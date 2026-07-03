@@ -113,10 +113,10 @@ struct RoomsTabContent: View {
 
         var icon: String {
             switch self {
-            case .discover: return "globe"
-            case .mine: return "rectangle.stack.fill"
-            case .join: return "door.right.hand.open"
-            case .requests: return "bell.badge.fill"
+            case .discover: return "🍿"
+            case .mine: return "🎬"
+            case .join: return "🔓"
+            case .requests: return "🔔"
             }
         }
     }
@@ -195,8 +195,8 @@ struct RoomsTabContent: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 12))
+                Text(tab.icon)
+                    .font(.system(size: 14))
                 Text(tab.rawValue)
                     .font(.system(size: 13, weight: isActive ? .bold : .medium))
 

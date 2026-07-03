@@ -37,6 +37,8 @@ struct HomeView: View {
     @State private var aiQuery = ""
     @State private var aiResults: [Room] = []
     @State private var aiSearching = false
+    /// 🔧 NEW: Natural-language response from the AI (shown above matching rooms).
+    @State private var aiResponseText: String?
     @State private var showProfile = false
 
     // onProfileTap больше не используется (профиль открывается через sheet).
@@ -311,12 +313,46 @@ struct HomeView: View {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14))
-                    .foregroundColor(.ravePrimary)
+                    .foregroundColor(.bioCyan)
                 Text("Рекомендации ИИ")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
             }
             .padding(.horizontal, 20)
+
+            // 🔧 NEW: Show the AI's natural-language response in a featured card
+            if let aiResponseText, !aiResponseText.isEmpty {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14))
+                        .foregroundColor(.bioCyan)
+                        .frame(width: 28, height: 28)
+                        .background(Color.bioCyan.opacity(0.18))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                    Text(aiResponseText)
+                        .font(.system(size: 14))
+                        .foregroundColor(.raveTextPrimary)
+                        .multilineTextAlignment(.leading)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.bioCyan.opacity(0.3), Color.white.opacity(0.04)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.5
+                        )
+                )
+                .padding(.horizontal, 20)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
@@ -354,7 +390,7 @@ struct HomeView: View {
                     .tint(.ravePrimary)
                     .scaleEffect(0.8)
             } else if !aiQuery.isEmpty {
-                Button { aiQuery = ""; aiResults = [] } label: {
+                Button { aiQuery = ""; aiResults = []; aiResponseText = nil } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.raveTextSecondary)
                 }
@@ -369,6 +405,11 @@ struct HomeView: View {
         )
     }
 
+    /// 🔧 REAL AI: Now calls OpenRouter via AIService.recommend() instead of
+    /// doing a local name-based filter. The AI sees the user's query + the list
+    /// of available room names and returns a natural-language recommendation.
+    /// The response is shown in the AI results section as a special "AI card"
+    /// alongside any matching rooms.
     private func searchAI() async {
         let query = aiQuery.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return }
@@ -376,16 +417,38 @@ struct HomeView: View {
         aiSearching = true
         defer { aiSearching = false }
 
-        // Ищем по реальным комнатам с сервера
+        // Get available room names for context
         let all = viewModel.filteredRooms
-        aiResults = all.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.mediaItem?.title.localizedCaseInsensitiveContains(query) == true
-        }
+        let roomNames = all.prefix(20).map { $0.name }
 
-        if aiResults.isEmpty {
-            // Если ничего не найдено — показываем доступные комнаты
-            aiResults = Array(all.prefix(3))
+        do {
+            // 🔧 Real AI call via OpenRouter
+            let aiResponse = try await AIService.shared.recommend(
+                query: query,
+                availableRooms: roomNames
+            )
+
+            // Also filter rooms by query (for showing matching rooms alongside)
+            let matchingRooms = all.filter {
+                $0.name.localizedCaseInsensitiveContains(query) ||
+                $0.mediaItem?.title.localizedCaseInsensitiveContains(query) == true
+            }
+
+            // Store the AI text response in a new state property
+            aiResponseText = aiResponse
+
+            // Show matching rooms (or top 3 if AI suggested something)
+            aiResults = matchingRooms.isEmpty ? Array(all.prefix(3)) : matchingRooms
+        } catch {
+            // Fall back to local filter if AI fails
+            aiResponseText = "⚠️ ИИ недоступен. Показываю результаты локального поиска."
+            aiResults = all.filter {
+                $0.name.localizedCaseInsensitiveContains(query) ||
+                $0.mediaItem?.title.localizedCaseInsensitiveContains(query) == true
+            }
+            if aiResults.isEmpty {
+                aiResults = Array(all.prefix(3))
+            }
         }
     }
 

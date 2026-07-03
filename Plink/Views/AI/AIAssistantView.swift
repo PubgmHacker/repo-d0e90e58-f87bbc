@@ -30,23 +30,25 @@ struct AIAssistantView: View {
                                 }
 
                                 ForEach(messages) { msg in
-                                    AIMessageBubble(message: msg)
+                                    AIMessageBubble(message: msg, isStreaming: isLoading && msg.id == messages.last?.id && msg.role == .ai)
                                         .id(msg.id)
                                 }
 
-                                if isLoading {
-                                    HStack {
-                                        AITypingIndicator()
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 20)
-                                }
+                                // 🔧 Removed AITypingIndicator — the streaming
+                                // AI message itself shows a pulsing cursor while
+                                // tokens arrive. No separate typing bubble needed.
                             }
                             .padding(.vertical, 16)
                         }
                         .scrollDismissesKeyboard(.interactively)
                         .onChange(of: messages.count) { _, _ in
                             withAnimation {
+                                proxy.scrollTo(messages.last?.id, anchor: .bottom)
+                            }
+                        }
+                        // 🔧 Scroll while streaming — when text grows, keep pinned to bottom
+                        .onChange(of: messages.last?.text) { _, _ in
+                            withAnimation(.easeOut(duration: 0.15)) {
                                 proxy.scrollTo(messages.last?.id, anchor: .bottom)
                             }
                         }
@@ -95,7 +97,7 @@ struct AIAssistantView: View {
                 Text("Что посмотреть?")
                     .font(.system(size: 24, weight: .heavy, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
-                Text("Опиши настроение — подберу идеальный фильм")
+                Text("Спроси ИИ — подберёт фильм, сериал или видео для совместного просмотра")
                     .font(.subheadline)
                     .foregroundColor(.raveTextSecondary)
                     .multilineTextAlignment(.center)
@@ -187,29 +189,72 @@ struct AIAssistantView: View {
         saveHistory()
 
         isLoading = true
+
+        // 🔧 REAL AI: Create an empty AI message and stream tokens into it
+        let aiMsgId = UUID().uuidString
+        let aiMsg = AIMessage(id: aiMsgId, role: .ai, text: "", timestamp: Date())
+        messages.append(aiMsg)
+
         Task {
-            let response = await getAIResponse(for: query)
-            await MainActor.run {
-                let aiMsg = AIMessage(id: UUID().uuidString, role: .ai, text: response, timestamp: Date())
-                self.messages.append(aiMsg)
-                self.isLoading = false
-                self.saveHistory()
-            }
+            await streamAIResponse(into: aiMsgId, userQuery: query)
         }
     }
 
-    // MARK: - AI Response (mock + ready for real API)
+    // MARK: - AI Response (real OpenRouter API with streaming)
 
-    private func getAIResponse(for query: String) async -> String {
-        // TODO: подключить реальный API (POST /api/ai/ask)
-        // Структура готова — достаточно заменить этот метод на:
-        // struct Body: Encodable { let query: String }
-        // let resp: AIResponse = try await api.request("ai/ask", method: .post, body: Body(query: query))
-        // return resp.answer
+    /// 🔧 NEW: Real AI integration via OpenRouter. Streams tokens live into the
+    /// AI message bubble identified by `messageId` — tokens appear as they're
+    /// generated, like ChatGPT.
+    private func streamAIResponse(into messageId: String, userQuery: String) async {
+        // Build conversation context from history (last 10 messages)
+        let historyMessages = messages.suffix(10).map { msg in
+            AIService.ChatMessage(
+                role: msg.role == .user ? "user" : "assistant",
+                content: msg.text
+            )
+        }
 
-        try? await Task.sleep(nanoseconds: 800_000_000)  // имитация задержки
+        // System prompt — defines the AI's persona for Plink
+        let systemMessage = AIService.ChatMessage(
+            role: "system",
+            content: """
+            Ты — ИИ-помощник Плинка, приложения для совместного просмотра видео с друзьями.
+            Помогаешь подобрать контент для совместного просмотра: фильмы, сериалы, видео, музыку.
+            Отвечай дружелюбно, кратко (1-4 предложения), на русском языке.
+            Если просят фильм — предложи 1-2 варианта с кратким описанием и почему стоит посмотреть вместе.
+            Если спрашивают о комнате — объясни, как создать или присоединиться.
+            Не выдумывай факты. Если не знаешь — честно скажи.
+            """
+        )
 
-        return MockAIResponses.response(for: query)
+        let allMessages = [systemMessage] + historyMessages
+
+        do {
+            let stream = AIService.shared.chatStream(messages: allMessages)
+            for try await token in stream {
+                await MainActor.run {
+                    // Append token to the AI message's text
+                    if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                        self.messages[idx].text += token
+                    }
+                }
+            }
+            await MainActor.run {
+                self.isLoading = false
+                self.saveHistory()
+            }
+        } catch {
+            await MainActor.run {
+                // If we got no tokens at all, show the error in the message bubble
+                if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                    if self.messages[idx].text.isEmpty {
+                        self.messages[idx].text = "⚠️ Не удалось получить ответ от ИИ. Проверьте интернет-соединение и попробуйте снова."
+                    }
+                }
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: - Persistence (UserDefaults)
@@ -239,13 +284,18 @@ struct AIMessage: Identifiable {
 
     let id: String
     let role: Role
-    let text: String
+    /// 🔧 Made `var` so streaming can append tokens live without creating a new AIMessage.
+    var text: String
     let timestamp: Date
 }
 
 // MARK: - AI Message Bubble
 struct AIMessageBubble: View {
     let message: AIMessage
+    /// 🔧 When true, shows a pulsing cursor at the end of the text (streaming).
+    var isStreaming: Bool = false
+
+    @State private var cursorVisible: Bool = true
 
     var body: some View {
         HStack {
@@ -258,142 +308,51 @@ struct AIMessageBubble: View {
                             .font(.system(size: 11))
                         Text("ИИ")
                             .font(.system(size: 11, weight: .bold))
+                        if isStreaming {
+                            Text("печатает…")
+                                .font(.system(size: 10))
+                                .foregroundColor(.raveTextTertiary)
+                        }
                     }
                     .foregroundColor(.ravePrimary)
                 }
 
-                Text(message.text)
-                    .font(.system(size: 15))
-                    .foregroundColor(message.role == .user ? .white : .raveTextPrimary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        message.role == .user
-                            ? AnyShapeStyle(Color.raveGradient)
-                            : AnyShapeStyle(.ultraThinMaterial)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
-                    .overlay(
-                        // Тонкая стеклянная обводка для AI-сообщений
-                        Group {
-                            if message.role == .ai {
-                                RoundedRectangle(cornerRadius: 18)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
-                            }
+                HStack(alignment: .bottom, spacing: isStreaming ? 2 : 0) {
+                    Text(message.text.isEmpty && isStreaming ? " " : message.text)
+                        .font(.system(size: 15))
+                        .foregroundColor(message.role == .user ? .white : .raveTextPrimary)
+
+                    // 🔧 Streaming cursor — pulsing block at the end of text
+                    if isStreaming && !message.text.isEmpty {
+                        Rectangle()
+                            .fill(Color.bioCyan)
+                            .frame(width: 2, height: 16)
+                            .opacity(cursorVisible ? 1 : 0)
+                            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: cursorVisible)
+                            .onAppear { cursorVisible = false }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    message.role == .user
+                        ? AnyShapeStyle(Color.raveGradient)
+                        : AnyShapeStyle(.ultraThinMaterial)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    // Тонкая стеклянная обводка для AI-сообщений
+                    Group {
+                        if message.role == .ai {
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
                         }
-                    )
+                    }
+                )
             }
 
             if message.role == .ai { Spacer() }
         }
         .padding(.horizontal, 20)
-    }
-}
-
-// MARK: - AI Typing Indicator
-struct AITypingIndicator: View {
-    @State private var offset: CGFloat = 0
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3, id: \.self) { i in
-                Circle()
-                    .fill(Color.ravePrimary)
-                    .frame(width: 8, height: 8)
-                    .offset(y: offset)
-                    .animation(
-                        .easeInOut(duration: 0.4)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.15),
-                        value: offset
-                    )
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
-        )
-        .onAppear {
-            offset = -6
-        }
-    }
-}
-
-// MARK: - Mock AI Responses
-enum MockAIResponses {
-    static func response(for query: String) -> String {
-        let lower = query.lowercased()
-
-        if lower.contains("ужас") || lower.contains("хоррор") {
-            return """
-            🎬 Вот отличные фильмы ужасов 2024:
-
-            **«Длинные ноги» (Longlegs)**
-            Триллер с Николасом Кейджем. Мрачная атмосфера Финча, FBI расследует серию убийств. Озноб guaranteed.
-
-            **«Тихое место: День первый»**
-            Приквел культового фильма. Как всё началось в Нью-Йорке. Менее страшно, но очень напряжно.
-
-            **«Прорва» (Oddity)**
-            Ирландский хоррор. Женщина с даром ясновидения расследует смерть сестры. Жуткий и стильный.
-            """
-        }
-
-        if lower.contains("новинк") || lower.contains("2025") || lower.contains("лучшие") {
-            return """
-            🔥 Топ новинок 2025:
-
-            **«Дюна: Часть третья»**
-            Завершение эпопеи Вильнёва. Визуальный шедевр — стоит смотреть в 4K с друзьями.
-
-            **«Миссия невыполнима: Финал»**
-            Последняя часть с Томом Крузом. Трюки, которых ещё не было в кино.
-
-            **«Зверополис 2»**
-            Долгожданное продолжение. Отлично для просмотра всей семьёй.
-
-            Создай комнату и смотри с друзьями! 🍿
-            """
-        }
-
-        if lower.contains("вечер") || lower.contains("сегодня") || lower.contains("посмотреть") {
-            return """
-            🎯 Подобрал для вечера:
-
-            **«Интерстеллар»** — если хочется подумать и поплакать. 3 часа чистого восторга.
-
-            **«Омерзительная восьмёрка»** — диалоги Тарантино, снег, интрига. Идеально для компании.
-
-            **«Гордость и предубеждение»** — если нужен уютный вечер.
-
-            Что из этого ближе? 🎬
-            """
-        }
-
-        if lower.contains("комеди") || lower.contains("смешн") {
-            return """
-            😂 Лучшие комедии:
-
-            **«Евротур»** — классика, всегда смешно.
-
-            **«Отель "Гранд Будапешт"»** — эстетика Андерсона + юмор.
-
-            **«Достать ножи»** — детективная комедия, держит до конца.
-            """
-        }
-
-        // Default
-        return """
-        Расскажи подробнее, что хочется посмотреть! 🎬
-
-        Могу подобрать по жанру, настроению или году. Например:
-        • «Посоветуй фантастический фильм»
-        • «Хочу плакать весь вечер»
-        • «Что-то лёгкое и весёлое»
-        """
     }
 }

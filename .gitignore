@@ -49,3 +49,8 @@ sess_*/
 dating/
 mobile/
 server/
+
+# 🔧 NEW: Never commit real API keys
+Secrets.xcconfig
+*.xcconfig.local
+

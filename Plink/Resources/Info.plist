@@ -48,6 +48,10 @@
         <key>YANDEX_CLIENT_ID</key>
         <string>$(YANDEX_CLIENT_ID)</string>
 
+        <!-- 🔧 NEW: OpenRouter API key for AI features (set via xcconfig) -->
+        <key>PLINK_AI_API_KEY</key>
+        <string>$(PLINK_AI_API_KEY)</string>
+
         <!-- App Transport Security — allow Railway backend -->
         <key>NSAppTransportSecurity</key>
         <dict>

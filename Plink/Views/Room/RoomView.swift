@@ -1,0 +1,524 @@
+import SwiftUI
+import AVKit
+
+// MARK: - Room View v4 — Rave-style Layout
+///
+/// Портрет:
+/// ┌──────────────────────┐
+/// │      Ambilight       │
+/// │   ┌──────────────┐   │  ← видео 16:9, ~70% ширины, центрировано
+/// │   │    VIDEO     │   │     контролы по центру видео
+/// │   │  (controls)  │   │     аватары в правом верхнем углу видео
+/// │   └──────────────┘   │
+/// │                      │
+/// │   ┌──────────────┐   │  ← чат (оставшееся пространство)
+/// │   │    CHAT      │   │     всегда виден
+/// │   └──────────────┘   │
+/// └──────────────────────┘
+///
+/// Ландшафт:
+/// ┌──────────────────────┐
+/// │ VIDEO (full screen)  │  ← видео на весь экран
+/// │            ┌────────┐│  ← чат выезжает справа поверх
+/// │            │  CHAT  ││
+/// │            └────────┘│
+/// └──────────────────────┘
+struct RoomView: View {
+    @ObservedObject private var loc = LocalizationManager.shared
+    let room: Room
+
+    @State private var viewModel: RoomViewModel?
+    @State private var syncManager: RoomSyncManager?
+    @State private var voiceChat: VoiceChatService?
+    // UI State
+    @State private var showControls = true
+    @State private var showChatPanel = true  // landscape: чат открыт по умолчанию
+    @State private var reactionTrigger: ReactionTrigger?
+    @State private var hideControlsTask: Task<Void, Never>?
+    @State private var showEmojiPicker = false
+    @State private var shareSheetPresented = false
+    /// YouTube-style: кнопка fullscreen разворачивает видео на весь экран
+    /// с авторотацией в ландшафт. ВАЖНО: используется ТОЛЬКО для управления
+    /// ориентацией устройства, а НЕ для выбора layout (layout зависит от геометрии).
+    @State private var isFullscreenMode = false
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+
+    private let controlsHideDelay: UInt64 = 3_000_000_000
+
+    var body: some View {
+        GeometryReader { geo in
+            // Layout полностью зависит от фактической геометрии, а не от isFullscreenMode.
+            // Это устраняет баг растягивания чата при возврате из background.
+            let isLandscape = geo.size.width > geo.size.height
+
+            ZStack {
+                // ── 1. Ambilight фон (весь экран) ────────────────────
+                AmbilightBackground()
+
+                // ── 2. Контент ────────────────────────────────────────
+                if let viewModel {
+                    if isLandscape {
+                        landscapeLayout(viewModel: viewModel, geo: geo)
+                    } else {
+                        portraitLayout(viewModel: viewModel, geo: geo)
+                    }
+                } else {
+                    ProgressView(loc.string(.roomConnecting))
+                        .tint(.ravePrimary)
+                        .onAppear { setupViewModel() }
+                }
+
+                // ── 3. SpriteKit реакции ──────────────────────────────
+                ReactionSpriteOverlay(reactionTrigger: $reactionTrigger)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)  // Полностью скрываем TabBar в комнате
+        .task {
+            guard let viewModel else { return }
+            await viewModel.joinRoomFlow()
+            // Активируем голосовой чат при входе в комнату
+            try? await voiceChat?.startCall(roomId: room.id)
+
+            // Восстановление позиции (авто-пауза → продолжить с того же места)
+            let savedPosition = UserDefaults.standard.double(forKey: "room_position_\(room.id)")
+            if savedPosition > 0 {
+                viewModel.syncEngine.seek(to: savedPosition)
+            }
+        }
+        .onAppear {
+            resetToPortrait()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // КЛЮЧЕВОЙ ФИКС: при возврате из background принудительно сбрасываем
+            // ориентацию и fullscreen-режим, иначе чат растягивается.
+            if newPhase == .active {
+                resetToPortrait()
+            }
+        }
+        .onDisappear {
+            OrientationManager.shared.forcePortrait()
+
+            guard let viewModel else { return }
+            syncManager?.disconnect()
+
+            // Авто-пауза + сохранение позиции (через UserDefaults)
+            let position = viewModel.syncEngine.currentTime
+            let roomID = room.id
+            UserDefaults.standard.set(position, forKey: "room_position_\(roomID)")
+
+            Task {
+                await voiceChat?.endCall()
+                await viewModel.cleanupFlow()
+            }
+        }
+        .navigationBarBackButtonHidden()
+        .preferredColorScheme(.dark)
+        .sheet(isPresented: $shareSheetPresented) {
+            if let url = URL(string: "https://raveclone.com/join/\(room.code)") {
+                ShareSheet(items: [url])
+            }
+        }
+    }
+
+    // MARK: - Portrait Layout
+
+    @ViewBuilder
+    private func portraitLayout(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {
+        let screenWidth = geo.size.width
+        let videoWidth = screenWidth
+        let videoHeight = videoWidth * 9.0 / 16.0
+        let chatHeight = geo.size.height - videoHeight - 8
+
+        VStack(spacing: 0) {
+            // Видео 16:9 + контролы + marquee
+            videoSection(
+                viewModel: viewModel,
+                videoWidth: videoWidth,
+                videoHeight: videoHeight,
+                isFullscreen: false
+            )
+
+            // Чат — оставшееся пространство
+            RoomChatView(
+                messages: syncManager?.chatMessages ?? viewModel.messages,
+                chatText: chatTextBinding,
+                onSend: sendMessage,
+                mode: .portrait
+            )
+            .frame(height: max(chatHeight, 100))
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        }
+        .contentShape(Rectangle())
+        // Single tap = toggle controls (только в области видео)
+        .onTapGesture { toggleControls() }
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { handleDoubleTap() }
+        )
+    }
+
+    // MARK: - Landscape Layout
+
+    @ViewBuilder
+    private func landscapeLayout(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {
+        ZStack {
+            // Видео на весь экран
+            videoSection(
+                viewModel: viewModel,
+                videoWidth: geo.size.width,
+                videoHeight: geo.size.height,
+                isFullscreen: true
+            )
+
+            // Чат выезжает справа поверх
+            RoomChatView(
+                messages: syncManager?.chatMessages ?? viewModel.messages,
+                chatText: chatTextBinding,
+                onSend: sendMessage,
+                mode: .landscape,
+                isPanelOpen: $showChatPanel
+            )
+            .ignoresSafeArea()
+
+            // Кнопка вызова чата (когда свёрнут)
+            if !showChatPanel {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                showChatPanel = true
+                            }
+                        } label: {
+                            Image(systemName: "bubble.left.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 24)
+                    }
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { toggleControls() }
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { handleDoubleTap() }
+        )
+        .gesture(
+            DragGesture(minimumDistance: 25)
+                .onEnded { value in
+                    let horizontal = value.translation.width
+                    // Свайп справа-налево (←) — открыть чат
+                    if !showChatPanel && horizontal < -25 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showChatPanel = true
+                        }
+                    }
+                    // Свайп слева-направо (→) — закрыть чат
+                    else if showChatPanel && horizontal > 25 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showChatPanel = false
+                        }
+                    }
+                }
+        )
+    }
+
+    // MARK: - Video Section (видео + оверлеи)
+
+    @ViewBuilder
+    private func videoSection(
+        viewModel: RoomViewModel,
+        videoWidth: CGFloat,
+        videoHeight: CGFloat,
+        isFullscreen: Bool
+    ) -> some View {
+        ZStack {
+            // Видео контейнер
+            if let mediaItem = viewModel.syncEngine.currentMediaItem,
+               !mediaItem.streamURL.isEmpty {
+
+                VideoContainerView(
+                    mediaURL: mediaItem.streamURL,
+                    playbackMode: .directStream,
+                    isPlaying: viewModel.syncEngine.isPlaying,
+                    currentTime: viewModel.syncEngine.currentTime,
+                    duration: viewModel.syncEngine.duration,
+                    isFullscreen: isFullscreen,
+                    onTogglePlay: { viewModel.syncEngine.togglePlayPause() },
+                    onSeek: { pos in viewModel.syncEngine.seek(to: pos) }
+                )
+            } else {
+                videoPlaceholder
+            }
+
+            // Оверлей контролов (по центру видео)
+            ControlsOverlay(
+                isPlaying: viewModel.syncEngine.isPlaying,
+                currentTime: viewModel.syncEngine.currentTime,
+                duration: viewModel.syncEngine.duration,
+                participantCount: viewModel.room.participantCount,
+                roomName: viewModel.room.name,
+                isFullscreen: isFullscreen,
+                onTogglePlay: {
+                    HapticManager.impact(.light)
+                    viewModel.syncEngine.togglePlayPause()
+                    resetControlsTimer()
+                },
+                onSeek: { pos in
+                    viewModel.syncEngine.seek(to: pos)
+                    resetControlsTimer()
+                },
+                onSeekRelative: { delta in
+                    viewModel.syncEngine.seekRelative(delta)
+                    resetControlsTimer()
+                },
+                onClose: {
+                    if isFullscreen {
+                        // Из fullscreen → обратно в портрет
+                        exitFullscreen()
+                    } else {
+                        Task {
+                            await voiceChat?.endCall()
+                            await viewModel.cleanupFlow()
+                        }
+                        dismiss()
+                    }
+                },
+                onShowParticipants: {
+                    // TODO: show participants sheet
+                },
+                onToggleFullscreen: {
+                    HapticManager.impact(.light)
+                    if isFullscreen {
+                        exitFullscreen()
+                    } else {
+                        enterFullscreen()
+                    }
+                },
+                isVisible: $showControls
+            )
+
+            // Discord-style кнопка микрофона (левый нижний угол) + share (правый верхний угол)
+            if let voiceChat {
+                VStack {
+                    // ── Share: правый верхний угол (22pt прозрачная иконка) ──
+                    HStack {
+                        Spacer()
+                        Button {
+                            HapticManager.impact(.light)
+                            shareSheetPresented = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                                .frame(width: 36, height: 36)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 16)
+                        .padding(.top, 8)
+                    }
+
+                    Spacer()
+
+                    // ── Микрофон: левый нижний угол (не перекрывает fullscreen) ──
+                    HStack(spacing: 12) {
+                        VoiceChatButton(voiceChat: voiceChat) {
+                            voiceChat.toggleMute()
+                        }
+                        Spacer()
+                    }
+                    .padding(.leading, 16)
+                    .padding(.bottom, 8)
+                }
+            }
+
+            // Бегущая строка (marquee) — последнее сообщение
+            MarqueeContainer(messages: syncManager?.chatMessages ?? viewModel.messages)
+        }
+        .frame(width: isFullscreen ? nil : videoWidth,
+               height: isFullscreen ? nil : videoHeight)
+        .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 16))
+    }
+
+    private var videoPlaceholder: some View {
+        ZStack {
+            Color.black.opacity(0.5)
+            VStack(spacing: 12) {
+                ProgressView()
+                    .tint(.ravePrimary)
+                    .scaleEffect(1.2)
+                Text(loc.string(.roomLoading))
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        }
+    }
+
+    // MARK: - Controls Visibility
+
+    private func toggleControls() {
+        showControls.toggle()
+        if showControls { resetControlsTimer() }
+    }
+
+    // MARK: - Orientation Reset (фикс бага растягивания чата)
+
+    /// Принудительный сброс в портрет — вызывается при onAppear, возврате из background,
+    /// и при смене scenePhase на .active. Гарантирует что чат всегда корректного размера.
+    private func resetToPortrait() {
+        isFullscreenMode = false
+        showChatPanel = true
+        showEmojiPicker = false
+        OrientationManager.shared.forcePortrait()
+    }
+
+    // MARK: - Fullscreen (YouTube-style)
+
+    private func enterFullscreen() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            isFullscreenMode = true
+            showControls = true
+        }
+        OrientationManager.shared.forceLandscape()
+        resetControlsTimer()
+    }
+
+    private func exitFullscreen() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            isFullscreenMode = false
+            showControls = true
+        }
+        OrientationManager.shared.forcePortrait()
+        resetControlsTimer()
+    }
+
+    private func resetControlsTimer() {
+        hideControlsTask?.cancel()
+        hideControlsTask = Task {
+            try? await Task.sleep(nanoseconds: controlsHideDelay)
+            await MainActor.run {
+                if !Task.isCancelled {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showControls = false
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Reactions
+
+    private func handleDoubleTap() {
+        let emojis = ["❤️", "🔥", "😂", "👍", "🎉"]
+        triggerReaction(emoji: emojis.randomElement() ?? "❤️")
+    }
+
+    private func triggerReaction(emoji: String) {
+        HapticManager.impact(.soft)
+        reactionTrigger = ReactionTrigger(
+            point: CGPoint(x: UIScreen.main.bounds.width / 2,
+                          y: UIScreen.main.bounds.height * 0.35),
+            emoji: emoji
+        )
+        syncManager?.sendReaction(emoji: emoji, senderId: "current_user", senderName: "You")
+    }
+
+    // MARK: - Chat
+
+    private var chatTextBinding: Binding<String> {
+        Binding(
+            get: { viewModel?.chatText ?? "" },
+            set: { viewModel?.chatText = $0 }
+        )
+    }
+
+    private func sendMessage() {
+        guard let viewModel, let syncManager else { return }
+        let text = viewModel.chatText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+
+        let message = ChatMessage(
+            id: UUID().uuidString,
+            roomID: room.id,
+            senderID: "current_user",
+            senderName: "You",
+            text: text,
+            timestamp: Date(),
+            isRead: false,
+            senderAvatarURL: nil
+        )
+        syncManager.sendChatMessage(message)
+        viewModel.chatText = ""
+    }
+
+    // MARK: - Setup (DI)
+
+    private func setupViewModel() {
+        let api = APIClient()
+        let wsClient = WebSocketClient()
+        let roomService = RoomService(api: api)
+        let authService = AuthService(api: api)
+
+        let signaling = SignalingClient(ws: wsClient)
+        let voiceChat = VoiceChatService(signaling: signaling, localPeerId: "current_user")
+
+        let syncEngine = SyncEngine(
+            wsClient: wsClient,
+            roomID: room.id,
+            userID: "current_user",
+            isHost: room.hostID == "current_user"
+        )
+
+        let vm = RoomViewModel(
+            room: room,
+            currentUserId: "current_user",
+            wsClient: wsClient,
+            roomService: roomService,
+            authService: authService,
+            syncEngine: syncEngine,
+            voiceChat: voiceChat
+        )
+
+        let manager = RoomSyncManager(wsClient: wsClient, roomID: room.id)
+        manager.onPlayCommand = { pos in
+            vm.syncEngine.seek(to: pos)
+            if !vm.syncEngine.isPlaying { vm.syncEngine.togglePlayPause() }
+        }
+        manager.onPauseCommand = { pos in
+            vm.syncEngine.seek(to: pos)
+            if vm.syncEngine.isPlaying { vm.syncEngine.togglePlayPause() }
+        }
+        manager.onSeekCommand = { pos in vm.syncEngine.seek(to: pos) }
+        manager.onReactionReceived = { HapticManager.impact(.soft) }
+        manager.connect()
+
+        viewModel = vm
+        syncManager = manager
+        self.voiceChat = voiceChat
+    }
+}
+
+// MARK: - Share Sheet (UIActivityViewController wrapper)
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}

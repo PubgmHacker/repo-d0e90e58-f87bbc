@@ -36,12 +36,18 @@ final class YandexAuthService: NSObject, ObservableObject {
 
     // MARK: - Init
 
+    /// 🔧 FIX C14: Read clientID from Info.plist (was: hardcoded placeholder).
+    /// Set YANDEX_CLIENT_ID in your xcconfig file or build settings.
     init(
-        clientID: String = "yandex_client_id_placeholder",
+        clientID: String? = nil,
         redirectScheme: String = "syncwatch",
         backendURL: URL = URL(string: "https://raveclone.app/api")!
     ) {
-        self.clientID = clientID
+        // Resolve Yandex client ID: explicit param → Info.plist → fail-safe empty
+        let resolvedClientID: String = clientID
+            ?? (Bundle.main.object(forInfoDictionaryKey: "YANDEX_CLIENT_ID") as? String)
+            ?? ""
+        self.clientID = resolvedClientID
         self.redirectScheme = redirectScheme
         self.redirectURI = "\(redirectScheme)://oauth"
         self.backendURL = backendURL
@@ -59,6 +65,14 @@ final class YandexAuthService: NSObject, ObservableObject {
 
     func signInWithYandex() async throws {
         guard !isAuthenticating else { return }
+
+        // 🔧 FIX C14: Fail early with a clear error if clientID is not configured.
+        // (was: silently hit Yandex OAuth with 'yandex_client_id_placeholder')
+        guard !clientID.isEmpty else {
+            errorMessage = "Yandex Client ID не настроен. Установите YANDEX_CLIENT_ID в xcconfig."
+            throw YandexAuthError.clientIDNotConfigured
+        }
+
         isAuthenticating = true
         errorMessage = nil
 
@@ -269,5 +283,18 @@ final class KeychainHelper {
             kSecAttrAccount as String: key,
         ]
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+// MARK: - Yandex Auth Errors
+/// 🔧 FIX C14: Clear error for misconfigured Yandex client ID
+enum YandexAuthError: LocalizedError {
+    case clientIDNotConfigured
+
+    var errorDescription: String? {
+        switch self {
+        case .clientIDNotConfigured:
+            return "Yandex Client ID не настроен. Установите YANDEX_CLIENT_ID в xcconfig."
+        }
     }
 }

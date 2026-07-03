@@ -146,7 +146,7 @@ struct RoomsTabContent: View {
             }
             .navigationTitle("Комнаты")
             .navigationBarTitleDisplayMode(.large)
-            .navigationDestination(item: ) { room in
+            .navigationDestination(item: $navigateToRoom) { room in
                 RoomView(room: room)
                     .toolbar(.hidden, for: .tabBar)
             }
@@ -575,7 +575,7 @@ struct HomeTabContent: View {
 /// Друзья — список друзей с поиском и кнопкой чата
 struct FriendsTabContent: View {
     @State private var searchText = ""
-    @State private var friendManager: FriendManager? = nil
+    @EnvironmentObject private var friendManager: FriendManager
     @State private var selectedFriendForProfile: Friend?
     @State private var selectedFriendForChat: Friend?
     @State private var showAddFriend = false

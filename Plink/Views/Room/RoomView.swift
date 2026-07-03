@@ -467,7 +467,7 @@ struct RoomView: View {
     }
 
     /// 🔧 FIX 5.7: Throttle reactions to prevent spam (max 2/sec)
-    private var lastReactionTime: Date = .distantPast
+    @State private var lastReactionTime: Date = .distantPast
     private let reactionThrottle: TimeInterval = 0.5
 
     private func triggerReaction(emoji: String) {

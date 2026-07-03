@@ -417,7 +417,6 @@ final class WebSocketClient: WebSocketClientProtocol {
         isConnected = false
         socket = nil
         stopHeartbeat()
-        isReconnecting = true
 
         delegate?.webSocketDidDisconnect(self, reason: reason)
 
@@ -427,6 +426,8 @@ final class WebSocketClient: WebSocketClientProtocol {
     private func scheduleReconnect() {
         guard !isManuallyDisconnected else { return }
         guard !isReconnecting else { return }  // 🔧 FIX 1.3: Guard against double-schedule
+
+        isReconnecting = true  // 🔧 FIX NEW#1: Set AFTER guard, not in handleDisconnect
 
         let delay = nextBackoffDelay()
         Logger.ws.info("Reconnecting in \(String(format: "%.1f", delay))s (attempt #\(reconnectAttempts))")

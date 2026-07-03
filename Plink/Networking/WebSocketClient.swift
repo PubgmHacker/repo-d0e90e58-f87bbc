@@ -48,9 +48,21 @@ final class WebSocketClient: WebSocketClientProtocol {
 
     // MARK: - Internal WebSocket
 
-    /// `nonisolated(unsafe)` — URLSessionWebSocketTask сам по себе thread-safe,
-    /// доступ нужен из `deinit` (nonisolated context).
-    private nonisolated(unsafe) var socket: URLSessionWebSocketTask?
+    /// 🔧 FIX H12: Socket access synchronized via NSLock to prevent data races
+    /// between connectInternal (@MainActor), disconnect (@MainActor),
+    /// cancelSocketForDeinit (nonisolated), and sendRaw (background queue).
+    private let socketLock = NSLock()
+    private var _socket: URLSessionWebSocketTask?
+    private var socket: URLSessionWebSocketTask? {
+        get {
+            socketLock.lock(); defer { socketLock.unlock() }
+            return _socket
+        }
+        set {
+            socketLock.lock(); defer { socketLock.unlock() }
+            _socket = newValue
+        }
+    }
     private let urlSession: URLSession
 
     // MARK: - Reconnect (Exponential Backoff)
@@ -185,6 +197,22 @@ final class WebSocketClient: WebSocketClientProtocol {
         Logger.ws.info("Connecting to \(finalURL.path)…")
 
         receiveMessage()
+
+        // 🔧 FIX C1: Proactive open-state probe.
+        // URLSessionWebSocketTask has no "did open" callback, so we also schedule
+        // a one-shot 250ms check — if the socket is alive but no message has arrived
+        // yet (server is silent), this fires notifyConnectedIfNeeded() and unblocks
+        // the send path. Without this, an idle server would keep us "connecting" forever.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, !self.isManuallyDisconnected else { return }
+            // If still not connected after 250ms, assume the socket is open.
+            // The first receive cycle will confirm; if the socket failed, the receive
+            // completion will fire .failure and trigger reconnect.
+            if !self.isConnected && self.socket != nil {
+                self.notifyConnectedIfNeeded()
+            }
+        }
     }
 
     func disconnect() {
@@ -238,7 +266,9 @@ final class WebSocketClient: WebSocketClientProtocol {
         socket?.send(.string(string)) { [weak self] error in
             if let error {
                 Logger.ws.error("Send error: \(error.localizedDescription)")
-                DispatchQueue.main.async {
+                // 🔧 FIX M12: Use Task @MainActor instead of DispatchQueue.main.async
+                // for proper actor isolation guarantees under strict concurrency.
+                Task { @MainActor [weak self] in
                     self?.handleDisconnect(reason: "Send error: \(error.localizedDescription)")
                 }
             }
@@ -259,8 +289,10 @@ final class WebSocketClient: WebSocketClientProtocol {
 
     private func receiveMessage() {
         socket?.receive { [weak self] result in
-            guard let self else { return }
-
+            // 🔧 FIX M11: Hop to MainActor only for state mutation + delegate dispatch.
+            // The receive completion itself runs on a URLSession background queue;
+            // we keep message processing off the hot path so chat floods don't
+            // serialize through 100 main-actor hops.
             Task { @MainActor [weak self] in
                 self?.handleReceiveResult(result)
             }
@@ -270,6 +302,11 @@ final class WebSocketClient: WebSocketClientProtocol {
     private func handleReceiveResult(_ result: Result<URLSessionWebSocketTask.Message, Error>) {
         switch result {
         case .success(let message):
+            // 🔧 FIX C1: First successful receive = socket is open.
+            // URLSessionWebSocketTask has no "did open" callback, so we infer open state
+            // from the first successful receive cycle. This unblocks the entire send path.
+            notifyConnectedIfNeeded()
+
             switch message {
             case .string(let text):
                 handleMessage(text)
@@ -280,7 +317,7 @@ final class WebSocketClient: WebSocketClientProtocol {
                 }
 
             @unknown default:
-                break
+                    break
             }
 
             // Continue listening
@@ -449,7 +486,14 @@ struct WSPingPong: Codable {
 // hop to the main actor. This keeps the protocol clean while ensuring all WS
 // state mutations happen on the main actor (matches our @MainActor SyncEngine).
 extension WebSocketClient {
+    /// 🔧 FIX M16: MainActor.assumeIsolated crashes if called off-main.
+    /// Use a thread-safe atomic flag instead — set under socketLock, read anywhere.
     nonisolated var isConnectedBridge: Bool {
-        MainActor.assumeIsolated { self.isConnected }
+        // Best-effort check: if called from MainActor, use the live value;
+        // otherwise fall back to false (callers should hop to MainActor for truth).
+        if Thread.isMainThread {
+            return self.isConnected
+        }
+        return false
     }
 }

@@ -1748,33 +1748,39 @@ story.append(PageBreak())
 
 # ── REDESIGN SECTION (NEW) ─────────────────────────────────────────────────
 story.append(PageBreak())
-story.append(section_header("06", "Редизайн: премиум дизайн-система «Cinema Violet»"))
+story.append(section_header("06", "Редизайн: премиум дизайн-система «Cinema Violet v2»"))
 story.append(Paragraph(
-    "Текущая палитра приложения (<code>Color+Theme.swift</code>) построена на бирюзовом акценте "
-    "(<code>#00C2FF</code>) и неоновом изумрудном (<code>#00FF88</code>). Для premium watch-party "
-    "проекта это визуально дёшево и не соответствует позиционированию. Конкуренты (Rave, Hearo, "
-    "Disney+, Apple Music) используют тёплые глубокие тона — фиолетовый, магента, золото. "
-    "Ниже — полная замена дизайн-системы с разделением ролей (free / premium / host / admin) и "
-    "готовым кодом для drop-in миграции.",
+    "Полная переработка визуального языка. Убираем бирюзовый (дёшево для premium) "
+    "И золото (шаблонно, как у всех). Премиум-подписка теперь <b>Плинк+</b> — "
+    "визуально выражена через <b>постоянную анимацию фиолетово-пурпурного градиента</b> "
+    "по кругу обводки аватара и <b>переливающийся ник</b> (animated hue rotation). "
+    "Админ — <b>красная постоянная анимация</b> + красный переливающийся ник. "
+    "Хост — статичная магента. Free — без обводки, минимум визуального шума. "
+    "Стиль вдохновлён Rave (оригинал), но современнее: больше glass, glow, "
+    "mesh-градиенты, smooth spring-physics вместо linear.",
     S["body"]
 ))
 story.append(Spacer(0, 10))
 
-# 6.1 Проблема
-story.append(Paragraph("6.1 Почему бирюзовый — это дёшево для premium-продукта", S["h3"]))
+# 6.1 Проблема со старым дизайном
+story.append(Paragraph("6.1 Почему старый дизайн не работает", S["h3"]))
 story.append(Paragraph(
-    "Бирюзовый (<code>#00C2FF</code>) и неоново-зелёный (<code>#00FF88</code>) — это палитра "
-    "бюджетных streaming-сервисов и IoT-приложений. В контексте «смотрим вместе» пользователь "
-    "ожидает ощущение <b>кинозала</b> или <b>лонж-бара</b>: глубокие тёмные тона, точечные тёплые "
-    "подсветки, премиум-акценты. Бирюзовый фон подсознательно ассоциируется с дешёвой Android "
-    "утилитой, а не с премиум-подпиской за 299₽/мес.",
+    "Старая палитра <code>Color+Theme.swift</code> — бирюза <code>#00C2FF</code> + "
+    "неоновый изумруд <code>#00FF88</code>. Это палитра бюджетных Android-утилит "
+    "и IoT-приложений, не premium watch-party продукта за 299₽/мес.",
     S["body"]
 ))
-story.append(Spacer(0, 4))
 story.append(Paragraph(
-    "Дополнительно: текущая система не различает роли визуально. У premium-юзера и у free-юзера "
-    "одинаковые аватарки, одинаковые кнопки, одинаковые карточки. Нет ощущения «апгрейда» — а "
-    "именно это и продаёт подписку.",
+    "Дополнительно: текущая система не различает роли визуально. У premium-юзера "
+    "и у free-юзера одинаковые аватарки, кнопки, карточки. Нет ощущения «апгрейда» "
+    "— а именно это и продаёт подписку.",
+    S["body"]
+))
+story.append(Paragraph(
+    "<b>Почему убираем золото:</b> Золотые градиенты — клише всех «premium» дизайна "
+    "2020-2023 (Telegram Premium, Twitch, Discord Nitro). В 2026 это выглядит "
+    "шаблонно и дёшево. Современный premium выражается через <b>глубокие насыщенные "
+    "цвета + постоянную плавную анимацию</b>, а не через металлик.",
     S["body"]
 ))
 story.append(Spacer(0, 8))
@@ -1782,13 +1788,17 @@ story.append(Spacer(0, 8))
 # 6.2 Конкурентный анализ
 story.append(Paragraph("6.2 Конкурентный анализ", S["h3"]))
 comp_data = [
-    ["Продукт", "Палитра", "Premium-сигнал", "Урок"],
-    ["Rave (оригинал)", "Глубокий фиолетовый + неон", "Премиум-цвета в фоне", "Фиолетовый = бренд"],
-    ["Hearo", "Тёмный серый + точечные акценты", "Минимализм", "Меньше = дороже"],
-    ["Disney+", "Тёмно-синий + золотые акценты", "Золото на CTA", "Золото = premium"],
-    ["Apple Music", "Розово-красный gradient на чёрном", "Animated gradient", "Движение = жизнь"],
-    ["Spotify", "Зелёный на чёрном (иконичный)", "—", "Не для watch-party"],
-    ["Telegram", "Голубой + синий", "Premium: звёздное сияние", "Premium ring"],
+    ["Продукт", "Палитра", "Premium-сигнал", "Проблема", "Наш ответ"],
+    ["Rave (оригинал)", "Тёмный + неон-фиолетовый", "Анимированные градиенты",
+     "Устаревшие анимации (jittery, без spring)", "Smooth TimelineView + spring physics"],
+    ["Hearo", "Серый + точечные акценты", "Минимализм",
+     "Слишком bland, не premium", "Глубокий чёрный + насыщенный violet"],
+    ["Telegram Premium", "Синий + звёздное сияние", "Animated stars + gold border",
+     "Шаблонное золото", "Без золота, через hue rotation"],
+    ["Apple Music", "Розово-красный gradient", "Animated gradient",
+     "Слишком ярко для watch-party", "Violet→magenta, более глубокий"],
+    ["Discord Nitro", "Сиреневый + анимированный badge", "Animated SVG icon",
+     "Слишком игриво", "Сдержанно, premium-feel"],
 ]
 body_rows = []
 for i, row in enumerate(comp_data):
@@ -1796,14 +1806,14 @@ for i, row in enumerate(comp_data):
         body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
     else:
         body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
-t = Table(body_rows, colWidths=[3.0*cm, 4.5*cm, 4.0*cm, 5.5*cm])
+t = Table(body_rows, colWidths=[2.7*cm, 3.5*cm, 3.3*cm, 3.5*cm, 4.0*cm])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
     ("VALIGN", (0,0), (-1,-1), "TOP"),
-    ("LEFTPADDING", (0,0), (-1,-1), 6),
-    ("RIGHTPADDING", (0,0), (-1,-1), 6),
-    ("TOPPADDING", (0,0), (-1,-1), 6),
-    ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
     ("BOX", (0,0), (-1,-1), 0.5, BORDER),
     ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
 ]))
@@ -1813,46 +1823,57 @@ for i in range(1, len(body_rows)):
 story.append(t)
 story.append(Spacer(0, 6))
 story.append(Paragraph(
-    "<b>Вывод:</b> Cinema Violet = глубокий фиолетовый (как Rave) + золото для premium (как Disney+) + "
-    "магента как эмоциональный акцент (как Apple Music). Это даёт ощущение премиум-кинозала.",
+    "<b>Вывод:</b> Cinema Violet v2 = глубокий фиолетовый (#A855F7) + сочный "
+    "пурпурный (#EC4899) для Плинк+, чистый красный (#FF1744) для админа. "
+    "Постоянные анимации (rotation 4s, hue rotation 3s) — modern, не раздражает.",
     S["body"]
 ))
 story.append(Spacer(0, 10))
 
 # 6.3 Новая палитра
-story.append(Paragraph("6.3 Новая палитра «Cinema Violet»", S["h3"]))
+story.append(Paragraph("6.3 Новая палитра «Cinema Violet v2»", S["h3"]))
+story.append(Paragraph(
+    "<b>Принцип:</b> никаких золотых/жёлтых цветов в системе. Премиум-tier "
+    "выражается через violet+magenta gradient и постоянную анимацию, не через "
+    "металлик. Все <code>ravePremium*</code> имена удалены — заменены на "
+    "<code>ravePlink</code>.",
+    S["body"]
+))
+story.append(Spacer(0, 4))
+
 palette_data = [
-    ["Роль", "Имя", "Hex", "Замена"],
-    ["Акцент", "ravePrimary",       "#A855F7", "Бирюзовый #00C2FF → фиолетовый"],
-    ["Акцент", "raveAccent",        "#EC4899", "Розовый #FF2D87 → магента (более насыщенная)"],
-    ["Premium", "ravePremium",      "#FBBF24", "НОВЫЙ — золото для premium-tier"],
-    ["Premium", "ravePremiumDeep",  "#D97706", "НОВЫЙ — тёмное золото для градиентов"],
-    ["Premium", "ravePremiumLight", "#FCD34D", "НОВЫЙ — светлое золото для glow"],
-    ["Успех",   "raveSuccess",      "#10B981", "Изумруд #00FF88 → приглушённый"],
-    ["Опасность", "raveDanger",     "#EF4444", "Красный #FF3B5C → более чистый"],
-    ["Внимание", "raveWarning",     "#F59E0B", "Янтарь (без изменений)"],
-    ["Secondary", "raveSecondary",  "#6366F1", "НОВЫЙ — индиго"],
-    ["Фон",     "raveBackground",   "#08080C", "Чёрный #000000 → с фиолетовым подтоном"],
-    ["Surface", "raveSurface",      "#14141C", "Карточный фон"],
-    ["Surface", "raveSurfaceElevated","#1F1F2A","Приподнятые карточки (featured)"],
-    ["Surface", "raveSurfaceHover", "#2A2A38", "Hover-состояние"],
-    ["Border",  "raveBorder",       "rgba(255,255,255,0.06)", "Тонкая граница"],
-    ["Text",    "raveTextPrimary",  "#FAFAFA", "Чистый белый → чуть мягче"],
-    ["Text",    "raveTextSecondary","#A1A1AA", "Серый текст"],
-    ["Text",    "raveTextTertiary", "#71717A", "Третий уровень"],
+    ["Роль", "Имя", "Hex", "Назначение / Замена"],
+    ["Primary", "ravePrimary",       "#A855F7", "Violet — основной акцент, CTA, free-хост"],
+    ["Accent",  "raveAccent",        "#EC4899", "Магента — LIVE, эмоциональный акцент"],
+    ["Plink",   "ravePlink",         "#D946EF", "Fuchsia — Плинк+ accent (второй цвет)"],
+    ["Plink",   "ravePlinkDeep",     "#7E22CE", "Глубокий violet для Плинк+ градиентов"],
+    ["Plink",   "ravePlinkLight",    "#F0ABFC", "Светлый fuchsia для переливания ника"],
+    ["Admin",   "raveAdmin",         "#FF1744", "Чистый красный — админ обводка"],
+    ["Admin",   "raveAdminDeep",     "#D50000", "Глубокий красный — градиент"],
+    ["Admin",   "raveAdminLight",    "#FF8A80", "Светлый красный — переливание ника"],
+    ["Secondary","raveSecondary",    "#6366F1", "Индиго — secondary"],
+    ["Success", "raveSuccess",       "#10B981", "Изумруд (приглушённый) — online"],
+    ["Warning", "raveWarning",       "#F59E0B", "Янтарь — warning (не для premium)"],
+    ["Danger",  "raveDanger",        "#EF4444", "Красный — danger (mute, ban) — НЕ админ!"],
+    ["Фон",     "raveBackground",    "#08080C", "Глубокий чёрный с фиолетовым подтоном"],
+    ["Surface", "raveSurface",       "#14141C", "Карточный фон"],
+    ["Surface", "raveSurfaceElevated","#1F1F2A", "Приподнятые карточки (featured)"],
+    ["Surface", "raveSurfaceHover",  "#2A2A38", "Hover"],
+    ["Border",  "raveBorder",        "rgba(255,255,255,0.06)", "Тонкая граница"],
+    ["Text",    "raveTextPrimary",   "#FAFAFA", "Основной текст"],
+    ["Text",    "raveTextSecondary", "#A1A1AA", "Вторичный"],
+    ["Text",    "raveTextTertiary",  "#71717A", "Третий уровень"],
 ]
 body_rows = []
 for i, row in enumerate(palette_data):
     if i == 0:
         body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
     else:
-        # color swatch + hex (handle rgba gracefully)
         hex_val = row[2].lstrip("#")
         if hex_val.startswith("rgba"):
-            # для rgba — без swatch, просто текст
             swatch_cell = f'<font name="Mono" color="#A1A1AA">{row[2]}</font>'
         else:
-            swatch_cell = f'<font name="Mono" color="#{hex_val}">●</font> {row[2]}'
+            swatch_cell = f'<font name="Mono" color="#{hex_val}">\u25cf</font> {row[2]}'
         body_rows.append([
             Paragraph(row[0], S["tbl_c"]),
             Paragraph(f'<font name="Mono">{row[1]}</font>', S["tbl_c"]),
@@ -1863,8 +1884,8 @@ t = Table(body_rows, colWidths=[2.0*cm, 4.0*cm, 4.5*cm, 6.5*cm])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
     ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-    ("LEFTPADDING", (0,0), (-1,-1), 6),
-    ("RIGHTPADDING", (0,0), (-1,-1), 6),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
     ("TOPPADDING", (0,0), (-1,-1), 4),
     ("BOTTOMPADDING", (0,0), (-1,-1), 4),
     ("BOX", (0,0), (-1,-1), 0.5, BORDER),
@@ -1877,15 +1898,16 @@ story.append(t)
 story.append(Spacer(0, 10))
 
 # 6.4 Градиенты
-story.append(Paragraph("6.4 Градиенты", S["h3"]))
+story.append(Paragraph("6.4 Градиенты (все анимированные)", S["h3"]))
 grad_data = [
-    ["Градиент", "Применение", "Цвета"],
-    ["raveGradient", "Primary CTA (Create Room, Confirm)", "#A855F7 → #EC4899 (violet → magenta)"],
-    ["ravePremiumGradient", "Subscribe button, premium cards", "#FCD34D → #FBBF24 → #D97706 (gold)"],
-    ["ravePremiumRingGradient", "Аватар premium-юзера (animated)", "#FCD34D → #FBBF24 → #D97706 → #FCD34D"],
-    ["raveHostGradient", "Аватар хоста в комнате", "#EC4899 → #F43F5E (magenta → rose)"],
-    ["raveAdminGradient", "Аватар админа (глобально)", "#A855F7 → #6366F1 (violet → indigo)"],
-    ["raveBgGradient", "Фоновый градиент", "#08080C → #0F0A1A → #08080C"],
+    ["Градиент", "Тип", "Цвета", "Анимация"],
+    ["raveGradient",       "Linear",       "#A855F7 \u2192 #EC4899",       "— (static)"],
+    ["ravePlinkRingGradient","Angular",    "#A855F7 \u2192 #EC4899 \u2192 #D946EF \u2192 #A855F7", "rotation 360\u00b0 / 4s linear, repeatForever"],
+    ["ravePlinkNickGradient","Linear + hue","#A855F7 \u2192 #EC4899 \u2192 #D946EF \u2192 #A855F7", "hueRotation 0\u00b0\u2192360\u00b0 / 3s linear, repeatForever"],
+    ["raveAdminRingGradient","Angular",    "#FF1744 \u2192 #FF5252 \u2192 #D50000 \u2192 #FF1744", "rotation 360\u00b0 / 4s linear, repeatForever"],
+    ["raveAdminNickGradient","Linear + hue","#FF1744 \u2192 #FF5252 \u2192 #FF8A80 \u2192 #FF1744", "hueRotation 0\u00b0\u2192360\u00b0 / 3s linear, repeatForever"],
+    ["raveHostGradient",   "Linear (static)","#EC4899 \u2192 #F43F5E",      "— (host \u2014 временная роль, без анимации)"],
+    ["raveBgGradient",     "Linear",       "#08080C \u2192 #0F0A1A \u2192 #08080C", "— (фон, анимация через TimelineView orbs)"],
 ]
 body_rows = []
 for i, row in enumerate(grad_data):
@@ -1896,13 +1918,14 @@ for i, row in enumerate(grad_data):
             Paragraph(f'<font name="Mono">{row[0]}</font>', S["tbl_c"]),
             Paragraph(row[1], S["tbl_c"]),
             Paragraph(f'<font name="Mono" color="#e6cb77">{row[2]}</font>', S["tbl_c"]),
+            Paragraph(row[3], S["tbl_c"]),
         ])
-t = Table(body_rows, colWidths=[5.0*cm, 5.5*cm, 6.5*cm])
+t = Table(body_rows, colWidths=[5.0*cm, 3.0*cm, 4.5*cm, 4.5*cm])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
     ("VALIGN", (0,0), (-1,-1), "TOP"),
-    ("LEFTPADDING", (0,0), (-1,-1), 6),
-    ("RIGHTPADDING", (0,0), (-1,-1), 6),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
     ("TOPPADDING", (0,0), (-1,-1), 5),
     ("BOTTOMPADDING", (0,0), (-1,-1), 5),
     ("BOX", (0,0), (-1,-1), 0.5, BORDER),
@@ -1912,49 +1935,54 @@ for i in range(1, len(body_rows)):
     if i % 2 == 0:
         t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
 story.append(t)
+story.append(Spacer(0, 6))
+story.append(Paragraph(
+    "<b>Ключевое отличие от v1:</b> Все premium/admin градиенты <b>анимированные постоянно</b>. "
+    "Используется <code>AngularGradient</code> для кольца (постоянное вращение) и "
+    "<code>LinearGradient + hueRotation</code> для ника (переливается через spectrum). "
+    "Анимация <b>никогда не останавливается</b>, даже когда юзер не взаимодействует с UI.",
+    S["body"]
+))
 story.append(Spacer(0, 12))
 
-# 6.5 Кнопки — 5 уровней
-story.append(Paragraph("6.5 Кнопки — 5 уровней", S["h3"]))
+# 6.5 Кнопки
+story.append(Paragraph("6.5 Кнопки — 4 типа", S["h3"]))
 story.append(Paragraph(
-    "Каждый тип кнопки имеет чёткое назначение. Смешивание запрещено: например, нельзя использовать "
-    "Primary-стиль для secondary-действий — это путает иерархию.",
+    "Убран «Premium Subscribe» как отдельный тип (золотой). Теперь Плинк+ — это "
+    "тот же primary CTA, но с <b>animated shimmer overlay</b> поверх градиента "
+    "(белая полоса света, проходящая по кнопке каждые 2s). Один компонент, "
+    "меньше когнитивной нагрузки.",
     S["body"]
 ))
 story.append(Spacer(0, 6))
 
 btn_data = [
-    ["Тип", "Применение", "Фон", "Текст", "Тень/Glow", "Pressed"],
+    ["Тип", "Применение", "Фон", "Эффект", "Pressed"],
     ["Primary CTA",
-     "Create Room, Confirm, Send",
-     "raveGradient (violet→pink)",
-     "Белый bold",
+     "Create Room, Confirm, Join",
+     "raveGradient (violet\u2192magenta)",
      "glowPrimary 16pt y=6",
-     "scale 0.96, glow ↓"],
-    ["Premium Subscribe",
-     "Upgrade, Restore Purchases",
-     "ravePremiumGradient (gold)",
-     "raveBackground (чёрный на золоте)",
-     "glowPremium 14pt y=5",
-     "scale 0.95, glow ↓"],
+     "scale 0.96, glow \u2193"],
+    ["Plink+ Subscribe",
+     "Upgrade to \u041f\u043b\u0438\u043d\u043a+",
+     "raveGradient + animated shimmer overlay",
+     "glowPlink 18pt y=6 (stronger)",
+     "scale 0.95, shimmer pause"],
     ["Secondary",
      "Cancel, Back, Close",
-     "raveSurface",
-     "raveTextPrimary semibold",
+     "raveSurface + 0.5px border",
      "rgba(0,0,0,0.4) 10pt",
      "scale 0.97"],
     ["Ghost",
      "Forgot password, Skip",
      "transparent",
-     "ravePrimary medium",
-     "—",
+     "\u2014",
      "opacity 0.6, scale 0.98"],
     ["Icon",
      "Mute, Settings, Share",
-     "raveSurface circle",
-     "icon: raveTextSecondary",
-     "—",
-     "scale 0.9, spring"],
+     "raveSurface circle 44\u00d744",
+     "\u2014",
+     "scale 0.9 spring"],
 ]
 body_rows = []
 for i, row in enumerate(btn_data):
@@ -1962,7 +1990,7 @@ for i, row in enumerate(btn_data):
         body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
     else:
         body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
-t = Table(body_rows, colWidths=[2.5*cm, 3.5*cm, 3.5*cm, 3.0*cm, 2.5*cm, 2.0*cm])
+t = Table(body_rows, colWidths=[2.5*cm, 3.5*cm, 4.0*cm, 3.5*cm, 3.5*cm])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
     ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -1982,40 +2010,54 @@ story.append(Spacer(0, 12))
 # 6.6 Аватарки — ключевое
 story.append(Paragraph("6.6 Аватарки — 4 уровня (КЛЮЧЕВОЕ)", S["h3"]))
 story.append(Paragraph(
-    "Это самое важное решение дизайн-системы. Аватарка — это <b>первый визуальный сигнал статуса</b>. "
-    "У free-юзера её обводки НЕ должно быть — премиум-эффект возникает через отсутствие, а не через "
-    "добавление. Premium-юзер получает медленно вращающееся золотое кольцо (8s/оборот — не раздражает). "
-    "Хост в контексте комнаты — статичная magenta-обводка. Админ — глобальная фиолетовая.",
+    "<b>Главное правило:</b> у free-юзера НЕТ обводки. Это и есть премиум-сигнал "
+    "для остальных — разница через отсутствие, не через добавление.",
+    S["body"]
+))
+story.append(Paragraph(
+    "<b>Плинк+ юзер:</b> постоянная анимация фиолетово-пурпурного градиента по "
+    "кругу обводки. AngularGradient вращается 360\u00b0 за 4s (быстрее чем 8s в v1 "
+    "— более живая, но не раздражает). Плюс переливающийся ник (см. 6.7).",
+    S["body"]
+))
+story.append(Paragraph(
+    "<b>Админ:</b> постоянная красная анимированная обводка. AngularGradient "
+    "красных оттенков вращается 360\u00b0 за 4s. Плюс красный переливающийся ник.",
+    S["body"]
+))
+story.append(Paragraph(
+    "<b>Хост:</b> статичная магента обводка (без анимации). Хост — временная "
+    "роль в контексте комнаты, не должен конкурировать за внимание с Плинк+.",
     S["body"]
 ))
 story.append(Spacer(0, 6))
 
 avatar_data = [
-    ["Роль", "Обводка", "Цвет", "Анимация", "Glow", "Видимость"],
+    ["\u0420\u043e\u043b\u044c", "\u041e\u0431\u0432\u043e\u0434\u043a\u0430", "\u0426\u0432\u0435\u0442", "\u0410\u043d\u0438\u043c\u0430\u0446\u0438\u044f", "Glow", "\u041d\u0438\u043a"],
     ["Free user",
-     "НЕТ обводки",
-     "—",
-     "—",
-     "—",
-     "Чистый circle, минимум визуального шума"],
-    ["Premium",
-     "2px animated gradient ring",
-     "ravePremiumRingGradient (gold)",
-     "rotation 360° за 8s, linear, repeatForever",
-     "ravePremium.opacity(0.4) radius 6",
-     "Подписка видна всем, не навязчиво"],
-    ["Host (в комнате)",
-     "2px static gradient ring",
-     "raveHostGradient (magenta→rose)",
-     "—",
+     "\u041d\u0415\u0422",
+     "\u2014",
+     "\u2014",
+     "\u2014",
+     "\u0411\u0435\u043b\u044b\u0439, static"],
+    ["\u041f\u043b\u0438\u043d\u043a+",
+     "2.5px AngularGradient ring",
+     "violet \u2192 magenta \u2192 fuchsia",
+     "rotation 360\u00b0 / 4s linear repeatForever (\u041f\u041e\u0421\u0422\u041e\u042f\u041d\u041d\u0410\u042f)",
+     "ravePlink.opacity(0.5) radius 8",
+     "\u0410\u043d\u0438\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 hue rotation 3s"],
+    ["Host (\u0432 \u043a\u043e\u043c\u043d\u0430\u0442\u0435)",
+     "2px static Linear ring",
+     "raveHostGradient (magenta\u2192rose)",
+     "\u2014 (\u0441\u0442\u0430\u0442\u0438\u0447\u043d\u0430\u044f)",
      "raveAccent.opacity(0.35) radius 6",
-     "Только в контексте текущей комнаты"],
+     "\u0411\u0435\u043b\u044b\u0439, semibold"],
     ["Admin / Moderator",
-     "2px static gradient ring",
-     "raveAdminGradient (violet→indigo)",
-     "—",
-     "ravePrimary.opacity(0.35) radius 6",
-     "Глобально во всём приложении"],
+     "2.5px AngularGradient ring",
+     "red \u2192 deep red \u2192 light red",
+     "rotation 360\u00b0 / 4s linear repeatForever (\u041f\u041e\u0421\u0422\u041e\u042f\u041d\u041d\u0410\u042f)",
+     "raveAdmin.opacity(0.5) radius 8",
+     "\u0410\u043d\u0438\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 hue rotation 3s (\u043a\u0440\u0430\u0441\u043d\u044b\u0439 spectrum)"],
 ]
 body_rows = []
 for i, row in enumerate(avatar_data):
@@ -2023,12 +2065,12 @@ for i, row in enumerate(avatar_data):
         body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
     else:
         body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
-t = Table(body_rows, colWidths=[2.5*cm, 3.0*cm, 3.5*cm, 3.5*cm, 3.0*cm, 1.5*cm])
+t = Table(body_rows, colWidths=[2.0*cm, 2.8*cm, 3.0*cm, 3.5*cm, 2.7*cm, 3.0*cm])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
     ("VALIGN", (0,0), (-1,-1), "TOP"),
-    ("LEFTPADDING", (0,0), (-1,-1), 5),
-    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("LEFTPADDING", (0,0), (-1,-1), 4),
+    ("RIGHTPADDING", (0,0), (-1,-1), 4),
     ("TOPPADDING", (0,0), (-1,-1), 5),
     ("BOTTOMPADDING", (0,0), (-1,-1), 5),
     ("BOX", (0,0), (-1,-1), 0.5, BORDER),
@@ -2040,31 +2082,39 @@ for i in range(1, len(body_rows)):
 story.append(t)
 story.append(Spacer(0, 6))
 story.append(Paragraph(
-    "<b>Правило приоритета</b> (если у юзера несколько ролей одновременно):<br/>"
-    "Admin &gt; Premium &gt; Host &gt; Free.<br/>"
-    "Например, premium-юзер, который сейчас хостит комнату, видит <b>gold ring</b> (premium приоритетнее host). "
-    "Админ с premium-подпиской видит <b>violet ring</b> (admin приоритетнее premium).",
+    "<b>\u041f\u0440\u0430\u0432\u0438\u043b\u043e \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u0430</b> (\u0435\u0441\u043b\u0438 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0440\u043e\u043b\u0435\u0439 \u043e\u0434\u043d\u043e\u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e):<br/>"
+    "Admin &gt; \u041f\u043b\u0438\u043d\u043a+ &gt; Host &gt; Free.<br/>"
+    "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440, \u043f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0441\u0435\u0439\u0447\u0430\u0441 \u0445\u043e\u0441\u0442\u0438\u0442, \u0432\u0438\u0434\u0438\u0442 <b>violet ring + animated nick</b>. "
+    "\u0410\u0434\u043c\u0438\u043d \u0441 \u043f\u043b\u0438\u043d\u043a+-\u043f\u043e\u0434\u043f\u0438\u0441\u043a\u043e\u0439 \u0432\u0438\u0434\u0438\u0442 <b>red ring + red animated nick</b>.",
     S["body"]
 ))
 story.append(Spacer(0, 12))
 
-# 6.7 Бейджи
-story.append(Paragraph("6.7 Бейджи", S["h3"]))
-badge_data = [
-    ["Бейдж", "Применение", "Фон", "Текст", "Иконка", "Анимация"],
-    ["LIVE",     "Активная комната", "rgba(236,72,153,0.15)", "raveAccent bold", "pink dot, pulse 1s", "pulse scale 1.0↔1.3"],
-    ["PREMIUM",  "Premium-юзер в чате", "ravePremiumGradient", "raveBackground heavy", "crown.fill", "—"],
-    ["HOST",     "Хост в списке участников", "rgba(236,72,153,0.2)", "raveAccent bold", "star.fill", "—"],
-    ["ADMIN",    "Админ в списке", "rgba(168,85,247,0.15)", "ravePrimary bold", "shield.fill", "—"],
-    ["MOD",      "Модератор комнаты", "rgba(99,102,241,0.15)", "raveSecondary bold", "checkmark.shield", "—"],
+# 6.7 Переливающиеся ники — ключевая фича
+story.append(Paragraph("6.7 \u041f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0435\u0441\u044f \u043d\u0438\u043a\u0438 (\u041a\u041b\u042e\u0427\u0415\u0412\u041e\u0415)", S["h3"]))
+story.append(Paragraph(
+    "\u042d\u0442\u043e \u0441\u0430\u043c\u0430\u044f \u0432\u0430\u0436\u043d\u0430\u044f \u0444\u0438\u0447\u0430 \u0434\u0438\u0437\u0430\u0439\u043d\u0430. \u041d\u0438\u043a \u043f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440\u0430 \u0434\u043e\u043b\u0436\u0435\u043d "
+    "<b>\u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u0442\u044c\u0441\u044f</b> \u0447\u0435\u0440\u0435\u0437 spectrum \u0446\u0432\u0435\u0442\u043e\u0432: "
+    "\u043e\u0442 \u043d\u0430\u0441\u044b\u0449\u0435\u043d\u043d\u043e\u0433\u043e violet \u043a magenta, fuchsia, \u043e\u0431\u0440\u0430\u0442\u043d\u043e. "
+    "\u042d\u0444\u0444\u0435\u043a\u0442 \u0434\u043e\u0441\u0442\u0438\u0433\u0430\u0435\u0442\u0441\u044f \u0447\u0435\u0440\u0435\u0437 <code>LinearGradient + hueRotation</code> "
+    "\u043d\u0430 <code>Text</code>, \u0430\u043d\u0438\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u0447\u0435\u0440\u0435\u0437 <code>withAnimation(.linear.duration:3).repeatForever</code>.",
+    S["body"]
+))
+story.append(Spacer(0, 6))
+nick_data = [
+    ["\u0420\u043e\u043b\u044c", "\u0421\u0442\u0438\u043b\u044c \u043d\u0438\u043a\u0430", "\u0426\u0432\u0435\u0442\u0430", "\u0410\u043d\u0438\u043c\u0430\u0446\u0438\u044f"],
+    ["Free",    "Text, .semibold, white",  "#FAFAFA",                       "\u2014 (static)"],
+    ["\u041f\u043b\u0438\u043d\u043a+","Text + hueRotation", "#A855F7 \u2192 #EC4899 \u2192 #D946EF", "hue 0\u00b0\u2192360\u00b0 / 3s linear repeatForever"],
+    ["Host",    "Text, .bold, magenta",    "#EC4899",                       "\u2014 (static, host \u2014 \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u0430\u044f)"],
+    ["Admin",   "Text + hueRotation",      "#FF1744 \u2192 #FF5252 \u2192 #FF8A80", "hue 0\u00b0\u2192360\u00b0 / 3s linear repeatForever (\u043a\u0440\u0430\u0441\u043d\u044b\u0439 spectrum)"],
 ]
 body_rows = []
-for i, row in enumerate(badge_data):
+for i, row in enumerate(nick_data):
     if i == 0:
         body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
     else:
         body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
-t = Table(body_rows, colWidths=[2.0*cm, 3.5*cm, 3.5*cm, 3.0*cm, 2.5*cm, 2.5*cm])
+t = Table(body_rows, colWidths=[2.0*cm, 3.5*cm, 4.5*cm, 6.0*cm])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
     ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -2081,22 +2131,55 @@ for i in range(1, len(body_rows)):
 story.append(t)
 story.append(Spacer(0, 12))
 
-# 6.8 Карточки
-story.append(Paragraph("6.8 Карточки — 3 уровня", S["h3"]))
+# 6.8 \u0411\u0435\u0439\u0434\u0436\u0438
+story.append(Paragraph("6.8 \u0411\u0435\u0439\u0434\u0436\u0438", S["h3"]))
+badge_data = [
+    ["\u0411\u0435\u0439\u0434\u0436", "\u041f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u0435", "\u0424\u043e\u043d", "\u0422\u0435\u043a\u0441\u0442", "\u0410\u043d\u0438\u043c\u0430\u0446\u0438\u044f"],
+    ["LIVE",    "\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u043e\u043c\u043d\u0430\u0442\u0430", "rgba(236,72,153,0.15)", "raveAccent bold",       "pulse 1s scale 1.0\u21941.3"],
+    ["\u041f\u041b\u0418\u041d\u041a+","\u041f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440 \u0432 \u0447\u0430\u0442\u0435", "raveGradient (violet\u2192magenta)", "white heavy", "shimmer 2s (\u0431\u0435\u043b\u0430\u044f \u043f\u043e\u043b\u043e\u0441\u0430)"],
+    ["HOST",    "\u0425\u043e\u0441\u0442 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435", "rgba(236,72,153,0.2)", "raveAccent bold", "\u2014 (static)"],
+    ["ADMIN",   "\u0410\u0434\u043c\u0438\u043d \u0432 \u0441\u043f\u0438\u0441\u043a\u0435", "raveAdminGradient (red)", "white heavy", "shimmer 2s"],
+    ["MOD",     "\u041c\u043e\u0434\u0435\u0440\u0430\u0442\u043e\u0440 \u043a\u043e\u043c\u043d\u0430\u0442\u044b", "rgba(99,102,241,0.15)", "raveSecondary bold", "\u2014"],
+]
+body_rows = []
+for i, row in enumerate(badge_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[2.0*cm, 3.5*cm, 4.0*cm, 2.5*cm, 4.0*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 12))
+
+# 6.9 \u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0438
+story.append(Paragraph("6.9 \u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u2014 3 \u0443\u0440\u043e\u0432\u043d\u044f", S["h3"]))
 card_data = [
-    ["Уровень", "Применение", "Фон", "Граница", "Тень"],
+    ["\u0423\u0440\u043e\u0432\u0435\u043d\u044c", "\u041f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u0435", "\u0424\u043e\u043d", "\u0413\u0440\u0430\u043d\u0438\u0446\u0430", "\u0422\u0435\u043d\u044c"],
     ["Standard",
-     "Комнаты в списке, message bubbles",
+     "\u041a\u043e\u043c\u043d\u0430\u0442\u044b \u0432 \u0441\u043f\u0438\u0441\u043a\u0435, message bubbles",
      "raveSurface (#14141C)",
-     "raveBorder 0.5px (rgba 0.06)",
+     "raveBorder 0.5px",
      "rgba(0,0,0,0.4) 10pt y=4"],
-    ["Premium Featured",
-     "Featured контент, premium-комнаты",
+    ["Plink+ Featured",
+     "\u041f\u043b\u0438\u043d\u043a+-\u043a\u043e\u043c\u043d\u0430\u0442\u044b, featured \u043a\u043e\u043d\u0442\u0435\u043d\u0442",
      "raveSurfaceElevated (#1F1F2A)",
-     "gold gradient 0.5px (subtle)",
-     "glowPremium 8pt + black 10pt"],
+     "violet\u2192magenta 0.5px",
+     "glowPrimary 8pt + black 10pt"],
     ["Live / Active",
-     "Активные трансляции в HomeView",
+     "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u0442\u0440\u0430\u043d\u0441\u043b\u044f\u0446\u0438\u0438 \u0432 HomeView",
      "raveSurface + pink top stripe (2pt)",
      "raveBorder 0.5px",
      "rgba(0,0,0,0.4) 10pt, glowAccent on hover"],
@@ -2124,103 +2207,154 @@ for i in range(1, len(body_rows)):
 story.append(t)
 story.append(Spacer(0, 14))
 
-# 6.9 Готовый код: Color+Theme.swift
-story.append(Paragraph("6.9 Готовый код: Color+Theme.swift (полная замена)", S["h3"]))
-story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Extensions/Color+Theme.swift</font>", S["file"]))
+# 6.10 \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043a\u043e\u0434: Color+Theme.swift
+story.append(Paragraph("6.10 \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043a\u043e\u0434: Color+Theme.swift (\u043f\u043e\u043b\u043d\u0430\u044f \u0437\u0430\u043c\u0435\u043d\u0430)", S["h3"]))
+story.append(Paragraph("\U0001f4c1 <font name='Mono'>RaveClone/RaveClone/Extensions/Color+Theme.swift</font>", S["file"]))
 story.append(Spacer(0, 4))
 story.append(code_block(
 '''import SwiftUI
 
-// MARK: - Cinema Violet — Premium Design System
-// Заменяет "Pure Black × Ice Glow" (бирюзовый)
-// Принципы:
-//   • База — глубокий чёрный с фиолетовым подтоном (#08080C)
-//   • Primary — фиолетовый (#A855F7), НЕ бирюзовый
-//   • Premium — золото (#FBBF24) для premium-tier сигналов
-//   • Accent — магента (#EC4899) для эмоциональных акцентов
+// MARK: - Cinema Violet v2 \u2014 Premium Design System
+// \u0417\u0430\u043c\u0435\u043d\u044f\u0435\u0442 "Pure Black \u00d7 Ice Glow" (\u0431\u0438\u0440\u044e\u0437\u043e\u0432\u044b\u0439) \u0438 v1 (\u0441 \u0437\u043e\u043b\u043e\u0442\u043e\u043c)
+// \u041f\u0440\u0438\u043d\u0446\u0438\u043f\u044b:
+//   \u2022 \u0411\u0430\u0437\u0430 \u2014 \u0433\u043b\u0443\u0445\u043e\u0439 \u0447\u04d1\u0440\u043d\u044b\u0439 \u0441 \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u043c \u043f\u043e\u0434\u0442\u043e\u043d\u043e\u043c (#08080C)
+//   \u2022 Primary \u2014 \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u0439 (#A855F7), \u041d\u0415 \u0431\u0438\u0440\u044e\u0437\u043e\u0432\u044b\u0439
+//   \u2022 \u041f\u043b\u0438\u043d\u043a+ \u2014 violet + magenta + fuchsia (\u0411\u0415\u0417 \u0437\u043e\u043b\u043e\u0442\u0430)
+//   \u2022 Admin \u2014 \u0447\u0438\u0441\u0442\u044b\u0439 \u043a\u0440\u0430\u0441\u043d\u044b\u0439 (\u0430\u043d\u0438\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439)
+//   \u2022 \u0412\u0441\u0435 \u043f\u0440\u0435\u043c\u0438\u0430\u043b-\u044d\u0444\u0444\u0435\u043a\u0442\u044b \u2014 \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0435 \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u0438
 
 extension Color {
-    // ── Accents ─────────────────────────────────────────────────────
-    /// Основной акцент — глубокий фиолетовый (CTA, активные элементы)
+    // \u2500\u2500 Accents \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /// \u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0430\u043a\u0446\u0435\u043d\u0442 \u2014 \u0433\u043b\u0443\u0445\u043e\u0439 \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u0439 (CTA, free-\u0445\u043e\u0441\u0442)
     static let ravePrimary = Color(hex: 0xA855F7)
-    /// Магента — live, urgent, emotional
+    /// \u041c\u0430\u0433\u0435\u043d\u0442\u0430 \u2014 LIVE, urgent, emotional
     static let raveAccent = Color(hex: 0xEC4899)
-    /// Индиго — secondary
+    /// \u0418\u043d\u0434\u0438\u0433\u043e \u2014 secondary
     static let raveSecondary = Color(hex: 0x6366F1)
 
-    // ── Premium Tier (gold) ────────────────────────────────────────
-    /// Премиум-золото — premium-tier, subscribe buttons
-    static let ravePremium = Color(hex: 0xFBBF24)
-    /// Тёмное золото — gradients
-    static let ravePremiumDeep = Color(hex: 0xD97706)
-    /// Светлое золото — glow, highlights
-    static let ravePremiumLight = Color(hex: 0xFCD34D)
+    // \u2500\u2500 \u041f\u043b\u0438\u043d\u043a+ Tier (violet/magenta/fuchsia \u2014 \u0411\u0415\u0417 \u0437\u043e\u043b\u043e\u0442\u0430) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /// Fuchsia \u2014 \u041f\u043b\u0438\u043d\u043a+ accent (\u0432\u0442\u043e\u0440\u043e\u0439 \u0446\u0432\u0435\u0442 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442\u0430)
+    static let ravePlink = Color(hex: 0xD946EF)
+    /// \u0413\u043b\u0443\u0445\u043e\u0439 violet \u2014 \u0434\u043b\u044f \u043f\u043b\u0438\u043d\u043a+ \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442\u043e\u0432
+    static let ravePlinkDeep = Color(hex: 0x7E22CE)
+    /// \u0421\u0432\u0435\u0442\u043b\u044b\u0439 fuchsia \u2014 \u0434\u043b\u044f \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u043d\u0438\u044f \u043d\u0438\u043a\u0430
+    static let ravePlinkLight = Color(hex: 0xF0ABFC)
 
-    // ── Status ─────────────────────────────────────────────────────
-    /// Изумруд — online статус (приглушённый, не неон)
+    // \u2500\u2500 Admin Tier (\u0447\u0438\u0441\u0442\u044b\u0439 \u043a\u0440\u0430\u0441\u043d\u044b\u0439) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /// \u0427\u0438\u0441\u0442\u044b\u0439 \u043a\u0440\u0430\u0441\u043d\u044b\u0439 \u2014 \u0430\u0434\u043c\u0438\u043d \u043e\u0431\u0432\u043e\u0434\u043a\u0430
+    static let raveAdmin = Color(hex: 0xFF1744)
+    /// \u0413\u043b\u0443\u0445\u043e\u0439 \u043a\u0440\u0430\u0441\u043d\u044b\u0439 \u2014 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442
+    static let raveAdminDeep = Color(hex: 0xD50000)
+    /// \u0421\u0432\u0435\u0442\u043b\u044b\u0439 \u043a\u0440\u0430\u0441\u043d\u044b\u0439 \u2014 \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u043d\u0438\u0435 \u043d\u0438\u043a\u0430
+    static let raveAdminLight = Color(hex: 0xFF8A80)
+
+    // \u2500\u2500 Status \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /// \u0418\u0437\u0443\u043c\u0440\u0443\u0434 \u2014 online \u0441\u0442\u0430\u0442\u0443\u0441 (\u043f\u0440\u0438\u0433\u043b\u0443\u0448\u04d1\u043d\u043d\u044b\u0439, \u043d\u0435 \u043d\u0435\u043e\u043d)
     static let raveSuccess = Color(hex: 0x10B981)
-    /// Красный — danger, mute
+    /// \u041a\u0440\u0430\u0441\u043d\u044b\u0439 \u2014 danger, mute, ban (\u041d\u0415 \u0430\u0434\u043c\u0438\u043d!)
     static let raveDanger = Color(hex: 0xEF4444)
-    /// Янтарь — warning
+    /// \u042f\u043d\u0442\u0430\u0440\u044c \u2014 warning
     static let raveWarning = Color(hex: 0xF59E0B)
 
-    // ── Backgrounds ────────────────────────────────────────────────
-    /// Основной фон — глубокий чёрный с фиолетовым подтоном
+    // \u2500\u2500 Backgrounds \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /// \u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0444\u043e\u043d \u2014 \u0433\u043b\u0443\u0445\u043e\u0439 \u0447\u04d1\u0440\u043d\u044b\u0439 \u0441 \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u043c \u043f\u043e\u0434\u0442\u043e\u043d\u043e\u043c
     static let raveBackground = Color(hex: 0x08080C)
-    /// Карточный фон
+    /// \u041a\u0430\u0440\u0442\u043e\u0447\u043d\u044b\u0439 \u0444\u043e\u043d
     static let raveSurface = Color(hex: 0x14141C)
-    /// Приподнятые карточки (featured)
+    /// \u041f\u0440\u0438\u043f\u043e\u0434\u043d\u044f\u0442\u044b\u0435 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 (featured)
     static let raveSurfaceElevated = Color(hex: 0x1F1F2A)
-    /// Hover-состояние
+    /// Hover-\u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435
     static let raveSurfaceHover = Color(hex: 0x2A2A38)
 
-    // ── Borders ────────────────────────────────────────────────────
+    // \u2500\u2500 Borders \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     static let raveBorder = Color.white.opacity(0.06)
     static let raveBorderHover = Color.white.opacity(0.12)
 
-    // ── Text ───────────────────────────────────────────────────────
+    // \u2500\u2500 Text \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     static let raveTextPrimary = Color(hex: 0xFAFAFA)
     static let raveTextSecondary = Color(hex: 0xA1A1AA)
     static let raveTextTertiary = Color(hex: 0x71717A)
 
-    // ── Glass ──────────────────────────────────────────────────────
+    // \u2500\u2500 Glass \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     static let raveGlass = Color.white.opacity(0.05)
 
-    // ── Gradients ──────────────────────────────────────────────────
-    /// Главный CTA: фиолетовый → магента
+    // \u2500\u2500 Gradients \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /// \u0413\u043b\u0430\u0432\u043d\u044b\u0439 CTA: \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u0439 \u2192 \u043c\u0430\u0433\u0435\u043d\u0442\u0430
     static let raveGradient = LinearGradient(
         colors: [Color(hex: 0xA855F7), Color(hex: 0xEC4899)],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
-    /// Премиум-градиент: золотой перелив
-    static let ravePremiumGradient = LinearGradient(
-        colors: [Color(hex: 0xFCD34D), Color(hex: 0xFBBF24), Color(hex: 0xD97706)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-    /// Кольцо premium-аватара (animated rotation)
-    static let ravePremiumRingGradient = LinearGradient(
-        colors: [Color(hex: 0xFCD34D), Color(hex: 0xFBBF24),
-                 Color(hex: 0xD97706), Color(hex: 0xFCD34D)],
-        startPoint: .top, endPoint: .bottom
-    )
-    /// Хост-градиент (в контексте комнаты)
+
+    /// \u041a\u043e\u043b\u044c\u0446\u043e \u041f\u043b\u0438\u043d\u043a+-\u0430\u0432\u0430\u0442\u0430\u0440\u0430 (AngularGradient, \u0430\u043d\u0438\u043c\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435\u043c)
+    static func ravePlinkRingGradient() -> AngularGradient {
+        AngularGradient(
+            colors: [
+                Color(hex: 0xA855F7),  // violet
+                Color(hex: 0xEC4899),  // magenta
+                Color(hex: 0xD946EF),  // fuchsia
+                Color(hex: 0x7E22CE),  // deep violet
+                Color(hex: 0xA855F7),  // violet (\u0437\u0430\u043c\u044b\u043a\u0430\u043d\u0438\u0435 \u043a\u0440\u0443\u0433\u0430)
+            ],
+            center: .center
+        )
+    }
+
+    /// \u041d\u0438\u043a \u041f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440\u0430 (LinearGradient, \u0430\u043d\u0438\u043c\u0438\u0440\u0443\u0435\u0442\u0441\u044f hue rotation)
+    static func ravePlinkNickGradient() -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(hex: 0xA855F7),  // violet
+                Color(hex: 0xEC4899),  // magenta
+                Color(hex: 0xD946EF),  // fuchsia
+                Color(hex: 0xF0ABFC),  // light fuchsia
+                Color(hex: 0xA855F7),  // violet (\u0437\u0430\u043c\u044b\u043a\u0430\u043d\u0438\u0435)
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    /// \u041a\u043e\u043b\u044c\u0446\u043e \u0430\u0434\u043c\u0438\u043d-\u0430\u0432\u0430\u0442\u0430\u0440\u0430 (AngularGradient, \u0430\u043d\u0438\u043c\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435\u043c)
+    static func raveAdminRingGradient() -> AngularGradient {
+        AngularGradient(
+            colors: [
+                Color(hex: 0xFF1744),  // red
+                Color(hex: 0xFF5252),  // light red
+                Color(hex: 0xD50000),  // deep red
+                Color(hex: 0xFF8A80),  // very light red
+                Color(hex: 0xFF1744),  // red (\u0437\u0430\u043c\u044b\u043a\u0430\u043d\u0438\u0435)
+            ],
+            center: .center
+        )
+    }
+
+    /// \u041d\u0438\u043a \u0430\u0434\u043c\u0438\u043d\u0430 (LinearGradient, hue rotation \u043a\u0440\u0430\u0441\u043d\u043e\u0433\u043e spectrum)
+    static func raveAdminNickGradient() -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(hex: 0xFF1744),  // red
+                Color(hex: 0xFF5252),  // light red
+                Color(hex: 0xFF8A80),  // very light red
+                Color(hex: 0xD50000),  // deep red
+                Color(hex: 0xFF1744),  // red (\u0437\u0430\u043c\u044b\u043a\u0430\u043d\u0438\u0435)
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    /// \u0425\u043e\u0441\u0442-\u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442 (\u0432 \u043a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b, \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0439)
     static let raveHostGradient = LinearGradient(
         colors: [Color(hex: 0xEC4899), Color(hex: 0xF43F5E)],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
-    /// Админ-градиент (глобально)
-    static let raveAdminGradient = LinearGradient(
-        colors: [Color(hex: 0xA855F7), Color(hex: 0x6366F1)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-    /// Фоновый градиент — чёрный с фиолетовым
+
+    /// \u0424\u043e\u043d\u043e\u0432\u044b\u0439 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442 \u2014 \u0447\u04d1\u0440\u043d\u044b\u0439 \u0441 \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u043c
     static let raveBgGradient = LinearGradient(
         colors: [Color(hex: 0x08080C), Color(hex: 0x0F0A1A), Color(hex: 0x08080C)],
         startPoint: .top, endPoint: .bottom
     )
 }
 
-// MARK: - Hex init (без изменений)
+// MARK: - Hex init (\u0431\u0435\u0437 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439)
 extension Color {
     init(hex: UInt32, alpha: Double = 1.0) {
         let r = Double((hex >> 16) & 0xFF) / 255.0
@@ -2239,45 +2373,52 @@ extension View {
     func neonGlow(color: Color = .ravePrimary, radius: CGFloat = 16, y: CGFloat = 6) -> some View {
         self.shadow(color: color.glowShadow, radius: radius, x: 0, y: y)
     }
-    func premiumGlow(radius: CGFloat = 12) -> some View {
-        self.shadow(color: Color.ravePremium.opacity(0.5), radius: radius, x: 0, y: 4)
+    /// \u041f\u043b\u0438\u043d\u043a+ glow \u2014 \u0431\u043e\u043b\u0435\u0435 \u0441\u0438\u043b\u044c\u043d\u044b\u0439, violet+magenta
+    func plinkGlow(radius: CGFloat = 14) -> some View {
+        self.shadow(color: Color.ravePlink.opacity(0.55), radius: radius, x: 0, y: 5)
+    }
+    /// \u0410\u0434\u043c\u0438\u043d glow \u2014 \u043a\u0440\u0430\u0441\u043d\u044b\u0439
+    func adminGlow(radius: CGFloat = 14) -> some View {
+        self.shadow(color: Color.raveAdmin.opacity(0.55), radius: radius, x: 0, y: 5)
     }
 }'''
 ))
 story.append(Spacer(0, 12))
 
-# 6.10 PremiumAvatar.swift
-story.append(Paragraph("6.10 Готовый код: PremiumAvatar.swift (новый файл)", S["h3"]))
-story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Views/Components/PremiumAvatar.swift</font>", S["file"]))
+# 6.11 PremiumAvatar.swift
+story.append(Paragraph("6.11 \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043a\u043e\u0434: PremiumAvatar.swift (\u043d\u043e\u0432\u044b\u0439 \u0444\u0430\u0439\u043b)", S["h3"]))
+story.append(Paragraph("\U0001f4c1 <font name='Mono'>RaveClone/RaveClone/Views/Components/PremiumAvatar.swift</font>", S["file"]))
 story.append(Spacer(0, 4))
 story.append(code_block(
 '''import SwiftUI
 
-// MARK: - Premium Avatar с role-based borders
+// MARK: - Premium Avatar \u0441 role-based borders + \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u043e\u0439 \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u0435\u0439
 //
-// 4 уровня (приоритет: admin > premium > host > free):
-//   1. Free user — БЕЗ обводки, чистый circle (минимум визуального шума)
-//   2. Premium   — анимированное золотое кольцо (8s/оборот, не раздражает)
-//   3. Host      — статичное magenta кольцо (только в текущей комнате)
-//   4. Admin     — статичное фиолетовое кольцо (глобально)
+// 4 \u0443\u0440\u043e\u0432\u043d\u044f (\u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442: admin > plink > host > free):
+//   1. Free user  \u2014 \u0411\u0415\u0417 \u043e\u0431\u0432\u043e\u0434\u043a\u0438, \u0447\u0438\u0441\u0442\u044b\u0439 circle
+//   2. \u041f\u043b\u0438\u043d\u043a+  \u2014 \u041f\u041e\u0421\u0422\u041e\u042f\u041d\u041d\u0410\u042f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f violet+magenta AngularGradient,
+//                   \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435 360\u00b0 \u0437\u0430 4s, linear, repeatForever
+//   3. Host      \u2014 \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u043e\u0435 magenta \u043a\u043e\u043b\u044c\u0446\u043e (\u0442\u043e\u043b\u044c\u043a\u043e \u0432 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u043a\u043e\u043c\u043d\u0430\u0442\u0435)
+//   4. Admin     \u2014 \u041f\u041e\u0421\u0422\u041e\u042f\u041d\u041d\u0410\u042f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f red AngularGradient,
+//                   \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435 360\u00b0 \u0437\u0430 4s, linear, repeatForever
 
 enum AvatarRole: Equatable {
     case free
-    case premium
+    case plink      // \u041f\u043b\u0438\u043d\u043a+
     case host
     case admin
 
-    /// Приоритет для комбинирования ролей
+    /// \u041f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442 \u0434\u043b\u044f \u043a\u043e\u043c\u0431\u0438\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0440\u043e\u043b\u0435\u0439
     var priority: Int {
         switch self {
-        case .free:     return 0
-        case .host:     return 1
-        case .premium:  return 2
-        case .admin:    return 3
+        case .free:  return 0
+        case .host:  return 1
+        case .plink: return 2
+        case .admin: return 3
         }
     }
 
-    /// Выбор доминирующей роли
+    /// \u0412\u044b\u0431\u043e\u0440 \u0434\u043e\u043c\u0438\u043d\u0438\u0440\u0443\u044e\u0449\u0435\u0439 \u0440\u043e\u043b\u0438
     static func dominant(_ roles: [AvatarRole]) -> AvatarRole {
         roles.max(by: { $0.priority < $1.priority }) ?? .free
     }
@@ -2289,20 +2430,23 @@ struct PremiumAvatar: View {
     let role: AvatarRole
     var size: CGFloat = 44
 
-    @State private var animateRotation: Bool = false
+    // \u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u0430\u044f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u044f
+    @State private var rotationAngle: Double = 0
 
     var body: some View {
         ZStack {
+            // \u0410\u0432\u0430\u0442\u0430\u0440 \u0432\u043d\u0443\u0442\u0440\u0438
             avatarContent
                 .frame(width: size, height: size)
                 .clipShape(Circle())
 
+            // \u041a\u043e\u043b\u044c\u0446\u043e \u043e\u0431\u0432\u043e\u0434\u043a\u0438 (\u0430\u043d\u0438\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u0435 \u0438\u043b\u0438 \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u043e\u0435)
             ringOverlay
                 .frame(width: size + ringWidth, height: size + ringWidth)
         }
         .frame(width: size + ringWidth, height: size + ringWidth)
         .shadow(color: glowColor, radius: glowRadius)
-        .onAppear { startAnimationIfNeeded() }
+        .onAppear { startConstantAnimation() }
     }
 
     // MARK: - Avatar content (image or initials)
@@ -2328,33 +2472,25 @@ struct PremiumAvatar: View {
         }
     }
 
-    // MARK: - Ring overlay (role-based) — КЛЮЧЕВАЯ логика
+    // MARK: - Ring overlay \u2014 \u041a\u041b\u042e\u0427\u0415\u0412\u0410\u042f \u043b\u043e\u0433\u0438\u043a\u0430
     @ViewBuilder
     private var ringOverlay: some View {
         switch role {
         case .free:
-            // ❌ НЕТ обводки — чистый circle. Это и есть премиум-сигнал для остальных.
+            // \u274c \u041d\u0415\u0422 \u043e\u0431\u0432\u043e\u0434\u043a\u0438 \u2014 \u0447\u0438\u0441\u0442\u044b\u0439 circle.
             EmptyView()
 
-        case .premium:
-            // ✨ Анимированное золотое кольцо
+        case .plink:
+            // \u2728 \u041f\u041e\u0421\u0422\u041e\u042f\u041d\u041d\u0410\u042f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f violet+magenta \u043f\u043e \u043a\u0440\u0443\u0433\u0443
             Circle()
                 .stroke(
-                    AngularGradient(
-                        colors: [
-                            Color(hex: 0xFCD34D),
-                            Color(hex: 0xFBBF24),
-                            Color(hex: 0xD97706),
-                            Color(hex: 0xFCD34D),
-                        ],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                    Color.ravePlinkRingGradient(),
+                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                 )
-                .rotationEffect(.degrees(animateRotation ? 360 : 0))
+                .rotationEffect(.degrees(rotationAngle))
 
         case .host:
-            // 🎬 Статичное magenta кольцо — хост в текущей комнате
+            // \U0001f3ac \u0421\u0442\u0430\u0442\u0438\u0447\u043d\u043e\u0435 magenta \u043a\u043e\u043b\u044c\u0446\u043e \u2014 \u0445\u043e\u0441\u0442 \u0432 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u043a\u043e\u043c\u043d\u0430\u0442\u0435
             Circle()
                 .stroke(
                     Color.raveHostGradient,
@@ -2362,70 +2498,182 @@ struct PremiumAvatar: View {
                 )
 
         case .admin:
-            // 🛡️ Статичное фиолетовое кольцо — глобально
+            // \U0001f6e1\ufe0f \u041f\u041e\u0421\u0422\u041e\u042f\u041d\u041d\u0410\u042f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f \u043a\u0440\u0430\u0441\u043d\u043e\u0433\u043e AngularGradient
             Circle()
                 .stroke(
-                    Color.raveAdminGradient,
-                    style: StrokeStyle(lineWidth: 2)
+                    Color.raveAdminRingGradient(),
+                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                 )
+                .rotationEffect(.degrees(rotationAngle))
         }
     }
 
     // MARK: - Geometry helpers
     private var ringWidth: CGFloat {
-        role == .free ? 0 : 4   // 2px stroke + 2px padding
+        role == .free ? 0 : 5   // 2.5px stroke + 2.5px padding
     }
 
     private var glowColor: Color {
         switch role {
-        case .free:     return .clear
-        case .premium:  return .ravePremium.opacity(0.4)
-        case .host:     return .raveAccent.opacity(0.35)
-        case .admin:    return .ravePrimary.opacity(0.35)
+        case .free:  return .clear
+        case .plink: return .ravePlink.opacity(0.5)
+        case .host:  return .raveAccent.opacity(0.35)
+        case .admin: return .raveAdmin.opacity(0.5)
         }
     }
 
     private var glowRadius: CGFloat {
-        role == .free ? 0 : 6
+        role == .free ? 0 : 8
     }
 
-    private func startAnimationIfNeeded() {
-        guard role == .premium, !animateRotation else { return }
-        withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
-            animateRotation = true
+    // MARK: - \u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u0430\u044f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f (\u043d\u0438\u043a\u043e\u0433\u0434\u0430 \u043d\u0435 \u043e\u0441\u0442\u0430\u043d\u0430\u0432\u043b\u0438\u0432\u0430\u0435\u0442\u0441\u044f)
+    private func startConstantAnimation() {
+        guard role == .plink || role == .admin else { return }
+        // \u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u043e\u0435 \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435 360\u00b0 \u0437\u0430 4 \u0441\u0435\u043a\u0443\u043d\u0434\u044b
+        // \u041b\u0438\u043d\u0435\u0439\u043d\u0430\u044f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f = \u043f\u043b\u0430\u0432\u043d\u043e\u0435 \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435 \u0431\u0435\u0437 \u0440\u044b\u0432\u043e\u0432
+        withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) {
+            rotationAngle = 360
         }
     }
 }
 
 // MARK: - Usage examples
 /*
- // Free user в списке участников:
+ // Free user \u0432 \u0441\u043f\u0438\u0441\u043a\u0435 \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432:
  PremiumAvatar(imageURL: user.avatarURL, displayName: user.name, role: .free, size: 44)
 
- // Premium-юзер:
- PremiumAvatar(imageURL: user.avatarURL, displayName: user.name, role: .premium, size: 44)
+ // \u041f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440:
+ PremiumAvatar(imageURL: user.avatarURL, displayName: user.name, role: .plink, size: 44)
 
- // Хост в RoomView:
+ // \u0425\u043e\u0441\u0442 \u0432 RoomView (\u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442: plink > host):
  PremiumAvatar(imageURL: host.avatarURL, displayName: host.name,
-               role: .dominant([.premium, .host]), size: 56)
-               // → выберет .premium (приоритет выше)
+               role: .dominant([.plink, .host]), size: 56)
+               // \u2192 \u0432\u044b\u0431\u0435\u0440\u0435\u0442 .plink (\u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442 \u0432\u044b\u0448\u0435)
 
- // Админ в AdminPanelView:
+ // \u0410\u0434\u043c\u0438\u043d \u0432 AdminPanelView:
  PremiumAvatar(imageURL: admin.avatarURL, displayName: admin.name, role: .admin, size: 44)
  */
 '''
 ))
 story.append(Spacer(0, 12))
 
-# 6.11 PremiumButtonStyle.swift
-story.append(Paragraph("6.11 Готовый код: PremiumButtonStyle.swift (5 стилей)", S["h3"]))
-story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Views/Components/PremiumButtonStyle.swift</font> (заменяет существующий)", S["file"]))
+# 6.12 AnimatedNickText.swift
+story.append(Paragraph("6.12 \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043a\u043e\u0434: AnimatedNickText.swift (\u043d\u043e\u0432\u044b\u0439 \u0444\u0430\u0439\u043b)", S["h3"]))
+story.append(Paragraph(
+    "\u041f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0435\u0441\u044f \u043d\u0438\u043a\u0438 \u2014 \u0441\u0430\u043c\u0430\u044f \u0432\u0430\u0436\u043d\u0430\u044f \u0444\u0438\u0447\u0430 \u0434\u0438\u0437\u0430\u0439\u043d\u0430. "
+    "\u042d\u0444\u0444\u0435\u043a\u0442: \u043d\u0438\u043a \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0447\u0435\u0440\u0435\u0437 spectrum \u0446\u0432\u0435\u0442\u043e\u0432 "
+    "(\u0434\u043b\u044f \u041f\u043b\u0438\u043d\u043a+: violet \u2192 magenta \u2192 fuchsia; \u0434\u043b\u044f \u0430\u0434\u043c\u0438\u043d\u0430: red \u2192 light red \u2192 deep red). "
+    "\u0414\u043e\u0441\u0442\u0438\u0433\u0430\u0435\u0442\u0441\u044f \u0447\u0435\u0440\u0435\u0437 LinearGradient + hueRotation \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f.",
+    S["body"]
+))
+story.append(Paragraph("\U0001f4c1 <font name='Mono'>RaveClone/RaveClone/Views/Components/AnimatedNickText.swift</font> (\u043d\u043e\u0432\u044b\u0439)", S["file"]))
 story.append(Spacer(0, 4))
 story.append(code_block(
 '''import SwiftUI
 
-// MARK: - 1. Primary CTA (violet → magenta gradient)
-// Применение: Create Room, Confirm, Send, Join
+// MARK: - Animated Nick Text
+//
+// \u041f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0439\u0441\u044f \u043d\u0438\u043a \u0434\u043b\u044f \u043f\u0440\u0435\u043c\u0438\u0430\u043b\u044c\u043d\u044b\u0445 \u0440\u043e\u043b\u0435\u0439.
+// \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442 LinearGradient + \u0430\u043d\u0438\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 hueRotation
+// \u0434\u043b\u044f \u043f\u043b\u0430\u0432\u043d\u043e\u0433\u043e \u043f\u0435\u0440\u0435\u0442\u0435\u043a\u0430\u043d\u0438\u044f \u0446\u0432\u0435\u0442\u043e\u0432.
+
+enum NickStyle {
+    case free
+    case plink     // \u041f\u043b\u0438\u043d\u043a+ \u2014 violet/magenta/fuchsia spectrum
+    case host      // \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0439 magenta
+    case admin     // \u043a\u0440\u0430\u0441\u043d\u044b\u0439 spectrum
+
+    var baseFont: Font {
+        switch self {
+        case .free:  return .system(size: 14, weight: .medium)
+        case .plink: return .system(size: 14, weight: .bold)
+        case .host:  return .system(size: 14, weight: .semibold)
+        case .admin: return .system(size: 14, weight: .bold)
+        }
+    }
+}
+
+struct AnimatedNickText: View {
+    let text: String
+    let style: NickStyle
+
+    @State private var hueShift: Double = 0
+
+    var body: some View {
+        switch style {
+        case .free:
+            // \u041e\u0431\u044b\u0447\u043d\u044b\u0439 \u0431\u0435\u043b\u044b\u0439 \u0442\u0435\u043a\u0441\u0442
+            Text(text)
+                .font(style.baseFont)
+                .foregroundColor(.raveTextPrimary)
+
+        case .plink:
+            // \u041f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0439\u0441\u044f violet\u2194magenta\u2194fuchsia
+            Text(text)
+                .font(style.baseFont)
+                .foregroundStyle(Color.ravePlinkNickGradient())
+                .hueRotation(.degrees(hueShift))
+                .onAppear {
+                    withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+                        hueShift = 360
+                    }
+                }
+
+        case .host:
+            // \u0421\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0439 magenta (\u0445\u043e\u0441\u0442 \u2014 \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u0430\u044f \u0440\u043e\u043b\u044c)
+            Text(text)
+                .font(style.baseFont)
+                .foregroundColor(.raveAccent)
+
+        case .admin:
+            // \u041f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0439\u0441\u044f \u043a\u0440\u0430\u0441\u043d\u044b\u0439 spectrum
+            Text(text)
+                .font(style.baseFont)
+                .foregroundStyle(Color.raveAdminNickGradient())
+                .hueRotation(.degrees(hueShift))
+                .onAppear {
+                    withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+                        hueShift = 360
+                    }
+                }
+        }
+    }
+}
+
+// MARK: - Convenience: \u0430\u0432\u0442\u043e-\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0442\u0438\u043b\u044f \u043f\u043e AvatarRole
+extension AnimatedNickText {
+    init(_ text: String, role: AvatarRole) {
+        self.text = text
+        switch role {
+        case .free:  self.style = .free
+        case .plink: self.style = .plink
+        case .host:  self.style = .host
+        case .admin: self.style = .admin
+        }
+    }
+}
+
+// MARK: - Usage
+/*
+ // \u0412\u043c\u0435\u0441\u0442\u043e Text(user.name):
+ AnimatedNickText(user.name, role: .plink)        // \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0439\u0441\u044f \u043d\u0438\u043a \u043f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440\u0430
+ AnimatedNickText(user.name, role: .admin)        // \u043a\u0440\u0430\u0441\u043d\u044b\u0439 \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0439\u0441\u044f
+ AnimatedNickText(user.name, role: .free)         // \u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u0431\u0435\u043b\u044b\u0439
+ AnimatedNickText(user.name, role: .host)         // \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0439 magenta
+ */
+'''
+))
+story.append(Spacer(0, 12))
+
+# 6.13 PremiumButtonStyle.swift
+story.append(Paragraph("6.13 \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043a\u043e\u0434: PremiumButtonStyle.swift (4 \u0441\u0442\u0438\u043b\u044f + \u043f\u043b\u0438\u043d\u043a+ shimmer)", S["h3"]))
+story.append(Paragraph("\U0001f4c1 <font name='Mono'>RaveClone/RaveClone/Views/Components/PremiumButtonStyle.swift</font> (\u0437\u0430\u043c\u0435\u043d\u044f\u0435\u0442 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0439)", S["file"]))
+story.append(Spacer(0, 4))
+story.append(code_block(
+'''import SwiftUI
+
+// MARK: - 1. Primary CTA (violet \u2192 magenta gradient)
+// \u041f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u0435: Create Room, Confirm, Send, Join
 struct PremiumButtonStyle: ButtonStyle {
     var gradient: LinearGradient = Color.raveGradient
     var glowColor: Color = .ravePrimary
@@ -2445,26 +2693,50 @@ struct PremiumButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - 2. Premium Subscribe (gold gradient)
-// Применение: Upgrade to Premium, Restore Purchases
-struct PremiumSubscribeButtonStyle: ButtonStyle {
+// MARK: - 2. \u041f\u043b\u0438\u043d\u043a+ Subscribe (\u0441 animated shimmer overlay)
+// \u041f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u0435: Upgrade to \u041f\u043b\u0438\u043d\u043a+, Restore Purchases
+struct PlinkSubscribeButtonStyle: ButtonStyle {
+    @State private var shimmerOffset: CGFloat = -1
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .heavy, design: .rounded))
-            .foregroundColor(.raveBackground)  // чёрный на золоте — макс контраст
+            .foregroundColor(.white)
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6),
                        value: configuration.isPressed)
             .shadow(
-                color: .ravePremium.opacity(configuration.isPressed ? 0.3 : 0.55),
-                radius: configuration.isPressed ? 4 : 14,
-                y: 5
+                color: Color.ravePlink.opacity(configuration.isPressed ? 0.3 : 0.55),
+                radius: configuration.isPressed ? 4 : 18,
+                y: 6
+            )
+            .overlay(
+                // \u0411\u0435\u043b\u0430\u044f \u043f\u043e\u043b\u043e\u0441\u0430 \u0441\u0432\u0435\u0442\u0430, \u043f\u0440\u043e\u0445\u043e\u0434\u044f\u0449\u0430\u044f \u043f\u043e \u043a\u043d\u043e\u043f\u043a\u0435 \u043a\u0430\u0436\u0434\u044b\u0435 2s
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.white.opacity(0.4),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 0.5)
+                    .offset(x: shimmerOffset * geo.size.width * 1.5)
+                    .onAppear {
+                        withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                            shimmerOffset = 1
+                        }
+                    }
+                }
+                .mask(configuration.label.background(Color.clear))
             )
     }
 }
 
 // MARK: - 3. Secondary (surface + subtle border)
-// Применение: Cancel, Back, Close
+// \u041f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u0435: Cancel, Back, Close
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -2477,7 +2749,7 @@ struct SecondaryButtonStyle: ButtonStyle {
 }
 
 // MARK: - 4. Ghost (text only)
-// Применение: Forgot password, Skip, View all
+// \u041f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u0435: Forgot password, Skip, View all
 struct GhostButtonStyle: ButtonStyle {
     var color: Color = .ravePrimary
 
@@ -2491,7 +2763,6 @@ struct GhostButtonStyle: ButtonStyle {
 }
 
 // MARK: - 5. Icon (mute, settings, share)
-// Применение: круглые icon-кнопки
 struct IconButtonStyle: ButtonStyle {
     var isActive: Bool = false
     var activeColor: Color = .raveAccent
@@ -2508,6 +2779,7 @@ struct IconButtonStyle: ButtonStyle {
 
 // MARK: - Modifier helpers
 extension View {
+    /// Primary CTA: violet\u2192magenta gradient
     func primaryButton() -> some View {
         self
             .background(Color.raveGradient)
@@ -2515,13 +2787,15 @@ extension View {
             .buttonStyle(PremiumButtonStyle())
     }
 
-    func premiumSubscribeButton() -> some View {
+    /// \u041f\u043b\u0438\u043d\u043a+ subscribe: gradient + animated shimmer overlay
+    func plinkSubscribeButton() -> some View {
         self
-            .background(Color.ravePremiumGradient)
+            .background(Color.raveGradient)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .buttonStyle(PremiumSubscribeButtonStyle())
+            .buttonStyle(PlinkSubscribeButtonStyle())
     }
 
+    /// Secondary: surface + border
     func secondaryButton() -> some View {
         self
             .background(Color.raveSurface)
@@ -2533,10 +2807,12 @@ extension View {
             .buttonStyle(SecondaryButtonStyle())
     }
 
+    /// Ghost: text only
     func ghostButton(color: Color = .ravePrimary) -> some View {
         self.buttonStyle(GhostButtonStyle(color: color))
     }
 
+    /// Icon: circle 44\u00d744
     func iconButton(isActive: Bool = false, activeColor: Color = .raveAccent) -> some View {
         self
             .frame(width: 44, height: 44)
@@ -2550,51 +2826,56 @@ extension View {
 ))
 story.append(Spacer(0, 12))
 
-# 6.12 AnimatedGradientBackground.swift updated
-story.append(Paragraph("6.12 Готовый код: AnimatedGradientBackground.swift (обновлённый)", S["h3"]))
+# 6.14 AnimatedGradientBackground.swift
+story.append(Paragraph("6.14 \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043a\u043e\u0434: AnimatedGradientBackground.swift + Badges", S["h3"]))
 story.append(Paragraph(
-    "Объединяет фикс из раздела 02 (TimelineView вместо withAnimation) с новой палитрой «Cinema Violet» — "
-    "фоновые орбы теперь фиолетовые, магента и золотые (вместо бирюзовых).",
+    "\u041e\u0431\u044a\u0435\u0434\u0438\u043d\u044f\u0435\u0442 \u0444\u0438\u043a\u0441 \u0438\u0437 \u0440\u0430\u0437\u0434\u0435\u043b\u0430 02 (TimelineView) \u0441 \u043d\u043e\u0432\u043e\u0439 \u043f\u0430\u043b\u0438\u0442\u0440\u043e\u0439 Cinema Violet v2: "
+    "\u0444\u043e\u043d\u043e\u0432\u044b\u0435 \u043e\u0440\u0431\u044b \u0442\u0435\u043f\u0435\u0440\u044c violet, magenta \u0438 \u043d\u0435\u043c\u043d\u043e\u0433\u043e fuchsia (\u0431\u0435\u0437 \u0437\u043e\u043b\u043e\u0442\u0430). "
+    "\u041f\u043b\u044e\u0441 \u043e\u0431\u043d\u043e\u0432\u043b\u04d1\u043d\u043d\u044b\u0435 \u0431\u0435\u0439\u0434\u0436\u0438: LIVE, \u041f\u041b\u0418\u041d\u041a+, HOST, ADMIN.",
     S["body"]
 ))
-story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Views/Components/AnimatedGradientBackground.swift</font> (полная замена)", S["file"]))
+story.append(Paragraph("\U0001f4c1 <font name='Mono'>RaveClone/RaveClone/Views/Components/AnimatedGradientBackground.swift</font> (\u043f\u043e\u043b\u043d\u0430\u044f \u0437\u0430\u043c\u0435\u043d\u0430)", S["file"]))
 story.append(Spacer(0, 4))
 story.append(code_block(
 '''import SwiftUI
 
-// MARK: - Cinema Violet Ambient Background
-// Заменяет бирюзовый "Ice Glow" на фиолетово-золотой premium-фон.
-// TimelineView — надёжная анимация (не зависит от lifecycle).
+// MARK: - Cinema Violet v2 Ambient Background
+// \u0417\u0430\u043c\u0435\u043d\u044f\u0435\u0442 \u0431\u0438\u0440\u044e\u0437\u043e\u0432\u044b\u0439 "Ice Glow" \u043d\u0430 violet+magenta premium-\u0444\u043e\u043d.
+// TimelineView \u2014 \u043d\u0430\u0434\u04d1\u0436\u043d\u0430\u044f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f (\u043d\u0435 \u0437\u0430\u0432\u0438\u0441\u0438\u0442 \u043e\u0442 lifecycle).
+// \u0411\u0435\u0437 \u0437\u043e\u043b\u043e\u0442\u0430 \u2014 \u0442\u043e\u043b\u044c\u043a\u043e violet, magenta, fuchsia.
 
 struct AnimatedGradientBackground: View {
     var hasActiveRooms: Bool = true
 
     var body: some View {
         ZStack {
-            // База — глубокий чёрный с фиолетовым подтоном
+            // \u0411\u0430\u0437\u0430 \u2014 \u0433\u043b\u0443\u0445\u043e\u0439 \u0447\u04d1\u0440\u043d\u044b\u0439 \u0441 \u0444\u0438\u043e\u043b\u0435\u0442\u043e\u0432\u044b\u043c \u043f\u043e\u0434\u0442\u043e\u043d\u043e\u043c
             Color.raveBackground
                 .ignoresSafeArea()
 
-            // Плавающие glow-orbs (violet, magenta, gold)
+            // \u041f\u043b\u0430\u0432\u0430\u044e\u0449\u0438\u0435 glow-orbs (violet, magenta, fuchsia \u2014 \u0411\u0415\u0417 \u0437\u043e\u043b\u043e\u0442\u0430)
             TimelineView(.animation) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 ZStack {
+                    // \u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 violet orb \u2014 \u0431\u043e\u043b\u044c\u0448\u043e\u0439, \u0441\u043b\u0435\u0432\u0430 \u0441\u0432\u0435\u0440\u0445\u0443
                     glowOrb(
-                        color: .ravePrimary,        // фиолетовый
+                        color: .ravePrimary,        // violet
                         t: t, size: 360, blur: 50,
                         xAmp: 60, yAmp: 180,
                         xPhase: 0.0, yPhase: 0.3,
                         opacity: hasActiveRooms ? 0.40 : 0.25
                     )
+                    // Magenta orb \u2014 \u0441\u043f\u0440\u0430\u0432\u0430 \u0441\u043d\u0438\u0437\u0443
                     glowOrb(
-                        color: .raveAccent,         // магента
+                        color: .raveAccent,         // magenta
                         t: t, size: 300, blur: 60,
                         xAmp: 100, yAmp: 160,
                         xPhase: 1.2, yPhase: 0.7,
                         opacity: hasActiveRooms ? 0.32 : 0.20
                     )
+                    // Fuchsia orb \u2014 \u043c\u0435\u043b\u043a\u0438\u0439 accent (\u043d\u0430\u043c\u04d1\u043a \u043d\u0430 \u041f\u043b\u0438\u043d\u043a+)
                     glowOrb(
-                        color: .ravePremium,        // золото (premium hint)
+                        color: .ravePlink,          // fuchsia
                         t: t, size: 240, blur: 70,
                         xAmp: 80, yAmp: 40,
                         xPhase: 2.4, yPhase: 1.1,
@@ -2620,11 +2901,11 @@ struct AnimatedGradientBackground: View {
                 x: CGFloat(sin(t * 0.1 + xPhase)) * xAmp,
                 y: CGFloat(cos(t * 0.07 + yPhase)) * yAmp
             )
-            .blendMode(.screen)   // свечение поверх чёрного
+            .blendMode(.screen)   // \u0441\u0432\u0435\u0447\u0435\u043d\u0438\u0435 \u043f\u043e\u0432\u0435\u0440\u0445 \u0447\u04d1\u0440\u043d\u043e\u0433\u043e
     }
 }
 
-// MARK: - GlassCard (обновлён под новую палитру)
+// MARK: - GlassCard (\u043e\u0431\u043d\u043e\u0432\u043b\u04d1\u043d \u043f\u043e\u0434 \u043d\u043e\u0432\u0443\u044e \u043f\u0430\u043b\u0438\u0442\u0440\u0443)
 struct GlassCard: ViewModifier {
     var cornerRadius: CGFloat = 18
     var opacity: Double = 0.05
@@ -2673,7 +2954,7 @@ extension View {
     }
 }
 
-// MARK: - Badge components (LIVE, PREMIUM, HOST, ADMIN)
+// MARK: - Badge components (LIVE, \u041f\u041b\u0418\u041d\u041a+, HOST, ADMIN)
 
 struct LiveBadge: View {
     @State private var pulse = false
@@ -2702,20 +2983,40 @@ struct LiveBadge: View {
     }
 }
 
-struct PremiumBadge: View {
+/// \u041f\u041b\u0418\u041d\u041a+ \u0431\u0435\u0439\u0434\u0436 \u2014 violet\u2192magenta gradient + animated shimmer
+struct PlinkBadge: View {
+    @State private var shimmerOffset: CGFloat = -1
+
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: "crown.fill")
-                .font(.system(size: 9))
-            Text("PREMIUM")
-                .font(.system(size: 9, weight: .heavy))
+            Image(systemName: "sparkles")
+                .font(.system(size: 9, weight: .bold))
+            Text("\u041f\u041b\u0418\u041d\u041a+")
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
         }
-        .foregroundColor(.raveBackground)  // чёрный на золоте
+        .foregroundColor(.white)
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(Color.ravePremiumGradient)
+        .background(Color.raveGradient)
         .clipShape(Capsule())
-        .shadow(color: .ravePremium.opacity(0.4), radius: 4)
+        .shadow(color: .ravePlink.opacity(0.5), radius: 4)
+        .overlay(
+            // \u0411\u0435\u043b\u0430\u044f \u043f\u043e\u043b\u043e\u0441\u0430 shimmer
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [.clear, Color.white.opacity(0.3), .clear],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .offset(x: shimmerOffset * 80)
+                .onAppear {
+                    withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                        shimmerOffset = 1
+                    }
+                }
+        )
+        .mask(Capsule())
     }
 }
 
@@ -2736,61 +3037,89 @@ struct HostBadge: View {
     }
 }
 
+/// ADMIN \u0431\u0435\u0439\u0434\u0436 \u2014 red gradient + animated shimmer
 struct AdminBadge: View {
+    @State private var shimmerOffset: CGFloat = -1
+
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "shield.fill")
-                .font(.system(size: 9))
+                .font(.system(size: 9, weight: .bold))
             Text("ADMIN")
-                .font(.system(size: 9, weight: .heavy))
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
         }
-        .foregroundColor(.ravePrimary)
+        .foregroundColor(.white)
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(Color.ravePrimary.opacity(0.15))
+        .background(
+            LinearGradient(
+                colors: [Color.raveAdmin, Color.raveAdminDeep],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+        )
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.ravePrimary.opacity(0.5), lineWidth: 0.5))
+        .shadow(color: .raveAdmin.opacity(0.5), radius: 4)
+        .overlay(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [.clear, Color.white.opacity(0.3), .clear],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .offset(x: shimmerOffset * 80)
+                .onAppear {
+                    withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                        shimmerOffset = 1
+                    }
+                }
+        )
+        .mask(Capsule())
     }
 }
 '''
 ))
 story.append(Spacer(0, 14))
 
-# 6.13 План миграции
-story.append(Paragraph("6.13 План миграции", S["h3"]))
+# 6.15 \u041f\u043b\u0430\u043d \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u0438
+story.append(Paragraph("6.15 \u041f\u043b\u0430\u043d \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u0438", S["h3"]))
 story.append(Paragraph(
-    "Миграция состоит из 4 шагов. Каждый шаг — отдельный коммит. Прогресс виден визуально после каждого.",
+    "\u041c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0441\u043e\u0441\u0442\u043e\u0438\u0442 \u0438\u0437 7 \u0448\u0430\u0433\u043e\u0432. \u041a\u0430\u0436\u0434\u044b\u0439 \u0448\u0430\u0433 \u2014 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0439 \u043a\u043e\u043c\u043c\u0438\u0442. "
+    "\u041f\u0440\u043e\u0433\u0440\u0435\u0441\u0441 \u0432\u0438\u0434\u0435\u043d \u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u043e \u043f\u043e\u0441\u043b\u0435 \u043a\u0430\u0436\u0434\u043e\u0433\u043e.",
     S["body"]
 ))
 story.append(Spacer(0, 6))
 
 migrate_data = [
-    ["Шаг", "Действие", "Файлы", "Результат"],
+    ["\u0428\u0430\u0433", "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435", "\u0424\u0430\u0439\u043b\u044b", "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442"],
     ["1",
-     "Заменить Color+Theme.swift целиком",
+     "\u0417\u0430\u043c\u0435\u043d\u0438\u0442\u044c Color+Theme.swift \u0446\u0435\u043b\u0438\u043a\u043e\u043c (\u043a\u043e\u0434 \u0438\u0437 6.10)",
      "RaveClone/RaveClone/Extensions/Color+Theme.swift",
-     "Все ссылки на ravePrimary/raveAccent автоматически получают новые цвета. Бирюзовый исчезает."],
+     "\u0411\u0438\u0440\u044e\u0437\u043e\u0432\u044b\u0439 \u0438\u0441\u0447\u0435\u0437\u0430\u0435\u0442, \u043f\u043e\u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f violet. \u0412\u0441\u0435 ravePrimary/raveAccent \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u043e\u043c."],
     ["2",
-     "Добавить PremiumAvatar.swift + Badge components",
-     "RaveClone/RaveClone/Views/Components/PremiumAvatar.swift (новый)\n"+
-     "AnimatedGradientBackground.swift (обновить секцию badges)",
-     "Доступны 4 уровня аватарок и 4 бейджа. Старый код продолжает работать."],
+     "\u0421\u043e\u0437\u0434\u0430\u0442\u044c PremiumAvatar.swift (\u043a\u043e\u0434 \u0438\u0437 6.11)",
+     "RaveClone/RaveClone/Views/Components/PremiumAvatar.swift (\u043d\u043e\u0432\u044b\u0439)",
+     "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u044b 4 \u0443\u0440\u043e\u0432\u043d\u044f \u0430\u0432\u0430\u0442\u0430\u0440\u043e\u043a \u0441 \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u043e\u0439 \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u0435\u0439"],
     ["3",
-     "Обновить AnimatedGradientBackground.swift (фон + TimelineView fix)",
-     "RaveClone/RaveClone/Views/Components/AnimatedGradientBackground.swift",
-     "Фон становится фиолетово-золотым. Заодно фиксится баг C1 раздела 02 (анимация)."],
+     "\u0421\u043e\u0437\u0434\u0430\u0442\u044c AnimatedNickText.swift (\u043a\u043e\u0434 \u0438\u0437 6.12)",
+     "RaveClone/RaveClone/Views/Components/AnimatedNickText.swift (\u043d\u043e\u0432\u044b\u0439)",
+     "\u041f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0449\u0438\u0435\u0441\u044f \u043d\u0438\u043a\u0438 \u0434\u043b\u044f \u041f\u043b\u0438\u043d\u043a+ \u0438 \u0430\u0434\u043c\u0438\u043d\u0430"],
     ["4",
-     "Заменить старые аватарки на PremiumAvatar во views",
-     "Views/Home/HomeView.swift\nViews/Room/ParticipantListView.swift\nViews/Room/RoomChatView.swift\nViews/Profile/ProfileView.swift\nViews/Friends/FriendsView.swift\nViews/Admin/AdminPanelView.swift",
-     "Аватарки получают role-based обводки. Premium-юзеры видят gold ring, free — без обводки."],
+     "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c AnimatedGradientBackground.swift + Badges (\u043a\u043e\u0434 \u0438\u0437 6.14)",
+     "RaveClone/RaveClone/Views/Components/AnimatedGradientBackground.swift",
+     "\u0424\u043e\u043d \u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0441\u044f violet+magenta. \u0417\u0430\u043e\u0434\u043d\u043e \u0444\u0438\u043a\u0441\u0438\u0442\u0441\u044f \u0431\u0430\u0433 \u0440\u0430\u0437\u0434\u0435\u043b\u0430 02. \u0414\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b LiveBadge, PlinkBadge, HostBadge, AdminBadge."],
     ["5",
-     "Обновить кнопки: заменить .buttonStyle(PremiumButtonStyle()) на специфичные стили",
-     "Views/Home/HomeView.swift\nViews/Auth/LoginView.swift\nViews/Room/RoomView.swift\nViews/Premium/PaywallView.swift",
-     "Premium Subscribe кнопки получают gold gradient. Secondary кнопки — surface+border."],
+     "\u0417\u0430\u043c\u0435\u043d\u0438\u0442\u044c PremiumButtonStyle.swift (\u043a\u043e\u0434 \u0438\u0437 6.13)",
+     "RaveClone/RaveClone/Views/Components/PremiumButtonStyle.swift",
+     "5 \u0441\u0442\u0438\u043b\u0435\u0439 \u043a\u043d\u043e\u043f\u043e\u043a + plinkSubscribeButton() \u0441 animated shimmer"],
     ["6",
-     "Добавить PremiumBadge в chat messages и participant list",
+     "\u0417\u0430\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0442\u0430\u0440\u044b\u0435 Circle()-\u0430\u0432\u0430\u0442\u0430\u0440\u043a\u0438 \u043d\u0430 PremiumAvatar + \u043d\u0438\u043a\u0438 \u043d\u0430 AnimatedNickText \u0432\u043e views",
+     "Views/Home/HomeView.swift\nViews/Room/ParticipantListView.swift\nViews/Room/RoomChatView.swift\nViews/Profile/ProfileView.swift\nViews/Friends/FriendsView.swift\nViews/Admin/AdminPanelView.swift",
+     "\u0410\u0432\u0430\u0442\u0430\u0440\u043a\u0438 \u043f\u043e\u043b\u0443\u0447\u0430\u044e\u0442 \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u0443\u044e \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044e, \u043d\u0438\u043a\u0438 \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u044e\u0442\u0441\u044f"],
+    ["7",
+     "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c PlinkBadge \u0438 AdminBadge \u0432 \u0447\u0430\u0442 \u0438 \u0441\u043f\u0438\u0441\u043e\u043a \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432",
      "Views/Room/RoomChatView.swift\nViews/Room/ParticipantListView.swift",
-     "Premium-юзеры видны в чате по gold-бейджу рядом с именем."],
+     "\u041f\u043b\u0438\u043d\u043a+-\u044e\u0437\u0435\u0440\u044b \u0432\u0438\u0434\u043d\u044b \u043f\u043e \u0431\u0435\u0439\u0434\u0436\u0443 + \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f \u043d\u0438\u043a\u0430"],
 ]
 body_rows = []
 for i, row in enumerate(migrate_data):
@@ -2815,45 +3144,50 @@ for i in range(1, len(body_rows)):
 story.append(t)
 story.append(Spacer(0, 14))
 
-# 6.14 Правила дизайна
-story.append(Paragraph("6.14 Правила дизайна (для всех будущих экранов)", S["h3"]))
+# 6.16 \u041f\u0440\u0430\u0432\u0438\u043b\u0430 \u0434\u0438\u0437\u0430\u0439\u043d\u0430
+story.append(Paragraph("6.16 \u041f\u0440\u0430\u0432\u0438\u043b\u0430 \u0434\u0438\u0437\u0430\u0439\u043d\u0430 (\u0434\u043b\u044f \u0432\u0441\u0435\u0445 \u0431\u0443\u0434\u0443\u0449\u0438\u0445 \u044d\u043a\u0440\u0430\u043d\u043e\u0432)", S["h3"]))
 rules = [
-    "<b>Бирюзовый запрещён.</b> Никаких <code>#00C2FF</code>, <code>#00FFCC</code>, <code>#00FF88</code>. Если видите — заменить на <code>ravePrimary</code> (violet) или <code>raveSuccess</code> (приглушённый).",
-    "<b>Золото = только premium.</b> <code>ravePremium</code> (#FBBF24) используется ТОЛЬКО для premium-tier сигналов: avatar ring, subscribe button, premium badge, premium-featured карточки. Не использовать для обычных CTA.",
-    "<b>Free-юзер — без визуального шума.</b> У бесплатного юзера на аватаре нет обводки, нет бейджа, нет glow. Это и есть мотивация апгрейдить — разница видна сразу.",
-    "<b>Один primary CTA на экран.</b> Если на экране две кнопки с violet→magenta gradient — это ошибка. Secondary должна быть SecondaryButtonStyle (surface + border).",
-    "<b>Pressed state — обязателен.</b> Все интерактивные элементы имеют scaleEffect на press (0.95-0.97). Без pressed-state кнопка ощущается мёртвой.",
-    "<b>Backgrounds — глубокий чёрный.</b> Не серый, не фиолетовый. <code>#08080C</code>. Это «кинозал».",
-    "<b>Скругления — consistent.</b> Cards = 16pt, buttons = 14-16pt, badges = capsule. Не смешивать.",
-    "<b>Тени — цветные, не чёрные.</b> Primary кнопка — violet glow. Premium — gold glow. Обычные карточки — чёрная тень. Цветная тень = premium-ощущение.",
-    "<b>Анимации — медленные и плавные.</b> Premium ring вращается 8s/оборот (не 2s). Pulse LIVE — 1s. Никаких резких bounce-эффектов на premium-элементах.",
-    "<b>Граница 0.5px.</b> Тонкие границы выглядят дороже, чем 1-2px. Использовать <code>raveBorder</code> (rgba 0.06) на всех стандартных карточках.",
+    "<b>\u0411\u0438\u0440\u044e\u0437\u043e\u0432\u044b\u0439 \u0437\u0430\u043f\u0440\u0435\u0449\u04d1\u043d.</b> \u041d\u0438\u043a\u0430\u043a\u0438\u0445 <code>#00C2FF</code>, <code>#00FFCC</code>, <code>#00FF88</code>. \u0415\u0441\u043b\u0438 \u0432\u0438\u0434\u0438\u0442\u0435 \u2014 \u0437\u0430\u043c\u0435\u043d\u0438\u0442\u044c \u043d\u0430 <code>ravePrimary</code> (violet) \u0438\u043b\u0438 <code>raveSuccess</code> (\u043f\u0440\u0438\u0433\u043b\u0443\u0448\u04d1\u043d\u043d\u044b\u0439).",
+    "<b>\u0417\u043e\u043b\u043e\u0442\u043e \u0437\u0430\u043f\u0440\u0435\u0449\u0435\u043d\u043e.</b> \u041d\u0438\u043a\u0430\u043a\u0438\u0445 <code>#FBBF24</code>, <code>#FCD34D</code>, <code>#D97706</code>. \u041f\u0440\u0435\u043c\u0438\u0443\u043c \u0432\u044b\u0440\u0430\u0436\u0430\u0435\u0442\u0441\u044f \u0447\u0435\u0440\u0435\u0437 violet+magenta+fuchsia, \u043d\u0435 \u0447\u0435\u0440\u0435\u0437 \u043c\u0435\u0442\u0430\u043b\u043b\u0438\u043a.",
+    "<b>\u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u0430\u044f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f \u043f\u0440\u0435\u043c\u0438\u0443\u043c\u0430.</b> \u041a\u043e\u043b\u044c\u0446\u043e \u041f\u043b\u0438\u043d\u043a+ \u0432\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f 360\u00b0 \u0437\u0430 4s, \u043d\u0438\u043a \u043f\u0435\u0440\u0435\u043b\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0447\u0435\u0440\u0435\u0437 hue 360\u00b0 \u0437\u0430 3s. \u041d\u0438\u043a\u043e\u0433\u0434\u0430 \u043d\u0435 \u043e\u0441\u0442\u0430\u043d\u0430\u0432\u043b\u0438\u0432\u0430\u0435\u0442\u0441\u044f (\u0434\u0430\u0436\u0435 \u0432 background).",
+    "<b>\u0410\u0434\u043c\u0438\u043d \u2014 \u043a\u0440\u0430\u0441\u043d\u044b\u0439 spectrum.</b> \u0422\u043e\u0442 \u0436\u0435 \u043c\u0435\u0445\u0430\u043d\u0438\u0437\u043c, \u043d\u043e \u0447\u0435\u0440\u0435\u0437 red \u0446\u0432\u0435\u0442\u0430: <code>#FF1744</code>, <code>#FF5252</code>, <code>#FF8A80</code>, <code>#D50000</code>.",
+    "<b>\u0425\u043e\u0441\u0442 \u2014 \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0439 magenta.</b> \u0425\u043e\u0441\u0442 \u044d\u0442\u043e \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u0430\u044f \u0440\u043e\u043b\u044c, \u0431\u0435\u0437 \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u0438. \u041d\u0435 \u043a\u043e\u043d\u043a\u0443\u0440\u0438\u0440\u0443\u0435\u0442 \u0441 \u041f\u043b\u0438\u043d\u043a+.",
+    "<b>Free-\u044e\u0437\u0435\u0440 \u2014 \u0431\u0435\u0437 \u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0448\u0443\u043c\u0430.</b> \u0411\u0435\u0437 \u043e\u0431\u0432\u043e\u0434\u043a\u0438, \u0431\u0435\u0437 glow, \u0431\u0435\u0437 \u0431\u0435\u0439\u0434\u0436\u0430. \u042d\u0442\u043e \u0438 \u0435\u0441\u0442\u044c \u043c\u043e\u0442\u0438\u0432\u0430\u0446\u0438\u044f \u0430\u043f\u0433\u0440\u0435\u0439\u0434\u0438\u0442\u044c \u2014 \u0440\u0430\u0437\u043d\u0438\u0446\u0430 \u0432\u0438\u0434\u043d\u0430 \u0441\u0440\u0430\u0437\u0443.",
+    "<b>\u041e\u0434\u0438\u043d primary CTA \u043d\u0430 \u044d\u043a\u0440\u0430\u043d.</b> \u0415\u0441\u043b\u0438 \u0434\u0432\u0435 \u043a\u043d\u043e\u043f\u043a\u0438 \u0441 violet\u2192magenta gradient \u2014 \u044d\u0442\u043e \u043e\u0448\u0438\u0431\u043a\u0430. Secondary \u0434\u043e\u043b\u0436\u043d\u0430 \u0431\u044b\u0442\u044c SecondaryButtonStyle.",
+    "<b>\u041f\u043b\u0438\u043d\u043a+ subscribe \u2014 \u0441 animated shimmer.</b> \u0411\u0435\u043b\u0430\u044f \u043f\u043e\u043b\u043e\u0441\u0430 \u0441\u0432\u0435\u0442\u0430 \u043f\u0440\u043e\u0445\u043e\u0434\u0438\u0442 \u043f\u043e \u043a\u043d\u043e\u043f\u043a\u0435 \u043a\u0430\u0436\u0434\u044b\u0435 2s. \u042d\u0442\u043e \u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u0438\u0433\u043d\u0430\u043b «premium action».",
+    "<b>Pressed state \u2014 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u0435\u043d.</b> \u0412\u0441\u0435 \u0438\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0438\u043c\u0435\u044e\u0442 scaleEffect \u043d\u0430 press (0.95-0.97).",
+    "<b>\u0422\u0435\u043d\u0438 \u2014 \u0446\u0432\u0435\u0442\u043d\u044b\u0435, \u043d\u0435 \u0447\u04d1\u0440\u043d\u044b\u0435.</b> Primary \u043a\u043d\u043e\u043f\u043a\u0430 \u2014 violet glow. \u041f\u043b\u0438\u043d\u043a+ \u2014 plink glow (fuchsia). \u0410\u0434\u043c\u0438\u043d \u2014 red glow. \u041e\u0431\u044b\u0447\u043d\u044b\u0435 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u2014 \u0447\u04d1\u0440\u043d\u0430\u044f \u0442\u0435\u043d\u044c. \u0426\u0432\u0435\u0442\u043d\u0430\u044f \u0442\u0435\u043d\u044c = premium-\u043e\u0449\u0443\u0449\u0435\u043d\u0438\u0435.",
+    "<b>\u0410\u043d\u0438\u043c\u0430\u0446\u0438\u0438 \u2014 \u043f\u043b\u0430\u0432\u043d\u044b\u0435, linear, \u043d\u0435 spring.</b> \u0414\u043b\u044f \u043f\u0440\u0435\u043c\u0438\u0443\u043c-\u044d\u0444\u0444\u0435\u043a\u0442\u043e\u0432 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c .linear \u0441 repeatForever \u2014 \u043f\u043b\u0430\u0432\u043d\u043e\u0435 \u043f\u0435\u0440\u0435\u0442\u0435\u043a\u0430\u043d\u0438\u0435. \u0414\u043b\u044f pressed states \u2014 spring physics.",
+    "<b>\u0413\u0440\u0430\u043d\u0438\u0446\u0430 0.5px.</b> \u0422\u043e\u043d\u043a\u0438\u0435 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0432\u044b\u0433\u043b\u044f\u0434\u044f\u0442 \u0434\u043e\u0440\u043e\u0436\u0435, \u0447\u0435\u043c 1-2px. \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c <code>raveBorder</code> (rgba 0.06).",
 ]
-items = [ListItem(Paragraph(r, S["body"]), leftIndent=10, value="•") for r in rules]
-story.append(ListFlowable(items, bulletType="bullet", start="•"))
+items = [ListItem(Paragraph(r, S["body"]), leftIndent=10, value="\u2022") for r in rules]
+story.append(ListFlowable(items, bulletType="bullet", start="\u2022"))
 story.append(Spacer(0, 12))
 
-# 6.15 Чек-лист App Store Review
-story.append(Paragraph("6.15 Чек-лист для App Store Review", S["h3"]))
+# 6.17 \u0427\u0435\u043a-\u043b\u0438\u0441\u0442 App Store
+story.append(Paragraph("6.17 \u0427\u0435\u043a-\u043b\u0438\u0441\u0442 \u0434\u043b\u044f App Store Review", S["h3"]))
 story.append(Paragraph(
-    "После миграции на Cinema Violet убедитесь, что:",
+    "\u041f\u043e\u0441\u043b\u0435 \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u0438 \u043d\u0430 Cinema Violet v2 \u0443\u0431\u0435\u0434\u0438\u0442\u0435\u0441\u044c, \u0447\u0442\u043e:",
     S["body"]
 ))
 checklist = [
-    "Premium-подписка визуально отличается от free (gold ring + badge + subscribe button)",
-    "Все premium-фичи (4K, no-ads, 50 participants) доступны только при активной подписке",
-    "Subscribe button использует gold gradient, не violet (чёткое визуальное разделение)",
-    "Restore Purchases работает (см. баг iOS M5 —修复ить в этапе 4 дорожной карты)",
-    "Free-юзеры не видят gold-элементов нигде (иначе вводит в заблуждение)",
-    "Premium ring не анимируется быстрее 8s/оборот (иначе раздражает — App Store reject за анимацию)",
-    "Все цвета соответствуют контрастности WCAG AA (минимум 4.5:1 для текста)",
-    "Dark mode единственный (light mode не поддерживается — приложение для тёмных помещений)",
+    "\u041f\u043b\u0438\u043d\u043a+-\u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0430 \u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u043e \u043e\u0442\u043b\u0438\u0447\u0430\u0435\u0442\u0441\u044f \u043e\u0442 free (violet ring + animated nick + \u041f\u041b\u0418\u041d\u041a+ \u0431\u0435\u0439\u0434\u0436 + shimmer button)",
+    "\u0410\u0434\u043c\u0438\u043d \u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u043e \u043e\u0442\u043b\u0438\u0447\u0430\u0435\u0442\u0441\u044f \u043e\u0442 \u043f\u043b\u0438\u043d\u043a+ (red spectrum \u0432\u043c\u0435\u0441\u0442\u043e violet+magenta)",
+    "\u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u0430\u044f \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f \u043d\u0435 \u0440\u0430\u0437\u0434\u0440\u0430\u0436\u0430\u0435\u0442 (4s \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u0435 = \u043c\u0435\u0434\u043b\u0435\u043d\u043d\u043e\u0435, 3s hue = \u043f\u043b\u0430\u0432\u043d\u043e\u0435)",
+    "\u0412\u0441\u0435 \u043f\u043b\u0438\u043d\u043a+-\u0444\u0438\u0447\u0438 (4K, no-ads, 50 participants) \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u0438 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0435",
+    "Subscribe button \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442 animated shimmer \u2014 \u0447\u04d1\u0442\u043a\u043e\u0435 \u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u043e\u0435 \u0440\u0430\u0437\u0434\u0435\u043b\u0435\u043d\u0438\u0435",
+    "Restore Purchases \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442 (\u0441\u043c. \u0431\u0430\u0433 iOS M5 \u2014 \u0444\u0438\u043a\u0441\u0438\u0442\u044c \u0432 \u044d\u0442\u0430\u043f\u0435 4 \u0434\u043e\u0440\u043e\u0436\u043d\u043e\u0439 \u043a\u0430\u0440\u0442\u044b)",
+    "Free-\u044e\u0437\u0435\u0440\u044b \u043d\u0435 \u0432\u0438\u0434\u044f\u0442 violet/red \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u043e\u0432 \u043d\u0438\u0433\u0434\u0435 (\u0438\u043d\u0430\u0447\u0435 \u0432\u0432\u043e\u0434\u0438\u0442 \u0432 \u0437\u0430\u0431\u043b\u0443\u0436\u0434\u0435\u043d\u0438\u0435)",
+    "\u0412\u0441\u0435 \u0446\u0432\u0435\u0442\u0430 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044e\u0442 \u043a\u043e\u043d\u0442\u0440\u0430\u0441\u0442\u043d\u043e\u0441\u0442\u0438 WCAG AA (\u043c\u0438\u043d\u0438\u043c\u0443\u043c 4.5:1 \u0434\u043b\u044f \u0442\u0435\u043a\u0441\u0442\u0430)",
+    "Dark mode \u0435\u0434\u0438\u043d\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 (light mode \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u2014 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u0442\u04d1\u043c\u043d\u044b\u0445 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0439)",
+    "Reduce Motion accessibility: \u043f\u0440\u0438 \u0432\u043a\u043b\u044e\u0447\u04d1\u043d\u043d\u043e\u043c Reduce Motion \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u044f \u043a\u043e\u043b\u044c\u0446\u0430 \u0438 \u043d\u0438\u043a\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0430\u0435\u0442\u0441\u044f, \u043e\u0441\u0442\u0430\u0435\u0442\u0441\u044f \u0441\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0439 gradient",
 ]
-items = [ListItem(Paragraph(c, S["body"]), leftIndent=10, value="✓") for c in checklist]
-story.append(ListFlowable(items, bulletType="bullet", start="✓"))
+items = [ListItem(Paragraph(c, S["body"]), leftIndent=10, value="\u2713") for c in checklist]
+story.append(ListFlowable(items, bulletType="bullet", start="\u2713"))
 
 story.append(PageBreak())
 
+# ── ROADMAP ───────────────────────────────────────────────────────────────
 # ── ROADMAP ───────────────────────────────────────────────────────────────
 story.append(section_header("07", "Дорожная карта исправлений"))
 story.append(Paragraph(

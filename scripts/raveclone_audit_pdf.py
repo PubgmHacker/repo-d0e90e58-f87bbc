@@ -1746,8 +1746,1116 @@ for bid, title, fref, what, impact, fix in rn_med_low:
 
 story.append(PageBreak())
 
+# ── REDESIGN SECTION (NEW) ─────────────────────────────────────────────────
+story.append(PageBreak())
+story.append(section_header("06", "Редизайн: премиум дизайн-система «Cinema Violet»"))
+story.append(Paragraph(
+    "Текущая палитра приложения (<code>Color+Theme.swift</code>) построена на бирюзовом акценте "
+    "(<code>#00C2FF</code>) и неоновом изумрудном (<code>#00FF88</code>). Для premium watch-party "
+    "проекта это визуально дёшево и не соответствует позиционированию. Конкуренты (Rave, Hearo, "
+    "Disney+, Apple Music) используют тёплые глубокие тона — фиолетовый, магента, золото. "
+    "Ниже — полная замена дизайн-системы с разделением ролей (free / premium / host / admin) и "
+    "готовым кодом для drop-in миграции.",
+    S["body"]
+))
+story.append(Spacer(0, 10))
+
+# 6.1 Проблема
+story.append(Paragraph("6.1 Почему бирюзовый — это дёшево для premium-продукта", S["h3"]))
+story.append(Paragraph(
+    "Бирюзовый (<code>#00C2FF</code>) и неоново-зелёный (<code>#00FF88</code>) — это палитра "
+    "бюджетных streaming-сервисов и IoT-приложений. В контексте «смотрим вместе» пользователь "
+    "ожидает ощущение <b>кинозала</b> или <b>лонж-бара</b>: глубокие тёмные тона, точечные тёплые "
+    "подсветки, премиум-акценты. Бирюзовый фон подсознательно ассоциируется с дешёвой Android "
+    "утилитой, а не с премиум-подпиской за 299₽/мес.",
+    S["body"]
+))
+story.append(Spacer(0, 4))
+story.append(Paragraph(
+    "Дополнительно: текущая система не различает роли визуально. У premium-юзера и у free-юзера "
+    "одинаковые аватарки, одинаковые кнопки, одинаковые карточки. Нет ощущения «апгрейда» — а "
+    "именно это и продаёт подписку.",
+    S["body"]
+))
+story.append(Spacer(0, 8))
+
+# 6.2 Конкурентный анализ
+story.append(Paragraph("6.2 Конкурентный анализ", S["h3"]))
+comp_data = [
+    ["Продукт", "Палитра", "Premium-сигнал", "Урок"],
+    ["Rave (оригинал)", "Глубокий фиолетовый + неон", "Премиум-цвета в фоне", "Фиолетовый = бренд"],
+    ["Hearo", "Тёмный серый + точечные акценты", "Минимализм", "Меньше = дороже"],
+    ["Disney+", "Тёмно-синий + золотые акценты", "Золото на CTA", "Золото = premium"],
+    ["Apple Music", "Розово-красный gradient на чёрном", "Animated gradient", "Движение = жизнь"],
+    ["Spotify", "Зелёный на чёрном (иконичный)", "—", "Не для watch-party"],
+    ["Telegram", "Голубой + синий", "Premium: звёздное сияние", "Premium ring"],
+]
+body_rows = []
+for i, row in enumerate(comp_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[3.0*cm, 4.5*cm, 4.0*cm, 5.5*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 6),
+    ("RIGHTPADDING", (0,0), (-1,-1), 6),
+    ("TOPPADDING", (0,0), (-1,-1), 6),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 6))
+story.append(Paragraph(
+    "<b>Вывод:</b> Cinema Violet = глубокий фиолетовый (как Rave) + золото для premium (как Disney+) + "
+    "магента как эмоциональный акцент (как Apple Music). Это даёт ощущение премиум-кинозала.",
+    S["body"]
+))
+story.append(Spacer(0, 10))
+
+# 6.3 Новая палитра
+story.append(Paragraph("6.3 Новая палитра «Cinema Violet»", S["h3"]))
+palette_data = [
+    ["Роль", "Имя", "Hex", "Замена"],
+    ["Акцент", "ravePrimary",       "#A855F7", "Бирюзовый #00C2FF → фиолетовый"],
+    ["Акцент", "raveAccent",        "#EC4899", "Розовый #FF2D87 → магента (более насыщенная)"],
+    ["Premium", "ravePremium",      "#FBBF24", "НОВЫЙ — золото для premium-tier"],
+    ["Premium", "ravePremiumDeep",  "#D97706", "НОВЫЙ — тёмное золото для градиентов"],
+    ["Premium", "ravePremiumLight", "#FCD34D", "НОВЫЙ — светлое золото для glow"],
+    ["Успех",   "raveSuccess",      "#10B981", "Изумруд #00FF88 → приглушённый"],
+    ["Опасность", "raveDanger",     "#EF4444", "Красный #FF3B5C → более чистый"],
+    ["Внимание", "raveWarning",     "#F59E0B", "Янтарь (без изменений)"],
+    ["Secondary", "raveSecondary",  "#6366F1", "НОВЫЙ — индиго"],
+    ["Фон",     "raveBackground",   "#08080C", "Чёрный #000000 → с фиолетовым подтоном"],
+    ["Surface", "raveSurface",      "#14141C", "Карточный фон"],
+    ["Surface", "raveSurfaceElevated","#1F1F2A","Приподнятые карточки (featured)"],
+    ["Surface", "raveSurfaceHover", "#2A2A38", "Hover-состояние"],
+    ["Border",  "raveBorder",       "rgba(255,255,255,0.06)", "Тонкая граница"],
+    ["Text",    "raveTextPrimary",  "#FAFAFA", "Чистый белый → чуть мягче"],
+    ["Text",    "raveTextSecondary","#A1A1AA", "Серый текст"],
+    ["Text",    "raveTextTertiary", "#71717A", "Третий уровень"],
+]
+body_rows = []
+for i, row in enumerate(palette_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        # color swatch + hex (handle rgba gracefully)
+        hex_val = row[2].lstrip("#")
+        if hex_val.startswith("rgba"):
+            # для rgba — без swatch, просто текст
+            swatch_cell = f'<font name="Mono" color="#A1A1AA">{row[2]}</font>'
+        else:
+            swatch_cell = f'<font name="Mono" color="#{hex_val}">●</font> {row[2]}'
+        body_rows.append([
+            Paragraph(row[0], S["tbl_c"]),
+            Paragraph(f'<font name="Mono">{row[1]}</font>', S["tbl_c"]),
+            Paragraph(swatch_cell, S["tbl_c"]),
+            Paragraph(row[3], S["tbl_c"]),
+        ])
+t = Table(body_rows, colWidths=[2.0*cm, 4.0*cm, 4.5*cm, 6.5*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+    ("LEFTPADDING", (0,0), (-1,-1), 6),
+    ("RIGHTPADDING", (0,0), (-1,-1), 6),
+    ("TOPPADDING", (0,0), (-1,-1), 4),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 10))
+
+# 6.4 Градиенты
+story.append(Paragraph("6.4 Градиенты", S["h3"]))
+grad_data = [
+    ["Градиент", "Применение", "Цвета"],
+    ["raveGradient", "Primary CTA (Create Room, Confirm)", "#A855F7 → #EC4899 (violet → magenta)"],
+    ["ravePremiumGradient", "Subscribe button, premium cards", "#FCD34D → #FBBF24 → #D97706 (gold)"],
+    ["ravePremiumRingGradient", "Аватар premium-юзера (animated)", "#FCD34D → #FBBF24 → #D97706 → #FCD34D"],
+    ["raveHostGradient", "Аватар хоста в комнате", "#EC4899 → #F43F5E (magenta → rose)"],
+    ["raveAdminGradient", "Аватар админа (глобально)", "#A855F7 → #6366F1 (violet → indigo)"],
+    ["raveBgGradient", "Фоновый градиент", "#08080C → #0F0A1A → #08080C"],
+]
+body_rows = []
+for i, row in enumerate(grad_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([
+            Paragraph(f'<font name="Mono">{row[0]}</font>', S["tbl_c"]),
+            Paragraph(row[1], S["tbl_c"]),
+            Paragraph(f'<font name="Mono" color="#e6cb77">{row[2]}</font>', S["tbl_c"]),
+        ])
+t = Table(body_rows, colWidths=[5.0*cm, 5.5*cm, 6.5*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 6),
+    ("RIGHTPADDING", (0,0), (-1,-1), 6),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 12))
+
+# 6.5 Кнопки — 5 уровней
+story.append(Paragraph("6.5 Кнопки — 5 уровней", S["h3"]))
+story.append(Paragraph(
+    "Каждый тип кнопки имеет чёткое назначение. Смешивание запрещено: например, нельзя использовать "
+    "Primary-стиль для secondary-действий — это путает иерархию.",
+    S["body"]
+))
+story.append(Spacer(0, 6))
+
+btn_data = [
+    ["Тип", "Применение", "Фон", "Текст", "Тень/Glow", "Pressed"],
+    ["Primary CTA",
+     "Create Room, Confirm, Send",
+     "raveGradient (violet→pink)",
+     "Белый bold",
+     "glowPrimary 16pt y=6",
+     "scale 0.96, glow ↓"],
+    ["Premium Subscribe",
+     "Upgrade, Restore Purchases",
+     "ravePremiumGradient (gold)",
+     "raveBackground (чёрный на золоте)",
+     "glowPremium 14pt y=5",
+     "scale 0.95, glow ↓"],
+    ["Secondary",
+     "Cancel, Back, Close",
+     "raveSurface",
+     "raveTextPrimary semibold",
+     "rgba(0,0,0,0.4) 10pt",
+     "scale 0.97"],
+    ["Ghost",
+     "Forgot password, Skip",
+     "transparent",
+     "ravePrimary medium",
+     "—",
+     "opacity 0.6, scale 0.98"],
+    ["Icon",
+     "Mute, Settings, Share",
+     "raveSurface circle",
+     "icon: raveTextSecondary",
+     "—",
+     "scale 0.9, spring"],
+]
+body_rows = []
+for i, row in enumerate(btn_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[2.5*cm, 3.5*cm, 3.5*cm, 3.0*cm, 2.5*cm, 2.0*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 12))
+
+# 6.6 Аватарки — ключевое
+story.append(Paragraph("6.6 Аватарки — 4 уровня (КЛЮЧЕВОЕ)", S["h3"]))
+story.append(Paragraph(
+    "Это самое важное решение дизайн-системы. Аватарка — это <b>первый визуальный сигнал статуса</b>. "
+    "У free-юзера её обводки НЕ должно быть — премиум-эффект возникает через отсутствие, а не через "
+    "добавление. Premium-юзер получает медленно вращающееся золотое кольцо (8s/оборот — не раздражает). "
+    "Хост в контексте комнаты — статичная magenta-обводка. Админ — глобальная фиолетовая.",
+    S["body"]
+))
+story.append(Spacer(0, 6))
+
+avatar_data = [
+    ["Роль", "Обводка", "Цвет", "Анимация", "Glow", "Видимость"],
+    ["Free user",
+     "НЕТ обводки",
+     "—",
+     "—",
+     "—",
+     "Чистый circle, минимум визуального шума"],
+    ["Premium",
+     "2px animated gradient ring",
+     "ravePremiumRingGradient (gold)",
+     "rotation 360° за 8s, linear, repeatForever",
+     "ravePremium.opacity(0.4) radius 6",
+     "Подписка видна всем, не навязчиво"],
+    ["Host (в комнате)",
+     "2px static gradient ring",
+     "raveHostGradient (magenta→rose)",
+     "—",
+     "raveAccent.opacity(0.35) radius 6",
+     "Только в контексте текущей комнаты"],
+    ["Admin / Moderator",
+     "2px static gradient ring",
+     "raveAdminGradient (violet→indigo)",
+     "—",
+     "ravePrimary.opacity(0.35) radius 6",
+     "Глобально во всём приложении"],
+]
+body_rows = []
+for i, row in enumerate(avatar_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[2.5*cm, 3.0*cm, 3.5*cm, 3.5*cm, 3.0*cm, 1.5*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 6))
+story.append(Paragraph(
+    "<b>Правило приоритета</b> (если у юзера несколько ролей одновременно):<br/>"
+    "Admin &gt; Premium &gt; Host &gt; Free.<br/>"
+    "Например, premium-юзер, который сейчас хостит комнату, видит <b>gold ring</b> (premium приоритетнее host). "
+    "Админ с premium-подпиской видит <b>violet ring</b> (admin приоритетнее premium).",
+    S["body"]
+))
+story.append(Spacer(0, 12))
+
+# 6.7 Бейджи
+story.append(Paragraph("6.7 Бейджи", S["h3"]))
+badge_data = [
+    ["Бейдж", "Применение", "Фон", "Текст", "Иконка", "Анимация"],
+    ["LIVE",     "Активная комната", "rgba(236,72,153,0.15)", "raveAccent bold", "pink dot, pulse 1s", "pulse scale 1.0↔1.3"],
+    ["PREMIUM",  "Premium-юзер в чате", "ravePremiumGradient", "raveBackground heavy", "crown.fill", "—"],
+    ["HOST",     "Хост в списке участников", "rgba(236,72,153,0.2)", "raveAccent bold", "star.fill", "—"],
+    ["ADMIN",    "Админ в списке", "rgba(168,85,247,0.15)", "ravePrimary bold", "shield.fill", "—"],
+    ["MOD",      "Модератор комнаты", "rgba(99,102,241,0.15)", "raveSecondary bold", "checkmark.shield", "—"],
+]
+body_rows = []
+for i, row in enumerate(badge_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[2.0*cm, 3.5*cm, 3.5*cm, 3.0*cm, 2.5*cm, 2.5*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 12))
+
+# 6.8 Карточки
+story.append(Paragraph("6.8 Карточки — 3 уровня", S["h3"]))
+card_data = [
+    ["Уровень", "Применение", "Фон", "Граница", "Тень"],
+    ["Standard",
+     "Комнаты в списке, message bubbles",
+     "raveSurface (#14141C)",
+     "raveBorder 0.5px (rgba 0.06)",
+     "rgba(0,0,0,0.4) 10pt y=4"],
+    ["Premium Featured",
+     "Featured контент, premium-комнаты",
+     "raveSurfaceElevated (#1F1F2A)",
+     "gold gradient 0.5px (subtle)",
+     "glowPremium 8pt + black 10pt"],
+    ["Live / Active",
+     "Активные трансляции в HomeView",
+     "raveSurface + pink top stripe (2pt)",
+     "raveBorder 0.5px",
+     "rgba(0,0,0,0.4) 10pt, glowAccent on hover"],
+]
+body_rows = []
+for i, row in enumerate(card_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[2.5*cm, 4.0*cm, 3.5*cm, 3.5*cm, 3.5*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 14))
+
+# 6.9 Готовый код: Color+Theme.swift
+story.append(Paragraph("6.9 Готовый код: Color+Theme.swift (полная замена)", S["h3"]))
+story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Extensions/Color+Theme.swift</font>", S["file"]))
+story.append(Spacer(0, 4))
+story.append(code_block(
+'''import SwiftUI
+
+// MARK: - Cinema Violet — Premium Design System
+// Заменяет "Pure Black × Ice Glow" (бирюзовый)
+// Принципы:
+//   • База — глубокий чёрный с фиолетовым подтоном (#08080C)
+//   • Primary — фиолетовый (#A855F7), НЕ бирюзовый
+//   • Premium — золото (#FBBF24) для premium-tier сигналов
+//   • Accent — магента (#EC4899) для эмоциональных акцентов
+
+extension Color {
+    // ── Accents ─────────────────────────────────────────────────────
+    /// Основной акцент — глубокий фиолетовый (CTA, активные элементы)
+    static let ravePrimary = Color(hex: 0xA855F7)
+    /// Магента — live, urgent, emotional
+    static let raveAccent = Color(hex: 0xEC4899)
+    /// Индиго — secondary
+    static let raveSecondary = Color(hex: 0x6366F1)
+
+    // ── Premium Tier (gold) ────────────────────────────────────────
+    /// Премиум-золото — premium-tier, subscribe buttons
+    static let ravePremium = Color(hex: 0xFBBF24)
+    /// Тёмное золото — gradients
+    static let ravePremiumDeep = Color(hex: 0xD97706)
+    /// Светлое золото — glow, highlights
+    static let ravePremiumLight = Color(hex: 0xFCD34D)
+
+    // ── Status ─────────────────────────────────────────────────────
+    /// Изумруд — online статус (приглушённый, не неон)
+    static let raveSuccess = Color(hex: 0x10B981)
+    /// Красный — danger, mute
+    static let raveDanger = Color(hex: 0xEF4444)
+    /// Янтарь — warning
+    static let raveWarning = Color(hex: 0xF59E0B)
+
+    // ── Backgrounds ────────────────────────────────────────────────
+    /// Основной фон — глубокий чёрный с фиолетовым подтоном
+    static let raveBackground = Color(hex: 0x08080C)
+    /// Карточный фон
+    static let raveSurface = Color(hex: 0x14141C)
+    /// Приподнятые карточки (featured)
+    static let raveSurfaceElevated = Color(hex: 0x1F1F2A)
+    /// Hover-состояние
+    static let raveSurfaceHover = Color(hex: 0x2A2A38)
+
+    // ── Borders ────────────────────────────────────────────────────
+    static let raveBorder = Color.white.opacity(0.06)
+    static let raveBorderHover = Color.white.opacity(0.12)
+
+    // ── Text ───────────────────────────────────────────────────────
+    static let raveTextPrimary = Color(hex: 0xFAFAFA)
+    static let raveTextSecondary = Color(hex: 0xA1A1AA)
+    static let raveTextTertiary = Color(hex: 0x71717A)
+
+    // ── Glass ──────────────────────────────────────────────────────
+    static let raveGlass = Color.white.opacity(0.05)
+
+    // ── Gradients ──────────────────────────────────────────────────
+    /// Главный CTA: фиолетовый → магента
+    static let raveGradient = LinearGradient(
+        colors: [Color(hex: 0xA855F7), Color(hex: 0xEC4899)],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    /// Премиум-градиент: золотой перелив
+    static let ravePremiumGradient = LinearGradient(
+        colors: [Color(hex: 0xFCD34D), Color(hex: 0xFBBF24), Color(hex: 0xD97706)],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    /// Кольцо premium-аватара (animated rotation)
+    static let ravePremiumRingGradient = LinearGradient(
+        colors: [Color(hex: 0xFCD34D), Color(hex: 0xFBBF24),
+                 Color(hex: 0xD97706), Color(hex: 0xFCD34D)],
+        startPoint: .top, endPoint: .bottom
+    )
+    /// Хост-градиент (в контексте комнаты)
+    static let raveHostGradient = LinearGradient(
+        colors: [Color(hex: 0xEC4899), Color(hex: 0xF43F5E)],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    /// Админ-градиент (глобально)
+    static let raveAdminGradient = LinearGradient(
+        colors: [Color(hex: 0xA855F7), Color(hex: 0x6366F1)],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    /// Фоновый градиент — чёрный с фиолетовым
+    static let raveBgGradient = LinearGradient(
+        colors: [Color(hex: 0x08080C), Color(hex: 0x0F0A1A), Color(hex: 0x08080C)],
+        startPoint: .top, endPoint: .bottom
+    )
+}
+
+// MARK: - Hex init (без изменений)
+extension Color {
+    init(hex: UInt32, alpha: Double = 1.0) {
+        let r = Double((hex >> 16) & 0xFF) / 255.0
+        let g = Double((hex >> 8) & 0xFF) / 255.0
+        let b = Double(hex & 0xFF) / 255.0
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
+    }
+}
+
+// MARK: - Glow Helpers
+extension Color {
+    var glowShadow: Color { self.opacity(0.45) }
+}
+
+extension View {
+    func neonGlow(color: Color = .ravePrimary, radius: CGFloat = 16, y: CGFloat = 6) -> some View {
+        self.shadow(color: color.glowShadow, radius: radius, x: 0, y: y)
+    }
+    func premiumGlow(radius: CGFloat = 12) -> some View {
+        self.shadow(color: Color.ravePremium.opacity(0.5), radius: radius, x: 0, y: 4)
+    }
+}'''
+))
+story.append(Spacer(0, 12))
+
+# 6.10 PremiumAvatar.swift
+story.append(Paragraph("6.10 Готовый код: PremiumAvatar.swift (новый файл)", S["h3"]))
+story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Views/Components/PremiumAvatar.swift</font>", S["file"]))
+story.append(Spacer(0, 4))
+story.append(code_block(
+'''import SwiftUI
+
+// MARK: - Premium Avatar с role-based borders
+//
+// 4 уровня (приоритет: admin > premium > host > free):
+//   1. Free user — БЕЗ обводки, чистый circle (минимум визуального шума)
+//   2. Premium   — анимированное золотое кольцо (8s/оборот, не раздражает)
+//   3. Host      — статичное magenta кольцо (только в текущей комнате)
+//   4. Admin     — статичное фиолетовое кольцо (глобально)
+
+enum AvatarRole: Equatable {
+    case free
+    case premium
+    case host
+    case admin
+
+    /// Приоритет для комбинирования ролей
+    var priority: Int {
+        switch self {
+        case .free:     return 0
+        case .host:     return 1
+        case .premium:  return 2
+        case .admin:    return 3
+        }
+    }
+
+    /// Выбор доминирующей роли
+    static func dominant(_ roles: [AvatarRole]) -> AvatarRole {
+        roles.max(by: { $0.priority < $1.priority }) ?? .free
+    }
+}
+
+struct PremiumAvatar: View {
+    let imageURL: URL?
+    let displayName: String
+    let role: AvatarRole
+    var size: CGFloat = 44
+
+    @State private var animateRotation: Bool = false
+
+    var body: some View {
+        ZStack {
+            avatarContent
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+
+            ringOverlay
+                .frame(width: size + ringWidth, height: size + ringWidth)
+        }
+        .frame(width: size + ringWidth, height: size + ringWidth)
+        .shadow(color: glowColor, radius: glowRadius)
+        .onAppear { startAnimationIfNeeded() }
+    }
+
+    // MARK: - Avatar content (image or initials)
+    @ViewBuilder
+    private var avatarContent: some View {
+        if let imageURL {
+            AsyncImage(url: imageURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                placeholderView
+            }
+        } else {
+            placeholderView
+        }
+    }
+
+    private var placeholderView: some View {
+        ZStack {
+            Circle().fill(Color.raveSurface)
+            Text(String(displayName.prefix(1)).uppercased())
+                .font(.system(size: size * 0.4, weight: .bold))
+                .foregroundColor(.raveTextPrimary)
+        }
+    }
+
+    // MARK: - Ring overlay (role-based) — КЛЮЧЕВАЯ логика
+    @ViewBuilder
+    private var ringOverlay: some View {
+        switch role {
+        case .free:
+            // ❌ НЕТ обводки — чистый circle. Это и есть премиум-сигнал для остальных.
+            EmptyView()
+
+        case .premium:
+            // ✨ Анимированное золотое кольцо
+            Circle()
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            Color(hex: 0xFCD34D),
+                            Color(hex: 0xFBBF24),
+                            Color(hex: 0xD97706),
+                            Color(hex: 0xFCD34D),
+                        ],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                )
+                .rotationEffect(.degrees(animateRotation ? 360 : 0))
+
+        case .host:
+            // 🎬 Статичное magenta кольцо — хост в текущей комнате
+            Circle()
+                .stroke(
+                    Color.raveHostGradient,
+                    style: StrokeStyle(lineWidth: 2)
+                )
+
+        case .admin:
+            // 🛡️ Статичное фиолетовое кольцо — глобально
+            Circle()
+                .stroke(
+                    Color.raveAdminGradient,
+                    style: StrokeStyle(lineWidth: 2)
+                )
+        }
+    }
+
+    // MARK: - Geometry helpers
+    private var ringWidth: CGFloat {
+        role == .free ? 0 : 4   // 2px stroke + 2px padding
+    }
+
+    private var glowColor: Color {
+        switch role {
+        case .free:     return .clear
+        case .premium:  return .ravePremium.opacity(0.4)
+        case .host:     return .raveAccent.opacity(0.35)
+        case .admin:    return .ravePrimary.opacity(0.35)
+        }
+    }
+
+    private var glowRadius: CGFloat {
+        role == .free ? 0 : 6
+    }
+
+    private func startAnimationIfNeeded() {
+        guard role == .premium, !animateRotation else { return }
+        withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
+            animateRotation = true
+        }
+    }
+}
+
+// MARK: - Usage examples
+/*
+ // Free user в списке участников:
+ PremiumAvatar(imageURL: user.avatarURL, displayName: user.name, role: .free, size: 44)
+
+ // Premium-юзер:
+ PremiumAvatar(imageURL: user.avatarURL, displayName: user.name, role: .premium, size: 44)
+
+ // Хост в RoomView:
+ PremiumAvatar(imageURL: host.avatarURL, displayName: host.name,
+               role: .dominant([.premium, .host]), size: 56)
+               // → выберет .premium (приоритет выше)
+
+ // Админ в AdminPanelView:
+ PremiumAvatar(imageURL: admin.avatarURL, displayName: admin.name, role: .admin, size: 44)
+ */
+'''
+))
+story.append(Spacer(0, 12))
+
+# 6.11 PremiumButtonStyle.swift
+story.append(Paragraph("6.11 Готовый код: PremiumButtonStyle.swift (5 стилей)", S["h3"]))
+story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Views/Components/PremiumButtonStyle.swift</font> (заменяет существующий)", S["file"]))
+story.append(Spacer(0, 4))
+story.append(code_block(
+'''import SwiftUI
+
+// MARK: - 1. Primary CTA (violet → magenta gradient)
+// Применение: Create Room, Confirm, Send, Join
+struct PremiumButtonStyle: ButtonStyle {
+    var gradient: LinearGradient = Color.raveGradient
+    var glowColor: Color = .ravePrimary
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7),
+                       value: configuration.isPressed)
+            .shadow(
+                color: glowColor.opacity(configuration.isPressed ? 0.2 : 0.45),
+                radius: configuration.isPressed ? 6 : 16,
+                y: 6
+            )
+    }
+}
+
+// MARK: - 2. Premium Subscribe (gold gradient)
+// Применение: Upgrade to Premium, Restore Purchases
+struct PremiumSubscribeButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .heavy, design: .rounded))
+            .foregroundColor(.raveBackground)  // чёрный на золоте — макс контраст
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6),
+                       value: configuration.isPressed)
+            .shadow(
+                color: .ravePremium.opacity(configuration.isPressed ? 0.3 : 0.55),
+                radius: configuration.isPressed ? 4 : 14,
+                y: 5
+            )
+    }
+}
+
+// MARK: - 3. Secondary (surface + subtle border)
+// Применение: Cancel, Back, Close
+struct SecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundColor(.raveTextPrimary)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7),
+                       value: configuration.isPressed)
+    }
+}
+
+// MARK: - 4. Ghost (text only)
+// Применение: Forgot password, Skip, View all
+struct GhostButtonStyle: ButtonStyle {
+    var color: Color = .ravePrimary
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(color)
+            .opacity(configuration.isPressed ? 0.6 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+    }
+}
+
+// MARK: - 5. Icon (mute, settings, share)
+// Применение: круглые icon-кнопки
+struct IconButtonStyle: ButtonStyle {
+    var isActive: Bool = false
+    var activeColor: Color = .raveAccent
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(isActive ? activeColor : .raveTextSecondary)
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6),
+                       value: configuration.isPressed)
+    }
+}
+
+// MARK: - Modifier helpers
+extension View {
+    func primaryButton() -> some View {
+        self
+            .background(Color.raveGradient)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .buttonStyle(PremiumButtonStyle())
+    }
+
+    func premiumSubscribeButton() -> some View {
+        self
+            .background(Color.ravePremiumGradient)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .buttonStyle(PremiumSubscribeButtonStyle())
+    }
+
+    func secondaryButton() -> some View {
+        self
+            .background(Color.raveSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.raveBorder, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .buttonStyle(SecondaryButtonStyle())
+    }
+
+    func ghostButton(color: Color = .ravePrimary) -> some View {
+        self.buttonStyle(GhostButtonStyle(color: color))
+    }
+
+    func iconButton(isActive: Bool = false, activeColor: Color = .raveAccent) -> some View {
+        self
+            .frame(width: 44, height: 44)
+            .background(Color.raveSurface)
+            .overlay(Circle().stroke(Color.raveBorder, lineWidth: 0.5))
+            .clipShape(Circle())
+            .buttonStyle(IconButtonStyle(isActive: isActive, activeColor: activeColor))
+    }
+}
+'''
+))
+story.append(Spacer(0, 12))
+
+# 6.12 AnimatedGradientBackground.swift updated
+story.append(Paragraph("6.12 Готовый код: AnimatedGradientBackground.swift (обновлённый)", S["h3"]))
+story.append(Paragraph(
+    "Объединяет фикс из раздела 02 (TimelineView вместо withAnimation) с новой палитрой «Cinema Violet» — "
+    "фоновые орбы теперь фиолетовые, магента и золотые (вместо бирюзовых).",
+    S["body"]
+))
+story.append(Paragraph("📁 <font name='Mono'>RaveClone/RaveClone/Views/Components/AnimatedGradientBackground.swift</font> (полная замена)", S["file"]))
+story.append(Spacer(0, 4))
+story.append(code_block(
+'''import SwiftUI
+
+// MARK: - Cinema Violet Ambient Background
+// Заменяет бирюзовый "Ice Glow" на фиолетово-золотой premium-фон.
+// TimelineView — надёжная анимация (не зависит от lifecycle).
+
+struct AnimatedGradientBackground: View {
+    var hasActiveRooms: Bool = true
+
+    var body: some View {
+        ZStack {
+            // База — глубокий чёрный с фиолетовым подтоном
+            Color.raveBackground
+                .ignoresSafeArea()
+
+            // Плавающие glow-orbs (violet, magenta, gold)
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                ZStack {
+                    glowOrb(
+                        color: .ravePrimary,        // фиолетовый
+                        t: t, size: 360, blur: 50,
+                        xAmp: 60, yAmp: 180,
+                        xPhase: 0.0, yPhase: 0.3,
+                        opacity: hasActiveRooms ? 0.40 : 0.25
+                    )
+                    glowOrb(
+                        color: .raveAccent,         // магента
+                        t: t, size: 300, blur: 60,
+                        xAmp: 100, yAmp: 160,
+                        xPhase: 1.2, yPhase: 0.7,
+                        opacity: hasActiveRooms ? 0.32 : 0.20
+                    )
+                    glowOrb(
+                        color: .ravePremium,        // золото (premium hint)
+                        t: t, size: 240, blur: 70,
+                        xAmp: 80, yAmp: 40,
+                        xPhase: 2.4, yPhase: 1.1,
+                        opacity: hasActiveRooms ? 0.20 : 0.15
+                    )
+                }
+                .ignoresSafeArea()
+            }
+        }
+    }
+
+    private func glowOrb(
+        color: Color, t: Double, size: CGFloat, blur: CGFloat,
+        xAmp: CGFloat, yAmp: CGFloat,
+        xPhase: Double, yPhase: Double,
+        opacity: Double
+    ) -> some View {
+        Circle()
+            .fill(color.opacity(opacity))
+            .frame(width: size, height: size)
+            .blur(radius: blur)
+            .offset(
+                x: CGFloat(sin(t * 0.1 + xPhase)) * xAmp,
+                y: CGFloat(cos(t * 0.07 + yPhase)) * yAmp
+            )
+            .blendMode(.screen)   // свечение поверх чёрного
+    }
+}
+
+// MARK: - GlassCard (обновлён под новую палитру)
+struct GlassCard: ViewModifier {
+    var cornerRadius: CGFloat = 18
+    var opacity: Double = 0.05
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(Color.white.opacity(opacity))
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.10),
+                                    Color.clear
+                                ],
+                                startPoint: .top, endPoint: .center
+                            )
+                        )
+                }
+            )
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.18),
+                                Color.white.opacity(0.04),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.4), radius: 10, y: 4)
+    }
+}
+
+extension View {
+    func glassCard(cornerRadius: CGFloat = 18, opacity: Double = 0.05) -> some View {
+        modifier(GlassCard(cornerRadius: cornerRadius, opacity: opacity))
+    }
+}
+
+// MARK: - Badge components (LIVE, PREMIUM, HOST, ADMIN)
+
+struct LiveBadge: View {
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color.raveAccent)
+                .frame(width: 6, height: 6)
+                .scaleEffect(pulse ? 1.3 : 1.0)
+            Text("LIVE")
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundColor(.raveAccent)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.raveAccent.opacity(0.15))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.raveAccent.opacity(0.5), lineWidth: 0.5))
+        .shadow(color: .raveAccent.opacity(0.4), radius: pulse ? 8 : 3)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+    }
+}
+
+struct PremiumBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "crown.fill")
+                .font(.system(size: 9))
+            Text("PREMIUM")
+                .font(.system(size: 9, weight: .heavy))
+        }
+        .foregroundColor(.raveBackground)  // чёрный на золоте
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.ravePremiumGradient)
+        .clipShape(Capsule())
+        .shadow(color: .ravePremium.opacity(0.4), radius: 4)
+    }
+}
+
+struct HostBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 9))
+            Text("HOST")
+                .font(.system(size: 9, weight: .heavy))
+        }
+        .foregroundColor(.raveAccent)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.raveAccent.opacity(0.2))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.raveAccent.opacity(0.5), lineWidth: 0.5))
+    }
+}
+
+struct AdminBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "shield.fill")
+                .font(.system(size: 9))
+            Text("ADMIN")
+                .font(.system(size: 9, weight: .heavy))
+        }
+        .foregroundColor(.ravePrimary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.ravePrimary.opacity(0.15))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.ravePrimary.opacity(0.5), lineWidth: 0.5))
+    }
+}
+'''
+))
+story.append(Spacer(0, 14))
+
+# 6.13 План миграции
+story.append(Paragraph("6.13 План миграции", S["h3"]))
+story.append(Paragraph(
+    "Миграция состоит из 4 шагов. Каждый шаг — отдельный коммит. Прогресс виден визуально после каждого.",
+    S["body"]
+))
+story.append(Spacer(0, 6))
+
+migrate_data = [
+    ["Шаг", "Действие", "Файлы", "Результат"],
+    ["1",
+     "Заменить Color+Theme.swift целиком",
+     "RaveClone/RaveClone/Extensions/Color+Theme.swift",
+     "Все ссылки на ravePrimary/raveAccent автоматически получают новые цвета. Бирюзовый исчезает."],
+    ["2",
+     "Добавить PremiumAvatar.swift + Badge components",
+     "RaveClone/RaveClone/Views/Components/PremiumAvatar.swift (новый)\n"+
+     "AnimatedGradientBackground.swift (обновить секцию badges)",
+     "Доступны 4 уровня аватарок и 4 бейджа. Старый код продолжает работать."],
+    ["3",
+     "Обновить AnimatedGradientBackground.swift (фон + TimelineView fix)",
+     "RaveClone/RaveClone/Views/Components/AnimatedGradientBackground.swift",
+     "Фон становится фиолетово-золотым. Заодно фиксится баг C1 раздела 02 (анимация)."],
+    ["4",
+     "Заменить старые аватарки на PremiumAvatar во views",
+     "Views/Home/HomeView.swift\nViews/Room/ParticipantListView.swift\nViews/Room/RoomChatView.swift\nViews/Profile/ProfileView.swift\nViews/Friends/FriendsView.swift\nViews/Admin/AdminPanelView.swift",
+     "Аватарки получают role-based обводки. Premium-юзеры видят gold ring, free — без обводки."],
+    ["5",
+     "Обновить кнопки: заменить .buttonStyle(PremiumButtonStyle()) на специфичные стили",
+     "Views/Home/HomeView.swift\nViews/Auth/LoginView.swift\nViews/Room/RoomView.swift\nViews/Premium/PaywallView.swift",
+     "Premium Subscribe кнопки получают gold gradient. Secondary кнопки — surface+border."],
+    ["6",
+     "Добавить PremiumBadge в chat messages и participant list",
+     "Views/Room/RoomChatView.swift\nViews/Room/ParticipantListView.swift",
+     "Premium-юзеры видны в чате по gold-бейджу рядом с именем."],
+]
+body_rows = []
+for i, row in enumerate(migrate_data):
+    if i == 0:
+        body_rows.append([Paragraph(f'<b>{c}</b>', S["tbl_h"]) for c in row])
+    else:
+        body_rows.append([Paragraph(c, S["tbl_c"]) for c in row])
+t = Table(body_rows, colWidths=[1.0*cm, 4.5*cm, 5.5*cm, 6.0*cm])
+t.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), HEADER_FILL),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ("LEFTPADDING", (0,0), (-1,-1), 5),
+    ("RIGHTPADDING", (0,0), (-1,-1), 5),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("BOX", (0,0), (-1,-1), 0.5, BORDER),
+    ("INNERGRID", (0,0), (-1,-1), 0.2, BORDER),
+]))
+for i in range(1, len(body_rows)):
+    if i % 2 == 0:
+        t.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), TABLE_STRIPE)]))
+story.append(t)
+story.append(Spacer(0, 14))
+
+# 6.14 Правила дизайна
+story.append(Paragraph("6.14 Правила дизайна (для всех будущих экранов)", S["h3"]))
+rules = [
+    "<b>Бирюзовый запрещён.</b> Никаких <code>#00C2FF</code>, <code>#00FFCC</code>, <code>#00FF88</code>. Если видите — заменить на <code>ravePrimary</code> (violet) или <code>raveSuccess</code> (приглушённый).",
+    "<b>Золото = только premium.</b> <code>ravePremium</code> (#FBBF24) используется ТОЛЬКО для premium-tier сигналов: avatar ring, subscribe button, premium badge, premium-featured карточки. Не использовать для обычных CTA.",
+    "<b>Free-юзер — без визуального шума.</b> У бесплатного юзера на аватаре нет обводки, нет бейджа, нет glow. Это и есть мотивация апгрейдить — разница видна сразу.",
+    "<b>Один primary CTA на экран.</b> Если на экране две кнопки с violet→magenta gradient — это ошибка. Secondary должна быть SecondaryButtonStyle (surface + border).",
+    "<b>Pressed state — обязателен.</b> Все интерактивные элементы имеют scaleEffect на press (0.95-0.97). Без pressed-state кнопка ощущается мёртвой.",
+    "<b>Backgrounds — глубокий чёрный.</b> Не серый, не фиолетовый. <code>#08080C</code>. Это «кинозал».",
+    "<b>Скругления — consistent.</b> Cards = 16pt, buttons = 14-16pt, badges = capsule. Не смешивать.",
+    "<b>Тени — цветные, не чёрные.</b> Primary кнопка — violet glow. Premium — gold glow. Обычные карточки — чёрная тень. Цветная тень = premium-ощущение.",
+    "<b>Анимации — медленные и плавные.</b> Premium ring вращается 8s/оборот (не 2s). Pulse LIVE — 1s. Никаких резких bounce-эффектов на premium-элементах.",
+    "<b>Граница 0.5px.</b> Тонкие границы выглядят дороже, чем 1-2px. Использовать <code>raveBorder</code> (rgba 0.06) на всех стандартных карточках.",
+]
+items = [ListItem(Paragraph(r, S["body"]), leftIndent=10, value="•") for r in rules]
+story.append(ListFlowable(items, bulletType="bullet", start="•"))
+story.append(Spacer(0, 12))
+
+# 6.15 Чек-лист App Store Review
+story.append(Paragraph("6.15 Чек-лист для App Store Review", S["h3"]))
+story.append(Paragraph(
+    "После миграции на Cinema Violet убедитесь, что:",
+    S["body"]
+))
+checklist = [
+    "Premium-подписка визуально отличается от free (gold ring + badge + subscribe button)",
+    "Все premium-фичи (4K, no-ads, 50 participants) доступны только при активной подписке",
+    "Subscribe button использует gold gradient, не violet (чёткое визуальное разделение)",
+    "Restore Purchases работает (см. баг iOS M5 —修复ить в этапе 4 дорожной карты)",
+    "Free-юзеры не видят gold-элементов нигде (иначе вводит в заблуждение)",
+    "Premium ring не анимируется быстрее 8s/оборот (иначе раздражает — App Store reject за анимацию)",
+    "Все цвета соответствуют контрастности WCAG AA (минимум 4.5:1 для текста)",
+    "Dark mode единственный (light mode не поддерживается — приложение для тёмных помещений)",
+]
+items = [ListItem(Paragraph(c, S["body"]), leftIndent=10, value="✓") for c in checklist]
+story.append(ListFlowable(items, bulletType="bullet", start="✓"))
+
+story.append(PageBreak())
+
 # ── ROADMAP ───────────────────────────────────────────────────────────────
-story.append(section_header("06", "Дорожная карта исправлений"))
+story.append(section_header("07", "Дорожная карта исправлений"))
 story.append(Paragraph(
     "Рекомендуемый порядок фиксов. Каждый этап — independently shippable: можно релизить после каждого.",
     S["body"]

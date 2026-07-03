@@ -96,6 +96,7 @@ struct MainTabView: View {
 // MARK: - Rooms Tab (Общедоступные + Мои комнаты)
 
 struct RoomsTabContent: View {
+    @EnvironmentObject private var apiClient: APIClient
     @State private var viewModel: HomeViewModel?
     @State private var navigateToRoom: Room?
 
@@ -143,28 +144,48 @@ struct RoomsTabContent: View {
 
                         Divider().background(Color.white.opacity(0.06))
 
-                        // Мои комнаты
+                        // ── Мои комнаты (с реальными данными) ──
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text("Мои комнаты")
                                     .font(.system(size: 22, weight: .bold, design: .rounded))
                                     .foregroundColor(.raveTextPrimary)
                                 Spacer()
+                                if let count = viewModel?.myRooms.count, count > 0 {
+                                    Text("\(count)")
+                                        .font(.system(size: 12, weight: .bold).monospacedDigit())
+                                        .foregroundColor(.raveTextSecondary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                }
                                 Image(systemName: "clock.arrow.circlepath")
-                                    .foregroundColor(.ravePrimary)
+                                    .foregroundColor(.bioCyan)
                             }
 
-                            VStack(spacing: 8) {
-                                Image(systemName: "rectangle.stack.badge.plus")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(.raveTextTertiary)
-                                Text("Создайте комнату с главной")
-                                    .font(.subheadline)
-                                    .foregroundColor(.raveTextSecondary)
+                            if let myRooms = viewModel?.myRooms, !myRooms.isEmpty {
+                                ForEach(myRooms) { room in
+                                    Button {
+                                        navigateToRoom = room
+                                    } label: {
+                                        myRoomCard(room)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } else {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "rectangle.stack.badge.plus")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(.raveTextTertiary)
+                                    Text("Создайте комнату с главной")
+                                        .font(.subheadline)
+                                        .foregroundColor(.raveTextSecondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 30)
+                                .glassCard(cornerRadius: 16, opacity: 0.04)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 30)
-                            .glassCard(cornerRadius: 16, opacity: 0.04)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -179,16 +200,99 @@ struct RoomsTabContent: View {
                     .toolbar(.hidden, for: .tabBar)
             }
         }
+        .refreshable {
+            await viewModel?.loadRooms()
+            await viewModel?.loadMyRooms()
+        }
         .onAppear {
             if viewModel == nil {
-                let api = APIClient()
                 viewModel = HomeViewModel(
-                    roomService: RoomService(api: api),
-                    authService: AuthService(api: api)
+                    roomService: RoomService(api: apiClient),
+                    authService: AuthService(api: apiClient)
                 )
-                Task { await viewModel?.loadRooms() }
+                Task {
+                    await viewModel?.loadRooms()
+                    await viewModel?.loadMyRooms()
+                }
+            } else {
+                Task { await viewModel?.loadMyRooms() }
             }
         }
+    }
+
+    // MARK: - My Room Card (compact, shows participant count)
+
+    @ViewBuilder
+    private func myRoomCard(_ room: Room) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.bioCyan.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                if let service = room.mediaItem?.source, service != .url {
+                    ServiceLogoView(service: service, size: 24)
+                } else {
+                    Image(systemName: "play.rectangle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.bioCyan)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(room.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.raveTextPrimary)
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 10))
+                        Text("\(room.participantCount)")
+                            .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    }
+                    .foregroundColor(.raveTextSecondary)
+
+                    Text("· \(room.hostName)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.raveTextTertiary)
+                        .lineLimit(1)
+
+                    if room.isActive {
+                        HStack(spacing: 2) {
+                            Circle()
+                                .fill(Color.bioEmerald)
+                                .frame(width: 5, height: 5)
+                            Text("LIVE")
+                                .font(.system(size: 9, weight: .heavy))
+                        }
+                        .foregroundColor(.bioEmerald)
+                    }
+                }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(room.code)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(.bioCyan)
+                Text("код")
+                    .font(.system(size: 8))
+                    .foregroundColor(.raveTextTertiary)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12))
+                .foregroundColor(.raveTextTertiary)
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
     }
 }
 

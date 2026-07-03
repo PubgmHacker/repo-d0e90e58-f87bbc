@@ -8,6 +8,8 @@ final class HomeViewModel {
     // MARK: - State
 
     var rooms: [Room] = []
+    /// 🔧 NEW: User's own rooms (created + previously joined)
+    var myRooms: [Room] = []
     var isLoading = false
     var errorMessage: String?
     var showCreateRoom = false
@@ -78,6 +80,15 @@ final class HomeViewModel {
         }
 
         isLoading = false
+    }
+
+    /// 🔧 NEW: Load user's own rooms (created + joined history)
+    func loadMyRooms() async {
+        do {
+            myRooms = try await roomService.fetchMyRooms()
+        } catch {
+            print("[HomeVM] loadMyRooms error: \(error.localizedDescription)")
+        }
     }
 
     func createRoom(name: String, maxParticipants: Int, mediaItem: MediaItem?) async throws -> Room {

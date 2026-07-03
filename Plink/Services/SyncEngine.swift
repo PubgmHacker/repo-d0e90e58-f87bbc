@@ -49,7 +49,10 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     // MARK: - Private State
 
-    private var player: AVPlayer?
+    // 🔧 FIX H3: Expose player as internal so VideoContainerView can use the SAME
+    // AVPlayer instance (was: private — forced VideoContainerView to create its own
+    // second AVPlayer, causing visual desync).
+    private(set) var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     private var lastSyncEventTime: TimeInterval = 0      // server time of last event

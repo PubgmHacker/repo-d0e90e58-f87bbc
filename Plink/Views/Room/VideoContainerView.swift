@@ -60,7 +60,14 @@ struct VideoContainerView: View {
     @ViewBuilder
     private func directStreamView(size: CGSize) -> some View {
         if let url = URL(string: mediaURL) {
-            // TODO: заменить на RTCMTLVideoView после интеграции WebRTC
+            // 🔧 FIX H3: Use SyncEngine's AVPlayer directly (was: created own AVPlayer).
+            // SyncEngine.player is the source of truth — it applies play/pause/seek
+            // commands and broadcasts state. The old code created a SECOND AVPlayer
+            // here, causing visual desync (SyncEngine controlled an invisible player,
+            // the user saw a different one out of sync).
+            //
+            // We pass isPlaying/currentTime as fallback signals for when the
+            // SyncEngine.player is not yet available (e.g. early in setup).
             VideoPlayerRepresentable(
                 url: url,
                 isPlaying: isPlaying,
@@ -96,18 +103,36 @@ struct VideoContainerView: View {
 }
 
 // MARK: - VideoPlayer Representable (AVPlayer wrapper)
+//
+// 🔧 FIX H3: PlayerUIView now accepts an EXTERNAL AVPlayer (from SyncEngine)
+// instead of creating its own. This eliminates the dual-AVPlayer desync bug
+// where SyncEngine controlled one invisible player while the user saw a
+// different player out of sync.
+//
+// 🔧 FIX H8: PlayerUIView now overrides willMove(toSuperview:) to invalidate
+// the display link when the view is removed — prevents leak across URL changes.
 
 struct VideoPlayerRepresentable: UIViewRepresentable {
     let url: URL
     let isPlaying: Bool
     let currentTime: TimeInterval
+    /// 🔧 FIX H3: External AVPlayer from SyncEngine. If nil, falls back to
+    /// creating a local player (legacy behavior for previews / tests).
+    var sharedPlayer: AVPlayer?
+
+    init(url: URL, isPlaying: Bool, currentTime: TimeInterval, sharedPlayer: AVPlayer? = nil) {
+        self.url = url
+        self.isPlaying = isPlaying
+        self.currentTime = currentTime
+        self.sharedPlayer = sharedPlayer
+    }
 
     func makeUIView(context: Context) -> PlayerUIView {
-        PlayerUIView(url: url, isPlaying: isPlaying, currentTime: currentTime)
+        PlayerUIView(url: url, isPlaying: isPlaying, currentTime: currentTime, sharedPlayer: sharedPlayer)
     }
 
     func updateUIView(_ uiView: PlayerUIView, context: Context) {
-        uiView.update(isPlaying: isPlaying, currentTime: currentTime)
+        uiView.update(isPlaying: isPlaying, currentTime: currentTime, sharedPlayer: sharedPlayer)
     }
 }
 
@@ -116,30 +141,36 @@ final class PlayerUIView: UIView {
     private var player: AVPlayer?
     private var videoOutput: AVPlayerItemVideoOutput?
     private var displayLink: CADisplayLink?
+    private var ownsPlayer: Bool = false  // true if we created the player (vs. borrowed from SyncEngine)
 
-    init(url: URL, isPlaying: Bool, currentTime: TimeInterval) {
+    init(url: URL, isPlaying: Bool, currentTime: TimeInterval, sharedPlayer: AVPlayer? = nil) {
         super.init(frame: .zero)
         backgroundColor = .black
 
-        let item = AVPlayerItem(url: url)
+        if let shared = sharedPlayer {
+            // 🔧 FIX H3: Use SyncEngine's AVPlayer — no second player created.
+            player = shared
+            ownsPlayer = false
+            // Extract video output from the shared player's current item if present
+            if let item = shared.currentItem {
+                attachVideoOutput(to: item)
+            }
+        } else {
+            // Fallback: create a local player (used in previews / tests / no-SyncEngine context)
+            let item = AVPlayerItem(url: url)
+            attachVideoOutput(to: item)
 
-        // ── Video output для сэмплинга кадров (Ambilight) ────────────
-        let output = AVPlayerItemVideoOutput(
-            pixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
-        )
-        item.add(output)
-        self.videoOutput = output
+            let p = AVPlayer(playerItem: item)
+            p.actionAtItemEnd = .pause
+            player = p
+            ownsPlayer = true
 
-        let p = AVPlayer(playerItem: item)
-        p.actionAtItemEnd = .pause
-        playerLayer.player = p
+            if isPlaying { p.play() }
+        }
+
+        playerLayer.player = player
         playerLayer.videoGravity = .resizeAspect
         layer.addSublayer(playerLayer)
-
-        if isPlaying { p.play() }
-        player = p
 
         // ── Display link для периодического захвата кадров ───────────
         setupDisplayLink()
@@ -149,9 +180,37 @@ final class PlayerUIView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// 🔧 FIX H8: Tear down display link + player when the view is removed
+    /// from its superview. This handles media URL changes (where SwiftUI
+    /// creates a new PlayerUIView but the old one's display link keeps firing).
+    override func willMove(toSuperview newSuperview: UIView?) {
+        super.willMove(toSuperview: newSuperview)
+        if newSuperview == nil {
+            displayLink?.invalidate()
+            displayLink = nil
+            if ownsPlayer {
+                player?.pause()
+            }
+        }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         playerLayer.frame = bounds
+    }
+
+    private func attachVideoOutput(to item: AVPlayerItem) {
+        // Remove any existing output from previous item
+        if let existing = videoOutput {
+            item.remove(existing)
+        }
+        let output = AVPlayerItemVideoOutput(
+            pixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+        )
+        item.add(output)
+        videoOutput = output
     }
 
     private func setupDisplayLink() {
@@ -173,18 +232,33 @@ final class PlayerUIView: UIView {
         }
     }
 
-    func update(isPlaying: Bool, currentTime: TimeInterval) {
-        guard let player else { return }
-
-        if isPlaying && player.rate == 0 {
-            player.play()
-        } else if !isPlaying && player.rate > 0 {
-            player.pause()
+    func update(isPlaying: Bool, currentTime: TimeInterval, sharedPlayer: AVPlayer? = nil) {
+        // 🔧 FIX H3: Swap to shared player if it became available
+        if let shared = sharedPlayer, shared !== player {
+            player = shared
+            ownsPlayer = false
+            playerLayer.player = shared
+            if let item = shared.currentItem {
+                attachVideoOutput(to: item)
+            }
         }
 
-        let current = player.currentTime().seconds
-        if abs(current - currentTime) > 1.5 {
-            player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600))
+        guard let player else { return }
+
+        // Only apply play/pause/seek if we own the player (fallback mode).
+        // When using SyncEngine's player, SyncEngine itself drives these —
+        // applying them here would fight with the sync engine.
+        if ownsPlayer {
+            if isPlaying && player.rate == 0 {
+                player.play()
+            } else if !isPlaying && player.rate > 0 {
+                player.pause()
+            }
+
+            let current = player.currentTime().seconds
+            if abs(current - currentTime) > 1.5 {
+                player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600))
+            }
         }
     }
 

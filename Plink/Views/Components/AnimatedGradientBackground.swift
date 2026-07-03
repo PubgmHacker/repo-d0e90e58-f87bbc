@@ -1,21 +1,28 @@
 import SwiftUI
 
-// MARK: - AnimatedGradientBackground (deprecated alias)
+// MARK: - AnimatedGradientBackground (deprecated alias → BioluminescentBackground)
 //
-// Раньше — статичный градиент с орбами. Теперь биолюминесцентный фон
-// живёт на корневом уровне (RaveCloneApp), поэтому локальные фоны
-// заменены на прозрачные плейсхолдеры, чтобы не дублировать слои.
+// 🔧 FIX N1+N2: Was returning Color.clear, which meant 20 screens (sheets/modals
+// that don't sit on top of the root BioluminescentBackground) rendered with no
+// background at all — just the default UIWindow color. The orbColors and
+// hasActiveRooms parameters were silently dropped (5+ call sites passed specific
+// palettes that were ignored).
 //
-// Это сохраняет совместимость со всеми экранами, которые вызывают
-// AnimatedGradientBackground(), но убирает дублирование и тусклые цвета.
+// Now forwards to BioluminescentBackground so all 20 screens get the proper
+// cyan/teal/emerald animated background. The legacy parameters are accepted
+// for source compatibility but ignored (BioluminescentBackground has its own
+// palette that's strictly controlled).
 struct AnimatedGradientBackground: View {
     var orbColors: [Color] = []
     var hasActiveRooms: Bool = true
 
     var body: some View {
-        // Прозрачный — корневой BioluminescentBackground уже отрисован ниже
-        Color.clear
-            .ignoresSafeArea()
+        // Forward to BioluminescentBackground — ignores legacy orbColors param.
+        // hasActiveRooms modulates energy: active rooms = brighter, empty = dimmer.
+        BioluminescentBackground(
+            energy: hasActiveRooms ? 0.6 : 0.4,
+            dimming: 0
+        )
     }
 }
 

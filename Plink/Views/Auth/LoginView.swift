@@ -39,26 +39,10 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            // Animated gradient background
-            Color.raveBackground
+            // 🔧 FIX N7: Use BioluminescentBackground (was: opaque Color.raveBackground
+            // + two static blurred circles). Now consistent with the rest of the app.
+            BioluminescentBackground(energy: 0.5, dimming: 0)
                 .ignoresSafeArea()
-
-            // Subtle glow orbs
-            VStack {
-                Spacer()
-                Circle()
-                    .fill(Color.ravePrimary.opacity(0.06))
-                    .frame(width: 300, height: 300)
-                    .blur(radius: 80)
-                    .offset(y: -200)
-                Circle()
-                    .fill(Color.raveAccent.opacity(0.04))
-                    .frame(width: 250, height: 250)
-                    .blur(radius: 60)
-                    .offset(y: 100)
-                Spacer()
-            }
-            .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()

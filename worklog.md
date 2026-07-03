@@ -2631,3 +2631,299 @@ customization) that Rave and Hearo don't have.
 ---
 
 *End of Task FULL-AUDIT-FINAL report.*
+
+---
+
+## Task ID: FINAL-AUDIT-V3 — Re-Audit After 15 Critical Fixes
+
+**Scope:** Verify the 15 patches applied across 8 key files (SyncEngine,
+WebSocketClient, Room, RoomViewModel, RoomView, ServiceLogoView,
+BioluminescentBackground, PremiumStatusManager). Check for new bugs
+introduced by the fixes (compile errors, memory leaks, race conditions).
+
+**Method:** Line-by-line read of all 8 files + grep verification of fix
+markers (FIX 1.1, 1.2, 1.3, 2.2, 2.3, 2.5, 3.4, 4.4, 4.5, 5.7, M3, C9).
+Cross-referenced with FIXES_SUMMARY.md. No Swift compiler available in
+sandbox — compile-error analysis done via Swift language semantics.
+
+---
+
+### 1. ✅ VERIFIED FIXES (15/15 present, 11 fully correct)
+
+| # | Fix ID | File:Line | Status | Notes |
+|---|--------|-----------|--------|-------|
+| 1 | FIX 1.1 — `requestInitialState()` | SyncEngine.swift:234-238 | ✅ Correct | Exists, calls `requestStateFromHost()` |
+| 2 | FIX 1.2 — Buffer underrun fields | SyncEngine.swift:65-66 | ⚠️ Partial | Fields declared but **never wired up** — see NEW bug #3 |
+| 3 | FIX 1.3 — `scheduleReconnect` guard | WebSocketClient.swift:429 | 🔴 BROKEN | Guard added but breaks `handleDisconnect` path — see NEW bug #1 |
+| 4 | FIX 2.2 — Play/pause 300ms throttle | SyncEngine.swift:163, 181 | ✅ Correct | Throttle applied to both `play()` and `pause()` |
+| 5 | FIX 2.3 — Seek 2s timeout fallback | SyncEngine.swift:215-223 | ⚠️ Race | Fallback works but has a race on rapid seeks — see NEW bug #4 |
+| 6 | FIX 2.5 — RoomPrivacy `friends→byLink` | Room.swift:76-84 | ✅ Correct | Decoder maps `"friends"` → `.byLink` |
+| 7 | password field | Room.swift:19, 85, 102 | ✅ Correct | Optional `String?`, encoded via `encodeIfPresent` |
+| 8 | FIX M3 — routeInbound single parse | RoomViewModel.swift:229-279 | ✅ Correct | One `JSONSerialization` parse, then dispatch by discriminator |
+| 9 | requestInitialState in joinRoomFlow | RoomViewModel.swift:106 | ✅ Correct | Called after `voiceChat.startCall` |
+| 10 | FIX 5.7 — Reaction 500ms throttle | RoomView.swift:470-476 | 🔴 BROKEN | Missing `@State` — see NEW bug #2 |
+| 11 | senderID uses currentUserId | RoomView.swift:483, 503 | ✅ Correct | Uses `viewModel?.currentUserId ?? "unknown"` |
+| 12 | FIX 4.5 — Static imageCache | ServiceLogoView.swift:21-29 | ✅ Correct | `static let` cache loaded once at first access |
+| 13 | FIX 4.4 — 30fps cap | BioluminescentBackground.swift:18 | ✅ Correct | `TimelineView(.animation(minimumInterval: 1.0/30.0))` |
+| 14 | FIX 3.4 — serverConfirmed flag | PremiumStatusManager.swift:71, 125 | ⚠️ Dead code | Flag is set but never read — see NEW bug #5 |
+| 15 | FIX C9 — Removed `setPremium(_:)` | PremiumStatusManager.swift:62 | ✅ Correct | Verified zero callers via grep |
+
+---
+
+### 2. 🔴 NEW BUGS INTRODUCED BY THE FIXES
+
+#### 🔴 NEW #1 — CRITICAL: Auto-reconnect is permanently broken
+- **File:** `Networking/WebSocketClient.swift:414-439`
+- **What's wrong:**
+  ```swift
+  private func handleDisconnect(reason: String) {
+      guard !isManuallyDisconnected, !isReconnecting else { return }
+      ...
+      isReconnecting = true          // ← set TRUE here (line 420)
+      delegate?.webSocketDidDisconnect(self, reason: reason)
+      scheduleReconnect()            // ← called AFTER (line 424)
+  }
+
+  private func scheduleReconnect() {
+      guard !isManuallyDisconnected else { return }
+      guard !isReconnecting else { return }   // 🔧 FIX 1.3 ← BAILS OUT!
+      ...
+  }
+  ```
+  `handleDisconnect` sets `isReconnecting = true` BEFORE calling
+  `scheduleReconnect()`. The new guard (FIX 1.3) then sees
+  `isReconnecting == true` and returns immediately. **No reconnect is
+  ever scheduled after a network failure.**
+- **Impact:** Any network hiccup (Wi-Fi→LTE handoff, transient drop,
+  server restart) permanently disconnects the user. They must kill and
+  relaunch the app. This is a **showstopper** for TestFlight — sync,
+  chat, and voice all die on the first flaky packet.
+- **Trigger path:** `receiveMessage` → `.failure` → `handleDisconnect`
+  → `scheduleReconnect` (bails). Also `sendRaw` error → same path.
+  Also heartbeat timeout → same path.
+- **Fix:** Either remove the `guard !isReconnecting` from
+  `scheduleReconnect` (the early-return in `handleDisconnect` already
+  prevents double-entry), OR set `isReconnecting = true` INSIDE
+  `scheduleReconnect` AFTER the guard check:
+  ```swift
+  private func scheduleReconnect() {
+      guard !isManuallyDisconnected, !isReconnecting else { return }
+      isReconnecting = true
+      let delay = nextBackoffDelay()
+      ...
+  }
+  // In handleDisconnect: remove the `isReconnecting = true` line.
+  ```
+
+#### 🔴 NEW #2 — HIGH/CRITICAL: Reaction throttle is broken (likely compile error)
+- **File:** `Views/Room/RoomView.swift:469-476`
+- **What's wrong:**
+  ```swift
+  /// 🔧 FIX 5.7: Throttle reactions to prevent spam (max 2/sec)
+  private var lastReactionTime: Date = .distantPast        // ← NOT @State
+  private let reactionThrottle: TimeInterval = 0.5
+
+  private func triggerReaction(emoji: String) {            // ← non-mutating
+      let now = Date()
+      guard now.timeIntervalSince(lastReactionTime) >= reactionThrottle else { return }
+      lastReactionTime = now                                // ← assigns to non-@State
+      ...
+  }
+  ```
+  Two compounding bugs:
+  1. **Likely compile error:** `triggerReaction` is a non-`mutating`
+     method on a struct, and `lastReactionTime` is a regular `var` (not
+     a property wrapper). Swift requires `mutating` to assign to a
+     stored `var` from a struct method. Expected error: *"Cannot assign
+     to property: 'lastReactionTime' is immutable."*
+  2. **Even if it compiles, throttle doesn't work:** SwiftUI `View` is
+     a value type. Non-`@State` stored properties reset to their
+     initializer values whenever the view is re-created (e.g., when
+     `reactionTrigger` @State changes and triggers a body re-eval).
+     Every double-tap sees `lastReactionTime == .distantPast` and
+     passes the throttle.
+- **Evidence:** Every other throttle in the codebase correctly uses
+  `@State`: `DMChatView.swift:20`, `AIAssistantView.swift:16`,
+  `RoomChatView.swift:29` all use `@State private var lastSendTime`.
+  Only `RoomView.swift:470` is missing the `@State` attribute.
+- **Fix:** Change line 470 to `@State private var lastReactionTime: Date = .distantPast`.
+
+#### 🟠 NEW #3 — MEDIUM: Buffer underrun observer is dead code (FIX 1.2 incomplete)
+- **File:** `Services/SyncEngine.swift:64-66`
+- **What's wrong:**
+  ```swift
+  /// 🔧 FIX 1.2: Buffer underrun observer
+  private var bufferObserver: NSObjectProtocol?
+  private var bufferUnderrunCount = 0
+  ```
+  Both fields are declared but **never installed, never incremented,
+  never read anywhere** (verified via grep). The intended
+  `AVPlayerItem.isPlaybackStalled` / `isPlaybackLikelyToKeepUp`
+  KVO/notification observation was never wired up in `loadMedia()` or
+  `observeStatus()`. `teardownPlayer()` does not remove any observer.
+- **Impact:** Buffer underruns are still invisible to the sync engine.
+  A stalled participant won't notify the host or request a state
+  resync. The "fix" is a no-op — the original bug (no underrun
+  detection) is still present, just with two unused ivars added.
+- **Fix:** In `loadMedia()`, install `AVPlayerItemPlaybackStalled`
+  notification observer and `\.isPlaybackLikelyToKeepUp` KVO. On
+  stall: increment `bufferUnderrunCount`, log, optionally call
+  `requestStateFromHost()`. In `teardownPlayer()`: remove the observer.
+
+#### 🟠 NEW #4 — MEDIUM: Seek fallback race condition on rapid seeks
+- **File:** `Services/SyncEngine.swift:201-223`
+- **What's wrong:**
+  ```swift
+  func seek(to time: TimeInterval) {
+      let clamped = max(0, min(time, duration))
+      let handler: (Bool) -> Void = { [weak self] _ in
+          ...
+          self.broadcastSyncCommand(.seek, mediaTime: clamped)  // captures clamped #1
+          self.seekCompletionHandler = nil
+      }
+      seekCompletionHandler = handler
+      player?.seek(..., completionHandler: handler)
+
+      Task { @MainActor [weak self] in
+          try? await Task.sleep(nanoseconds: 2_000_000_000)
+          guard let self, self.seekCompletionHandler != nil else { return }
+          // ← but seekCompletionHandler might be a NEWER handler now!
+          self.currentTime = clamped                          // OLD clamped #1
+          self.broadcastSyncCommand(.seek, mediaTime: clamped)  // broadcasts OLD position
+          self.seekCompletionHandler = nil
+      }
+  }
+  ```
+  The Task captures `clamped` from its own seek, but checks the shared
+  `seekCompletionHandler != nil` flag. If the user seeks twice within
+  2s (e.g., tap-seek then scrub), the FIRST Task wakes up, sees the
+  second handler is still pending, and **broadcasts the OLD position**
+  — overwriting the newer seek.
+- **Impact:** Rapid seeks cause occasional wrong-position broadcasts
+  to other participants, who then jump to a stale position. Rare in
+  practice but visible during aggressive scrubbing.
+- **Fix:** Tag each seek with a unique token, capture it in the Task,
+  and verify identity before broadcasting:
+  ```swift
+  private var currentSeekToken = 0
+  ...
+  currentSeekToken += 1
+  let token = currentSeekToken
+  seekCompletionHandler = handler
+  Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
+      guard let self, self.currentSeekToken == token else { return }
+      ...
+  }
+  ```
+
+#### 🟡 NEW #5 — LOW: `serverConfirmed` flag is set but never read
+- **File:** `Services/PremiumStatusManager.swift:71, 125`
+- **What's wrong:**
+  ```swift
+  func syncFromServer(isPremium serverIsPremium: Bool, expiry: Date?) {
+      serverConfirmed = true          // ← set here
+      ...
+  }
+  ...
+  private var serverConfirmed = false  // ← declared here, never read
+  ```
+  The flag is set but never queried. The intended gating (e.g.,
+  "only trust `isPremium` if `serverConfirmed`") is not implemented.
+  `canSelect4K`, `hasAdShield`, etc. still check only `isPremium`,
+  which can be flipped by the local `activatePremium(expiryDate:)`
+  path without server confirmation (though that path is now gated
+  behind `StoreManager.handleSuccessfulPurchase` per FIX C9, so the
+  practical risk is low).
+- **Impact:** Dead code. No functional regression. The intent
+  (defense-in-depth: require server confirmation before granting
+  premium features) is not enforced.
+- **Fix:** Either expose `serverConfirmed` as a public computed
+  property and gate feature checks on `isPremium && serverConfirmed`,
+  OR remove the flag if no gating is intended.
+
+---
+
+### 3. ⚠️ REMAINING ISSUES (from previous audit, NOT iOS-fixable)
+
+These are backend-side dependencies of the iOS fixes:
+
+| # | Issue | iOS-side status | Backend requirement |
+|---|-------|-----------------|---------------------|
+| R1 | `stateRequest` → `stateResponse` relay | iOS sends `stateRequest` (SyncEngine.swift:551-559); host responds (line 540-549) | Server must broadcast `stateRequest` to host (currently may only echo to sender) |
+| R2 | Pong must carry `serverTimestamp` | iOS reads `msg.serverTimestamp` (WebSocketClient.swift:394) | Server pong must include `serverTimestamp` field |
+| R3 | `?roomId=` query param handling | iOS sends `?roomId=` + path `/ws/room/:id` (WebSocketClient.swift:160-174) | Server must accept either path or query for room routing |
+| R4 | `/auth/refresh` endpoint | AuthService.refreshJWT calls it | Backend must implement, return new JWT + optional refresh token |
+| R5 | `DELETE /api/auth/me` | Wired in SettingsView | Backend must implement for GDPR account deletion |
+| R6 | `GET /api/users/:id` | Wired in friend-invite flow | Backend must implement for username lookup by short ID |
+| R7 | AppIcon.appiconset | N/A | Asset-side: still missing (B5 from prior audit) |
+| R8 | `applinks:raveclone.app` real domain | Entitlements reference placeholder | DNS + apple-app-site-association must be hosted |
+| R9 | `aps-environment: production` for Release | Currently `development` | Use build-config-specific entitlements |
+
+---
+
+### 4. 📊 UPDATED QUALITY SCORES
+
+| Dimension | Previous | Now | Delta | Rationale |
+|-----------|----------|-----|-------|-----------|
+| **Code quality** | 6/10 | **6.5/10** | +0.5 | Fixes are mostly well-commented and well-placed, but FIX 1.3 introduces a critical regression and FIX 5.7 is missing `@State`. FIX 1.2 and 3.4 add dead code. |
+| **Feature completeness** | 7/10 | **7.5/10** | +0.5 | Late-joiner support (requestInitialState), seek fallback, password rooms all added. But buffer underrun handling is still non-functional. |
+| **Design quality** | 8/10 | **8/10** | 0 | No design changes in this fix batch. |
+| **Security** | 7/10 | **7.5/10** | +0.5 | IAP bypass closed (C9), server-side premium sync intent added (3.4). But `serverConfirmed` is not enforced, and password rooms rely on backend enforcement not yet implemented. |
+| **Performance** | 7/10 | **8/10** | +1.0 | 30fps cap on bioluminescent bg, static image cache, single-parse message routing, play/pause throttle all reduce CPU and bandwidth. |
+| **App Store readiness** | 3/10 | **5/10** | +2.0 | Compile errors B1/B2 fixed. But still missing AppIcon (R7), real associated domain (R8), production APN env (R9), and now NEW #1 (reconnect) is a runtime showstopper. |
+| **Overall** | 6.3/10 | **7.1/10** | +0.8 | Meaningful progress, but two new bugs (one critical, one likely compile-blocking) prevent TestFlight sign-off. |
+
+---
+
+### 5. 🎯 FINAL ASSESSMENT — Is the project ready for TestFlight?
+
+**🔴 NO — NOT YET READY.** Two blocking issues must be fixed first:
+
+1. **NEW #1 (CRITICAL):** WebSocket auto-reconnect is permanently broken
+   by FIX 1.3. Any network hiccup kills the session until app restart.
+   This is a guaranteed TestFlight rejection finding (and would
+   generate immediate user reports). **Fix time: ~10 minutes.**
+
+2. **NEW #2 (HIGH/CRITICAL):** Reaction throttle in `RoomView` is
+   missing `@State` on `lastReactionTime`. This is either a
+   compile-blocking error or a non-functional throttle. Either way,
+   it must be fixed. **Fix time: ~1 minute** (one-character change:
+   add `@State`).
+
+**Recommended pre-TestFlight checklist:**
+- [ ] Fix NEW #1 — move `isReconnecting = true` into `scheduleReconnect`
+- [ ] Fix NEW #2 — add `@State` to `lastReactionTime`
+- [ ] Fix NEW #4 — add seek token to prevent stale broadcast (nice-to-have, not blocking)
+- [ ] Add AppIcon.appiconset (R7)
+- [ ] Switch aps-environment to `production` for Release (R9)
+- [ ] Verify backend relays `stateRequest` to host (R1)
+- [ ] Verify backend pong includes `serverTimestamp` (R2)
+
+**After NEW #1 and NEW #2 are fixed, the app is ready for an INTERNAL
+TestFlight build** (closed beta). The remaining issues (NEW #3 buffer
+observer dead code, NEW #5 serverConfirmed dead code) are not blocking
+and can be addressed in the next iteration. Public TestFlight release
+should additionally clear R7/R8/R9 and verify the backend
+dependencies (R1–R6).
+
+---
+
+### 6. 📋 SUMMARY TABLE
+
+| Category | Count | Details |
+|----------|-------|---------|
+| Fixes verified present | 15/15 | All 15 patches exist in the code |
+| Fixes fully correct | 11/15 | 1.1, 2.2, 2.5, password, M3, currentUserId, 4.5, 4.4, C9, requestInitialState-call, late-joiner |
+| Fixes that introduced bugs | 3/15 | 1.3 (critical), 2.3 (race), 5.7 (broken throttle) |
+| Fixes that are dead code | 2/15 | 1.2 (buffer observer), 3.4 (serverConfirmed) |
+| NEW critical bugs | 2 | NEW #1 (reconnect), NEW #2 (throttle/@State) |
+| NEW medium bugs | 2 | NEW #3 (buffer dead code), NEW #4 (seek race) |
+| NEW low bugs | 1 | NEW #5 (serverConfirmed dead code) |
+| Backend dependencies unmet | 6 | R1–R6 (server-side work) |
+| App Store blockers remaining | 3 | R7 (AppIcon), R8 (domain), R9 (APN env) |
+
+**Verdict:** Significant improvement (6.3 → 7.1), but FIX 1.3 and
+FIX 5.7 each introduced regressions that must be patched before
+TestFlight distribution. Estimated fix time for both: **~15 minutes**.
+

@@ -61,11 +61,17 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     private var driftCorrectionTimer: Timer?
     private var stateBroadcastTimer: Timer?
     private var seekCompletionHandler: ((Bool) -> Void)?
+    /// 🔧 FIX 1.2: Buffer underrun observer
+    private var bufferObserver: NSObjectProtocol?
+    private var bufferUnderrunCount = 0
 
     private let wsClient: WebSocketClient
     private let roomID: String
     private let userID: String
     private let isHost: Bool
+    /// 🔧 FIX 2.2: Throttle for play/pause to prevent rapid-fire WS spam
+    private var lastCommandTime: TimeInterval = 0
+    private let commandThrottle: TimeInterval = 0.3  // 300ms min between commands
 
     // MARK: - Constants
 
@@ -153,6 +159,9 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     func play() {
         guard isHost else { return }
+        let now = Date().timeIntervalSince1970
+        guard now - lastCommandTime >= commandThrottle else { return }
+        lastCommandTime = now
         player?.play()
         isPlaying = true
 
@@ -169,6 +178,9 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     func pause() {
         guard isHost else { return }
+        let now = Date().timeIntervalSince1970
+        guard now - lastCommandTime >= commandThrottle else { return }
+        lastCommandTime = now
         player?.pause()
         isPlaying = false
 
@@ -199,10 +211,30 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         seekCompletionHandler = handler
         player?.seek(to: CMTime(seconds: clamped, preferredTimescale: 600),
                      completionHandler: handler)
+
+        // 🔧 FIX 2.3: Fallback timeout — if seek doesn't complete in 2s, broadcast anyway
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard let self, self.seekCompletionHandler != nil else { return }
+            Logger.sync.warn("Seek timeout — broadcasting anyway")
+            self.currentTime = clamped
+            self.broadcastSyncCommand(.seek, mediaTime: clamped)
+            self.seekCompletionHandler = nil
+        }
     }
 
     func seekRelative(_ delta: TimeInterval) {
         seek(to: currentTime + delta)
+    }
+
+    // MARK: - Late Joiner Support
+
+    /// 🔧 FIX 1.1: Late joiner must request current state from host immediately.
+    /// Without this, new viewers see black screen until host does play/pause/seek.
+    func requestInitialState() {
+        guard !isHost else { return }
+        Logger.sync.info("Requesting initial state from host (late joiner)")
+        requestStateFromHost()
     }
 
     // MARK: - Incoming Sync Command Handling (LATENCY COMPENSATED)

@@ -17,6 +17,17 @@ struct ServiceLogoView: View {
     /// When false (default), shows just the square logo icon.
     var wordmark: Bool = false
 
+    // 🔧 FIX 4.5: Static cache — loaded once, reused forever
+    private static let imageCache: [String: UIImage] = {
+        var cache: [String: UIImage] = [:]
+        for svc in VideoService.allCases {
+            if let name = svc.assetName, let img = UIImage(named: name) {
+                cache[name] = img
+            }
+        }
+        return cache
+    }()
+
     var body: some View {
         if wordmark {
             wordmarkView
@@ -29,7 +40,7 @@ struct ServiceLogoView: View {
 
     private var iconView: some View {
         Group {
-            if let imageName = service.assetName, let uiImage = UIImage(named: imageName) {
+            if let imageName = service.assetName, let uiImage = Self.imageCache[imageName] {
                 Image(uiImage: uiImage)
                     .resizable()
                     .renderingMode(.original)

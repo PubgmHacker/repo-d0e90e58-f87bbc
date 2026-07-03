@@ -68,6 +68,7 @@ final class PremiumStatusManager: ObservableObject {
     /// Called after AuthService.signIn/signUp/getFreshToken resolves the user.
     /// This is the authoritative source — server decision overrides any local cache.
     func syncFromServer(isPremium serverIsPremium: Bool, expiry: Date?) {
+        serverConfirmed = true
         if serverIsPremium {
             if isPremium != true || subscriptionExpiry != expiry {
                 isPremium = true
@@ -119,6 +120,9 @@ final class PremiumStatusManager: ObservableObject {
         defaults.set(selectedAvatarBorder.rawValue, forKey: avatarBorderKey)
         defaults.set(selectedRoomTheme.rawValue, forKey: roomThemeKey)
     }
+
+    /// 🔧 FIX 3.4: Track whether server has confirmed premium status
+    private var serverConfirmed = false
 
     private func loadPersistedState() {
         isPremium = defaults.bool(forKey: premiumKey)

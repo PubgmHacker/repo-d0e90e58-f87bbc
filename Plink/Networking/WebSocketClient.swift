@@ -426,6 +426,7 @@ final class WebSocketClient: WebSocketClientProtocol {
 
     private func scheduleReconnect() {
         guard !isManuallyDisconnected else { return }
+        guard !isReconnecting else { return }  // 🔧 FIX 1.3: Guard against double-schedule
 
         let delay = nextBackoffDelay()
         Logger.ws.info("Reconnecting in \(String(format: "%.1f", delay))s (attempt #\(reconnectAttempts))")

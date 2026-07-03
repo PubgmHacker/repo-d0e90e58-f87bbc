@@ -15,7 +15,7 @@ struct BioluminescentBackground: View {
     var palette: BioPalette = .ocean
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0/30.0)) { timeline in  // 🔧 FIX 4.4: cap at 30fps
             Canvas { context, size in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 drawDepth(context: context, size: size)

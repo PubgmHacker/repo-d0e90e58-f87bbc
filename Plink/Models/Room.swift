@@ -73,7 +73,15 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         maxParticipants = try c.decodeIfPresent(Int.self, forKey: .maxParticipants) ?? 10
         hostIsPremium = try c.decodeIfPresent(Bool.self, forKey: .hostIsPremium) ?? false
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-        privacy = try c.decodeIfPresent(RoomPrivacy.self, forKey: .privacy) ?? .publicRoom
+        // 🔧 FIX 2.5: Map old "friends" to new .byLink for backwards compat
+        let privacyRaw = try c.decodeIfPresent(String.self, forKey: .privacy) ?? "public"
+        switch privacyRaw {
+        case "public": privacy = .publicRoom
+        case "private": privacy = .privateRoom
+        case "link": privacy = .byLink
+        case "friends": privacy = .byLink  // ← old value → new equivalent
+        default: privacy = .publicRoom
+        }
         password = try c.decodeIfPresent(String.self, forKey: .password)
     }
 

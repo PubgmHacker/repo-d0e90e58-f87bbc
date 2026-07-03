@@ -102,6 +102,9 @@ final class RoomViewModel: WebSocketClientDelegate {
             try await Task.sleep(for: .milliseconds(300))
             try await voiceChat.startCall(roomId: room.id)
 
+            // 🔧 FIX 1.1: Late joiner requests initial state from host
+            syncEngine.requestInitialState()
+
         } catch {
             errorMessage = "Не удалось войти в комнату: \(error.localizedDescription)"
             Logger.ws.error("joinRoomFlow failed: \(error.localizedDescription)")
@@ -226,27 +229,28 @@ final class RoomViewModel: WebSocketClientDelegate {
     private func routeInbound(_ raw: String) {
         guard let data = raw.data(using: .utf8) else { return }
 
-        // Peek at the JSON once to determine the message type
-        guard let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return
-        }
+        // 🔧 FIX: Single parse — extract type field, then decode once
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
-        // 1. WebRTC signaling (kind field) → VoiceChatService
-        if let kind = jsonObject["kind"] as? String,
-           SignalingMessage.Kind(rawValue: kind) != nil {
-            if voiceChat.ingest(raw: raw) { return }
-        }
-
-        // 2. Sync command (command field) → SyncEngine
-        if jsonObject["command"] != nil {
-            if let syncMsg = try? JSONDecoder().decode(SyncMessage.self, from: data) {
-                syncEngine.handleSyncMessage(syncMsg)
-                return
+        // Try sync command first (has "command" field)
+        if let cmd = json["command"] as? String {
+            switch cmd {
+            case "play", "pause", "seek", "correction", "stateRequest", "stateResponse", "changeMedia":
+                if let syncMsg = try? JSONDecoder().decode(SyncMessage.self, from: data) {
+                    syncEngine.handleSyncMessage(syncMsg)
+                    return
+                }
+            default: break
             }
         }
 
-        // 3. Chat message (senderID + text fields) → messages array
-        if jsonObject["senderID"] != nil || jsonObject["sender_id"] != nil {
+        // Try WebRTC signaling (has "kind" field)
+        if let kind = json["kind"] as? String, SignalingMessage.Kind(rawValue: kind) != nil {
+            if voiceChat.ingest(raw: raw) { return }
+        }
+
+        // Try chat (has "senderID" field)
+        if json["senderID"] != nil || json["sender_id"] != nil {
             if let chatMsg = try? JSONDecoder().decode(ChatMessage.self, from: data) {
                 messages.append(chatMsg)
                 if messages.count > maxMessages {
@@ -256,16 +260,16 @@ final class RoomViewModel: WebSocketClientDelegate {
             }
         }
 
-        // 4. Participant update (action + userID fields) → handleParticipantUpdate
-        if jsonObject["action"] != nil, jsonObject["userID"] != nil || jsonObject["user_id"] != nil {
+        // Try participant update (has "action" field)
+        if json["action"] != nil {
             if let payload = try? JSONDecoder().decode(ParticipantUpdate.self, from: data) {
                 handleParticipantUpdate(payload)
                 return
             }
         }
 
-        // 5. Room closed (reason field) → disconnect
-        if jsonObject["reason"] != nil {
+        // Try room closed (has "reason" field)
+        if json["reason"] != nil {
             if let closed = try? JSONDecoder().decode(RoomClosedPayload.self, from: data) {
                 errorMessage = "Хост завершил комнату."
                 connectionStatus = .disconnected

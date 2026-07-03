@@ -466,7 +466,14 @@ struct RoomView: View {
         triggerReaction(emoji: emojis.randomElement() ?? "❤️")
     }
 
+    /// 🔧 FIX 5.7: Throttle reactions to prevent spam (max 2/sec)
+    private var lastReactionTime: Date = .distantPast
+    private let reactionThrottle: TimeInterval = 0.5
+
     private func triggerReaction(emoji: String) {
+        let now = Date()
+        guard now.timeIntervalSince(lastReactionTime) >= reactionThrottle else { return }
+        lastReactionTime = now
         HapticManager.impact(.soft)
         reactionTrigger = ReactionTrigger(
             point: CGPoint(x: UIScreen.main.bounds.width / 2,

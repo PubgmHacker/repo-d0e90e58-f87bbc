@@ -1,0 +1,1306 @@
+     1→import Foundation
+     2→import SwiftUI
+     3→import Combine
+     4→
+     5→// MARK: - App Language
+     6→/// Поддерживаемые языки приложения. Переключаются в рантайме (не системно).
+     7→enum AppLanguage: String, CaseIterable, Identifiable, Codable {
+     8→    case russian = "ru"
+     9→    case english = "en"
+    10→    case chinese = "zh"
+    11→
+    12→    var id: String { rawValue }
+    13→
+    14→    /// Название языка на самом языке (для переключателя).
+    15→    var nativeName: String {
+    16→        switch self {
+    17→        case .russian: return "Русский"
+    18→        case .english: return "English"
+    19→        case .chinese: return "中文"
+    20→        }
+    21→    }
+    22→
+    23→    /// Флаг для иконки.
+    24→    var flag: String {
+    25→        switch self {
+    26→        case .russian: return "🇷🇺"
+    27→        case .english: return "🇬🇧"
+    28→        case .chinese: return "🇨🇳"
+    29→        }
+    30→    }
+    31→}
+    32→
+    33→// MARK: - Localization Manager
+    34→/// Менеджер локализации с переключением языка в рантайме.
+    35→/// Хранит выбор в UserDefaults, транслирует изменения через objectWillChange.
+    36→@MainActor
+    37→final class LocalizationManager: ObservableObject {
+    38→
+    39→    static let shared = LocalizationManager()
+    40→
+    41→    /// Текущий язык (публикуется → UI обновляется автоматически).
+    42→    @Published var currentLanguage: AppLanguage {
+    43→        didSet {
+    44→            UserDefaults.standard.set(currentLanguage.rawValue, forKey: Self.storageKey)
+    45→        }
+    46→    }
+    47→
+    48→    private static let storageKey = "plink_app_language"
+    49→
+    50→    private init() {
+    51→        let raw = UserDefaults.standard.string(forKey: Self.storageKey) ?? AppLanguage.russian.rawValue
+    52→        currentLanguage = AppLanguage(rawValue: raw) ?? .russian
+    53→    }
+    54→
+    55→    /// Nonisolated доступ к текущему языку для use-case'ов вне MainActor
+    56→    /// (например, вычисляемые свойства enum'ов). Читает напрямую из UserDefaults.
+    57→    static var sharedSafe: LanguageReader { LanguageReader() }
+    58→
+    59→    /// Локализованная строка по ключу.
+    60→    func string(_ key: L10n.Key) -> String {
+    61→        L10n.table[key]?[currentLanguage] ?? key.rawValue
+    62→    }
+    63→}
+    64→
+    65→/// Thread-safe read-only доступ к выбранному языку.
+    66→struct LanguageReader {
+    67→    var currentLanguage: AppLanguage {
+    68→        let raw = UserDefaults.standard.string(forKey: "plink_app_language") ?? AppLanguage.russian.rawValue
+    69→        return AppLanguage(rawValue: raw) ?? .russian
+    70→    }
+    71→}
+    72→
+    73→// MARK: - L10n (Strings Table)
+    74→/// Все строки приложения в одном месте. Добавлять новые — сюда.
+    75→enum L10n {
+    76→
+    77→    enum Key: String {
+    78→        // App / Brand
+    79→        case appName = "app.name"
+    80→        case appTagline = "app.tagline"
+    81→
+    82→        // Common
+    83→        case cancel = "common.cancel"
+    84→        case done = "common.done"
+    85→        case back = "common.back"
+    86→        case save = "common.save"
+    87→        case delete = "common.delete"
+    88→        case error = "common.error"
+    89→        case loading = "common.loading"
+    90→        case search = "common.search"
+    91→
+    92→        // Login
+    93→        case loginTitle = "login.title"
+    94→        case loginTagline = "login.tagline"
+    95→        case loginEmail = "login.email"
+    96→        case loginPassword = "login.password"
+    97→        case loginUsername = "login.username"
+    98→        case loginSignIn = "login.signIn"
+    99→        case loginSigningIn = "login.signingIn"
+   100→        case loginSignUp = "login.signUp"
+   101→        case loginDontHaveAccount = "login.dontHaveAccount"
+   102→        case loginAlreadyHaveAccount = "login.alreadyHaveAccount"
+   103→        case loginContinueWith = "login.continueWith"
+   104→        case loginConnecting = "login.connecting"
+   105→        case loginTerms = "login.terms"
+   106→        case loginCreateAccount = "login.createAccount"
+   107→        case loginJoinParty = "login.joinParty"
+   108→
+   109→        // Home / Discover
+   110→        case homeDiscover = "home.discover"
+   111→        case homeWatchingNow = "home.watchingNow"
+   112→        case homeCreateRoom = "home.createRoom"
+   113→        case homeCreateRoomSubtitle = "home.createRoomSubtitle"
+   114→        case homeSearchRooms = "home.searchRooms"
+   115→        case homePublicRooms = "home.publicRooms"
+   116→        case homeTrending = "home.trending"
+   117→        case homeNoRooms = "home.noRooms"
+   118→        case homeLoadingRooms = "home.loadingRooms"
+   119→
+   120→        // Join Room
+   121→        case joinTitle = "join.title"
+   122→        case joinSubtitle = "join.subtitle"
+   123→        case joinEnterCode = "join.enterCode"
+   124→        case joinEnter = "join.enter"
+   125→        case joinOrLink = "join.orLink"
+   126→        case joinPlaceholder = "join.placeholder"
+   127→
+   128→        // Profile
+   129→        case profileTitle = "profile.title"
+   130→        case profileStatsRooms = "profile.statsRooms"
+   131→        case profileStatsHours = "profile.statsHours"
+   132→        case profileStatsFriends = "profile.statsFriends"
+   133→        case profileHistory = "profile.history"
+   134→        case profileHistoryEmpty = "profile.historyEmpty"
+   135→        case profileClear = "profile.clear"
+   136→        case profileAccount = "profile.account"
+   137→        case profileEditProfile = "profile.editProfile"
+   138→        case profileNotifications = "profile.notifications"
+   139→        case profilePrivacy = "profile.privacy"
+   140→        case profileFriends = "profile.friends"
+   141→        case profileDangerZone = "profile.dangerZone"
+   142→        case profileDeleteAccount = "profile.deleteAccount"
+   143→        case profileDeleteConfirm = "profile.deleteConfirm"
+   144→        case profileDeleteMessage = "profile.deleteMessage"
+   145→        case profileSignOut = "profile.signOut"
+   146→        case profileLanguage = "profile.language"
+   147→        case profileLanguageSubtitle = "profile.languageSubtitle"
+   148→
+   149→        // Video services
+   150→        case serviceYouTube = "service.youtube"
+   151→        case serviceVK = "service.vk"
+   152→        case serviceRuTube = "service.rutube"
+   153→        case serviceCustomURL = "service.customURL"
+   154→        case serviceBrowser = "service.browser"
+   155→        case serviceCinemas = "service.cinemas"
+   156→        case serviceCinemasHint = "service.cinemasHint"
+   157→        case serviceKinopoisk = "service.kinopoisk"
+   158→        case serviceIvi = "service.ivi"
+   159→        case serviceOkko = "service.okko"
+   160→        case serviceWink = "service.wink"
+   161→        case serviceStart = "service.start"
+   162→        case servicePremier = "service.premier"
+   163→        case serviceSmotrim = "service.smotrim"
+   164→        case serviceKion = "service.kion"
+   165→
+   166→        // Friends
+   167→        case friendsTitle = "friends.title"
+   168→        case friendsTab = "friends.tabFriends"
+   169→        case friendsRequests = "friends.tabRequests"
+   170→        case friendsSearch = "friends.tabSearch"
+   171→        case friendsEmpty = "friends.empty"
+   172→        case friendsAddHint = "friends.addHint"
+   173→        case friendsOnline = "friends.online"
+   174→        case friendsOffline = "friends.offline"
+   175→        case friendsNoFriends = "friends.noFriends"
+   176→        case friendsNoFriendsHint = "friends.noFriendsHint"
+   177→        case friendsIncoming = "friends.incoming"
+   178→        case friendsOutgoing = "friends.outgoing"
+   179→        case friendsNoRequests = "friends.noRequests"
+   180→        case friendsNoRequestsHint = "friends.noRequestsHint"
+   181→        case friendsSearchPlaceholder = "friends.searchPlaceholder"
+   182→        case friendsNoResults = "friends.noResults"
+   183→        case friendsNoResultsHint = "friends.noResultsHint"
+   184→        case friendsWantsToAdd = "friends.wantsToAdd"
+   185→        case friendsWaiting = "friends.waiting"
+   186→        case friendsSent = "friends.sent"
+   187→
+   188→        // Room creation
+   189→        case createTitle = "create.title"
+   190→        case createSource = "create.source"
+   191→        case createRoomSettings = "create.roomSettings"
+   192→        case createInviteFriends = "create.inviteFriends"
+   193→        case createVideoLink = "create.videoLink"
+   194→        case createExtractStream = "create.extractStream"
+   195→        case createExtracting = "create.extracting"
+   196→        case createNameOptional = "create.nameOptional"
+   197→        case createReady = "create.ready"
+   198→        case createRoomName = "create.roomName"
+   199→        case createRoomNamePlaceholder = "create.roomNamePlaceholder"
+   200→        case createMaxParticipants = "create.maxParticipants"
+   201→        case createWhoCanJoin = "create.whoCanJoin"
+   202→        case createPrivateHint = "create.privateHint"
+   203→        case createInviteSelected = "create.inviteSelected"
+   204→        case createFriendsEmpty = "create.friendsEmpty"
+   205→        case createFriendsEmptyHint = "create.friendsEmptyHint"
+   206→        case createInviteHint = "create.inviteHint"
+   207→        case createBack = "create.back"
+   208→        case createNext = "create.next"
+   209→        case createLaunch = "create.launch"
+   210→        case createExtractError = "create.extractError"
+   211→
+   212→        // Chat
+   213→        case chatTitle = "chat.title"
+   214→        case chatPlaceholder = "chat.placeholder"
+   215→        case chatReport = "chat.report"
+   216→        case chatBlock = "chat.block"
+   217→        case chatReportTitle = "chat.reportTitle"
+   218→        case chatBlockTitle = "chat.blockTitle"
+   219→        case chatReportMessage = "chat.reportMessage"
+   220→        case chatBlockMessage = "chat.blockMessage"
+   221→
+   222→        // Room moderation
+   223→        case reportRoom = "moderation.reportRoom"
+   224→        case reportRoomSent = "moderation.reportSent"
+   225→        case blockHost = "moderation.blockHost"
+   226→        case blockHostTitle = "moderation.blockHostTitle"
+   227→        case blockHostMessage = "moderation.blockHostMessage"
+   228→        case blockHostDone = "moderation.blockHostDone"
+   229→
+   230→        // Room view
+   231→        case roomConnecting = "room.connecting"
+   232→        case roomLinkCopied = "room.linkCopied"
+   233→        case roomVoiceOn = "room.voiceOn"
+   234→        case roomJoinVoice = "room.joinVoice"
+   235→        case roomChat = "room.chat"
+   236→        case roomMessagePlaceholder = "room.messagePlaceholder"
+   237→        case roomLoading = "room.loading"
+   238→        case roomPremiumActivated = "room.premiumActivated"
+   239→        case roomVoiceError = "room.voiceError"
+   240→
+   241→        // Ad
+   242→        case adBreak = "ad.break"
+   243→        case adBreakSubtitle = "ad.breakSubtitle"
+   244→
+   245→        // Notifications settings
+   246→        case notifTitle = "notif.title"
+   247→        case notifPush = "notif.push"
+   248→        case notifPushSubtitle = "notif.pushSubtitle"
+   249→        case notifSounds = "notif.sounds"
+   250→        case notifSoundsSubtitle = "notif.soundsSubtitle"
+   251→        case notifFriendsOnline = "notif.friendsOnline"
+   252→        case notifFriendsOnlineSubtitle = "notif.friendsOnlineSubtitle"
+   253→        case notifNewRooms = "notif.newRooms"
+   254→        case notifNewRoomsSubtitle = "notif.newRoomsSubtitle"
+   255→
+   256→        // Privacy settings
+   257→        case privacyTitle = "privacy.title"
+   258→        case privacyProfileVisibility = "privacy.profileVisibility"
+   259→        case privacyProfileVisibilitySubtitle = "privacy.profileVisibilitySubtitle"
+   260→        case privacyOnlineStatus = "privacy.onlineStatus"
+   261→        case privacyOnlineStatusSubtitle = "privacy.onlineStatusSubtitle"
+   262→        case privacyReadReceipts = "privacy.readReceipts"
+   263→        case privacyReadReceiptsSubtitle = "privacy.readReceiptsSubtitle"
+   264→        case privacyClearCache = "privacy.clearCache"
+   265→        case privacyClearCacheSubtitle = "privacy.clearCacheSubtitle"
+   266→        case privacyInfo = "privacy.info"
+   267→
+   268→        // Paywall
+   269→        case paywallTitle = "paywall.title"
+   270→        case paywallTagline = "paywall.tagline"
+   271→        case paywallRestore = "paywall.restore"
+   272→        case paywallSelectPlan = "paywall.selectPlan"
+   273→        case paywallSubscribe = "paywall.subscribe"
+   274→        case paywallFeatureAdShield = "paywall.featureAdShield"
+   275→        case paywallFeatureAdShieldSub = "paywall.featureAdShieldSub"
+   276→        case paywallFeature4K = "paywall.feature4K"
+   277→        case paywallFeature4KSub = "paywall.feature4KSub"
+   278→        case paywallFeatureThemes = "paywall.featureThemes"
+   279→        case paywallFeatureThemesSub = "paywall.featureThemesSub"
+   280→        case paywallFeatureNick = "paywall.featureNick"
+   281→        case paywallFeatureNickSub = "paywall.featureNickSub"
+   282→        case paywallFeatureAvatar = "paywall.featureAvatar"
+   283→        case paywallFeatureAvatarSub = "paywall.featureAvatarSub"
+   284→        case paywallMonth1 = "paywall.month1"
+   285→        case paywallMonth3 = "paywall.month3"
+   286→        case paywallMonth12 = "paywall.month12"
+   287→
+   288→        // Friends extras
+   289→        case friendsAlreadyFriends = "friends.alreadyFriends"
+   290→
+   291→        // Chat extras
+   292→        case chatBlockMessageWithName = "chat.blockMessageWithName"
+   293→
+   294→        // YouTube search
+   295→        case searchTitle = "search.title"
+   296→        case searchPlaceholder = "search.placeholder"
+   297→        case searchButton = "search.button"
+   298→        case searchEmpty = "search.empty"
+   299→        case searchHint = "search.hint"
+   300→        case searchError = "search.error"
+   301→        case searchUseThis = "search.useThis"
+   302→
+   303→        // Home extras
+   304→        case homeNoRoomsEmpty = "home.noRoomsEmpty"
+   305→        case homeNoResults = "home.noResults"
+   306→        case homeNoResultsHint = "home.noResultsHint"
+   307→    }
+   308→
+   309→    /// Главная таблица переводов: [ключ: [язык: перевод]].
+   310→    static let table: [Key: [AppLanguage: String]] = [
+   311→        .appName: [
+   312→            .russian: "Плинк",
+   313→            .english: "Plink",
+   314→            .chinese: "普林克"
+   315→        ],
+   316→        .appTagline: [
+   317→            .russian: "Смотрим вместе",
+   318→            .english: "Watch together",
+   319→            .chinese: "一起观看"
+   320→        ],
+   321→
+   322→        .cancel: [
+   323→            .russian: "Отмена",
+   324→            .english: "Cancel",
+   325→            .chinese: "取消"
+   326→        ],
+   327→        .done: [
+   328→            .russian: "Готово",
+   329→            .english: "Done",
+   330→            .chinese: "完成"
+   331→        ],
+   332→        .back: [
+   333→            .russian: "Назад",
+   334→            .english: "Back",
+   335→            .chinese: "返回"
+   336→        ],
+   337→        .save: [
+   338→            .russian: "Сохранить",
+   339→            .english: "Save",
+   340→            .chinese: "保存"
+   341→        ],
+   342→        .delete: [
+   343→            .russian: "Удалить",
+   344→            .english: "Delete",
+   345→            .chinese: "删除"
+   346→        ],
+   347→        .error: [
+   348→            .russian: "Ошибка",
+   349→            .english: "Error",
+   350→            .chinese: "错误"
+   351→        ],
+   352→        .loading: [
+   353→            .russian: "Загрузка...",
+   354→            .english: "Loading...",
+   355→            .chinese: "加载中..."
+   356→        ],
+   357→        .search: [
+   358→            .russian: "Поиск",
+   359→            .english: "Search",
+   360→            .chinese: "搜索"
+   361→        ],
+   362→
+   363→        // Login
+   364→        .loginTitle: [
+   365→            .russian: "Плинк",
+   366→            .english: "Plink",
+   367→            .chinese: "普林克"
+   368→        ],
+   369→        .loginTagline: [
+   370→            .russian: "Смотрим вместе",
+   371→            .english: "Watch together",
+   372→            .chinese: "一起观看"
+   373→        ],
+   374→        .loginEmail: [
+   375→            .russian: "Email",
+   376→            .english: "Email",
+   377→            .chinese: "邮箱"
+   378→        ],
+   379→        .loginPassword: [
+   380→            .russian: "Пароль",
+   381→            .english: "Password",
+   382→            .chinese: "密码"
+   383→        ],
+   384→        .loginUsername: [
+   385→            .russian: "Имя пользователя",
+   386→            .english: "Username",
+   387→            .chinese: "用户名"
+   388→        ],
+   389→        .loginSignIn: [
+   390→            .russian: "Войти",
+   391→            .english: "Sign In",
+   392→            .chinese: "登录"
+   393→        ],
+   394→        .loginSigningIn: [
+   395→            .russian: "Вход...",
+   396→            .english: "Signing in...",
+   397→            .chinese: "登录中..."
+   398→        ],
+   399→        .loginSignUp: [
+   400→            .russian: "Регистрация",
+   401→            .english: "Sign Up",
+   402→            .chinese: "注册"
+   403→        ],
+   404→        .loginDontHaveAccount: [
+   405→            .russian: "Нет аккаунта? Зарегистрироваться",
+   406→            .english: "Don't have an account? Sign Up",
+   407→            .chinese: "没有账号？注册"
+   408→        ],
+   409→        .loginAlreadyHaveAccount: [
+   410→            .russian: "Уже есть аккаунт? Войти",
+   411→            .english: "Already have an account? Sign In",
+   412→            .chinese: "已有账号？登录"
+   413→        ],
+   414→        .loginContinueWith: [
+   415→            .russian: "Продолжить через",
+   416→            .english: "Continue with",
+   417→            .chinese: "继续使用"
+   418→        ],
+   419→        .loginConnecting: [
+   420→            .russian: "Подключение к",
+   421→            .english: "Connecting to",
+   422→            .chinese: "正在连接"
+   423→        ],
+   424→        .loginTerms: [
+   425→            .russian: "Продолжая, вы соглашаетесь с Условиями использования и Политикой конфиденциальности.",
+   426→            .english: "By continuing, you agree to our Terms of Service and Privacy Policy.",
+   427→            .chinese: "继续即表示您同意我们的服务条款和隐私政策。"
+   428→        ],
+   429→        .loginCreateAccount: [
+   430→            .russian: "Создать аккаунт",
+   431→            .english: "Create Account",
+   432→            .chinese: "创建账号"
+   433→        ],
+   434→        .loginJoinParty: [
+   435→            .russian: "Присоединяйся к просмотру",
+   436→            .english: "Join the watch party",
+   437→            .chinese: "加入观看派对"
+   438→        ],
+   439→
+   440→        // Home
+   441→        .homeDiscover: [
+   442→            .russian: "Обзор",
+   443→            .english: "Discover",
+   444→            .chinese: "发现"
+   445→        ],
+   446→        .homeWatchingNow: [
+   447→            .russian: "смотрят сейчас",
+   448→            .english: "watching now",
+   449→            .chinese: "正在观看"
+   450→        ],
+   451→        .homeCreateRoom: [
+   452→            .russian: "Создать комнату",
+   453→            .english: "Create a room",
+   454→            .chinese: "创建房间"
+   455→        ],
+   456→        .homeCreateRoomSubtitle: [
+   457→            .russian: "YouTube · кинотеатры · прямая ссылка",
+   458→            .english: "YouTube · cinemas · direct link",
+   459→            .chinese: "YouTube · 影院 · 直链"
+   460→        ],
+   461→        .homeSearchRooms: [
+   462→            .russian: "Поиск комнат...",
+   463→            .english: "Search rooms...",
+   464→            .chinese: "搜索房间..."
+   465→        ],
+   466→        .homePublicRooms: [
+   467→            .russian: "Общедоступные комнаты",
+   468→            .english: "Public rooms",
+   469→            .chinese: "公共房间"
+   470→        ],
+   471→        .homeTrending: [
+   472→            .russian: "Тренды",
+   473→            .english: "Trending",
+   474→            .chinese: "热门"
+   475→        ],
+   476→        .homeNoRooms: [
+   477→            .russian: "Нет активных комнат",
+   478→            .english: "No active rooms",
+   479→            .chinese: "没有活跃房间"
+   480→        ],
+   481→        .homeLoadingRooms: [
+   482→            .russian: "Загрузка комнат...",
+   483→            .english: "Loading rooms...",
+   484→            .chinese: "加载房间中..."
+   485→        ],
+   486→
+   487→        // Join
+   488→        .joinTitle: [
+   489→            .russian: "Присоединиться",
+   490→            .english: "Join",
+   491→            .chinese: "加入"
+   492→        ],
+   493→        .joinSubtitle: [
+   494→            .russian: "Введите код комнаты или ссылку",
+   495→            .english: "Enter room code or link",
+   496→            .chinese: "输入房间代码或链接"
+   497→        ],
+   498→        .joinEnterCode: [
+   499→            .russian: "Код комнаты",
+   500→            .english: "Room code",
+   501→            .chinese: "房间代码"
+   502→        ],
+   503→        .joinEnter: [
+   504→            .russian: "Войти",
+   505→            .english: "Join",
+   506→            .chinese: "加入"
+   507→        ],
+   508→        .joinOrLink: [
+   509→            .russian: "или вставьте ссылку",
+   510→            .english: "or paste a link",
+   511→            .chinese: "或粘贴链接"
+   512→        ],
+   513→        .joinPlaceholder: [
+   514→            .russian: "ABC123 или https://...",
+   515→            .english: "ABC123 or https://...",
+   516→            .chinese: "ABC123 或 https://..."
+   517→        ],
+   518→
+   519→        // Profile
+   520→        .profileTitle: [
+   521→            .russian: "Профиль",
+   522→            .english: "Profile",
+   523→            .chinese: "个人资料"
+   524→        ],
+   525→        .profileStatsRooms: [
+   526→            .russian: "Комнат",
+   527→            .english: "Rooms",
+   528→            .chinese: "房间"
+   529→        ],
+   530→        .profileStatsHours: [
+   531→            .russian: "Часов",
+   532→            .english: "Hours",
+   533→            .chinese: "小时"
+   534→        ],
+   535→        .profileStatsFriends: [
+   536→            .russian: "Друзей",
+   537→            .english: "Friends",
+   538→            .chinese: "好友"
+   539→        ],
+   540→        .profileHistory: [
+   541→            .russian: "История просмотров",
+   542→            .english: "Watch history",
+   543→            .chinese: "观看历史"
+   544→        ],
+   545→        .profileHistoryEmpty: [
+   546→            .russian: "Здесь появятся просмотренные видео",
+   547→            .english: "Watched videos will appear here",
+   548→            .chinese: "观看过的视频将显示在此处"
+   549→        ],
+   550→        .profileClear: [
+   551→            .russian: "Очистить",
+   552→            .english: "Clear",
+   553→            .chinese: "清除"
+   554→        ],
+   555→        .profileAccount: [
+   556→            .russian: "Аккаунт",
+   557→            .english: "Account",
+   558→            .chinese: "账户"
+   559→        ],
+   560→        .profileEditProfile: [
+   561→            .russian: "Редактировать профиль",
+   562→            .english: "Edit profile",
+   563→            .chinese: "编辑个人资料"
+   564→        ],
+   565→        .profileNotifications: [
+   566→            .russian: "Уведомления",
+   567→            .english: "Notifications",
+   568→            .chinese: "通知"
+   569→        ],
+   570→        .profilePrivacy: [
+   571→            .russian: "Конфиденциальность",
+   572→            .english: "Privacy",
+   573→            .chinese: "隐私"
+   574→        ],
+   575→        .profileFriends: [
+   576→            .russian: "Друзья",
+   577→            .english: "Friends",
+   578→            .chinese: "好友"
+   579→        ],
+   580→        .profileDangerZone: [
+   581→            .russian: "Опасная зона",
+   582→            .english: "Danger zone",
+   583→            .chinese: "危险区域"
+   584→        ],
+   585→        .profileDeleteAccount: [
+   586→            .russian: "Удалить аккаунт",
+   587→            .english: "Delete account",
+   588→            .chinese: "删除账户"
+   589→        ],
+   590→        .profileDeleteConfirm: [
+   591→            .russian: "Удалить аккаунт?",
+   592→            .english: "Delete account?",
+   593→            .chinese: "删除账户？"
+   594→        ],
+   595→        .profileDeleteMessage: [
+   596→            .russian: "Это действие необратимо. Все ваши данные будут удалены навсегда.",
+   597→            .english: "This action is irreversible. All your data will be permanently deleted.",
+   598→            .chinese: "此操作不可逆。您的所有数据将被永久删除。"
+   599→        ],
+   600→        .profileSignOut: [
+   601→            .russian: "Выйти",
+   602→            .english: "Sign Out",
+   603→            .chinese: "退出登录"
+   604→        ],
+   605→        .profileLanguage: [
+   606→            .russian: "Язык приложения",
+   607→            .english: "App language",
+   608→            .chinese: "应用语言"
+   609→        ],
+   610→        .profileLanguageSubtitle: [
+   611→            .russian: "Русский · English · 中文",
+   612→            .english: "Русский · English · 中文",
+   613→            .chinese: "Русский · English · 中文"
+   614→        ],
+   615→
+   616→        // Video services
+   617→        .serviceYouTube: [
+   618→            .russian: "YouTube",
+   619→            .english: "YouTube",
+   620→            .chinese: "YouTube"
+   621→        ],
+   622→        .serviceVK: [
+   623→            .russian: "VK Видео",
+   624→            .english: "VK Video",
+   625→            .chinese: "VK 视频"
+   626→        ],
+   627→        .serviceRuTube: [
+   628→            .russian: "RuTube",
+   629→            .english: "RuTube",
+   630→            .chinese: "RuTube"
+   631→        ],
+   632→        .serviceCustomURL: [
+   633→            .russian: "Своя ссылка",
+   634→            .english: "Custom URL",
+   635→            .chinese: "自定义链接"
+   636→        ],
+   637→        .serviceBrowser: [
+   638→            .russian: "Браузер",
+   639→            .english: "Browser",
+   640→            .chinese: "浏览器"
+   641→        ],
+   642→        .serviceCinemas: [
+   643→            .russian: "Кинотеатры",
+   644→            .english: "Cinemas",
+   645→            .chinese: "影院"
+   646→        ],
+   647→        .serviceCinemasHint: [
+   648→            .russian: "Каждый зритель должен иметь свою подписку. Открывается в браузере с синхронизацией.",
+   649→            .english: "Each viewer needs their own subscription. Opens in browser with sync.",
+   650→            .chinese: "每位观众需有自己的订阅。在浏览器中打开并同步。"
+   651→        ],
+   652→        .serviceKinopoisk: [
+   653→            .russian: "Кинопоиск",
+   654→            .english: "Kinopoisk",
+   655→            .chinese: "Kinopoisk"
+   656→        ],
+   657→        .serviceIvi: [
+   658→            .russian: "Иви",
+   659→            .english: "Ivi",
+   660→            .chinese: "Ivi"
+   661→        ],
+   662→        .serviceOkko: [
+   663→            .russian: "Окко",
+   664→            .english: "Okko",
+   665→            .chinese: "Okko"
+   666→        ],
+   667→        .serviceWink: [
+   668→            .russian: "Wink",
+   669→            .english: "Wink",
+   670→            .chinese: "Wink"
+   671→        ],
+   672→        .serviceStart: [
+   673→            .russian: "Start",
+   674→            .english: "Start",
+   675→            .chinese: "Start"
+   676→        ],
+   677→        .servicePremier: [
+   678→            .russian: "Premier",
+   679→            .english: "Premier",
+   680→            .chinese: "Premier"
+   681→        ],
+   682→        .serviceSmotrim: [
+   683→            .russian: "Смотрим",
+   684→            .english: "Smotrim",
+   685→            .chinese: "Smotrim"
+   686→        ],
+   687→        .serviceKion: [
+   688→            .russian: "КИОН",
+   689→            .english: "KION",
+   690→            .chinese: "KION"
+   691→        ],
+   692→
+   693→        // Friends
+   694→        .friendsTitle: [
+   695→            .russian: "Друзья",
+   696→            .english: "Friends",
+   697→            .chinese: "好友"
+   698→        ],
+   699→        .friendsTab: [
+   700→            .russian: "Друзья",
+   701→            .english: "Friends",
+   702→            .chinese: "好友"
+   703→        ],
+   704→        .friendsRequests: [
+   705→            .russian: "Заявки",
+   706→            .english: "Requests",
+   707→            .chinese: "请求"
+   708→        ],
+   709→        .friendsSearch: [
+   710→            .russian: "Поиск",
+   711→            .english: "Search",
+   712→            .chinese: "搜索"
+   713→        ],
+   714→        .friendsEmpty: [
+   715→            .russian: "Друзей пока нет",
+   716→            .english: "No friends yet",
+   717→            .chinese: "还没有好友"
+   718→        ],
+   719→        .friendsAddHint: [
+   720→            .russian: "Добавить в друзья",
+   721→            .english: "Add friend",
+   722→            .chinese: "添加好友"
+   723→        ],
+   724→        .friendsOnline: [
+   725→            .russian: "В сети",
+   726→            .english: "Online",
+   727→            .chinese: "在线"
+   728→        ],
+   729→        .friendsOffline: [
+   730→            .russian: "Не в сети",
+   731→            .english: "Offline",
+   732→            .chinese: "离线"
+   733→        ],
+   734→        .friendsNoFriends: [
+   735→            .russian: "Друзей пока нет",
+   736→            .english: "No friends yet",
+   737→            .chinese: "还没有好友"
+   738→        ],
+   739→        .friendsNoFriendsHint: [
+   740→            .russian: "Найдите друзей во вкладке «Поиск»",
+   741→            .english: "Find friends in the Search tab",
+   742→            .chinese: "在搜索标签页中查找好友"
+   743→        ],
+   744→        .friendsIncoming: [
+   745→            .russian: "Входящие заявки",
+   746→            .english: "Incoming requests",
+   747→            .chinese: "收到的请求"
+   748→        ],
+   749→        .friendsOutgoing: [
+   750→            .russian: "Исходящие заявки",
+   751→            .english: "Outgoing requests",
+   752→            .chinese: "发送的请求"
+   753→        ],
+   754→        .friendsNoRequests: [
+   755→            .russian: "Нет активных заявок",
+   756→            .english: "No active requests",
+   757→            .chinese: "没有活跃请求"
+   758→        ],
+   759→        .friendsNoRequestsHint: [
+   760→            .russian: "Поделитесь ссылкой-приглашением с друзьями",
+   761→            .english: "Share an invite link with friends",
+   762→            .chinese: "与好友分享邀请链接"
+   763→        ],
+   764→        .friendsSearchPlaceholder: [
+   765→            .russian: "Поиск по имени...",
+   766→            .english: "Search by name...",
+   767→            .chinese: "按名字搜索..."
+   768→        ],
+   769→        .friendsNoResults: [
+   770→            .russian: "Ничего не найдено",
+   771→            .english: "Nothing found",
+   772→            .chinese: "未找到结果"
+   773→        ],
+   774→        .friendsNoResultsHint: [
+   775→            .russian: "Попробуйте другое имя",
+   776→            .english: "Try a different name",
+   777→            .chinese: "尝试其他名字"
+   778→        ],
+   779→        .friendsWantsToAdd: [
+   780→            .russian: "хочет добавить вас в друзья",
+   781→            .english: "wants to add you as a friend",
+   782→            .chinese: "想加你为好友"
+   783→        ],
+   784→        .friendsWaiting: [
+   785→            .russian: "ожидает подтверждения",
+   786→            .english: "awaiting confirmation",
+   787→            .chinese: "等待确认"
+   788→        ],
+   789→        .friendsSent: [
+   790→            .russian: "Отправлено",
+   791→            .english: "Sent",
+   792→            .chinese: "已发送"
+   793→        ],
+   794→
+   795→        // Room creation
+   796→        .createTitle: [
+   797→            .russian: "Новая комната",
+   798→            .english: "New Room",
+   799→            .chinese: "新房间"
+   800→        ],
+   801→        .createSource: [
+   802→            .russian: "Источник видео",
+   803→            .english: "Video source",
+   804→            .chinese: "视频来源"
+   805→        ],
+   806→        .createRoomSettings: [
+   807→            .russian: "Настройки комнаты",
+   808→            .english: "Room settings",
+   809→            .chinese: "房间设置"
+   810→        ],
+   811→        .createInviteFriends: [
+   812→            .russian: "Пригласить друзей",
+   813→            .english: "Invite friends",
+   814→            .chinese: "邀请好友"
+   815→        ],
+   816→        .createVideoLink: [
+   817→            .russian: "Ссылка на видео",
+   818→            .english: "Video link",
+   819→            .chinese: "视频链接"
+   820→        ],
+   821→        .createExtractStream: [
+   822→            .russian: "Получить прямой поток",
+   823→            .english: "Get direct stream",
+   824→            .chinese: "获取直链"
+   825→        ],
+   826→        .createExtracting: [
+   827→            .russian: "Извлечение…",
+   828→            .english: "Extracting…",
+   829→            .chinese: "提取中…"
+   830→        ],
+   831→        .createNameOptional: [
+   832→            .russian: "Название (необязательно)",
+   833→            .english: "Title (optional)",
+   834→            .chinese: "标题（可选）"
+   835→        ],
+   836→        .createReady: [
+   837→            .russian: "Готово к запуску ✓",
+   838→            .english: "Ready to launch ✓",
+   839→            .chinese: "准备启动 ✓"
+   840→        ],
+   841→        .createRoomName: [
+   842→            .russian: "Название комнаты",
+   843→            .english: "Room name",
+   844→            .chinese: "房间名称"
+   845→        ],
+   846→        .createRoomNamePlaceholder: [
+   847→            .russian: "напр., Кино-ночь 🍿",
+   848→            .english: "e.g. Movie Night 🍿",
+   849→            .chinese: "例如，电影之夜 🍿"
+   850→        ],
+   851→        .createMaxParticipants: [
+   852→            .russian: "Максимум участников",
+   853→            .english: "Max participants",
+   854→            .chinese: "最多参与者"
+   855→        ],
+   856→        .createWhoCanJoin: [
+   857→            .russian: "Кто может присоединиться?",
+   858→            .english: "Who can join?",
+   859→            .chinese: "谁可以加入？"
+   860→        ],
+   861→        .createPrivateHint: [
+   862→            .russian: "Приватная комната. Друзья смогут присоединиться только по прямой ссылке после запуска.",
+   863→            .english: "Private room. Friends can join only via direct link after launch.",
+   864→            .chinese: "私密房间。好友只能在启动后通过直接链接加入。"
+   865→        ],
+   866→        .createInviteSelected: [
+   867→            .russian: "Пригласить друзей",
+   868→            .english: "Invite friends",
+   869→            .chinese: "邀请好友"
+   870→        ],
+   871→        .createFriendsEmpty: [
+   872→            .russian: "Список друзей пуст",
+   873→            .english: "Your friends list is empty",
+   874→            .chinese: "好友列表为空"
+   875→        ],
+   876→        .createFriendsEmptyHint: [
+   877→            .russian: "Добавьте друзей в профиле",
+   878→            .english: "Add friends in profile",
+   879→            .chinese: "在个人资料中添加好友"
+   880→        ],
+   881→        .createInviteHint: [
+   882→            .russian: "Выбранным друзьям будет отправлено уведомление",
+   883→            .english: "Selected friends will be notified",
+   884→            .chinese: "将通知选中的好友"
+   885→        ],
+   886→        .createBack: [
+   887→            .russian: "Назад",
+   888→            .english: "Back",
+   889→            .chinese: "返回"
+   890→        ],
+   891→        .createNext: [
+   892→            .russian: "Далее",
+   893→            .english: "Next",
+   894→            .chinese: "下一步"
+   895→        ],
+   896→        .createLaunch: [
+   897→            .russian: "🚀 Запустить вечеринку",
+   898→            .english: "🚀 Launch party",
+   899→            .chinese: "🚀 启动派对"
+   900→        ],
+   901→        .createExtractError: [
+   902→            .russian: "Не удалось извлечь видео. Возможно, оно приватное или недоступно в вашем регионе.",
+   903→            .english: "Failed to extract video. It may be private or unavailable in your region.",
+   904→            .chinese: "无法提取视频。可能是私密的或在您所在的地区不可用。"
+   905→        ],
+   906→
+   907→        // Chat
+   908→        .chatTitle: [
+   909→            .russian: "Чат",
+   910→            .english: "Chat",
+   911→            .chinese: "聊天"
+   912→        ],
+   913→        .chatPlaceholder: [
+   914→            .russian: "Написать сообщение...",
+   915→            .english: "Type a message...",
+   916→            .chinese: "输入消息..."
+   917→        ],
+   918→        .chatReport: [
+   919→            .russian: "Пожаловаться",
+   920→            .english: "Report",
+   921→            .chinese: "举报"
+   922→        ],
+   923→        .chatBlock: [
+   924→            .russian: "Заблокировать",
+   925→            .english: "Block",
+   926→            .chinese: "拉黑"
+   927→        ],
+   928→        .chatReportTitle: [
+   929→            .russian: "Пожаловаться на сообщение?",
+   930→            .english: "Report message?",
+   931→            .chinese: "举报消息？"
+   932→        ],
+   933→        .chatBlockTitle: [
+   934→            .russian: "Заблокировать пользователя?",
+   935→            .english: "Block user?",
+   936→            .chinese: "拉黑用户？"
+   937→        ],
+   938→        .chatReportMessage: [
+   939→            .russian: "Выберите причину жалобы. Модерация рассмотрит обращение.",
+   940→            .english: "Select a reason. Moderators will review your report.",
+   941→            .chinese: "选择原因。管理员将审核您的举报。"
+   942→        ],
+   943→        .chatBlockMessage: [
+   944→            .russian: "Вы больше не будете видеть сообщения от этого пользователя.",
+   945→            .english: "You will no longer see messages from this user.",
+   946→            .chinese: "您将不再看到此用户的消息。"
+   947→        ],
+   948→
+   949→        // Room moderation
+   950→        .reportRoom: [
+   951→            .russian: "Пожаловаться на комнату?",
+   952→            .english: "Report room?",
+   953→            .chinese: "举报房间？"
+   954→        ],
+   955→        .reportRoomSent: [
+   956→            .russian: "Жалоба отправлена",
+   957→            .english: "Report sent",
+   958→            .chinese: "举报已发送"
+   959→        ],
+   960→        .blockHost: [
+   961→            .russian: "Заблокировать хоста?",
+   962→            .english: "Block host?",
+   963→            .chinese: "拉黑房主？"
+   964→        ],
+   965→        .blockHostTitle: [
+   966→            .russian: "Заблокировать",
+   967→            .english: "Block",
+   968→            .chinese: "拉黑"
+   969→        ],
+   970→        .blockHostMessage: [
+   971→            .russian: "Комнаты от этого хоста больше не будут отображаться.",
+   972→            .english: "Rooms from this host will no longer be shown.",
+   973→            .chinese: "此房主的房间将不再显示。"
+   974→        ],
+   975→        .blockHostDone: [
+   976→            .russian: "Хост заблокирован",
+   977→            .english: "Host blocked",
+   978→            .chinese: "房主已拉黑"
+   979→        ],
+   980→
+   981→        // Room view
+   982→        .roomConnecting: [
+   983→            .russian: "Подключение к комнате...",
+   984→            .english: "Connecting to room...",
+   985→            .chinese: "正在连接房间..."
+   986→        ],
+   987→        .roomLinkCopied: [
+   988→            .russian: "Ссылка скопирована!",
+   989→            .english: "Link copied!",
+   990→            .chinese: "链接已复制！"
+   991→        ],
+   992→        .roomVoiceOn: [
+   993→            .russian: "Голос вкл",
+   994→            .english: "Voice On",
+   995→            .chinese: "语音开"
+   996→        ],
+   997→        .roomJoinVoice: [
+   998→            .russian: "Голос",
+   999→            .english: "Voice",
+  1000→            .chinese: "语音"
+  1001→        ],
+  1002→        .roomChat: [
+  1003→            .russian: "Чат",
+  1004→            .english: "Chat",
+  1005→            .chinese: "聊天"
+  1006→        ],
+  1007→        .roomMessagePlaceholder: [
+  1008→            .russian: "Сообщение...",
+  1009→            .english: "Message...",
+  1010→            .chinese: "消息..."
+  1011→        ],
+  1012→        .roomLoading: [
+  1013→            .russian: "Загрузка...",
+  1014→            .english: "Loading...",
+  1015→            .chinese: "加载中..."
+  1016→        ],
+  1017→        .roomPremiumActivated: [
+  1018→            .russian: "Premium активирован! 🎉",
+  1019→            .english: "Premium activated! 🎉",
+  1020→            .chinese: "Premium 已激活！ 🎉"
+  1021→        ],
+  1022→        .roomVoiceError: [
+  1023→            .russian: "Ошибка голоса: %@",
+  1024→            .english: "Voice error: %@",
+  1025→            .chinese: "语音错误：%@"
+  1026→        ],
+  1027→
+  1028→        // Ad
+  1029→        .adBreak: [
+  1030→            .russian: "Рекламная пауза",
+  1031→            .english: "Ad break",
+  1032→            .chinese: "广告暂停"
+  1033→        ],
+  1034→        .adBreakSubtitle: [
+  1035→            .russian: "Скоро продолжим просмотр",
+  1036→            .english: "Resuming shortly",
+  1037→            .chinese: "即将继续观看"
+  1038→        ],
+  1039→
+  1040→        // Notifications settings
+  1041→        .notifTitle: [
+  1042→            .russian: "Уведомления",
+  1043→            .english: "Notifications",
+  1044→            .chinese: "通知"
+  1045→        ],
+  1046→        .notifPush: [
+  1047→            .russian: "Push-уведомления",
+  1048→            .english: "Push notifications",
+  1049→            .chinese: "推送通知"
+  1050→        ],
+  1051→        .notifPushSubtitle: [
+  1052→            .russian: "Получать уведомления о событиях",
+  1053→            .english: "Receive event notifications",
+  1054→            .chinese: "接收事件通知"
+  1055→        ],
+  1056→        .notifSounds: [
+  1057→            .russian: "Звуки уведомлений",
+  1058→            .english: "Notification sounds",
+  1059→            .chinese: "通知声音"
+  1060→        ],
+  1061→        .notifSoundsSubtitle: [
+  1062→            .russian: "Воспроизводить звук при уведомлении",
+  1063→            .english: "Play sound on notification",
+  1064→            .chinese: "收到通知时播放声音"
+  1065→        ],
+  1066→        .notifFriendsOnline: [
+  1067→            .russian: "Друзья онлайн",
+  1068→            .english: "Friends online",
+  1069→            .chinese: "好友在线"
+  1070→        ],
+  1071→        .notifFriendsOnlineSubtitle: [
+  1072→            .russian: "Уведомлять когда друзья заходят в сеть",
+  1073→            .english: "Notify when friends come online",
+  1074→            .chinese: "好友上线时通知"
+  1075→        ],
+  1076→        .notifNewRooms: [
+  1077→            .russian: "Новые комнаты",
+  1078→            .english: "New rooms",
+  1079→            .chinese: "新房间"
+  1080→        ],
+  1081→        .notifNewRoomsSubtitle: [
+  1082→            .russian: "Уведомлять о новых публичных комнатах",
+  1083→            .english: "Notify about new public rooms",
+  1084→            .chinese: "通知新公共房间"
+  1085→        ],
+  1086→
+  1087→        // Privacy settings
+  1088→        .privacyTitle: [
+  1089→            .russian: "Конфиденциальность",
+  1090→            .english: "Privacy",
+  1091→            .chinese: "隐私"
+  1092→        ],
+  1093→        .privacyProfileVisibility: [
+  1094→            .russian: "Видимость профиля",
+  1095→            .english: "Profile visibility",
+  1096→            .chinese: "个人资料可见性"
+  1097→        ],
+  1098→        .privacyProfileVisibilitySubtitle: [
+  1099→            .russian: "Другие пользователи могут видеть ваш профиль",
+  1100→            .english: "Others can see your profile",
+  1101→            .chinese: "其他人可以查看您的个人资料"
+  1102→        ],
+  1103→        .privacyOnlineStatus: [
+  1104→            .russian: "Онлайн-статус",
+  1105→            .english: "Online status",
+  1106→            .chinese: "在线状态"
+  1107→        ],
+  1108→        .privacyOnlineStatusSubtitle: [
+  1109→            .russian: "Показывать когда вы в сети",
+  1110→            .english: "Show when you're online",
+  1111→            .chinese: "显示您在线的时间"
+  1112→        ],
+  1113→        .privacyReadReceipts: [
+  1114→            .russian: "Отчёты о прочтении",
+  1115→            .english: "Read receipts",
+  1116→            .chinese: "已读回执"
+  1117→        ],
+  1118→        .privacyReadReceiptsSubtitle: [
+  1119→            .russian: "Показывать прочитанные сообщения",
+  1120→            .english: "Show read messages",
+  1121→            .chinese: "显示已读消息"
+  1122→        ],
+  1123→        .privacyClearCache: [
+  1124→            .russian: "Очистить кэш",
+  1125→            .english: "Clear cache",
+  1126→            .chinese: "清除缓存"
+  1127→        ],
+  1128→        .privacyClearCacheSubtitle: [
+  1129→            .russian: "Удалить временные данные",
+  1130→            .english: "Remove temporary data",
+  1131→            .chinese: "删除临时数据"
+  1132→        ],
+  1133→        .privacyInfo: [
+  1134→            .russian: "Данные хранятся локально на вашем устройстве. Мы не передаём вашу личную информацию третьим лицам.",
+  1135→            .english: "Data is stored locally on your device. We don't share your personal information with third parties.",
+  1136→            .chinese: "数据存储在您的设备本地。我们不会与第三方共享您的个人信息。"
+  1137→        ],
+  1138→
+  1139→        // Paywall
+  1140→        .paywallTitle: [
+  1141→            .russian: "SyncWatch Premium",
+  1142→            .english: "SyncWatch Premium",
+  1143→            .chinese: "SyncWatch Premium"
+  1144→        ],
+  1145→        .paywallTagline: [
+  1146→            .russian: "Без рекламы. Без ограничений. Полный контроль.",
+  1147→            .english: "No ads. No limits. Full control.",
+  1148→            .chinese: "无广告。无限制。完全掌控。"
+  1149→        ],
+  1150→        .paywallRestore: [
+  1151→            .russian: "Восстановить покупки",
+  1152→            .english: "Restore purchases",
+  1153→            .chinese: "恢复购买"
+  1154→        ],
+  1155→        .paywallSelectPlan: [
+  1156→            .russian: "Выберите план",
+  1157→            .english: "Choose a plan",
+  1158→            .chinese: "选择方案"
+  1159→        ],
+  1160→        .paywallSubscribe: [
+  1161→            .russian: "Подписаться",
+  1162→            .english: "Subscribe",
+  1163→            .chinese: "订阅"
+  1164→        ],
+  1165→        .paywallFeatureAdShield: [
+  1166→            .russian: "Рекламный щит для друзей",
+  1167→            .english: "Ad shield for friends",
+  1168→            .chinese: "好友广告屏蔽"
+  1169→        ],
+  1170→        .paywallFeatureAdShieldSub: [
+  1171→            .russian: "Создайте комнату — никто из гостей не увидит рекламу",
+  1172→            .english: "Create a room — none of the guests will see ads",
+  1173→            .chinese: "创建房间——所有嘉宾都不会看到广告"
+  1174→        ],
+  1175→        .paywallFeature4K: [
+  1176→            .russian: "Разрешение 2K / 4K",
+  1177→            .english: "2K / 4K resolution",
+  1178→            .chinese: "2K / 4K 分辨率"
+  1179→        ],
+  1180→        .paywallFeature4KSub: [
+  1181→            .russian: "Максимальное качество видео для ваших комнат",
+  1182→            .english: "Maximum video quality for your rooms",
+  1183→            .chinese: "房间的最高画质"
+  1184→        ],
+  1185→        .paywallFeatureThemes: [
+  1186→            .russian: "Темы оформления комнат",
+  1187→            .english: "Room themes",
+  1188→            .chinese: "房间主题"
+  1189→        ],
+  1190→        .paywallFeatureThemesSub: [
+  1191→            .russian: "Кастомные градиенты чата и неоновые рамки плеера",
+  1192→            .english: "Custom chat gradients and neon player frames",
+  1193→            .chinese: "自定义聊天渐变和霓虹播放器边框"
+  1194→        ],
+  1195→        .paywallFeatureNick: [
+  1196→            .russian: "Оформление ника",
+  1197→            .english: "Nickname styling",
+  1198→            .chinese: "昵称样式"
+  1199→        ],
+  1200→        .paywallFeatureNickSub: [
+  1201→            .russian: "Градиентные цвета ника в чате и бегущей строке",
+  1202→            .english: "Gradient nickname colors in chat and ticker",
+  1203→            .chinese: "聊天和滚动条中的渐变昵称"
+  1204→        ],
+  1205→        .paywallFeatureAvatar: [
+  1206→            .russian: "Рамки аватара",
+  1207→            .english: "Avatar frames",
+  1208→            .chinese: "头像边框"
+  1209→        ],
+  1210→        .paywallFeatureAvatarSub: [
+  1211→            .russian: "Неоновые, золотые и анимированные обводки",
+  1212→            .english: "Neon, gold and animated borders",
+  1213→            .chinese: "霓虹、金色和动态边框"
+  1214→        ],
+  1215→        .paywallMonth1: [
+  1216→            .russian: "1 месяц",
+  1217→            .english: "1 month",
+  1218→            .chinese: "1 个月"
+  1219→        ],
+  1220→        .paywallMonth3: [
+  1221→            .russian: "3 месяца",
+  1222→            .english: "3 months",
+  1223→            .chinese: "3 个月"
+  1224→        ],
+  1225→        .paywallMonth12: [
+  1226→            .russian: "12 месяцев",
+  1227→            .english: "12 months",
+  1228→            .chinese: "12 个月"
+  1229→        ],
+  1230→
+  1231→        // Friends extras
+  1232→        .friendsAlreadyFriends: [
+  1233→            .russian: "✓ Друзья",
+  1234→            .english: "✓ Friends",
+  1235→            .chinese: "✓ 好友"
+  1236→        ],
+  1237→
+  1238→        // Chat extras
+  1239→        .chatBlockMessageWithName: [
+  1240→            .russian: "Вы больше не будете видеть сообщения от «%@».",
+  1241→            .english: "You will no longer see messages from \"%@\".",
+  1242→            .chinese: "您将不再看到\"%@\"的消息。"
+  1243→        ],
+  1244→
+  1245→        // YouTube search
+  1246→        .searchTitle: [
+  1247→            .russian: "Поиск YouTube",
+  1248→            .english: "YouTube search",
+  1249→            .chinese: "YouTube 搜索"
+  1250→        ],
+  1251→        .searchPlaceholder: [
+  1252→            .russian: "Введите название ролика...",
+  1253→            .english: "Type a video title...",
+  1254→            .chinese: "输入视频标题..."
+  1255→        ],
+  1256→        .searchButton: [
+  1257→            .russian: "Искать",
+  1258→            .english: "Search",
+  1259→            .chinese: "搜索"
+  1260→        ],
+  1261→        .searchEmpty: [
+  1262→            .russian: "Введите запрос и нажмите «Искать»",
+  1263→            .english: "Type a query and press Search",
+  1264→            .chinese: "输入关键词并点击搜索"
+  1265→        ],
+  1266→        .searchHint: [
+  1267→            .russian: "Найдём ролик вместе",
+  1268→            .english: "Let's find a video together",
+  1269→            .chinese: "一起找视频吧"
+  1270→        ],
+  1271→        .searchError: [
+  1272→            .russian: "Поиск не удался. Попробуйте ещё раз.",
+  1273→            .english: "Search failed. Try again.",
+  1274→            .chinese: "搜索失败。请重试。"
+  1275→        ],
+  1276→        .searchUseThis: [
+  1277→            .russian: "Выбрать этот ролик",
+  1278→            .english: "Use this video",
+  1279→            .chinese: "使用此视频"
+  1280→        ],
+  1281→
+  1282→        // Home extras
+  1283→        .homeNoRoomsEmpty: [
+  1284→            .russian: "Создай комнату и пригласи друзей!",
+  1285→            .english: "Create a room and invite friends!",
+  1286→            .chinese: "创建房间并邀请好友！"
+  1287→        ],
+  1288→        .homeNoResults: [
+  1289→            .russian: "Комнаты не найдены",
+  1290→            .english: "No rooms found",
+  1291→            .chinese: "未找到房间"
+  1292→        ],
+  1293→        .homeNoResultsHint: [
+  1294→            .russian: "Попробуй другой запрос",
+  1295→            .english: "Try another search",
+  1296→            .chinese: "尝试其他搜索"
+  1297→        ]
+  1298→    ]
+  1299→}
+  1300→
+  1301→// MARK: - View Helper
+  1302→extension View {
+  1303→    /// Доступ к локализации из любого View.
+  1304→    var L: LocalizationManager { LocalizationManager.shared }
+  1305→}
+  1306→

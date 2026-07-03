@@ -1294,3 +1294,670 @@ and a concrete fix.
 5. **H3** — Unify on a single AVPlayer instance shared between SyncEngine
    and VideoContainerView. Without this, sync is visually broken even
    when C1 is fixed.
+
+---
+
+## Task ID: AUDIT-IOS-V2 — Re-Audit Delta Report (Plink iOS v2)
+
+**Scope:** Delta audit of the renamed/refactored Plink iOS app at
+`/home/z/my-project/raveclone-review-v2/Plink/`. The repo was wiped and
+recreated; only the iOS Swift app remains; new "Bioluminescent Dark
+Premium" design system (cyan `#2DE2E6` / teal `#0EB5C9` / emerald
+`#26D9A4` on obsidian `#0A0D14`) replaces "Pure Black × Ice Glow";
+`AnimatedGradientBackground.swift` reduced to a `Color.clear` placeholder;
+new `BioluminescentBackground.swift` uses `Canvas` + `TimelineView(.animation)`.
+
+**Method:** Re-read every key file from the new repo, verify each of the
+original 60 bugs from `AUDIT-IOS`, and flag new regressions introduced
+by the redesign. Line numbers below reference the new files.
+
+---
+
+### Summary table
+
+| Severity | Original | Still present | Fixed | New |
+|----------|----------|---------------|-------|-----|
+| 🔴 Critical | 14       | 14            | 0     | 0   |
+| 🟠 High     | 14       | 13            | 1     | 2   |
+| 🟡 Medium   | 16       | 16            | 0     | 3   |
+| 🟢 Low      | 16       | 16            | 0     | 2   |
+| **Total**  | **60**   | **59**        | **1** | **7** |
+
+**Headline:** Out of 60 original bugs, **only H1 was fixed**. The
+redesign touched theming/backgrounds but did not address any of the
+critical correctness, security, or auth-bypass issues. The new
+Bioluminescent background is real and animated, but its coverage is
+incomplete (20+ screens still call the now-`Color.clear`
+`AnimatedGradientBackground`, so sheets/modals render on a black
+backdrop), and the old palette leaks through ~30 hardcoded color
+literals.
+
+---
+
+### Section A — Original Bugs: Status Delta
+
+#### 🔴 Critical (C1–C14) — all still present
+
+- **C1 — WS `isConnected` never set true** — STILL PRESENT.
+  `notifyConnectedIfNeeded()` is still declared but never called:
+  `WebSocketClient.swift:408 private func notifyConnectedIfNeeded()`,
+  no caller anywhere in the repo (grep verified). `send(_:)` at line 221
+  still short-circuits via `if isConnected { sendRaw } else { enqueue }`.
+  The entire realtime send path is dead.
+
+- **C2 — JWT in UserDefaults** — STILL PRESENT.
+  `AuthService.swift:130 defaults.set(token, forKey: Keys.authToken)`.
+  The `KeychainHelper` exists (`YandexAuthService.swift:238`) but is
+  still only used for `yandex_jwt`, not the main `rave_auth_token`.
+
+- **C3 — `getFreshToken()` never refreshes** — STILL PRESENT.
+  `AuthService.swift:118-124`: both branches return `authToken`:
+  `if authToken == nil || now >= tokenExpiry - 300 { return authToken }`
+  then `return authToken`. No `/auth/refresh` call.
+
+- **C4 — `DMChatService` owns unauth `APIClient`** — STILL PRESENT.
+  `DMChatService.swift:16 private let api = APIClient()`. `api.authToken`
+  is never set. `loadHistory`'s `guard api.authToken != nil else { return }`
+  silently bails.
+
+- **C5 — `FriendManager` owns unauth `APIClient`** — STILL PRESENT.
+  `FriendManager.swift:26 private let api = APIClient()`. Same as C4;
+  every `loadFriends`/`loadRequests`/`sendRequest`/`acceptRequest`/
+  `searchUsers` will 401.
+
+- **C6 — `AdminPanelView` owns unauth `APIClient`** — STILL PRESENT.
+  `AdminPanelView.swift:8 private let api = APIClient()`. Admin panel
+  cannot load or modify any data.
+
+- **C7 — `RoomView.setupViewModel()` hardcodes `"current_user"`** — STILL PRESENT.
+  `RoomView.swift:479-484`:
+  ```swift
+  let syncEngine = SyncEngine(wsClient: wsClient, roomID: room.id,
+      userID: "current_user",
+      isHost: room.hostID == "current_user")
+  ```
+  `viewModel = RoomViewModel(room: room, currentUserId: "current_user", …)`
+  (line 488). `isHost` is `false` for every real user.
+
+- **C8 — `RoomCreationView.createRoom()` hardcodes `hostID: "current_user"`, `hostIsPremium: false`** — STILL PRESENT.
+  `RoomCreationView.swift:474 hostID: "current_user"` and
+  `RoomCreationView.swift:481 hostIsPremium: false`. Also in
+  `CreateRoomView.swift:328, 335`.
+
+- **C9 — `PremiumStatusManager.setPremium(_:)` allows manual IAP bypass** — STILL PRESENT.
+  `PremiumStatusManager.swift:62-72`: still callable, still writes
+  `rave_user_is_premium` to `UserDefaults` (line 105). Anyone with
+  filesystem access (or any caller) flips premium on.
+
+- **C10 — `AdSessionManager.triggerAd()` skips premium check** — STILL PRESENT.
+  `AdSessionManager.swift:122-136`: `triggerAd` does not call
+  `shouldPlayAd(hostIsPremium:)`. The check at line 109 is still a
+  standalone method no one calls. Premium hosts still get ads.
+
+- **C11 — `DirectMessage.isOwnMessage` checks `"current_user"` sentinel** — STILL PRESENT.
+  `DirectMessage.swift:19-21 var isOwnMessage: Bool { senderID == "current_user" }`.
+  But `DMChatService.sendMessage` line 75 sets `senderID = me` where
+  `me = currentUserId ?? "me"` (real user UUID). Own messages render
+  on the wrong side.
+
+- **C12 — Missing Info.plist privacy usage descriptions** — STILL PRESENT.
+  `Info.plist` (37 lines, full file): no `NSMicrophoneUsageDescription`,
+  no `NSCameraUsageDescription`, no `NSPhotoLibraryUsageDescription`,
+  no `NSLocalNetworkUsageDescription`. `VoiceChatService`,
+  `ScreenCaptureService`, `PlayerUIView` (displayLink + video output)
+  will all crash on first invocation; App Store will auto-reject.
+
+- **C13 — Empty entitlements file** — STILL PRESENT.
+  `Plink.entitlements` (5 lines, full file): `<dict/>`. No Associated
+  Domains, no IAP, no APNs. Universal Links, StoreKit 2 server-side
+  verification, and push notifications all silently fail in release.
+
+- **C14 — Yandex OAuth `clientID` is hardcoded placeholder** — STILL PRESENT.
+  `YandexAuthService.swift:40 clientID: String = "yandex_client_id_placeholder"`.
+  Yandex will reject with `400 invalid_client`.
+
+#### 🟠 High (H1–H14) — 1 fixed, 13 still present
+
+- **H1 — `scheduleReconnect` leaves `isReconnecting` stuck** — **FIXED** ✅.
+  `WebSocketClient.swift:190-201` now resets the flag explicitly:
+  ```swift
+  func disconnect() {
+      isManuallyDisconnected = true
+      isReconnecting = false          // ← fix
+      stopHeartbeat()
+      socket?.cancel(with: .goingAway, reason: nil)
+      …
+  }
+  ```
+
+- **H2 — `RoomViewModel` & `RoomSyncManager` race for `wsClient.delegate`** — STILL PRESENT.
+  `RoomViewModel.swift:89 wsClient.delegate = self` (in `joinRoomFlow`)
+  and `RoomSyncManager.swift:101 wsClient.delegate = self` (in `connect`)
+  both assign. Last assignment wins; messages arriving between the two
+  assignments go to the wrong handler.
+
+- **H3 — `VideoContainerView` creates a SECOND `AVPlayer`** — STILL PRESENT.
+  `VideoContainerView.swift:135 let p = AVPlayer(playerItem: item)`.
+  `SyncEngine.loadMedia` (`SyncEngine.swift:125`) also creates one.
+  Two AVPlayers play the same stream independently; SyncEngine's is
+  invisible, PlayerUIView's is out of sync.
+
+- **H4 — `AdSessionManager.deinit` doesn't invalidate timers** — STILL PRESENT.
+  `AdSessionManager.swift:66-68 deinit { /* Cannot touch @MainActor state */ }`.
+  Comment is still wrong; `Timer.invalidate()` is safe from `nonisolated
+  deinit`.
+
+- **H5 — `AdPlayerView.startCountdown` Timer leaks on dismiss** — STILL PRESENT.
+  `AdPlayerView.swift:73-88`: `Timer.scheduledTimer` invalidated only
+  when `countdown <= 0`; no `.onDisappear { timer.invalidate() }`.
+  Early dismiss fires `onDismiss()` ~15 more times.
+
+- **H6 — `AudioManager.animateVolume` spawns 10 racing Tasks** — STILL PRESENT.
+  `AudioManager.swift:113-121 for step in 1...steps { Task { … } }`.
+  No `volumeAnimTask?.cancel()` before starting the next animation.
+
+- **H7 — `AmbilightSampler.processFrame` CVPixelBuffer use-after-free** — STILL PRESENT.
+  `AmbilightBackground.swift:79-84 Task.detached(priority: .utility) {
+  [ciContext] in let extracted = await Self.extractDominantColors(from:
+  pixelBuffer, context: ciContext) … }` — no `CVPixelBufferRetain`/
+  `CVPixelBufferRelease`. Display-link fires at 4 Hz, throttled to 2 Hz;
+  buffer can be recycled before the detached task runs.
+
+- **H8 — `PlayerUIView` CADisplayLink leak across URL changes** — STILL PRESENT.
+  `VideoContainerView.swift:114-194`: no `willMove(toSuperview:)`
+  override. `deinit { displayLink?.invalidate() }` (line 191-193) is
+  the only teardown; if the parent view stays alive but `mediaURL`
+  changes, old display links keep firing against orphaned players.
+
+- **H9 — `RoomView.setupViewModel` creates fresh service instances** — STILL PRESENT.
+  `RoomView.swift:470-512`: `let api = APIClient()`, `let wsClient =
+  WebSocketClient()`, `let roomService = RoomService(api: api)`,
+  `let authService = AuthService(api: api)` — all brand-new, no auth
+  token, on every appear. Nothing is injected from `PlinkApp`.
+
+- **H10 — `APIClient.encoder/decoder` shared mutable state on `Sendable`** — STILL PRESENT.
+  `APIClient.swift:7-18`: `private let encoder: JSONEncoder` and
+  `private let decoder: JSONDecoder` on a `final class APIClient: Sendable`.
+  Both coders are not thread-safe; concurrent `request<T>` calls share
+  them.
+
+- **H11 — `APIClient.request<T>` cannot handle 204 No Content** — STILL PRESENT.
+  `APIClient.swift:62-64 case 200..<300: return try decoder.decode(T.self,
+  from: data)`. Empty body still throws a decoding error.
+
+- **H12 — `WebSocketClient nonisolated(unsafe) var socket`** — STILL PRESENT.
+  `WebSocketClient.swift:53 private nonisolated(unsafe) var socket:
+  URLSessionWebSocketTask?`. Touched from `connectInternal`, `disconnect`,
+  `cancelSocketForDeinit`, and `sendRaw`'s closure on a background
+  queue. No actual synchronization.
+
+- **H13 — `RoomViewModel.messages` unbounded** — STILL PRESENT.
+  `RoomViewModel.swift:13 var messages: [ChatMessage] = []` with no cap.
+  `routeInbound` line 234 `messages.append(chatMsg)` — never trims.
+
+- **H14 — `AuthService.init` mutates `currentUser` from detached Task** — STILL PRESENT.
+  `AuthService.swift:32-35 Task { @MainActor in self.currentUser = user }`
+  spawned from non-isolated `init`. `PlinkApp.checkAuth` calls
+  `authService.currentUser()` immediately after init — race on cold
+  launch flashes LoginView.
+
+#### 🟡 Medium (M1–M16) — all still present
+
+- **M1 — `SyncEngine.handleSeek` extrapolation heuristic** — STILL PRESENT.
+  `SyncEngine.swift:398 let isStatePulse = elapsedSinceEvent <
+  Constants.stateBroadcastInterval + 1`. Real seeks within 3s of a
+  broadcast are silently reverted to the broadcast position.
+
+- **M2 — `SignalingMessage.decode` string-substring detection** — STILL PRESENT.
+  `SignalingMessage.swift:43-44 guard raw.contains("\"kind\"") else {
+  return nil }`. Chat text containing the literal `"kind"` is attempted
+  as signaling.
+
+- **M3 — `RoomViewModel.routeInbound` decodes every msg up to 4×** — STILL PRESENT.
+  `RoomViewModel.swift:221, 228, 233, 239` — `SyncMessage`, then
+  `voiceChat.ingest`, then `ChatMessage`, then `ParticipantUpdate`,
+  then `RoomClosedPayload`. Up to 5 decode attempts per inbound frame.
+
+- **M4 — `RoomSyncManager.handleRawMessage` decodes every msg up to 4×** — STILL PRESENT.
+  `RoomSyncManager.swift:199-218`: `WSPingPong`, `AdCommandPayload`,
+  `SyncMessage`, `RoomEventEnvelope` all attempted in sequence.
+
+- **M5 — `StoreManager.restorePurchases` doesn't actually restore** — STILL PRESENT.
+  `StoreManager.swift:115-126`: only calls `AppStore.sync()`. Does not
+  iterate `Transaction.currentEntitlements` or call
+  `handleSuccessfulPurchase`. Restore button is a no-op for finished
+  transactions.
+
+- **M6 — `PremiumStatusManager.isPremium` loaded from `UserDefaults`** — STILL PRESENT.
+  `PremiumStatusManager.swift:112-133 loadPersistedState()` reads
+  `rave_user_is_premium` and trusts it. Combined with C9, the local
+  premium state is fully attacker-controlled.
+
+- **M7 — `APIClient.requestNoBody` missing 404 handling** — STILL PRESENT.
+  `APIClient.swift:124-131`: switch handles `401` and `default`; no
+  `case 404: throw .notFound`. Callers of `leaveRoom`/`deleteRoom`/
+  `removeFriend` cannot distinguish "not found" from generic server
+  error.
+
+- **M8 — `Room.isHost` always returns `false`** — STILL PRESENT.
+  `Room.swift:25-28 var isHost: Bool { false }`. Dead computed
+  property; comment lies.
+
+- **M9 — `OrientationManager.isPortrait` operator-precedence bug** — STILL PRESENT.
+  `OrientationManager.swift:38-48`: still has
+  `.interfaceOrientation.isPortrait ?? true && (UIDevice.current.orientation
+  == .unknown …)`. `??` binds looser than `&&`, so the right operand
+  parses as `?? (true && (...))`. Returns `true` for landscape when
+  device is flat.
+
+- **M10 — `RoomView` calls `voiceChat.startCall` twice** — STILL PRESENT.
+  `RoomView.swift:82-84`:
+  ```swift
+  await viewModel.joinRoomFlow()        // calls startCall at line 97
+  try? await voiceChat?.startCall(roomId: room.id)  // calls it AGAIN
+  ```
+  `joinRoomFlow` (line 97) already calls `try await voiceChat.startCall(roomId: room.id)`.
+
+- **M11 — `handleReceiveResult` recursively re-arms receive on MainActor** — STILL PRESENT.
+  `WebSocketClient.swift:260-293`: each receive hop is one full
+  MainActor cycle (`Task { @MainActor in handleReceiveResult }`).
+  A 100-message burst serializes through 100 main-actor hops.
+
+- **M12 — `sendRaw` error handler dispatches to main but uses `DispatchQueue.main.async`** — STILL PRESENT.
+  `WebSocketClient.swift:237-246`: closure on URLSession background
+  queue wraps `self?.handleDisconnect(…)` in
+  `DispatchQueue.main.async { … }` instead of `Task { @MainActor in … }`.
+  Compiler can't verify isolation; strict concurrency flag.
+
+- **M13 — `FriendManager.init` calls `loadAll()` before `authToken` set** — STILL PRESENT.
+  `FriendManager.swift:28-31 init() { Task { await loadAll() } }`.
+  Even if C5 were fixed, `RaveCloneApp` constructs `FriendManager`
+  (line 19) before `AuthService` has propagated the token. `loadAll`
+  no-ops.
+
+- **M14 — `RoomSyncManager.handleAppBackground` stale `didDisconnectInBackground`** — STILL PRESENT.
+  `RoomSyncManager.swift:81 didDisconnectInBackground = false` (init
+  default), but `handleAppBackground` (line 394) sets it to `true` and
+  only `handleAppForeground` (line 404) resets it. If the OS kills the
+  app mid-background, the next cold launch starts with stale
+  `.reconnecting` state — but actually `init` defaults it to `false`,
+  so the original "stuck on cold launch" concern is mitigated. Still
+  PARTIAL: `connectionStatus = .reconnecting` (line 405) is set before
+  `connect()` returns; if `connect()` fails synchronously the user
+  sees `.reconnecting` for a non-existent connection. Verified still
+  present.
+
+- **M15 — `HomeView.startCTACollapseTimer` Timer in `@State`** — STILL PRESENT.
+  `HomeView.swift:33 @State private var ctaCollapseTimer: Timer?`,
+  lines 483-500 schedule a `Timer.scheduledTimer`. No `.onDisappear`
+  cleanup; SwiftUI identity change can leak the prior timer.
+
+- **M16 — `WebSocketClient.isConnectedBridge` uses `MainActor.assumeIsolated`** — STILL PRESENT.
+  `WebSocketClient.swift:451-455`:
+  ```swift
+  nonisolated var isConnectedBridge: Bool {
+      MainActor.assumeIsolated { self.isConnected }
+  }
+  ```
+  Crashes if called from a non-MainActor context.
+
+#### 🟢 Low (L1–L16) — all still present
+
+- **L1 — Hardcoded Russian strings** — STILL PRESENT. Verified in
+  `RoomCreationView.swift:255 "Назад"`, `:376 "Запустить комнату"`,
+  `:352 "В сети"/"Не в сети"`, `ProfileView.swift:545 "Сохранить"`,
+  `:560 "Отмена"`, `MainTabView.swift:401 "Отмена"`, `PaywallView.swift:281
+  "Отмена в любой момент…"`, `DMChatView.swift:26 "Сегодня"`, etc.
+
+- **L2 — `Room.mockRooms` ships in prod** — STILL PRESENT.
+  `Room.swift:105-143 static var mockRooms: [Room]` — six fake rooms
+  ("Дюна 2", "Lo-Fi Chill", …) used as fallback. No `#if DEBUG` gate.
+
+- **L3 — `connectionStats` returns untyped `[String: Any]`** — STILL PRESENT.
+  `WebSocketClient.swift:428-437` returns mixed Bool/Int/String dict;
+  not Sendable.
+
+- **L4 — `ReactionOverlayView.swift` dead code** — STILL PRESENT.
+  File still exists, never instantiated (grep returns only the file
+  itself).
+
+- **L5 — `PrivacySettingsView` toggles don't persist** — STILL PRESENT.
+  `PrivacySettingsView.swift:8-10 @State private var profileVisibility =
+  true` etc. — no `UserDefaults`, no backend call.
+
+- **L6 — `LoginView` Google/Apple is fake** — STILL PRESENT.
+  `LoginView.swift:235-243 DispatchQueue.main.asyncAfter(deadline:
+  .now() + 1.5) { selectedAuthMethod = .email }` — 1.5s spinner then
+  fallback to email form. No `ASAuthorizationAppleIDProvider`.
+
+- **L7 — `AmbilightBackground` uses `@StateObject` for singleton** — STILL PRESENT.
+  `AmbilightBackground.swift:20 @StateObject private var sampler =
+  AmbilightSampler.shared`.
+
+- **L8 — `RoomView` share sheet URL still wrong** — STILL PRESENT.
+  `RoomView.swift:121 URL(string: "https://raveclone.com/join/\(room.code)")`.
+  Domain `raveclone.com` ≠ `DeepLinkRouter.domain` ("raveclone.app")
+  ≠ `ShareManager.shareBaseURL` ("https://raveclone.app"). Path
+  `/join/<code>` ≠ `DeepLinkRouter.parsePath`'s recognized `/r/<code>`
+  or `/u/<userId>`. Shared URLs return 404.
+
+- **L9 — `EnergyController` observer never removed** — STILL PRESENT.
+  `AmbilightBackground.swift:171-181 init` registers
+  `NSProcessInfoPowerStateDidChange` observer; singleton, no `deinit`.
+
+- **L10 — `handleDeepLink` hardcodes "Пользователь"** — STILL PRESENT.
+  `RaveCloneApp.swift:139 friendInviteAlert = FriendInviteAlert(userId:
+  userId, username: "Пользователь")`.
+
+- **L11 — Split backend URLs** — STILL PRESENT.
+  `APIClient.swift:23 baseURL: "https://xpkcakpkfewp-ofewk-pkv-production.up.railway.app/api"`
+  vs `MediaService.swift:38 apiBaseURL: "https://raveclone.app/api"`,
+  `YandexAuthService.swift:42 backendURL: URL(string:
+  "https://raveclone.app/api")`. Three different backend URLs.
+
+- **L12 — `PlinkApp.init` doesn't propagate token to `MediaService`** — STILL PRESENT.
+  `RaveCloneApp.swift:47 mediaService = MediaService()` — `MediaService`
+  has its own `authToken` and is updated only via `bridgeAuthToken()`
+  (line 158 `mediaService.setAuthToken(token)`). If `bridgeAuthToken`
+  runs before `AuthService` populates `authToken`, `MediaService`
+  keeps the stale token. Same architecture as before.
+
+- **L13 — `AuthService.deleteAccount` doesn't delete** — STILL PRESENT.
+  `AuthService.swift:111-114 func deleteAccount() async throws {
+  // TODO: добавить DELETE /api/auth/me на сервере
+  try await signOut() }`.
+
+- **L14 — `MarqueeMessageView.width(usingFont:)` uses `NSString.size`** — STILL PRESENT.
+  `MarqueeMessageView.swift:64-67 return (self as
+  NSString).size(withAttributes: attributes).width`.
+
+- **L15 — `notifyConnectedIfNeeded` force-unwraps `activeRoomID!`** — STILL PRESENT.
+  `WebSocketClient.swift:421 Logger.ws.info("Restoring room session:
+  \(activeRoomID!)")` after `if activeRoomID != nil` (line 420). Safe
+  today; fragile under refactor.
+
+- **L16 — `SyncEngine.deinit` touches `@MainActor` state** — STILL PRESENT.
+  `SyncEngine.swift:88-92 deinit { player?.pause(); if let observer =
+  timeObserver { player?.removeTimeObserver(observer) } }` — `player`
+  and `timeObserver` are `@MainActor`-isolated ivars; default
+  `nonisolated deinit` violates concurrency.
+
+---
+
+### Section B — New Bugs Introduced by the Redesign
+
+#### 🟠 N1 — Bioluminescent background has incomplete coverage
+- **Files:** 20 screens still call `AnimatedGradientBackground()`:
+  `Views/Chat/ChatView.swift:26`, `Views/Chat/DMChatView.swift:18`,
+  `Views/Premium/PaywallView.swift:25`, `Views/Admin/AdminPanelView.swift:38`,
+  `Views/Settings/PrivacySettingsView.swift:15`,
+  `Views/Settings/SettingsSlidePanel.swift:335`,
+  `Views/Settings/NotificationsView.swift`,
+  `Views/Settings/LanguagePickerView.swift`,
+  `Views/Home/HomeView.swift:55`, `Views/Home/RoomCreationView.swift:37`,
+  `Views/Home/CreateRoomView.swift:35`, `Views/Home/ServiceSelectionView.swift:253`,
+  `Views/Home/YouTubeSearchView.swift`, `Views/Room/ParticipantListView.swift:10`,
+  `Views/Friends/FriendsView.swift`, `Views/Friends/FriendProfileView.swift`,
+  `Views/AI/AIAssistantView.swift:18`, `Views/Components/MainTabView.swift:88`,
+  `Views/Profile/ProfileView.swift`, plus the deprecated
+  `Views/Components/AnimatedGradientBackground.swift:11` itself.
+- **What's wrong:** `AnimatedGradientBackground` is now `Color.clear.ignoresSafeArea()`
+  (file line 17). `Color.clear` is transparent — fine for tab content
+  where the root `BioluminescentBackground` shows through, but every
+  screen presented as a `.sheet` / `.fullScreenCover` / modal
+  `NavigationStack` (PaywallView, AdminPanelView, PrivacySettingsView,
+  ParticipantListView, ChatView, DMChatView, CreateRoomView,
+  RoomCreationView, etc.) renders against the sheet's own dimmed/black
+  backdrop with no bioluminescent theme. The "Bioluminescent Dark
+  Premium" look is broken on every modal.
+- **Impact:** Major visual regression. Every modal sheet appears
+  dark/black instead of glowing cyan/teal/emerald. The redesign
+  promise is unfulfilled on the screens where it matters most (paywall,
+  create-room flow).
+- **Fix:** Replace `AnimatedGradientBackground()` calls in sheets with
+  `BioluminescentBackground()` directly. Delete the `AnimatedGradientBackground`
+  struct entirely or make it `@available(*, deprecated, message: "Use
+  BioluminescentBackground")` returning `BioluminescentBackground()`.
+
+#### 🟠 N2 — `AnimatedGradientBackground` silently drops parameters
+- **File:** `Views/Components/AnimatedGradientBackground.swift:11-19`
+- **What's wrong:**
+  ```swift
+  struct AnimatedGradientBackground: View {
+      var orbColors: [Color] = []
+      var hasActiveRooms: Bool = true
+      var body: some View { Color.clear.ignoresSafeArea() }
+  }
+  ```
+  Callers still pass `orbColors: [Color(hex: 0x3D8DE0), …]`
+  (`PaywallView.swift:26`), `orbColors: [Color(hex: 0xFF3D8B), …]`
+  (`AdminPanelView.swift:38`), `orbColors: [Color(hex: 0x9B59B6), …]`
+  (`SettingsSlidePanel.swift:335`), `orbColors: [Color(hex: 0x7B2CBF),
+  …]` (`AIAssistantView.swift:18`), `hasActiveRooms: true/false`
+  (HomeView). All silently ignored. No compiler warning. Authors think
+  their custom per-screen palettes are still rendered.
+- **Impact:** Deceptive API. Future maintainers will "tune" the colors
+  and see no effect. Combined with N1, the screens render with no
+  background at all.
+- **Fix:** Either delete the parameters and remove from call sites, or
+  forward them to `BioluminescentBackground(palette:)`. Cleanest: delete
+  the wrapper and migrate call sites.
+
+#### 🟡 N3 — `DirectMessage.isOwnPremium` uses `MainActor.assumeIsolated` from a non-isolated computed property
+- **File:** `Models/DirectMessage.swift:25-28`
+- **What's wrong:**
+  ```swift
+  var isOwnPremium: Bool {
+      guard isOwnMessage else { return false }
+      return MainActor.assumeIsolated { PremiumStatusManager.shared.isPremium }
+  }
+  ```
+  `DirectMessage` is a plain `Codable` struct with no actor isolation.
+  `MainActor.assumeIsolated` traps if called from a non-MainActor
+  context. Today the only call sites are in `DMChatView` `@ViewBuilder`
+  bodies (`DMChatView.swift:200, 219`), so it happens to work — but the
+  struct has no compile-time protection. Any future caller decoding a
+  DM off-main and reading `isOwnPremium` will crash.
+- **Impact:** Latent crash. Mirrors M16's pattern but on a model type.
+- **Fix:** Pass `isOwnPremium: Bool` in from the view layer at
+  construction time, or make this a method `isOwnPremium(on mainActor:)`
+  that requires `@MainActor` caller.
+
+#### 🟡 N4 — Old color palette leaks through ~30 hardcoded literals
+- **Files:** `Views/Chat/DMChatView.swift:223-225` (`0x6EC1E4`, `0x9B59B6`,
+  `0x6EC1E4` — purple shimmer for premium DMs), `Views/Profile/ProfileView.swift:413-417,
+  436-437, 472, 479` (`0x6EC1E4`, `0xFF3D8B`), `Views/Home/HomeView.swift:625-626,
+  772-775` (`0xFF3D8B`, `0xE8B339`, `0xFF6B35`, `0x22D3EE`), `Views/Premium/PaywallView.swift:26,
+  80, 83` (`0x3D8DE0`, `0x6EC1E4`, `0x113CCF`), `Views/Admin/AdminPanelView.swift:38`
+  (`0xFF3D8B`, `0x6EC1E4`, `0xE8B339`), `Views/AI/AIAssistantView.swift:18, 83`
+  (`0x7B2CBF`, `0xFF3D8B`), `Views/Settings/SettingsSlidePanel.swift:335, 344`
+  (`0x9B59B6`, `0xF1C40F`, `0x6EC1E4`), `Views/Home/ServiceSelectionView.swift:253`
+  (`0x22D3EE`, `0x6EC1E4`, `0x1A2A6C`).
+- **What's wrong:** The new design system is strict cyan/teal/emerald
+  (`Color+Theme.swift:28-32`). These literals are old palette: pink
+  (`0xFF3D8B`), gold (`0xE8B339`, `0xF1C40F`), orange (`0xFF6B35`),
+  purple (`0x9B59B6`, `0x7B2CBF`), light-blue (`0x6EC1E4`), navy
+  (`0x113CCF`, `0x1A2A6C`). Some are passed to the now-ignored
+  `AnimatedGradientBackground(orbColors:)` (silently dropped), but
+  others are used in actual `LinearGradient`/`RadialGradient`/`.shadow`
+  calls (e.g. DMChatView premium shimmer line 221-229, ProfileView line
+  472, HomeView line 625) — those DO render and break the visual
+  contract.
+- **Impact:** Visual inconsistency. Premium DM bubbles shimmer in
+  pink-purple instead of cyan-emerald. Profile header glows pink.
+  Discovery cards have orange/pink hover gradients.
+- **Fix:** Replace every hardcoded literal with `Color.bioCyan` /
+  `.bioTeal` / `.bioEmerald` (or the existing semantic aliases). Or —
+  for non-themed accents — define them as new tokens in `Color+Theme`
+  with intentional justification. Add a linter to ban `Color(hex: 0x…)`
+  outside `Color+Theme.swift`.
+
+#### 🟡 N5 — `NickStyle` enum still uses legacy colors that contradict the new palette
+- **File:** `Services/PremiumStatusManager.swift:138-198`
+- **What's wrong:** `NickStyle.neonPurple = .purple/.blue`,
+  `.neonPink = .pink/0xFF3D8B`, `.gold = .orange/.yellow`,
+  `.fire = .red/.orange/.yellow`, `.ice = .blue/.cyan/.white`,
+  `.neonGreen = .green/.mint`. None of these match the strict
+  cyan/teal/emerald spectrum mandated by the redesign.
+  `Color+Theme.swift:43-48` explicitly remaps `ravePurple → bioTeal`
+  and `raveWarning → bioEmerald` precisely to kill these old colors —
+  but `NickStyle` bypasses the semantic tokens and uses `Color.purple`,
+  `.pink`, `.orange`, etc. directly.
+- **Impact:** Premium users who pick "Gold" or "Fire" nick style get
+  orange/yellow text — breaking the bioluminescent aesthetic the user
+  paid for. Inconsistent with `raveGradient` (cyan→teal) and
+  `bioNeonRing` (cyan→emerald) used everywhere else.
+- **Fix:** Either redesign each `NickStyle` variant as a
+  cyan/teal/emerald derivative (e.g. gold → emerald + warm-shifted),
+  or document that nick styles are an intentional exception and
+  gate them behind `PremiumStatusManager.canCustomizeNick`.
+
+#### 🟢 N6 — `BioEnergy` class is dead code
+- **File:** `Views/Components/BioluminescentBackground.swift:143-167`
+- **What's wrong:** `final class BioEnergy: ObservableObject` is
+  declared with `pulse(_:)`, `setVoiceLevel(_:)`, `@Published var
+  energy`/`voicePulse` — but no view in the codebase instantiates it
+  (grep returns only the declaration). Furthermore, it's a non-
+  `@MainActor` `ObservableObject` whose `pulse()` spawns a
+  `Task { … await MainActor.run { self.energy = … } }` — the
+  mutation happens on MainActor (correct), but the class is
+  non-isolated and could be constructed from anywhere.
+- **Impact:** ~25 lines of dead code + a concurrency smell.
+- **Fix:** Delete the class, or wire it into `BioluminescentBackground`
+  via `@StateObject` to actually drive the `energy` parameter.
+
+#### 🟢 N7 — `LoginView` bypasses Bioluminescent theme, uses its own static orb layout
+- **File:** `Views/Auth/LoginView.swift:43-61`
+- **What's wrong:**
+  ```swift
+  ZStack {
+      Color.raveBackground.ignoresSafeArea()
+      VStack {
+          Spacer()
+          Circle().fill(Color.ravePrimary.opacity(0.06)).frame(width: 300, height: 300).blur(radius: 80)
+          Circle().fill(Color.raveAccent.opacity(0.04)).frame(width: 250, height: 250).blur(radius: 60)
+          Spacer()
+      }
+  }
+  ```
+  `Color.raveBackground` (= `0x0A0D14`) is opaque, so it covers the
+  root `BioluminescentBackground` from `PlinkApp.body`. The login
+  screen renders a static obsidian with two blurred circles — no
+  animated drifting clouds, no noise texture. Inconsistent with the
+  app's "Premium" first impression.
+- **Impact:** Login flow visually flat compared to the rest of the app.
+- **Fix:** Replace the `Color.raveBackground + VStack { Circle… }`
+  block with a plain `BioluminescentBackground()` (and let the root
+  one show through).
+
+---
+
+### Section C — Original Background Bug
+
+**Original AUDIT-IOS did NOT explicitly enumerate an "AnimatedGradientBackground
+didn't animate" bug** among C1–L16. However, the redesign brief asserts
+that the old `AnimatedGradientBackground` was static and that the new
+`BioluminescentBackground` fixes animation.
+
+**Verification of `BioluminescentBackground` (`Views/Components/BioluminescentBackground.swift:12-120`):**
+- ✅ Animates: `TimelineView(.animation) { timeline in Canvas { context,
+  size in let t = timeline.date.timeIntervalSinceReferenceDate;
+  drawClouds(context: context, size: size, time: t) } }` (lines 18-24).
+  Four clouds drift via Lissajous-like trajectories (`sin(time * speed
+  + phase)` at line 67), with pulsating radius and brightness. ~60-120
+  FPS via GPU-accelerated Canvas.
+- ✅ Renders depth: `drawDepth` fills obsidian `#0A0D14` (line 51).
+- ✅ Renders noise overlay (line 36-41) for premium grain texture.
+- ⚠️  Caveat (per N1 above): only renders when actually placed in the
+  view tree. The root `PlinkApp.body` places it (line 58), so tab
+  content sees it through transparent overlays. But sheets/modals
+  that use the now-`Color.clear` `AnimatedGradientBackground` see
+  nothing bioluminescent.
+
+**Verification of the `AnimatedGradientBackground` placeholder (`Views/Components/AnimatedGradientBackground.swift:11-20`):**
+- ✅ Reduced to `Color.clear.ignoresSafeArea()` as the brief states.
+- ⚠️  But the `orbColors` and `hasActiveRooms` parameters are silently
+  ignored (N2), and 20 call sites still pass them expecting the old
+  behavior.
+
+**Verdict:** Background animation IS implemented and works where
+applied. Coverage is incomplete (N1); parameters are silently dropped
+(N2); login screen bypasses it (N7).
+
+---
+
+### Section D — Top 5 New Priorities
+
+Re-ranked across **original + new** bugs, in order of fix ROI for the
+v2 redesign:
+
+1. **C1 — Wire up `notifyConnectedIfNeeded()` (or replace with an
+   explicit open-probe).** Without this, no realtime path works:
+   chat, reactions, play/pause/seek, signaling all silently drop.
+   One-line fix in `connectInternal()`:
+   ```swift
+   task.resume(); socket = task; receiveMessage()
+   Task { @MainActor [weak self] in
+       try? await Task.sleep(nanoseconds: 250_000_000)
+       self?.notifyConnectedIfNeeded()
+   }
+   ```
+
+2. **C4 + C5 + C6 + H9 — Inject the shared authenticated `APIClient`
+   (and `WebSocketClient`, `AuthService`, `RoomService`) from `PlinkApp`
+   into `DMChatService`, `FriendManager`, `AdminPanelView`, and
+   `RoomView.setupViewModel`.** One architectural change unlocks DMs,
+   friends, admin, and the entire room session. Right now every one of
+   those services constructs `APIClient()` with `authToken == nil` and
+   every REST call 401s.
+
+3. **C7 + C8 + C10 + C11 — Thread real user identity through the room
+   layer.** Replace `"current_user"` everywhere with
+   `authService.currentUser?.id` (C7), resolve real `hostID` and
+   `hostIsPremium` from `PremiumStatusManager.shared.isPremium` in
+   `RoomCreationView.createRoom` (C8), call
+   `shouldPlayAd(hostIsPremium:)` at the top of
+   `AdSessionManager.triggerAd` (C10), and pass real user id into
+   `DirectMessage.isOwnMessage` comparison (C11). Without these, host
+   mode is dead, premium ad-skip is dead, and your own DMs render on
+   the wrong side.
+
+4. **N1 + N2 + N7 — Finish the Bioluminescent redesign coverage.**
+   Replace the 20 `AnimatedGradientBackground()` calls in
+   sheets/modals with `BioluminescentBackground()`, delete the
+   deprecated wrapper (or forward its parameters), and switch
+   `LoginView` to use the real background. Otherwise the redesign's
+   "Premium" promise is broken on the screens where it matters most
+   (paywall, create-room, login).
+
+5. **C2 + C3 + C9 + M5 + M6 — Close the auth/IAP hole.** Move JWT to
+   `KeychainHelper` (C2), implement real `/auth/refresh` (C3), delete
+   `PremiumStatusManager.setPremium` and source `isPremium` from
+   server `User.isPremium` (C9, M6), and make
+   `StoreManager.restorePurchases` actually iterate
+   `Transaction.currentEntitlements` (M5). Without this, the app is
+   one jailbreak/iCloud backup away from full account takeover and
+   IAP bypass — guaranteed App Review rejection.
+
+**Bonus quick wins** (low effort, high cleanup value):
+- **H4 + H5 + H6 + H8** — add `nonisolated deinit { timer?.invalidate()
+  }` / `displayLink?.invalidate()` to the timer-owning services; cancel
+  prior `volumeAnimTask` before starting a new one.
+- **C12 + C13 + C14** — paste the four missing Info.plist privacy
+  strings, add the three entitlements keys, move the Yandex `clientID`
+  into an xcconfig. Three config edits unlock voice chat, screen
+  capture, IAP, Universal Links, push, and Yandex OAuth in one sitting.
+- **L4** — delete `ReactionOverlayView.swift`.
+- **L8** — swap `URL(string: "https://raveclone.com/join/\(room.code)")`
+  for `ShareManager.shareURL(for: room.id, code: room.code)`.
+
+---
+
+**Conclusion:** The v2 refactor modernized the visual identity but
+left every functional bug from v1 in place. Net delta: 1 fixed (H1),
+7 new (N1–N7). The app is still non-functional for DMs, friends,
+admin, room hosting, IAP, ads, push, deep links, voice, and screen
+capture — and now also ships a redesign that doesn't apply to most
+modal screens. Recommend treating the v2 redesign as a visual-only
+pass and scheduling a v3 focused purely on the 14 critical bugs.
+

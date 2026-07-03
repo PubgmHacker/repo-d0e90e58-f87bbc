@@ -9,8 +9,8 @@ struct AIAssistantView: View {
     @State private var isLoading = false
     @FocusState private var isInputFocused: Bool
 
-    /// 🔧 CHAR LIMIT: 200 chars max per message — prevents spam + API abuse
-    private let charLimit = 200
+    /// 🔧 CHAR LIMIT: 150 chars max per message — prevents spam + API abuse
+    private let charLimit = 150
     /// 🔧 RATE LIMIT: min 2s between messages — prevents spam
     @State private var lastSendTime: Date = .distantPast
 

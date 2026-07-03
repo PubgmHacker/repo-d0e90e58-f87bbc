@@ -355,12 +355,22 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
         Logger.sync.info("▶️ PLAY  host@\(fmt(eventMediaTime))s → seek to \(fmt(compensatedTarget))s (+\(compensationMs)ms latency, RTT \(Int(estimatedRTT*1000))ms)")
 
-        // If we're already playing and within tolerance, do nothing (avoids stutter)
+        // 🔧 FAST PATH: If we're already playing and within tolerance, do nothing
+        // (avoids stutter on rapid play/pause toggles)
         if isPlaying && abs(currentTime - compensatedTarget) < Constants.seekTolerance {
             return
         }
 
-        // Seek to compensated position, then play
+        // 🔧 FAST PATH: If drift is small (< 2s), just play without seeking —
+        // the drift monitor will self-correct within a few seconds.
+        // This avoids the "seek then play" stutter that was causing delay.
+        if abs(currentTime - compensatedTarget) < 2.0 {
+            player?.play()
+            isPlaying = true
+            return
+        }
+
+        // Large drift — seek to compensated position, then play
         player?.seek(to: CMTime(seconds: compensatedTarget, preferredTimescale: 600)) { [weak self] _ in
             guard let self else { return }
             self.player?.play()
@@ -370,19 +380,21 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     }
 
     /// PAUSE command received.
-    /// Pause is less latency-sensitive (a paused frame is a paused frame),
-    /// but we still seek to the host's exact frame for visual consistency.
+    /// 🔧 IMMEDIATE: Pause instantly for zero-latency visual sync.
+    /// Seek to exact frame happens after pause (non-blocking).
     private func handlePause(_ message: SyncMessage) {
         let eventMediaTime = message.mediaTime ?? currentTime
         recordSyncPoint(mediaTime: eventMediaTime, isPlaying: false, serverTime: message.timestamp)
 
         Logger.sync.info("⏸️ PAUSE at \(fmt(eventMediaTime))s")
 
+        // 🔧 IMMEDIATE pause — no waiting for seek completion
         player?.pause()
         isPlaying = false
+        currentTime = eventMediaTime
 
-        // Seek to exact paused frame
-        player?.seek(to: CMTime(seconds: eventMediaTime, preferredTimescale: 600)) { [weak self] _ in
+        // Seek to exact paused frame (async, non-blocking)
+        player?.seek(to: CMTime(seconds: eventMediaTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             self?.currentTime = eventMediaTime
         }
     }

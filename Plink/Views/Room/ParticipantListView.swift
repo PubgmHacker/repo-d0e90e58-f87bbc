@@ -93,67 +93,92 @@ struct ParticipantListView: View {
     // MARK: - Room Info Card
 
     private var roomInfoCard: some View {
-        HStack(spacing: 16) {
-            // Room icon
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.bioCyan.opacity(0.2), Color.bioEmerald.opacity(0.15)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                // Room icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.bioCyan.opacity(0.2), Color.bioEmerald.opacity(0.15)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 52, height: 52)
-                Image(systemName: "rectangle.stack.fill.badge.play")
-                    .font(.system(size: 20))
-                    .foregroundColor(.bioCyan)
-            }
+                        .frame(width: 52, height: 52)
+                    Image(systemName: "rectangle.stack.fill.badge.play")
+                        .font(.system(size: 20))
+                        .foregroundColor(.bioCyan)
+                }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(room.name)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(room.name)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.raveTextPrimary)
+                        .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    // Room code
-                    HStack(spacing: 4) {
-                        Text("Код:")
-                            .font(.system(size: 11))
-                            .foregroundColor(.raveTextTertiary)
-                        Text(room.code)
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(.bioCyan)
-                    }
+                    HStack(spacing: 8) {
+                        // Room code
+                        HStack(spacing: 4) {
+                            Text("Код:")
+                                .font(.system(size: 11))
+                                .foregroundColor(.raveTextTertiary)
+                            Text(room.code)
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .foregroundColor(.bioCyan)
+                        }
 
-                    // Copy button
-                    Button {
-                        HapticManager.impact(.light)
-                        UIPasteboard.general.string = room.code
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 10))
-                            .foregroundColor(.raveTextTertiary)
+                        // Copy button
+                        Button {
+                            HapticManager.impact(.light)
+                            UIPasteboard.general.string = room.code
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 10))
+                                .foregroundColor(.raveTextTertiary)
+                        }
                     }
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            // Participant count badge
-            VStack(spacing: 2) {
-                Text("\(room.participantCount)")
-                    .font(.system(size: 18, weight: .heavy, design: .rounded).monospacedDigit())
-                    .foregroundColor(.raveTextPrimary)
-                Text("/ \(room.maxParticipants)")
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundColor(.raveTextTertiary)
+                // Participant count badge
+                VStack(spacing: 2) {
+                    Text("\(room.participantCount)")
+                        .font(.system(size: 18, weight: .heavy, design: .rounded).monospacedDigit())
+                        .foregroundColor(.raveTextPrimary)
+                    Text("/ \(room.maxParticipants)")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundColor(.raveTextTertiary)
+                }
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(14)
+
+            // 🔧 Share room button
+            Divider().background(Color.white.opacity(0.06))
+
+            Button {
+                HapticManager.impact(.light)
+                UIPasteboard.general.string = "Присоединяйся к комнате \(room.name) в Плинк! Код: \(room.code)"
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14))
+                    Text("Поделиться кодом комнаты")
+                        .font(.system(size: 14, weight: .semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(.raveTextTertiary)
+                }
+                .foregroundColor(.bioCyan)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(14)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(

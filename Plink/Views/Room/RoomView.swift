@@ -121,7 +121,24 @@ struct RoomView: View {
                 await viewModel.cleanupFlow()
             }
         }
-        .navigationBarBackButtonHidden()
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            // 🔧 Enable swipe-back gesture even with hidden back button
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    Task {
+                        await voiceChat?.endCall()
+                        await viewModel?.cleanupFlow()
+                    }
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.bioCyan)
+                }
+                .opacity(0)  // hidden but enables swipe-back gesture
+            }
+        }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $shareSheetPresented) {
             if let url = URL(string: "https://raveclone.com/join/\(room.code)") {
@@ -325,8 +342,8 @@ struct RoomView: View {
                 isVisible: $showControls
             )
 
-            // 🔧 GLASS CONTROLS: Mic, share, chat buttons — very transparent glass
-            // that fades with showControls so they don't distract from the movie.
+            // 🔧 GLASS CONTROLS: Mic, share buttons — always visible in landscape,
+            // dimmed (0.35) when controls hidden, brightened (1.0) when controls visible.
             if let voiceChat {
                 VStack {
                     // ── Share: правый верхний угол ──
@@ -337,32 +354,32 @@ struct RoomView: View {
                             shareSheetPresented = true
                         } label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.85))
-                                .frame(width: 34, height: 34)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(.white)
+                                .frame(width: 32, height: 32)
                                 .background(
                                     Circle()
                                         .fill(.ultraThinMaterial)
-                                        .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 0.3))
+                                        .overlay(Circle().stroke(Color.white.opacity(0.06), lineWidth: 0.3))
                                 )
                         }
                         .buttonStyle(GlassButtonStyle())
-                        .opacity(showControls ? 1 : 0)
-                        .padding(.trailing, 14)
+                        .opacity(showControls ? 1.0 : 0.35)
+                        .padding(.trailing, 12)
                         .padding(.top, 6)
                     }
 
                     Spacer()
 
                     // ── Микрофон: левый нижний угол ──
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         VoiceChatButton(voiceChat: voiceChat) {
                             voiceChat.toggleMute()
                         }
-                        .opacity(showControls ? 1 : 0.3)  // dim but visible when controls hidden
+                        .opacity(showControls ? 1.0 : 0.35)
                         Spacer()
                     }
-                    .padding(.leading, 14)
+                    .padding(.leading, 12)
                     .padding(.bottom, 6)
                 }
                 .animation(.easeInOut(duration: 0.25), value: showControls)

@@ -23,8 +23,8 @@ struct RoomChatView: View {
     /// Фокус на текстовом поле (чтобы убирать клавиатуру)
     @FocusState private var isInputFocused: Bool
 
-    /// 🔧 CHAR LIMIT: 200 chars max per chat message — prevents spam
-    private let charLimit = 200
+    /// 🔧 CHAR LIMIT: 150 chars max per chat message — prevents spam
+    private let charLimit = 150
     /// 🔧 RATE LIMIT: min 1s between chat messages
     @State private var lastSendTime: Date = .distantPast
 

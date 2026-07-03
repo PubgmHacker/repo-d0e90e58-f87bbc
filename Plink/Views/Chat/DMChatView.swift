@@ -14,8 +14,8 @@ struct DMChatView: View {
     @State private var messageText = ""
     @State private var showEmojiPicker = false
     @FocusState private var isInputFocused: Bool
-    /// 🔧 CHAR LIMIT: 200 chars max per DM — prevents spam
-    private let charLimit = 200
+    /// 🔧 CHAR LIMIT: 150 chars max per DM — prevents spam
+    private let charLimit = 150
     /// 🔧 RATE LIMIT: min 1s between DMs
     @State private var lastSendTime: Date = .distantPast
 

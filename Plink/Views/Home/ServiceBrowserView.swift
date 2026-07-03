@@ -64,11 +64,10 @@ struct ServiceBrowserView: View {
                         }
                     )
 
-                    // 🔧 Video detected banner — appears when a video page is found
-                    if let detectedVideo {
-                        videoDetectedBanner(video: detectedVideo)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
+                    // 🔧 REMOVED: green "video detected" banner — user found it confusing.
+                    // Video detection still works internally (sets detectedVideo),
+                    // which is used to pre-fill the title in the alert.
+                    // The bottom "Создать комнату" button is the only CTA now.
 
                     // Bottom bar with "Create Room" CTA
                     bottomBar

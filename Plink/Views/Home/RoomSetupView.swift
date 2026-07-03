@@ -13,10 +13,14 @@ import SwiftUI
 ///   - Content URL (from the browser, read-only)
 struct RoomSetupView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var apiClient: APIClient
     let service: VideoService
     let contentURL: String
     let contentTitle: String
     var onRoomCreated: (Room) -> Void
+
+    /// 🔧 FIX H1: RoomService for REST API room creation
+    private var roomService: RoomService { RoomService(api: apiClient) }
 
     @State private var roomName = ""
     @State private var privacy: RoomPrivacy = .publicRoom
@@ -295,23 +299,6 @@ struct RoomSetupView: View {
         errorMessage = nil
         HapticManager.impact(.medium)
 
-        // Resolve real user identity (FIX C7/C8 pattern)
-        let hostID: String = {
-            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
-               let user = try? JSONDecoder().decode(User.self, from: data) {
-                return user.id
-            }
-            return UUID().uuidString
-        }()
-        let hostName: String = {
-            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
-               let user = try? JSONDecoder().decode(User.self, from: data) {
-                return user.username
-            }
-            return "You"
-        }()
-        let hostIsPremium = PremiumStatusManager.shared.isPremium
-
         // Build MediaItem from the browsed URL
         let mediaItem = MediaItem(
             id: UUID().uuidString,
@@ -324,25 +311,29 @@ struct RoomSetupView: View {
             source: .url
         )
 
-        let room = Room(
-            id: UUID().uuidString,
-            name: name,
-            hostID: hostID,
-            hostName: hostName,
-            code: generateRoomCode(),
-            participants: [],
-            mediaItem: mediaItem,
-            isActive: true,
-            maxParticipants: maxParticipants,
-            hostIsPremium: hostIsPremium,
-            createdAt: Date()
-        )
-
-        // Brief delay for UX (show "Создание…" state)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            isCreating = false
-            HapticManager.roomJoined()
-            onRoomCreated(room)
+        // 🔧 FIX H1: Actually call the REST API to create the room server-side.
+        // Was: built a local Room object without persisting → room never appeared
+        // in "Мои комнаты" and guests couldn't join by code.
+        Task {
+            do {
+                let request = CreateRoomRequest(
+                    name: name,
+                    maxParticipants: maxParticipants,
+                    mediaItem: mediaItem
+                )
+                let room = try await roomService.createRoom(request)
+                await MainActor.run {
+                    isCreating = false
+                    HapticManager.roomJoined()
+                    onRoomCreated(room)
+                }
+            } catch {
+                await MainActor.run {
+                    isCreating = false
+                    errorMessage = "Не удалось создать комнату: \(error.localizedDescription)"
+                    HapticManager.impact(.heavy)
+                }
+            }
         }
     }
 

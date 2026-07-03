@@ -15,7 +15,7 @@ struct ProfileView: View {
     @State private var showPaywall = false
     @State private var showPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var friendManager = FriendManager()
+    @State private var friendManager: FriendManager? = nil
     @State private var isPremium = false
 
     init(viewModel: ProfileViewModel, onSignOut: @escaping () -> Void) {

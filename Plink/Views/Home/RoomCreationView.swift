@@ -7,7 +7,7 @@ import SwiftUI
 struct RoomCreationView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var loc = LocalizationManager.shared
-    var friendManager: FriendManager = FriendManager()
+    var friendManager: FriendManager? = nil
     var onRoomCreated: (Room) -> Void
 
     @State private var currentStep: CreationStep = .service

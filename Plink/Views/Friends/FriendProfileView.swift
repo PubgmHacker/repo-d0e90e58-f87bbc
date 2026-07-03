@@ -5,6 +5,7 @@ import SwiftUI
 /// история просмотров, кнопка отправить сообщение.
 struct FriendProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var apiClient: APIClient
     let friend: Friend
     var onMessageTap: () -> Void
 
@@ -40,7 +41,7 @@ struct FriendProfileView: View {
     // MARK: - Load Stats (GET /api/users/:userId/stats) + Mock fallback
 
     private func loadStats() async {
-        let api = APIClient()
+        let api = apiClient
         guard api.authToken != nil else {
             applyMockStats()
             return

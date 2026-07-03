@@ -14,6 +14,7 @@ struct ToastMessage: Identifiable {
 /// 2. «Рекомендации для тебя» — постеры фильмов/видео
 /// Floating CTA «Создать комнату» внизу. Никаких «общих комнат».
 struct HomeView: View {
+    @EnvironmentObject private var apiClient: APIClient
     @State private var viewModel: HomeViewModel
     @State private var showCreateRoom = false
     @State private var showJoinSheet = false
@@ -107,7 +108,7 @@ struct HomeView: View {
             .sheet(isPresented: $showProfile) {
                 NavigationStack {
                     ProfileView(
-                        viewModel: ProfileViewModel(authService: AuthService(api: APIClient())),
+                        viewModel: ProfileViewModel(authService: AuthService(api: apiClient)),
                         onSignOut: { showProfile = false }
                     )
                 }

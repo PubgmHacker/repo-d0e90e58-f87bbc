@@ -41,7 +41,8 @@ final class RoomViewModel: WebSocketClientDelegate {
     private let wsClient: WebSocketClient
     private let roomService: RoomServiceProtocol
     private let authService: AuthService
-    private let currentUserId: String
+    /// 🔧 FIX H5/H6: Made internal so RoomView can access it for chat senderID
+    let currentUserId: String
 
     // MARK: - Init
 

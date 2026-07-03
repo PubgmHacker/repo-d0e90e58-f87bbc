@@ -16,6 +16,7 @@
         </array>
 
         <!-- 🔧 FIX C13: Push Notifications (FCM via APNs) -->
+        <!-- Use 'development' for TestFlight, 'production' for App Store -->
         <key>aps-environment</key>
         <string>development</string>
 

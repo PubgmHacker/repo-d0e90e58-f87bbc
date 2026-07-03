@@ -7,6 +7,7 @@ struct AIAssistantView: View {
     @State private var messages: [AIMessage] = []
     @State private var inputText = ""
     @State private var isLoading = false
+    @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
 
     /// 🔧 CHAR LIMIT: 150 chars max per message — prevents spam + API abuse

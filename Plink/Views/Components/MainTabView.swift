@@ -329,10 +329,9 @@ struct HomeTabContent: View {
         }
         .onAppear {
             if viewModel == nil {
-                let api = APIClient()
                 viewModel = HomeViewModel(
-                    roomService: RoomService(api: api),
-                    authService: AuthService(api: api)
+                    roomService: RoomService(api: apiClient),
+                    authService: AuthService(api: apiClient)
                 )
             }
         }
@@ -342,7 +341,7 @@ struct HomeTabContent: View {
 /// Друзья — список друзей с поиском и кнопкой чата
 struct FriendsTabContent: View {
     @State private var searchText = ""
-    @State private var friendManager = FriendManager()
+    @State private var friendManager: FriendManager? = nil
     @State private var selectedFriendForProfile: Friend?
     @State private var selectedFriendForChat: Friend?
     @State private var showAddFriend = false

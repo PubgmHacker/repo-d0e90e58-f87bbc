@@ -473,7 +473,7 @@ struct RoomView: View {
                           y: UIScreen.main.bounds.height * 0.35),
             emoji: emoji
         )
-        syncManager?.sendReaction(emoji: emoji, senderId: "current_user", senderName: "You")
+        syncManager?.sendReaction(emoji: emoji, senderId: viewModel?.currentUserId ?? "unknown", senderName: viewModel?.room.hostName ?? "You")
     }
 
     // MARK: - Chat
@@ -493,7 +493,7 @@ struct RoomView: View {
         let message = ChatMessage(
             id: UUID().uuidString,
             roomID: room.id,
-            senderID: "current_user",
+            senderID: viewModel?.currentUserId ?? "unknown",
             senderName: "You",
             text: text,
             timestamp: Date(),

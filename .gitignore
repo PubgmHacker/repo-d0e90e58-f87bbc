@@ -48,7 +48,6 @@ sess_*/
 # Встроенные git-репозитории (submodules случайно добавленные)
 dating/
 mobile/
-server/
 
 # 🔧 NEW: Never commit real API keys
 Secrets.xcconfig

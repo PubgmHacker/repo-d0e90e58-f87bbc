@@ -45,9 +45,12 @@ struct RoomView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    // 🔧 FIX C7: Receive shared authenticated APIClient + AuthService from environment
-    // (was: setupViewModel created own unauth APIClient() and AuthService())
+    // 🔧 FIX C7: Receive shared authenticated APIClient from environment
     @EnvironmentObject private var apiClient: APIClient
+    // 🔧 FIX 1.4: Receive shared WebSocketClient from environment — already authenticated
+    // with JWT token. Was: setupViewModel created a new WebSocketClient() without token →
+    // WS connect without auth → 401 → reconnect loop.
+    @EnvironmentObject private var sharedWsClient: WebSocketClient
 
     private let controlsHideDelay: UInt64 = 3_000_000_000
 
@@ -515,9 +518,10 @@ struct RoomView: View {
 
     private func setupViewModel() {
         // 🔧 FIX C7 + H9: Use shared authenticated APIClient from environment
-        // (was: created own unauth APIClient() + AuthService() on every appear)
         let api = apiClient
-        let wsClient = WebSocketClient()
+        // 🔧 FIX 1.4: Use SHARED WebSocketClient — already connected + authenticated with JWT.
+        // Was: WebSocketClient() — new instance without token → 401 → reconnect loop.
+        let wsClient = sharedWsClient
         let roomService = RoomService(api: api)
         let authService = AuthService(api: api)
 

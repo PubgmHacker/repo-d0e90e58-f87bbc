@@ -106,6 +106,8 @@ struct PlinkApp: App {
             // 🔧 FIX C4+C6: Inject shared services for DM and Admin panels
             .environmentObject(dmChatService)
             .environmentObject(apiClient)
+            // 🔧 FIX 1.4: Inject shared WebSocketClient so RoomView doesn't create its own
+            .environmentObject(wsClient)
     }
 
     // MARK: - Login Content

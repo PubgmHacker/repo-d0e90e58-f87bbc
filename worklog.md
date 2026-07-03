@@ -2927,3 +2927,430 @@ dependencies (R1–R6).
 FIX 5.7 each introduced regressions that must be patched before
 TestFlight distribution. Estimated fix time for both: **~15 minutes**.
 
+
+---
+
+## Task ID: FINAL-AUDIT-V4 — Absolute Final Audit (Post Stage 1+2+3)
+
+**Scope:** Verify all 3 stages of fixes are present in 13 production files; find
+any remaining critical / medium issues; produce TestFlight readiness verdict.
+
+**Method:** Line-by-line read of all 13 listed files + targeted grep for
+`bufferObserver`, `Task.detached`, `scenePhase`, `navigationDestination`,
+`friendManager` to confirm fix presence and detect dead code.
+
+**Files audited:**
+1. `Networking/WebSocketClient.swift` (502 lines)
+2. `Services/SyncEngine.swift` (657 lines)
+3. `Views/Components/BioluminescentBackground.swift` (326 lines)
+4. `Views/Room/RoomView.swift` (594 lines)
+5. `ViewModels/RoomViewModel.swift` (320 lines)
+6. `RaveCloneApp.swift` (274 lines)
+7. `Services/PremiumStatusManager.swift` (293 lines)
+8. `Models/Room.swift` (205 lines)
+9. `Views/Components/ServiceLogoView.swift` (159 lines)
+10. `Views/Settings/SettingsView.swift` (478 lines)
+11. `Services/AIService.swift` (314 lines)
+12. `Views/Home/HomeView.swift` (830 lines)
+13. `Views/Components/MainTabView.swift` (1066 lines)
+
+---
+
+### 1. ✅ Verified Fixes
+
+#### Stage 1 (Backend auth — partially verified client-side)
+- ✅ `RoomViewModel.sendMessage()` (line 155–185) omits `senderID`/`senderName`
+  from chat payload — server injects from JWT. Comment confirms the intent.
+- ✅ `PremiumStatusManager`: `setPremium(_:)` removed; only `activatePremium(expiryDate:)`
+  (line 45) and `syncFromServer(isPremium:expiry:)` (line 70) are public entry
+  points. Local UserDefaults is a hint, not authority.
+- ✅ `Room` model has `password: String?` (line 19) and `isLocked` computed (line 21).
+  `JoinRoomRequest` includes `password` (line 169). Backwards-compat decoder maps
+  legacy `"friends"` → `.byLink` (line 82).
+
+#### Stage 2 (Realtime infra)
+- ✅ `RaveCloneApp.init()` constructs a single `wsClient = WebSocketClient()` (line 52)
+  and injects via `.environmentObject(wsClient)` (line 110).
+- ✅ `RoomView` consumes `@EnvironmentObject private var sharedWsClient: WebSocketClient`
+  (line 53) and uses it in `setupViewModel()` (line 524) instead of creating a new
+  instance. Comment cites "Was: WebSocketClient() — new instance without token → 401 →
+  reconnect loop".
+- ✅ `RoomViewModel.joinRoomFlow()` calls `syncEngine.requestInitialState()` after
+  WS connect (line 106). `SyncEngine.requestInitialState()` (line 234) routes to
+  `requestStateFromHost()` which broadcasts `.stateRequest`.
+- ✅ `WebSocketClient.scheduleReconnect()` (line 426) has a guard
+  `guard !isReconnecting else { return }` (line 428) — prevents double-scheduling.
+  `isReconnecting = true` is set AFTER the guard (line 430), not in
+  `handleDisconnect`. Comment cites "FIX NEW#1".
+- ✅ `WebSocketClient` has `nonisolated func cancelSocketForDeinit()` (line 26)
+  which only touches the underlying socket. `RoomViewModel.deinit` (line 71)
+  calls it instead of mutating @MainActor state.
+- ✅ `WebSocketClient.onSessionRestored` callback (line 104) is wired in
+  `RoomViewModel.init` (line 66) and triggers `handleSessionRestore()` which
+  re-loads media and requests state from host.
+- ✅ Socket access synchronized via `NSLock` (line 54) — fixes the data race
+  between `connectInternal` (@MainActor), `disconnect` (@MainActor),
+  `cancelSocketForDeinit` (nonisolated), and `sendRaw` (background queue).
+
+#### Stage 3 (Performance / background — partially verified)
+- ⚠️ **Background WS parsing**: `WebSocketClient.receiveMessage()` (line 290)
+  uses `Task { @MainActor [weak self] in self?.handleReceiveResult(result) }`
+  — NOT `Task.detached` as the Stage 3 description claims. The comment
+  (line 292–298) explains the intent ("Hop to MainActor only for state
+  mutation + delegate dispatch. The receive completion itself runs on a
+  URLSession background queue"), but the actual parsing still happens on
+  MainActor via `handleReceiveResult`. **This is functionally different
+  from the described fix** — chat floods still serialize through MainActor.
+  The only `Task.detached` in the codebase is in `AmbilightBackground.swift:86`
+  (for Core Image pixel-buffer processing, with proper CVPixelBufferRetain).
+- 🔴 **AVPlayer buffer underrun observer**: `SyncEngine` declares
+  `private var bufferObserver: NSObjectProtocol?` (line 65) and
+  `private var bufferUnderrunCount = 0` (line 66) with comment
+  "🔧 FIX 1.2: Buffer underrun observer" — but grep confirms these are
+  **NEVER ASSIGNED, NEVER OBSERVED, NEVER REMOVED**. The Stage 3 task
+  description says "wired up", but it is NOT wired up. Pure dead code.
+  `observeStatus()` only handles `.readyToPlay` and `.failed`, no
+  `AVPlayerItemPlaybackStalled` / `isPlaybackLikelyToKeepUp` /
+  `isPlaybackBufferEmpty` KVO. `teardownPlayer()` doesn't remove the
+  observer (because it's never added). **Stage 3 fix is missing.**
+- ⚠️ **Canvas pause in background**: `BioluminescentBackground` uses
+  `TimelineView(.animation(minimumInterval: 1.0/30.0))` (line 18) with
+  comment "🔧 FIX 4.4: cap at 30fps" — this is a frame-rate cap, not an
+  explicit background pause. SwiftUI TimelineView with `.animation`
+  **automatically** stops rendering when the app background because the
+  GPU is paused, so behaviorally it does pause, but the explicit pause
+  hook (e.g. `@Environment(\.scenePhase)`) is not implemented. Relies
+  on default SwiftUI behavior, not a deliberate fix.
+
+#### Cross-cutting wins
+- ✅ `RoomViewModel.routeInbound` (line 236) does single-parse dispatch
+  (peek `type`/`command`/`kind` field once) — comment cites "FIX M3"
+  eliminating the previous 4× decode chain.
+- ✅ `RoomViewModel` caps `messages` at 200 entries (line 21, 263) —
+  prevents unbounded memory growth.
+- ✅ `WebSocketClient.sendRaw` error path uses `Task { @MainActor }`
+  (line 271) instead of `DispatchQueue.main.async` — proper actor
+  isolation under strict concurrency.
+- ✅ `HomeView` invalidates `ctaCollapseTimer` in `.onDisappear`
+  (line 177–180) — comment cites "FIX M15".
+- ✅ `RoomView.resetToPortrait()` (line 424) called from `.onAppear` and
+  `onChange(of: scenePhase)` — fixes chat-stretch on background return.
+- ✅ `SyncEngine.handleSeek` (line 447) detects state-pulse vs real-seek
+  by comparing media-time delta, not elapsed time — comment cites "FIX M1"
+  preventing real seeks from being silently reverted.
+
+---
+
+### 2. 🔴 Remaining Critical Bugs (BLOCKING TESTFLIGHT)
+
+#### C1. `MainTabView.swift:149` — Syntax error in `navigationDestination`
+```swift
+.navigationDestination(item: ) { room in   // ❌ missing binding
+    RoomView(room: room)
+        .toolbar(.hidden, for: .tabBar)
+}
+```
+- The `item:` parameter has **no value**. Compare line 559 in the same file
+  (HomeTabContent) which uses the correct form:
+  `.navigationDestination(item: $navigateToRoom) { room in … }`.
+- **Impact:** Swift compile error. The `RoomsTabContent` (the entire
+  "Комнаты" tab containing Discover / My / Join / Requests sub-tabs) **will
+  not compile**, so the app cannot be built. Tapping any room card in the
+  Rooms tab also has no destination, but that's moot because the file
+  won't build.
+- **Fix:** Change to `.navigationDestination(item: $navigateToRoom) { room in`
+
+#### C2. `MainTabView.swift:578,587,589,602,619,646,649,661,754` — Optional unwrap violations
+```swift
+@State private var friendManager: FriendManager? = nil   // line 578 — Optional
+
+// Then later, used as non-optional:
+return friendManager.friends                                // line 587 — ❌
+return friendManager.friends.filter { … }                  // line 589 — ❌
+if friendManager.friends.isEmpty { … }                     // line 602 — ❌
+if !friendManager.incomingRequests.isEmpty { … }           // line 619 — ❌
+AddFriendSheet(friendManager: friendManager)               // line 646 — ❌
+FriendRequestsSheet(friendManager: friendManager)          // line 649 — ❌
+Text("\(friendManager.friends.count) друзей")              // line 661 — ❌
+Task { await friendManager.removeFriend(friend) }          // line 754 — ❌
+```
+- `friendManager` is declared `FriendManager?` (Optional) but is used as a
+  non-optional throughout `FriendsTabContent`. Swift strict optional
+  checking rejects this at compile time:
+  *"Value of optional type 'FriendManager?' must be unwrapped to refer to
+  member 'friends' of wrapped base type 'FriendManager'"*.
+- Furthermore, `friendManager` is **never assigned** anywhere in
+  `FriendsTabContent` (no `friendManager = FriendManager(…)` in `.onAppear`
+  or `.task`). Even if the unwrap issue were fixed, every access would
+  crash at runtime because the optional is `nil`.
+- **Impact:** Compile failure → app cannot build. Even after fixing the
+  unwrap, the entire "Друзья" tab would crash on first render.
+- **Fix:** Two-step:
+  1. Inject the shared `FriendManager` from `RaveCloneApp` via
+     `@EnvironmentObject` (the app already creates one at line 20-21 and
+     injects via `.environmentObject(friendManager)` at line 105).
+     Change `FriendsTabContent` to:
+     ```swift
+     @EnvironmentObject private var friendManager: FriendManager
+     ```
+     Then remove the `@State private var friendManager: FriendManager? = nil` line.
+  2. Alternative: keep `@State` but make it non-optional with a default:
+     ```swift
+     @State private var friendManager = FriendManager(api: apiClient)
+     ```
+     (and use `apiClient` from `@EnvironmentObject`).
+
+#### C3. `SyncEngine.swift:65–66` — Dead code masquerading as a Stage 3 fix
+```swift
+/// 🔧 FIX 1.2: Buffer underrun observer
+private var bufferObserver: NSObjectProtocol?
+private var bufferUnderrunCount = 0
+```
+- Both properties are declared but **never assigned, never observed, never
+  removed** (verified by grep — only the two declaration lines match).
+  `observeStatus()` (line 632) handles only `.readyToPlay` / `.failed`.
+  `teardownPlayer()` (line 605) doesn't `NotificationCenter.removeObserver`
+  for buffer events.
+- **Impact:** AVPlayer stalls / buffer underruns are completely silent.
+  When a participant on a flaky network stalls, the host's periodic state
+  pulse (every 2s) broadcasts a "play at X" command, but the participant's
+  player is stuck rebuffering — the drift monitor will then trigger
+  `requestStateFromHost()` repeatedly, generating extra WS traffic without
+  resolving the stall. Users see a frozen frame with no telemetry.
+- **Stage 3 task description says this is "wired up" — that claim is false.**
+- **Fix:** In `loadMedia()`, after `self.player = player`:
+  ```swift
+  bufferObserver = NotificationCenter.default.addObserver(
+      forName: AVPlayerItemPlaybackStalled.notificationName,
+      object: playerItem, queue: .main
+  ) { [weak self] _ in
+      guard let self else { return }
+      self.bufferUnderrunCount += 1
+      Logger.sync.warn("⏳ Buffer underrun #\(self.bufferUnderrunCount)")
+      // Request fresh state once rebuffered so we resync cleanly.
+      self.requestStateFromHost()
+  }
+  ```
+  And in `teardownPlayer()`:
+  ```swift
+  if let observer = bufferObserver {
+      NotificationCenter.default.removeObserver(observer)
+      bufferObserver = nil
+  }
+  ```
+
+---
+
+### 3. 🟡 Remaining Medium Issues
+
+#### M1. `WebSocketClient.swift:296` — Stage 3 "Task.detached" fix uses `Task @MainActor` instead
+- **File:** `Networking/WebSocketClient.swift:290–300`
+- The Stage 3 description specifies `Task.detached` for background WS parsing.
+  The actual code uses `Task { @MainActor [weak self] in self?.handleReceiveResult(result) }`,
+  which still hops to MainActor for every message. Comment says "keep message
+  processing off the hot path so chat floods don't serialize through 100
+  main-actor hops", but `Task { @MainActor … }` **does** serialize through
+  the main actor — it just defers the hop via the cooperative thread pool.
+- **Impact:** Under chat/reaction floods (~50+ msg/sec) the MainActor queue
+  gets saturated and UI frame drops. Not a crash, but a UX regression in
+  active rooms.
+- **Fix:** Either re-architect to decode off-actor and only hop for the
+  state mutation, or accept the design and update the comment.
+
+#### M2. `SyncEngine.swift:97–101` — `deinit` touches @MainActor state
+```swift
+deinit {
+    // Cannot touch @MainActor state in deinit; just tear down player.
+    player?.pause()
+    if let observer = timeObserver { player?.removeTimeObserver(observer) }
+}
+```
+- Comment says "Cannot touch @MainActor state in deinit" — then proceeds
+  to touch `player` and `timeObserver`, which are @MainActor-isolated
+  stored properties on a `@MainActor final class`.
+- `@unchecked Sendable` suppresses the compiler error, but under Swift 6
+  strict concurrency this is a runtime data race waiting to happen if
+  `deinit` fires off-main (e.g. from a Task cancellation path).
+- **Fix:** Match the `RoomViewModel` pattern — capture a non-isolated
+  reference for teardown:
+  ```swift
+  nonisolated deinit {
+      player?.pause()
+      if let observer = timeObserver { player?.removeTimeObserver(observer) }
+  }
+  ```
+  Mark as `nonisolated` and only touch AVFoundation types (which are
+  thread-safe for `pause()` / `removeTimeObserver`).
+
+#### M3. `SyncEngine.swift` — `bufferObserver` declared but never removed
+- Even though it's never assigned (see C3), `teardownPlayer()` should
+  defensively remove it to future-proof against someone wiring it up
+  later without updating teardown. As written, this is dead code today
+  but a latent leak tomorrow.
+
+#### M4. `RoomView.swift:96–99` — `UserDefaults.standard.double` seek fires before media loaded
+```swift
+.task {
+    guard let viewModel else { return }
+    await viewModel.joinRoomFlow()
+    let savedPosition = UserDefaults.standard.double(forKey: "room_position_\(room.id)")
+    if savedPosition > 0 {
+        viewModel.syncEngine.seek(to: savedPosition)   // ❌ player may be nil
+    }
+}
+```
+- `joinRoomFlow()` only kicks off the WS connect + voice chat. Media isn't
+  loaded until `webSocketDidConnect` fires (asynchronously) and calls
+  `syncEngine.loadMedia(room.mediaItem)`. So `seek(to: savedPosition)`
+  runs before `player` exists — `seek()`'s `player?.seek(…)` is a no-op,
+  and the saved position is silently lost.
+- **Impact:** "Resume from last position" feature is broken for non-host
+  participants. For hosts, `seek()` calls `player?.seek` and broadcasts
+  — also a no-op on the first call.
+- **Fix:** Defer the restore until after `currentMediaItem` is set, e.g.
+  observe `syncEngine.currentMediaItem` and apply once, or store the
+  pending position and apply in `webSocketDidConnect`.
+
+#### M5. `RoomView.swift:98` — Non-host calls `syncEngine.seek()` which is host-only
+```swift
+func seek(to time: TimeInterval) {
+    guard isHost else { return }   // SyncEngine.swift:202
+    …
+}
+```
+- For non-hosts, `syncEngine.seek(to: savedPosition)` is silently dropped
+  by the `isHost` guard. The saved-position restore only works for hosts.
+  Combined with M4, the feature is effectively broken for everyone on
+  re-entering a room.
+- **Fix:** For non-hosts, use `syncEngine.requestStateFromHost()` after
+  connect, or seek the local player directly via `player?.seek()` (bypass
+  the broadcast), or save/restore position on the server per-user.
+
+#### M6. `MainTabView.swift:46` — `.badge(inviteService.inviteCount > 0 ? inviteService.inviteCount : 0)` redundant ternary
+- `inviteService.inviteCount > 0 ? inviteService.inviteCount : 0` is
+  equivalent to just `inviteService.inviteCount` (since badge of 0 is
+  already hidden by SwiftUI). Cosmetic only, not a bug.
+- Also note: `@ObservedObject private var inviteService = RoomInviteService.shared`
+  on line 100 inside `RoomsTabContent` should be `@StateObject` for a
+  shared singleton (not `@ObservedObject`) — `@ObservedObject` doesn't
+  own its lifetime, but since `.shared` is a static singleton this is
+  harmless in practice. Minor style nit.
+
+#### M7. `WebSocketClient.swift:493–500` — `isConnectedBridge` returns `false` off-main
+```swift
+nonisolated var isConnectedBridge: Bool {
+    if Thread.isMainThread {
+        return self.isConnected
+    }
+    return false   // ❌ lie to off-main callers
+}
+```
+- Returns `false` (lying) when called from a background thread. Any
+  caller relying on this from a background queue will believe the socket
+  is disconnected and may take wrong action (e.g. enqueue messages that
+  should be sent).
+- **Fix:** Use a thread-safe atomic (`OSAllocatedUnfairLock` or
+  `Mutex<Bool>`) for `isConnected` so any caller can read truth.
+  Alternatively, mark `isConnectedBridge` as `@MainActor` and force
+  callers to hop.
+
+#### M8. `RoomView.swift:519–581` — `setupViewModel()` creates a NEW `SignalingClient(ws:)` per room entry
+- Each `RoomView` instantiation creates a new `SignalingClient` wrapping
+  the shared `wsClient`. Multiple quick room enter/exits could leave
+  orphaned signaling handlers attached to the shared WS, routing messages
+  to a dead `VoiceChatService`.
+- Not strictly a leak (VoiceChatService.endCall should clean up), but
+  worth verifying `SignalingClient` detaches its delegate on `endCall`.
+  Did not audit `SignalingClient.swift` in this pass.
+
+#### M9. `PremiumStatusManager.swift:70–84` — `syncFromServer` mutates `serverConfirmed` then conditionally persists
+- The `serverConfirmed = true` assignment happens before the `if/else`
+  branch. If `serverIsPremium == false` and `isPremium == false`,
+  `deactivatePremium()` is skipped but `serverConfirmed` is still `true`
+  and `onPremiumStatusChanged` is never called. Edge case: if the user
+  was premium in cache but server says not premium, `deactivatePremium()`
+  is correctly called. OK actually this is fine. False alarm.
+
+#### M10. `AIService.swift:46–58` — API key reads from Info.plist but never warns if empty
+```swift
+let key = (Bundle.main.object(forInfoDictionaryKey: "PLINK_AI_API_KEY") as? String) ?? ""
+self.apiKey = key
+```
+- If the xcconfig isn't set up, `apiKey` is `""`. Every chat request
+  will then 401 from OpenRouter. The user sees a generic error message
+  with no hint that the API key is missing.
+- **Fix:** Log a clear warning at init if `apiKey.isEmpty`, and surface
+  a friendlier error from `sendRequest()` ("AI features not configured").
+
+---
+
+### 4. 📊 Final Quality Scores (1–10)
+
+| Dimension              | Score | Notes |
+|------------------------|-------|-------|
+| Code quality           | 6/10  | Good architecture and comments, but 2 compile errors + dead Stage 3 code. |
+| Feature completeness   | 8/10  | All major flows (sync, voice, chat, friends, IAP, deep links, AI) present. Late-joiner, drift monitor, latency comp all real. |
+| Design                 | 9/10  | BioluminescentBackground + PremiumGlassCard + Apple-ID-style Settings are genuinely premium. 30fps TimelineView cap is sensible. |
+| Security               | 8/10  | JWT via ?token= + Authorization header fallback. Server-injected senderID for chat. Premium gating via server-confirmed flag. IAP bypass closed. |
+| Performance            | 6/10  | Single-parse routing, message cap, CTA timer invalidated. But buffer observer fix is missing, WS parsing still on MainActor, AVPlayer resume-position is broken. |
+| App Store readiness    | 3/10  | **Cannot build** due to C1 + C2. Even if those are fixed, missing Stage 3 buffer observer (C3) is a real correctness gap that App Review *may* not catch but users will. |
+
+---
+
+### 5. 🎯 Final Verdict: Ready for TestFlight?
+
+**🔴 NO — NOT READY FOR TESTFLIGHT.**
+
+The project does not compile. Two independent syntax/type errors in
+`MainTabView.swift` (C1 missing binding, C2 optional-unwrap violations)
+prevent `xcodebuild` from producing a binary. No binary = no TestFlight
+upload, period.
+
+Additionally, one Stage 3 fix that the task description claims is
+"wired up" (AVPlayer buffer underrun observer) is in fact **not wired
+up** — only the declaration exists. This is a credibility gap between
+the task description and the actual merged code.
+
+Once C1, C2, and C3 are fixed (all three are small, surgical changes
+totalling <30 lines), the project should be re-audited for compile +
+smoke-tested on simulator before TestFlight submission.
+
+---
+
+### 6. 📋 Remaining Checklist (in priority order)
+
+- [ ] **BLOCKER C1**: Fix `MainTabView.swift:149` — add `$navigateToRoom` binding.
+- [ ] **BLOCKER C2**: Fix `MainTabView.swift:578` — inject `FriendManager`
+      via `@EnvironmentObject` (already provided by `RaveCloneApp` line 105),
+      remove the broken `@State private var friendManager: FriendManager? = nil`.
+- [ ] **BLOCKER C3**: Actually wire up the AVPlayer buffer underrun observer
+      in `SyncEngine.loadMedia()` + remove in `teardownPlayer()`. Otherwise
+      remove the dead declarations at lines 65-66 and update the Stage 3
+      report to reflect what was actually shipped.
+- [ ] **M2**: Mark `SyncEngine.deinit` as `nonisolated` to match the
+      `RoomViewModel` pattern (avoids Swift 6 strict-concurrency hazard).
+- [ ] **M4 + M5**: Fix saved-position restore in `RoomView.task` — defer
+      until media is loaded, and handle non-hosts (currently silently
+      dropped by `isHost` guard in `SyncEngine.seek`).
+- [ ] **M1**: Either re-architect WS parsing to use `Task.detached` for
+      decode + `Task @MainActor` for state mutation, or update the Stage 3
+      report to reflect the actual `Task @MainActor` design.
+- [ ] **M7**: Replace `isConnectedBridge` with a thread-safe atomic for
+      `isConnected` so off-main callers don't get a false `false`.
+- [ ] **M10**: Warn at init if `PLINK_AI_API_KEY` is empty; surface a
+      clearer error to users.
+- [ ] **Pre-TestFlight gate**: Run `xcodebuild -scheme Plink -destination
+      'platform=iOS Simulator,name=iPhone 15' build` and ensure 0 errors
+      before any TestFlight upload.
+- [ ] **Smoke test**: After fixes, verify on simulator: login → create
+      room → join room from second simulator → chat → play/pause → seek →
+      background → resume → leave room. Each step must work end-to-end.
+
+---
+
+**Audit closed.** Three blockers (C1, C2, C3) must be resolved before
+TestFlight. After those are fixed, a re-audit (FINAL-AUDIT-V5) is
+recommended to confirm the fixes landed and the project compiles
+end-to-end.
+
+**— end of FINAL-AUDIT-V4 —**

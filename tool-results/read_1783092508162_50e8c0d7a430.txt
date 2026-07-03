@@ -1,0 +1,1066 @@
+     1→     1→import SwiftUI
+     2→     2→
+     3→     3→// MARK: - Main Tab Bar (5 вкладок) — ИИ-помощник по центру
+     4→     4→/// Нижняя навигация: Главная, Комнаты, ИИ ✨, Друзья, Настройки.
+     5→     5→/// «Настройки» открывает полноэкранный SettingsView (как Apple ID Settings).
+     6→     6→struct MainTabView: View {
+     7→     7→    @State private var selectedTab: Tab = .home
+     8→     8→    @State private var showSettings = false
+     9→     9→    @EnvironmentObject private var apiClient: APIClient
+    10→    10→    let authService: AuthService
+    11→    11→    /// 🔧 NEW: Room invite service for badge count on Rooms tab
+    12→    12→    @StateObject private var inviteService = RoomInviteService.shared
+    13→    13→
+    14→    14→    enum Tab: Hashable {
+    15→    15→        case home, rooms, ai, friends, settings
+    16→    16→    }
+    17→    17→
+    18→    18→    init(authService: AuthService) {
+    19→    19→        self.authService = authService
+    20→    20→    }
+    21→    21→
+    22→    22→    var body: some View {
+    23→    23→        ZStack {
+    24→    24→            TabView(selection: tabSelection) {
+    25→    25→                HomeTabContent(
+    26→    26→                    onProfileTap: { showSettings = true },
+    27→    27→                    onSwitchToAITab: {
+    28→    28→                        HapticManager.impact(.light)
+    29→    29→                        withAnimation { selectedTab = .ai }
+    30→    30→                    },
+    31→    31→                    onSwitchToJoinTab: {
+    32→    32→                        HapticManager.impact(.light)
+    33→    33→                        withAnimation { selectedTab = .rooms }
+    34→    34→                    }
+    35→    35→                )
+    36→    36→                    .tabItem {
+    37→    37→                        Label("Главная", systemImage: "house.fill")
+    38→    38→                    }
+    39→    39→                    .tag(Tab.home)
+    40→    40→
+    41→    41→                RoomsTabContent()
+    42→    42→                    .tabItem {
+    43→    43→                        // 🔧 Badge: red count on Rooms icon when invites pending
+    44→    44→                        Label("Комнаты", systemImage: "rectangle.stack.fill")
+    45→    45→                    }
+    46→    46→                    .badge(inviteService.inviteCount > 0 ? inviteService.inviteCount : 0)
+    47→    47→                    .tag(Tab.rooms)
+    48→    48→
+    49→    49→                AIAssistantView()
+    50→    50→                    .tabItem {
+    51→    51→                        Label("ИИ", systemImage: "sparkles")
+    52→    52→                    }
+    53→    53→                    .tag(Tab.ai)
+    54→    54→
+    55→    55→                FriendsTabContent()
+    56→    56→                    .tabItem {
+    57→    57→                        Label("Друзья", systemImage: "person.2.fill")
+    58→    58→                    }
+    59→    59→                    .tag(Tab.friends)
+    60→    60→
+    61→    61→                // Заглушка — контент этой вкладки не показывается,
+    62→    62→                // тап по ней открывает полноэкранные настройки через tabSelection.
+    63→    63→                Color.clear
+    64→    64→                    .tabItem {
+    65→    65→                        Label("Настройки", systemImage: "gearshape.fill")
+    66→    66→                    }
+    67→    67→                    .tag(Tab.settings)
+    68→    68→            }
+    69→    69→            .tint(.ravePrimary)
+    70→    70→            .toolbarBackground(.hidden, for: .tabBar)
+    71→    71→            .toolbarBackground(.hidden, for: .navigationBar)
+    72→    72→        }
+    73→    73→        .fullScreenCover(isPresented: $showSettings) {
+    74→    74→            SettingsView(isPresented: $showSettings, authService: authService)
+    75→    75→                .environmentObject(apiClient)
+    76→    76→        }
+    77→    77→        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSettings)
+    78→    78→    }
+    79→    79→
+    80→    80→    /// Кастомный binding: тап по «Настройки» открывает полноэкранный SettingsView, не меняя вкладку.
+    81→    81→    private var tabSelection: Binding<Tab> {
+    82→    82→        Binding(
+    83→    83→            get: { selectedTab },
+    84→    84→            set: { newTab in
+    85→    85→                if newTab == .settings {
+    86→    86→                    HapticManager.impact(.light)
+    87→    87→                    showSettings = true
+    88→    88→                } else {
+    89→    89→                    selectedTab = newTab
+    90→    90→                }
+    91→    91→            }
+    92→    92→        )
+    93→    93→    }
+    94→    94→}
+    95→    95→
+    96→    96→// MARK: - Rooms Tab (Общедоступные + Мои комнаты)
+    97→    97→
+    98→    98→struct RoomsTabContent: View {
+    99→    99→    @EnvironmentObject private var apiClient: APIClient
+   100→   100→    @ObservedObject private var inviteService = RoomInviteService.shared
+   101→   101→    @State private var viewModel: HomeViewModel?
+   102→   102→    @State private var navigateToRoom: Room?
+   103→   103→    @State private var selectedSubTab: RoomSubTab = .discover
+   104→   104→
+   105→   105→    /// 🔧 NEW: Internal tabs within the Rooms tab
+   106→   106→    enum RoomSubTab: String, CaseIterable, Identifiable {
+   107→   107→        case discover = "Общие"
+   108→   108→        case mine = "Мои"
+   109→   109→        case join = "Войти"
+   110→   110→        case requests = "Запросы"
+   111→   111→
+   112→   112→        var id: String { rawValue }
+   113→   113→
+   114→   114→        var icon: String {
+   115→   115→            switch self {
+   116→   116→            case .discover: return "🍿"
+   117→   117→            case .mine: return "🎬"
+   118→   118→            case .join: return "🔓"
+   119→   119→            case .requests: return "🔔"
+   120→   120→            }
+   121→   121→        }
+   122→   122→    }
+   123→   123→
+   124→   124→    var body: some View {
+   125→   125→        NavigationStack {
+   126→   126→            ZStack {
+   127→   127→                BioluminescentBackground(energy: 0.35, dimming: 0)
+   128→   128→                    .ignoresSafeArea()
+   129→   129→
+   130→   130→                VStack(spacing: 0) {
+   131→   131→                    // ── Sub-tab segmented control ──
+   132→   132→                    subTabBar
+   133→   133→
+   134→   134→                    // ── Content ──
+   135→   135→                    switch selectedSubTab {
+   136→   136→                    case .discover:
+   137→   137→                        discoverContent
+   138→   138→                    case .mine:
+   139→   139→                        myRoomsContent
+   140→   140→                    case .join:
+   141→   141→                        joinContent
+   142→   142→                    case .requests:
+   143→   143→                        requestsContent
+   144→   144→                    }
+   145→   145→                }
+   146→   146→            }
+   147→   147→            .navigationTitle("Комнаты")
+   148→   148→            .navigationBarTitleDisplayMode(.large)
+   149→   149→            .navigationDestination(item: ) { room in
+   150→   150→                RoomView(room: room)
+   151→   151→                    .toolbar(.hidden, for: .tabBar)
+   152→   152→            }
+   153→   153→        }
+   154→   154→        .refreshable {
+   155→   155→            await viewModel?.loadRooms()
+   156→   156→            await viewModel?.loadMyRooms()
+   157→   157→        }
+   158→   158→        .onAppear {
+   159→   159→            if viewModel == nil {
+   160→   160→                viewModel = HomeViewModel(
+   161→   161→                    roomService: RoomService(api: apiClient),
+   162→   162→                    authService: AuthService(api: apiClient)
+   163→   163→                )
+   164→   164→                Task {
+   165→   165→                    await viewModel?.loadRooms()
+   166→   166→                    await viewModel?.loadMyRooms()
+   167→   167→                }
+   168→   168→            } else {
+   169→   169→                Task { await viewModel?.loadMyRooms() }
+   170→   170→            }
+   171→   171→        }
+   172→   172→    }
+   173→   173→
+   174→   174→    // MARK: - Sub-Tab Bar
+   175→   175→
+   176→   176→    private var subTabBar: some View {
+   177→   177→        HStack(spacing: 0) {
+   178→   178→            ForEach(RoomSubTab.allCases) { tab in
+   179→   179→                subTabButton(tab)
+   180→   180→            }
+   181→   181→        }
+   182→   182→        .padding(.horizontal, 16)
+   183→   183→        .padding(.vertical, 8)
+   184→   184→    }
+   185→   185→
+   186→   186→    @ViewBuilder
+   187→   187→    private func subTabButton(_ tab: RoomSubTab) -> some View {
+   188→   188→        let isActive = selectedSubTab == tab
+   189→   189→        let showBadge = tab == .requests && inviteService.inviteCount > 0
+   190→   190→
+   191→   191→        Button {
+   192→   192→            HapticManager.impact(.light)
+   193→   193→            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+   194→   194→                selectedSubTab = tab
+   195→   195→            }
+   196→   196→        } label: {
+   197→   197→            HStack(spacing: 5) {
+   198→   198→                Text(tab.icon)
+   199→   199→                    .font(.system(size: 14))
+   200→   200→                Text(tab.rawValue)
+   201→   201→                    .font(.system(size: 13, weight: isActive ? .bold : .medium))
+   202→   202→
+   203→   203→                // 🔧 Red badge on Requests tab
+   204→   204→                if showBadge {
+   205→   205→                    Text("\(inviteService.inviteCount)")
+   206→   206→                        .font(.system(size: 9, weight: .heavy).monospacedDigit())
+   207→   207→                        .foregroundColor(.white)
+   208→   208→                        .padding(.horizontal, 5)
+   209→   209→                        .padding(.vertical, 2)
+   210→   210→                        .background(Color.raveDanger)
+   211→   211→                        .clipShape(Capsule())
+   212→   212→                }
+   213→   213→            }
+   214→   214→            .foregroundColor(isActive ? .white : .raveTextSecondary)
+   215→   215→            .padding(.horizontal, 12)
+   216→   216→            .padding(.vertical, 8)
+   217→   217→            .background(
+   218→   218→                isActive
+   219→   219→                    ? AnyShapeStyle(Color.raveGradient)
+   220→   220→                    : AnyShapeStyle(Color.clear)
+   221→   221→            )
+   222→   222→            .clipShape(Capsule())
+   223→   223→        }
+   224→   224→        .buttonStyle(.plain)
+   225→   225→        .frame(maxWidth: .infinity)
+   226→   226→    }
+   227→   227→
+   228→   228→    // MARK: - Discover Content (5 рандомных открытых комнат)
+   229→   229→
+   230→   230→    /// 🔧 Shows 5 RANDOM public rooms (not top, not sorted — random each time)
+   231→   231→    private var discoverContent: some View {
+   232→   232→        ScrollView(showsIndicators: false) {
+   233→   233→            VStack(alignment: .leading, spacing: 12) {
+   234→   234→                let publicRooms = (viewModel?.filteredRooms ?? [])
+   235→   235→                    .filter({ room in room.isActive && room.privacy == .publicRoom })
+   236→   236→                if !publicRooms.isEmpty {
+   237→   237→                    ForEach(Array(publicRooms.shuffled().prefix(5))) { room in
+   238→   238→                        Button { navigateToRoom = room } label: {
+   239→   239→                            RoomCardView(room: room, onReport: nil, onBlock: nil)
+   240→   240→                        }
+   241→   241→                        .buttonStyle(.plain)
+   242→   242→                    }
+   243→   243→                } else {
+   244→   244→                    emptyState(icon: "globe.americas.fill", text: "Нет активных комнат")
+   245→   245→                }
+   246→   246→            }
+   247→   247→            .padding(.horizontal, 20)
+   248→   248→            .padding(.top, 8)
+   249→   249→            .padding(.bottom, 40)
+   250→   250→        }
+   251→   251→    }
+   252→   252→
+   253→   253→    // MARK: - My Rooms Content
+   254→   254→
+   255→   255→    private var myRoomsContent: some View {
+   256→   256→        ScrollView(showsIndicators: false) {
+   257→   257→            VStack(alignment: .leading, spacing: 12) {
+   258→   258→                if let myRooms = viewModel?.myRooms, !myRooms.isEmpty {
+   259→   259→                    ForEach(myRooms) { room in
+   260→   260→                        Button { navigateToRoom = room } label: {
+   261→   261→                            myRoomCard(room)
+   262→   262→                        }
+   263→   263→                        .buttonStyle(.plain)
+   264→   264→                    }
+   265→   265→                } else {
+   266→   266→                    emptyState(icon: "rectangle.stack.badge.plus", text: "Создайте комнату с главной")
+   267→   267→                }
+   268→   268→            }
+   269→   269→            .padding(.horizontal, 20)
+   270→   270→            .padding(.top, 8)
+   271→   271→            .padding(.bottom, 40)
+   272→   272→        }
+   273→   273→    }
+   274→   274→
+   275→   275→    // MARK: - Join Content (embedded JoinRoomView)
+   276→   276→
+   277→   277→    private var joinContent: some View {
+   278→   278→        ScrollView(showsIndicators: false) {
+   279→   279→            JoinRoomView { room in
+   280→   280→                navigateToRoom = room
+   281→   281→            }
+   282→   282→            .frame(minHeight: 500)
+   283→   283→            .padding(.top, 8)
+   284→   284→        }
+   285→   285→    }
+   286→   286→
+   287→   287→    // MARK: - Requests Content (Room invites)
+   288→   288→
+   289→   289→    private var requestsContent: some View {
+   290→   290→        ScrollView(showsIndicators: false) {
+   291→   291→            VStack(alignment: .leading, spacing: 12) {
+   292→   292→                if inviteService.pendingInvites.isEmpty {
+   293→   293→                    emptyState(icon: "envelope.open", text: "Нет запросов на присоединение")
+   294→   294→                } else {
+   295→   295→                    ForEach(inviteService.pendingInvites) { invite in
+   296→   296→                        inviteCard(invite)
+   297→   297→                    }
+   298→   298→                }
+   299→   299→            }
+   300→   300→            .padding(.horizontal, 20)
+   301→   301→            .padding(.top, 8)
+   302→   302→            .padding(.bottom, 40)
+   303→   303→        }
+   304→   304→    }
+   305→   305→
+   306→   306→    // MARK: - Invite Card
+   307→   307→
+   308→   308→    @ViewBuilder
+   309→   309→    private func inviteCard(_ invite: RoomInvite) -> some View {
+   310→   310→        VStack(spacing: 0) {
+   311→   311→            // ── Top: Inviter avatar + nick + invite text ──
+   312→   312→            HStack(spacing: 12) {
+   313→   313→                // Inviter avatar
+   314→   314→                ZStack {
+   315→   315→                    Circle()
+   316→   316→                        .fill(Color.bioCyan.opacity(0.15))
+   317→   317→                        .frame(width: 44, height: 44)
+   318→   318→                    Text(invite.fromUsername.prefix(1).uppercased())
+   319→   319→                        .font(.system(size: 16, weight: .bold))
+   320→   320→                        .foregroundColor(.bioCyan)
+   321→   321→                }
+   322→   322→
+   323→   323→                VStack(alignment: .leading, spacing: 3) {
+   324→   324→                    // Nick + invite text
+   325→   325→                    HStack(spacing: 4) {
+   326→   326→                        Text(invite.fromUsername)
+   327→   327→                            .font(.system(size: 14, weight: .bold))
+   328→   328→                            .foregroundColor(.raveTextPrimary)
+   329→   329→                        Text("приглашает посмотреть")
+   330→   330→                            .font(.system(size: 12))
+   331→   331→                            .foregroundColor(.raveTextSecondary)
+   332→   332→                    }
+   333→   333→
+   334→   334→                    // 🔧 What they're watching — media title in quotes
+   335→   335→                    if let mediaTitle = invite.mediaTitle, !mediaTitle.isEmpty {
+   336→   336→                        Text("«\(mediaTitle)»")
+   337→   337→                            .font(.system(size: 13, weight: .semibold))
+   338→   338→                            .foregroundColor(.bioCyan)
+   339→   339→                            .lineLimit(1)
+   340→   340→                    } else {
+   341→   341→                        Text("«\(invite.roomName)»")
+   342→   342→                            .font(.system(size: 13, weight: .semibold))
+   343→   343→                            .foregroundColor(.bioCyan)
+   344→   344→                            .lineLimit(1)
+   345→   345→                    }
+   346→   346→
+   347→   347→                    // Service name
+   348→   348→                    if let service = invite.service {
+   349→   349→                        Text(service.brandName)
+   350→   350→                            .font(.system(size: 10, weight: .medium))
+   351→   351→                            .foregroundColor(.raveTextTertiary)
+   352→   352→                    }
+   353→   353→                }
+   354→   354→
+   355→   355→                Spacer()
+   356→   356→
+   357→   357→                // 🔧 Service logo (small, right side)
+   358→   358→                if let service = invite.service {
+   359→   359→                    ServiceLogoView(service: service, size: 28)
+   360→   360→                        .frame(width: 36, height: 36)
+   361→   361→                        .background(Color.white.opacity(0.04))
+   362→   362→                        .clipShape(RoundedRectangle(cornerRadius: 8))
+   363→   363→                }
+   364→   364→            }
+   365→   365→
+   366→   366→            // ── Room code (small, subtle) ──
+   367→   367→            HStack {
+   368→   368→                Image(systemName: "number")
+   369→   369→                    .font(.system(size: 9))
+   370→   370→                Text(invite.roomCode)
+   371→   371→                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+   372→   372→                    .foregroundColor(.raveTextTertiary)
+   373→   373→                Spacer()
+   374→   374→                Text(invite.timestamp, style: .relative)
+   375→   375→                    .font(.system(size: 10))
+   376→   376→                    .foregroundColor(.raveTextTertiary)
+   377→   377→            }
+   378→   378→            .padding(.top, 8)
+   379→   379→
+   380→   380→            // ── Accept / Decline buttons ──
+   381→   381→            HStack(spacing: 12) {
+   382→   382→                Button {
+   383→   383→                    HapticManager.impact(.light)
+   384→   384→                    inviteService.declineInvite(invite)
+   385→   385→                } label: {
+   386→   386→                    HStack(spacing: 6) {
+   387→   387→                        Image(systemName: "xmark")
+   388→   388→                            .font(.system(size: 12, weight: .bold))
+   389→   389→                        Text("Отклонить")
+   390→   390→                            .font(.system(size: 13, weight: .semibold))
+   391→   391→                    }
+   392→   392→                    .foregroundColor(.raveDanger)
+   393→   393→                    .frame(maxWidth: .infinity)
+   394→   394→                    .padding(.vertical, 10)
+   395→   395→                    .background(Color.raveDanger.opacity(0.1))
+   396→   396→                    .clipShape(RoundedRectangle(cornerRadius: 10))
+   397→   397→                    .overlay(
+   398→   398→                        RoundedRectangle(cornerRadius: 10)
+   399→   399→                            .stroke(Color.raveDanger.opacity(0.2), lineWidth: 0.5)
+   400→   400→                    )
+   401→   401→                }
+   402→   402→                .buttonStyle(.plain)
+   403→   403→
+   404→   404→                Button {
+   405→   405→                    HapticManager.impact(.medium)
+   406→   406→                    Task {
+   407→   407→                        if let room = await inviteService.acceptInvite(invite) {
+   408→   408→                            navigateToRoom = room
+   409→   409→                        }
+   410→   410→                    }
+   411→   411→                } label: {
+   412→   412→                    HStack(spacing: 6) {
+   413→   413→                        Image(systemName: "checkmark")
+   414→   414→                            .font(.system(size: 12, weight: .bold))
+   415→   415→                        Text("Принять")
+   416→   416→                            .font(.system(size: 13, weight: .semibold))
+   417→   417→                    }
+   418→   418→                    .foregroundColor(.white)
+   419→   419→                    .frame(maxWidth: .infinity)
+   420→   420→                    .padding(.vertical, 10)
+   421→   421→                    .background(Color.raveGradient)
+   422→   422→                    .clipShape(RoundedRectangle(cornerRadius: 10))
+   423→   423→                }
+   424→   424→                .buttonStyle(.plain)
+   425→   425→            }
+   426→   426→            .padding(.top, 10)
+   427→   427→        }
+   428→   428→        .padding(14)
+   429→   429→        .background(.ultraThinMaterial)
+   430→   430→        .clipShape(RoundedRectangle(cornerRadius: 14))
+   431→   431→        .overlay(
+   432→   432→            RoundedRectangle(cornerRadius: 14)
+   433→   433→                .stroke(
+   434→   434→                    LinearGradient(
+   435→   435→                        colors: [Color.bioCyan.opacity(0.15), Color.white.opacity(0.04)],
+   436→   436→                        startPoint: .topLeading, endPoint: .bottomTrailing
+   437→   437→                    ),
+   438→   438→                    lineWidth: 0.5
+   439→   439→                )
+   440→   440→        )
+   441→   441→    }
+   442→   442→
+   443→   443→    // MARK: - Empty State
+   444→   444→
+   445→   445→    private func emptyState(icon: String, text: String) -> some View {
+   446→   446→        VStack(spacing: 8) {
+   447→   447→            Image(systemName: icon)
+   448→   448→                .font(.system(size: 32))
+   449→   449→                .foregroundColor(.raveTextTertiary)
+   450→   450→            Text(text)
+   451→   451→                .font(.subheadline)
+   452→   452→                .foregroundColor(.raveTextSecondary)
+   453→   453→        }
+   454→   454→        .frame(maxWidth: .infinity)
+   455→   455→        .padding(.vertical, 30)
+   456→   456→        .glassCard(cornerRadius: 16, opacity: 0.04)
+   457→   457→    }
+   458→   458→
+   459→   459→    // MARK: - My Room Card
+   460→   460→
+   461→   461→    @ViewBuilder
+   462→   462→    private func myRoomCard(_ room: Room) -> some View {
+   463→   463→        HStack(spacing: 14) {
+   464→   464→            ZStack {
+   465→   465→                Circle()
+   466→   466→                    .fill(Color.bioCyan.opacity(0.12))
+   467→   467→                    .frame(width: 44, height: 44)
+   468→   468→                if let service = room.mediaItem?.source, service != .url {
+   469→   469→                    ServiceLogoView(service: service, size: 24)
+   470→   470→                } else {
+   471→   471→                    Image(systemName: "play.rectangle.fill")
+   472→   472→                        .font(.system(size: 18))
+   473→   473→                        .foregroundColor(.bioCyan)
+   474→   474→                }
+   475→   475→            }
+   476→   476→
+   477→   477→            VStack(alignment: .leading, spacing: 3) {
+   478→   478→                Text(room.name)
+   479→   479→                    .font(.system(size: 15, weight: .semibold))
+   480→   480→                    .foregroundColor(.raveTextPrimary)
+   481→   481→                    .lineLimit(1)
+   482→   482→
+   483→   483→                HStack(spacing: 6) {
+   484→   484→                    // 🔧 Participant badge (glass)
+   485→   485→                    ParticipantBadge(count: room.participantCount)
+   486→   486→
+   487→   487→                    Text("· \(room.hostName)")
+   488→   488→                        .font(.system(size: 12))
+   489→   489→                        .foregroundColor(.raveTextTertiary)
+   490→   490→                        .lineLimit(1)
+   491→   491→
+   492→   492→                    if room.isActive {
+   493→   493→                        HStack(spacing: 2) {
+   494→   494→                            Circle()
+   495→   495→                                .fill(Color.bioEmerald)
+   496→   496→                                .frame(width: 5, height: 5)
+   497→   497→                            Text("LIVE")
+   498→   498→                                .font(.system(size: 9, weight: .heavy))
+   499→   499→                        }
+   500→   500→                        .foregroundColor(.bioEmerald)
+   501→   501→                    }
+   502→   502→                }
+   503→   503→            }
+   504→   504→
+   505→   505→            Spacer()
+   506→   506→
+   507→   507→            VStack(alignment: .trailing, spacing: 2) {
+   508→   508→                Text(room.code)
+   509→   509→                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+   510→   510→                    .foregroundColor(.bioCyan)
+   511→   511→                Text("код")
+   512→   512→                    .font(.system(size: 8))
+   513→   513→                    .foregroundColor(.raveTextTertiary)
+   514→   514→            }
+   515→   515→
+   516→   516→            Image(systemName: "chevron.right")
+   517→   517→                .font(.system(size: 12))
+   518→   518→                .foregroundColor(.raveTextTertiary)
+   519→   519→        }
+   520→   520→        .padding(14)
+   521→   521→        .background(.ultraThinMaterial)
+   522→   522→        .clipShape(RoundedRectangle(cornerRadius: 14))
+   523→   523→        .overlay(
+   524→   524→            RoundedRectangle(cornerRadius: 14)
+   525→   525→                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+   526→   526→        )
+   527→   527→    }
+   528→   528→}
+   529→   529→
+   530→   530→// MARK: - Tab Contents Contents
+   531→   531→
+   532→   532→/// Главная — экран Discover
+   533→   533→struct HomeTabContent: View {
+   534→   534→    @State private var navigateToRoom: Room?
+   535→   535→    @State private var viewModel: HomeViewModel?
+   536→   536→    var onProfileTap: () -> Void
+   537→   537→    /// 🔧 NEW: Closure to switch to the AI tab from Home's AI CTA card.
+   538→   538→    var onSwitchToAITab: (() -> Void)?
+   539→   539→    var onSwitchToJoinTab: (() -> Void)?
+   540→   540→
+   541→   541→    var body: some View {
+   542→   542→        NavigationStack {
+   543→   543→            ZStack {
+   544→   544→                BioluminescentBackground(energy: 0.45, dimming: 0)
+   545→   545→                    .ignoresSafeArea()
+   546→   546→
+   547→   547→                if let viewModel {
+   548→   548→                    HomeView(
+   549→   549→                        viewModel: viewModel,
+   550→   550→                        onProfileTap: onProfileTap,
+   551→   551→                        onSwitchToAITab: onSwitchToAITab,
+   552→   552→                        onSwitchToJoinTab: onSwitchToJoinTab
+   553→   553→                    )
+   554→   554→                } else {
+   555→   555→                    ProgressView()
+   556→   556→                        .tint(.ravePrimary)
+   557→   557→                }
+   558→   558→            }
+   559→   559→            .navigationDestination(item: $navigateToRoom) { room in
+   560→   560→                RoomView(room: room)
+   561→   561→                    .toolbar(.hidden, for: .tabBar)
+   562→   562→            }
+   563→   563→        }
+   564→   564→        .onAppear {
+   565→   565→            if viewModel == nil {
+   566→   566→                viewModel = HomeViewModel(
+   567→   567→                    roomService: RoomService(api: apiClient),
+   568→   568→                    authService: AuthService(api: apiClient)
+   569→   569→                )
+   570→   570→            }
+   571→   571→        }
+   572→   572→    }
+   573→   573→}
+   574→   574→
+   575→   575→/// Друзья — список друзей с поиском и кнопкой чата
+   576→   576→struct FriendsTabContent: View {
+   577→   577→    @State private var searchText = ""
+   578→   578→    @State private var friendManager: FriendManager? = nil
+   579→   579→    @State private var selectedFriendForProfile: Friend?
+   580→   580→    @State private var selectedFriendForChat: Friend?
+   581→   581→    @State private var showAddFriend = false
+   582→   582→    @State private var showRequests = false
+   583→   583→    @State private var friendToDelete: Friend?
+   584→   584→
+   585→   585→    private var filteredFriends: [Friend] {
+   586→   586→        if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+   587→   587→            return friendManager.friends
+   588→   588→        }
+   589→   589→        return friendManager.friends.filter {
+   590→   590→            $0.username.localizedCaseInsensitiveContains(searchText)
+   591→   591→        }
+   592→   592→    }
+   593→   593→
+   594→   594→    var body: some View {
+   595→   595→        NavigationStack {
+   596→   596→            ZStack {
+   597→   597→                AnimatedGradientBackground()
+   598→   598→
+   599→   599→                VStack(spacing: 16) {
+   600→   600→                    friendsHeader
+   601→   601→
+   602→   602→                    if friendManager.friends.isEmpty {
+   603→   603→                        emptyState
+   604→   604→                    } else {
+   605→   605→                        searchAndList
+   606→   606→                    }
+   607→   607→                }
+   608→   608→            }
+   609→   609→            .navigationTitle("Друзья")
+   610→   610→            .navigationBarTitleDisplayMode(.inline)
+   611→   611→            .toolbar {
+   612→   612→                // Кнопка «Запросы»
+   613→   613→                ToolbarItem(placement: .topBarLeading) {
+   614→   614→                    Button { showRequests = true } label: {
+   615→   615→                        ZStack(alignment: .topTrailing) {
+   616→   616→                            Image(systemName: "envelope.fill")
+   617→   617→                                .font(.system(size: 16))
+   618→   618→                                .foregroundColor(.ravePrimary)
+   619→   619→                            if !friendManager.incomingRequests.isEmpty {
+   620→   620→                                Circle()
+   621→   621→                                    .fill(Color.raveAccent)
+   622→   622→                                    .frame(width: 8, height: 8)
+   623→   623→                                    .offset(x: 4, y: -4)
+   624→   624→                            }
+   625→   625→                        }
+   626→   626→                    }
+   627→   627→                }
+   628→   628→                // Кнопка «Добавить друга»
+   629→   629→                ToolbarItem(placement: .topBarTrailing) {
+   630→   630→                    Button { showAddFriend = true } label: {
+   631→   631→                        Image(systemName: "person.badge.plus")
+   632→   632→                            .font(.system(size: 17))
+   633→   633→                            .foregroundColor(.ravePrimary)
+   634→   634→                    }
+   635→   635→                }
+   636→   636→            }
+   637→   637→            .navigationDestination(item: $selectedFriendForProfile) { friend in
+   638→   638→                FriendProfileView(friend: friend) {
+   639→   639→                    selectedFriendForChat = friend
+   640→   640→                }
+   641→   641→            }
+   642→   642→            .navigationDestination(item: $selectedFriendForChat) { friend in
+   643→   643→                DMChatView(friend: friend)
+   644→   644→            }
+   645→   645→            .sheet(isPresented: $showAddFriend) {
+   646→   646→                AddFriendSheet(friendManager: friendManager)
+   647→   647→            }
+   648→   648→            .sheet(isPresented: $showRequests) {
+   649→   649→                FriendRequestsSheet(friendManager: friendManager)
+   650→   650→            }
+   651→   651→        }
+   652→   652→    }
+   653→   653→
+   654→   654→    // MARK: - Header
+   655→   655→    private var friendsHeader: some View {
+   656→   656→        HStack {
+   657→   657→            VStack(alignment: .leading, spacing: 2) {
+   658→   658→                Text("Друзья")
+   659→   659→                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+   660→   660→                    .foregroundColor(.raveTextPrimary)
+   661→   661→                Text("\(friendManager.friends.count) друзей")
+   662→   662→                    .font(.subheadline)
+   663→   663→                    .foregroundColor(.raveTextSecondary)
+   664→   664→            }
+   665→   665→            Spacer()
+   666→   666→        }
+   667→   667→        .padding(.horizontal, 20)
+   668→   668→        .padding(.top, 8)
+   669→   669→    }
+   670→   670→
+   671→   671→    // MARK: - Empty State
+   672→   672→    private var emptyState: some View {
+   673→   673→        VStack(spacing: 20) {
+   674→   674→            Spacer()
+   675→   675→            Image(systemName: "person.2.badge.gearshape")
+   676→   676→                .font(.system(size: 56))
+   677→   677→                .foregroundColor(.ravePrimary.opacity(0.5))
+   678→   678→
+   679→   679→            Text("Друзей пока нет")
+   680→   680→                .font(.system(size: 20, weight: .bold))
+   681→   681→                .foregroundColor(.raveTextPrimary)
+   682→   682→
+   683→   683→            Text("Добавьте друзей, чтобы смотреть вместе")
+   684→   684→                .font(.subheadline)
+   685→   685→                .foregroundColor(.raveTextSecondary)
+   686→   686→                .multilineTextAlignment(.center)
+   687→   687→
+   688→   688→            Button { showAddFriend = true } label: {
+   689→   689→                HStack(spacing: 8) {
+   690→   690→                    Image(systemName: "person.badge.plus")
+   691→   691→                    Text("Добавить друга")
+   692→   692→                }
+   693→   693→                .font(.system(size: 16, weight: .bold))
+   694→   694→                .foregroundColor(.white)
+   695→   695→                .padding(.horizontal, 24)
+   696→   696→                .padding(.vertical, 14)
+   697→   697→                .background(Color.raveGradient)
+   698→   698→                .clipShape(RoundedRectangle(cornerRadius: 16))
+   699→   699→            }
+   700→   700→            .buttonStyle(PremiumButtonStyle())
+   701→   701→            .padding(.top, 8)
+   702→   702→            Spacer()
+   703→   703→        }
+   704→   704→        .padding(.horizontal, 40)
+   705→   705→    }
+   706→   706→
+   707→   707→    // MARK: - Search + List
+   708→   708→    private var searchAndList: some View {
+   709→   709→        VStack(spacing: 0) {
+   710→   710→            // Поиск
+   711→   711→            HStack(spacing: 10) {
+   712→   712→                Image(systemName: "magnifyingglass")
+   713→   713→                    .foregroundColor(.raveTextSecondary)
+   714→   714→                TextField("Поиск друзей", text: $searchText)
+   715→   715→                    .foregroundColor(.raveTextPrimary)
+   716→   716→                if !searchText.isEmpty {
+   717→   717→                    Button {
+   718→   718→                        searchText = ""
+   719→   719→                    } label: {
+   720→   720→                        Image(systemName: "xmark.circle.fill")
+   721→   721→                            .foregroundColor(.raveTextSecondary)
+   722→   722→                    }
+   723→   723→                }
+   724→   724→            }
+   725→   725→            .padding(.horizontal, 14)
+   726→   726→            .padding(.vertical, 12)
+   727→   727→            .glassCard(cornerRadius: 14, opacity: 0.05)
+   728→   728→            .padding(.horizontal, 20)
+   729→   729→            .padding(.top, 4)
+   730→   730→
+   731→   731→            // Список
+   732→   732→            ScrollView {
+   733→   733→                LazyVStack(spacing: 8) {
+   734→   734→                    ForEach(filteredFriends) { friend in
+   735→   735→                        FriendRowCard(
+   736→   736→                            friend: friend,
+   737→   737→                            onProfileTap: { selectedFriendForProfile = friend },
+   738→   738→                            onChatTap: { selectedFriendForChat = friend },
+   739→   739→                            onDelete: { friendToDelete = friend }
+   740→   740→                        )
+   741→   741→                    }
+   742→   742→                }
+   743→   743→                .padding(.horizontal, 20)
+   744→   744→                .padding(.top, 12)
+   745→   745→            }
+   746→   746→        }
+   747→   747→        .confirmationDialog(
+   748→   748→            "Удалить \(friendToDelete?.username ?? "") из друзей?",
+   749→   749→            isPresented: Binding(get: { friendToDelete != nil }, set: { if !$0 { friendToDelete = nil } }),
+   750→   750→            titleVisibility: .visible
+   751→   751→        ) {
+   752→   752→            Button("Удалить", role: .destructive) {
+   753→   753→                if let friend = friendToDelete {
+   754→   754→                    Task { await friendManager.removeFriend(friend) }
+   755→   755→                }
+   756→   756→                friendToDelete = nil
+   757→   757→            }
+   758→   758→            Button("Отмена", role: .cancel) { friendToDelete = nil }
+   759→   759→        }
+   760→   760→    }
+   761→   761→}
+   762→   762→
+   763→   763→// MARK: - Friend Row Card v3 (ice blue, 44pt avatar, swipe delete)
+   764→   764→private struct FriendRowCard: View {
+   765→   765→    let friend: Friend
+   766→   766→    var onProfileTap: () -> Void
+   767→   767→    var onChatTap: () -> Void
+   768→   768→    var onDelete: () -> Void
+   769→   769→
+   770→   770→    var body: some View {
+   771→   771→        HStack(spacing: 12) {
+   772→   772→            // Аватарка 44pt → профиль
+   773→   773→            Button(action: onProfileTap) {
+   774→   774→                if let urlStr = friend.avatarURL, let url = URL(string: urlStr) {
+   775→   775→                    AsyncImage(url: url) { phase in
+   776→   776→                        if let image = phase.image {
+   777→   777→                            image.resizable().scaledToFill()
+   778→   778→                        } else {
+   779→   779→                            avatarFallback
+   780→   780→                        }
+   781→   781→                    }
+   782→   782→                    .frame(width: 44, height: 44)
+   783→   783→                    .clipShape(Circle())
+   784→   784→                    .overlay(alignment: .bottomTrailing) {
+   785→   785→                        if friend.isOnline {
+   786→   786→                            Circle()
+   787→   787→                                .fill(Color.raveGreen)
+   788→   788→                                .frame(width: 11, height: 11)
+   789→   789→                                .overlay(Circle().stroke(Color.raveBackground, lineWidth: 2))
+   790→   790→                        }
+   791→   791→                    }
+   792→   792→                } else {
+   793→   793→                    avatarFallback
+   794→   794→                        .frame(width: 44, height: 44)
+   795→   795→                        .clipShape(Circle())
+   796→   796→                        .overlay(alignment: .bottomTrailing) {
+   797→   797→                            if friend.isOnline {
+   798→   798→                                Circle()
+   799→   799→                                    .fill(Color.raveGreen)
+   800→   800→                                    .frame(width: 11, height: 11)
+   801→   801→                                    .overlay(Circle().stroke(Color.raveBackground, lineWidth: 2))
+   802→   802→                            }
+   803→   803→                        }
+   804→   804→                }
+   805→   805→            }
+   806→   806→            .buttonStyle(.plain)
+   807→   807→
+   808→   808→            // Имя + username + статус → профиль
+   809→   809→            Button(action: onProfileTap) {
+   810→   810→                VStack(alignment: .leading, spacing: 3) {
+   811→   811→                    Text(friend.username)
+   812→   812→                        .font(.system(size: 16, weight: .bold))
+   813→   813→                        .foregroundColor(.raveTextPrimary)
+   814→   814→                    Text("@\(friend.username.lowercased())")
+   815→   815→                        .font(.system(size: 13))
+   816→   816→                        .foregroundColor(.raveTextSecondary)
+   817→   817→                    Text(friend.isOnline ? "В сети" : "Был(а) недавно")
+   818→   818→                        .font(.system(size: 12))
+   819→   819→                        .foregroundColor(friend.isOnline ? .raveGreen : .raveTextTertiary)
+   820→   820→                }
+   821→   821→            }
+   822→   822→            .buttonStyle(.plain)
+   823→   823→
+   824→   824→            Spacer()
+   825→   825→
+   826→   826→            // Кнопка чата — ледяной голубой на прозрачной подложке
+   827→   827→            Button(action: onChatTap) {
+   828→   828→                Image(systemName: "bubble.left.fill")
+   829→   829→                    .font(.system(size: 18, weight: .medium))
+   830→   830→                    .foregroundColor(.ravePrimary)
+   831→   831→                    .frame(width: 40, height: 40)
+   832→   832→                    .background(Color.ravePrimary.opacity(0.08))
+   833→   833→                    .clipShape(Circle())
+   834→   834→            }
+   835→   835→            .buttonStyle(.plain)
+   836→   836→        }
+   837→   837→        .padding(14)
+   838→   838→        .glassCard(cornerRadius: 16, opacity: 0.04)
+   839→   839→        .swipeActions(edge: .trailing) {
+   840→   840→            Button(role: .destructive, action: onDelete) {
+   841→   841→                Label("Удалить", systemImage: "trash")
+   842→   842→            }
+   843→   843→        }
+   844→   844→        .contextMenu {
+   845→   845→            Button(role: .destructive, action: onDelete) {
+   846→   846→                Label("Удалить из друзей", systemImage: "trash")
+   847→   847→            }
+   848→   848→        }
+   849→   849→    }
+   850→   850→
+   851→   851→    private var avatarFallback: some View {
+   852→   852→        ZStack {
+   853→   853→            Circle()
+   854→   854→                .fill(LinearGradient(colors: [.ravePrimary, .raveAccent],
+   855→   855→                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+   856→   856→            Text(friend.initials)
+   857→   857→                .font(.system(size: 16, weight: .bold))
+   858→   858→                .foregroundColor(.white)
+   859→   859→        }
+   860→   860→    }
+   861→   861→}
+   862→   862→
+   863→   863→// MARK: - Add Friend Sheet (поиск по username)
+   864→   864→struct AddFriendSheet: View {
+   865→   865→    @Environment(\.dismiss) private var dismiss
+   866→   866→    @ObservedObject var friendManager: FriendManager
+   867→   867→    @State private var searchQuery = ""
+   868→   868→    @State private var hasSearched = false
+   869→   869→
+   870→   870→    var body: some View {
+   871→   871→        NavigationStack {
+   872→   872→            ZStack {
+   873→   873→                AnimatedGradientBackground()
+   874→   874→
+   875→   875→                VStack(spacing: 16) {
+   876→   876→                    // Поле поиска
+   877→   877→                    HStack(spacing: 10) {
+   878→   878→                        Image(systemName: "magnifyingglass")
+   879→   879→                            .foregroundColor(.ravePrimary)
+   880→   880→                        TextField("Введите @username", text: $searchQuery)
+   881→   881→                            .foregroundColor(.raveTextPrimary)
+   882→   882→                            .autocapitalization(.none)
+   883→   883→                            .submitLabel(.search)
+   884→   884→                            .onSubmit {
+   885→   885→                                Task {
+   886→   886→                                    await friendManager.searchUsers(query: searchQuery)
+   887→   887→                                    hasSearched = true
+   888→   888→                                }
+   889→   889→                            }
+   890→   890→                        if !searchQuery.isEmpty {
+   891→   891→                            Button { searchQuery = "" } label: {
+   892→   892→                                Image(systemName: "xmark.circle.fill")
+   893→   893→                                    .foregroundColor(.raveTextSecondary)
+   894→   894→                            }
+   895→   895→                        }
+   896→   896→                    }
+   897→   897→                    .padding(.horizontal, 14)
+   898→   898→                    .padding(.vertical, 12)
+   899→   899→                    .glassCard(cornerRadius: 14, opacity: 0.05)
+   900→   900→                    .padding(.horizontal, 20)
+   901→   901→
+   902→   902→                    // Результаты
+   903→   903→                    if friendManager.isLoading {
+   904→   904→                        ProgressView().tint(.ravePrimary)
+   905→   905→                    } else if hasSearched && friendManager.searchResults.isEmpty {
+   906→   906→                        VStack(spacing: 12) {
+   907→   907→                            Image(systemName: "person.crop.circle.badge.questionmark")
+   908→   908→                                .font(.system(size: 44))
+   909→   909→                                .foregroundColor(.raveTextTertiary)
+   910→   910→                            Text("Ничего не найдено")
+   911→   911→                                .font(.subheadline)
+   912→   912→                                .foregroundColor(.raveTextSecondary)
+   913→   913→                        }
+   914→   914→                        .padding(.top, 40)
+   915→   915→                    } else {
+   916→   916→                        ScrollView {
+   917→   917→                            LazyVStack(spacing: 8) {
+   918→   918→                                ForEach(friendManager.searchResults) { user in
+   919→   919→                                    HStack(spacing: 12) {
+   920→   920→                                        ZStack {
+   921→   921→                                            Circle().fill(Color.ravePrimary.opacity(0.2))
+   922→   922→                                            Text(user.username.prefix(1).uppercased())
+   923→   923→                                                .font(.system(size: 16, weight: .bold))
+   924→   924→                                                .foregroundColor(.ravePrimary)
+   925→   925→                                        }
+   926→   926→                                        .frame(width: 44, height: 44)
+   927→   927→
+   928→   928→                                        Text("@\(user.username)")
+   929→   929→                                            .font(.system(size: 16, weight: .medium))
+   930→   930→                                            .foregroundColor(.raveTextPrimary)
+   931→   931→                                        Spacer()
+   932→   932→
+   933→   933→                                        Button {
+   934→   934→                                            Task { await friendManager.sendRequest(to: user.id, username: user.username) }
+   935→   935→                                        } label: {
+   936→   936→                                            HStack(spacing: 5) {
+   937→   937→                                                Image(systemName: "person.badge.plus")
+   938→   938→                                                Text("Добавить")
+   939→   939→                                            }
+   940→   940→                                            .font(.system(size: 14, weight: .bold))
+   941→   941→                                            .foregroundColor(.white)
+   942→   942→                                            .padding(.horizontal, 14)
+   943→   943→                                            .padding(.vertical, 8)
+   944→   944→                                            .background(Color.raveGradient)
+   945→   945→                                            .clipShape(Capsule())
+   946→   946→                                        }
+   947→   947→                                        .buttonStyle(.plain)
+   948→   948→                                    }
+   949→   949→                                    .padding(12)
+   950→   950→                                    .glassCard(cornerRadius: 14, opacity: 0.04)
+   951→   951→                                }
+   952→   952→                            }
+   953→   953→                            .padding(.horizontal, 20)
+   954→   954→                        }
+   955→   955→                    }
+   956→   956→                    Spacer()
+   957→   957→                }
+   958→   958→                .padding(.top, 20)
+   959→   959→            }
+   960→   960→            .navigationTitle("Добавить друга")
+   961→   961→            .navigationBarTitleDisplayMode(.inline)
+   962→   962→            .toolbar {
+   963→   963→                ToolbarItem(placement: .topBarLeading) {
+   964→   964→                    Button {
+   965→   965→                        dismiss()
+   966→   966→                    } label: {
+   967→   967→                        Image(systemName: "chevron.left")
+   968→   968→                            .font(.system(size: 15, weight: .bold))
+   969→   969→                            .foregroundColor(.ravePrimary)
+   970→   970→                    }
+   971→   971→                }
+   972→   972→            }
+   973→   973→        }
+   974→   974→    }
+   975→   975→}
+   976→   976→
+   977→   977→// MARK: - Friend Requests Sheet
+   978→   978→struct FriendRequestsSheet: View {
+   979→   979→    @Environment(\.dismiss) private var dismiss
+   980→   980→    @ObservedObject var friendManager: FriendManager
+   981→   981→
+   982→   982→    var body: some View {
+   983→   983→        NavigationStack {
+   984→   984→            ZStack {
+   985→   985→                AnimatedGradientBackground()
+   986→   986→
+   987→   987→                if friendManager.incomingRequests.isEmpty {
+   988→   988→                    VStack(spacing: 12) {
+   989→   989→                        Image(systemName: "envelope.open")
+   990→   990→                            .font(.system(size: 44))
+   991→   991→                            .foregroundColor(.raveTextTertiary)
+   992→   992→                        Text("Нет запросов")
+   993→   993→                            .font(.subheadline)
+   994→   994→                            .foregroundColor(.raveTextSecondary)
+   995→   995→                    }
+   996→   996→                } else {
+   997→   997→                    ScrollView {
+   998→   998→                        LazyVStack(spacing: 10) {
+   999→   999→                            ForEach(friendManager.incomingRequests) { request in
+  1000→  1000→                                HStack(spacing: 12) {
+  1001→  1001→                                    ZStack {
+  1002→  1002→                                        Circle().fill(Color.raveAccent.opacity(0.2))
+  1003→  1003→                                        Text(request.fromUser.username.prefix(1).uppercased())
+  1004→  1004→                                            .font(.system(size: 16, weight: .bold))
+  1005→  1005→                                            .foregroundColor(.raveAccent)
+  1006→  1006→                                    }
+  1007→  1007→                                    .frame(width: 44, height: 44)
+  1008→  1008→
+  1009→  1009→                                    VStack(alignment: .leading, spacing: 2) {
+  1010→  1010→                                        Text(request.fromUser.username)
+  1011→  1011→                                            .font(.system(size: 16, weight: .bold))
+  1012→  1012→                                            .foregroundColor(.raveTextPrimary)
+  1013→  1013→                                        Text("Хочет дружить")
+  1014→  1014→                                            .font(.system(size: 13))
+  1015→  1015→                                            .foregroundColor(.raveTextSecondary)
+  1016→  1016→                                    }
+  1017→  1017→                                    Spacer()
+  1018→  1018→
+  1019→  1019→                                    // Принять
+  1020→  1020→                                    Button {
+  1021→  1021→                                        Task { await friendManager.acceptRequest(request) }
+  1022→  1022→                                    } label: {
+  1023→  1023→                                        Image(systemName: "checkmark")
+  1024→  1024→                                            .font(.system(size: 14, weight: .bold))
+  1025→  1025→                                            .foregroundColor(.white)
+  1026→  1026→                                            .frame(width: 36, height: 36)
+  1027→  1027→                                            .background(Color.raveGreen)
+  1028→  1028→                                            .clipShape(Circle())
+  1029→  1029→                                    }
+  1030→  1030→                                    // Отклонить
+  1031→  1031→                                    Button {
+  1032→  1032→                                        Task { await friendManager.declineRequest(request) }
+  1033→  1033→                                    } label: {
+  1034→  1034→                                        Image(systemName: "xmark")
+  1035→  1035→                                            .font(.system(size: 14, weight: .bold))
+  1036→  1036→                                            .foregroundColor(.white)
+  1037→  1037→                                            .frame(width: 36, height: 36)
+  1038→  1038→                                            .background(Color.raveDanger)
+  1039→  1039→                                            .clipShape(Circle())
+  1040→  1040→                                    }
+  1041→  1041→                                }
+  1042→  1042→                                .padding(14)
+  1043→  1043→                                .glassCard(cornerRadius: 16, opacity: 0.04)
+  1044→  1044→                            }
+  1045→  1045→                        }
+  1046→  1046→                        .padding(.horizontal, 20)
+  1047→  1047→                    }
+  1048→  1048→                }
+  1049→  1049→            }
+  1050→  1050→            .navigationTitle("Запросы")
+  1051→  1051→            .navigationBarTitleDisplayMode(.inline)
+  1052→  1052→            .toolbar {
+  1053→  1053→                ToolbarItem(placement: .topBarLeading) {
+  1054→  1054→                    Button {
+  1055→  1055→                        dismiss()
+  1056→  1056→                    } label: {
+  1057→  1057→                        Image(systemName: "chevron.left")
+  1058→  1058→                            .font(.system(size: 15, weight: .bold))
+  1059→  1059→                            .foregroundColor(.ravePrimary)
+  1060→  1060→                    }
+  1061→  1061→                }
+  1062→  1062→            }
+  1063→  1063→        }
+  1064→  1064→    }
+  1065→  1065→}
+  1066→  1066→

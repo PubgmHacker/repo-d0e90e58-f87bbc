@@ -1,11 +1,14 @@
 import SwiftUI
 
-// MARK: - Service Selection v4 — "3 Hyper-Buttons"
+// MARK: - Service Selection v5 — Premium List
 ///
-/// Три крупные гипер-кнопки-категории вместо длинного списка:
-/// 1. Видеосервисы → полноэкранный экран с YouTube, VK, Rutube, Netflix, Disney+
-/// 2. Кинотеатры → экран с Кинопоиск, Ivi, Wink, Okko, Start, Premier, СМОТРИМ, КИОН
-/// 3. Браузер/Своя ссылка → экран с полем ввода URL
+/// 🔧 REDESIGNED: Was a 2×N grid ("сетка-винегрет"). Now a clean scrollable
+/// list with real brand logos, premium row design, and section headers.
+///
+/// Structure:
+///   1. Three category cards at top (Видеосервисы, Кинотеатры, Браузер)
+///   2. Tapping a category opens a full-screen list of services
+///   3. Each service row: real logo + name + subtitle + chevron
 struct ServiceSelectionView: View {
     @Environment(\.dismiss) private var dismiss
     var onSelect: (VideoService) -> Void
@@ -19,48 +22,53 @@ struct ServiceSelectionView: View {
     }
 
     private let videoServices: [VideoService] = [.youtube, .vk, .rutube, .netflix, .disney]
-    private let cinemaServices: [VideoService] = [.kinopoisk, .ivi, .wink, .okko, .start, .premier, .smotrim, .kion]
+    private let cinemaServices: [VideoService] = [.kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion]
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground()
+            BioluminescentBackground(energy: 0.4, dimming: 0)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 premiumNav
 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        // Гипер-кнопка 1: Видеосервисы
-                        hyperButton(
+                    VStack(spacing: 12) {
+                        // Section header
+                        PlinkSectionHeader(text: "Категория")
+                            .padding(.top, 16)
+
+                        // Three category cards
+                        categoryCard(
                             title: "Видеосервисы",
                             subtitle: "YouTube · VK · Rutube · Netflix · Disney+",
                             icon: "play.rectangle.fill",
-                            gradient: [Color.ravePrimary.opacity(0.3), .black],
+                            iconColor: .bioCyan,
+                            count: videoServices.count,
                             action: { selectedCategory = .video }
                         )
 
-                        // Гипер-кнопка 2: Кинотеатры
-                        hyperButton(
+                        categoryCard(
                             title: "Кинотеатры",
-                            subtitle: "Кинопоиск · Ivi · Okko · Wink · и другие",
+                            subtitle: "Кинопоиск · Ivi · Okko · Wink · Start · Premier · Смотрим · KION",
                             icon: "film.stack",
-                            gradient: [Color.raveAccent.opacity(0.3), .black],
+                            iconColor: .bioEmerald,
+                            count: cinemaServices.count,
                             action: { selectedCategory = .cinema }
                         )
 
-                        // Гипер-кнопка 3: Браузер / Своя ссылка
-                        hyperButton(
+                        categoryCard(
                             title: "Браузер / Своя ссылка",
-                            subtitle: "Открой любой сайт или вставь URL",
+                            subtitle: "Открой любой сайт или вставьте URL",
                             icon: "safari.fill",
-                            gradient: [Color.raveCyan.opacity(0.3), .black],
+                            iconColor: .bioTeal,
+                            count: nil,
                             action: { selectedCategory = .browser }
                         )
 
                         Spacer(minLength: 40)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
+                    .padding(.horizontal, 16)
                 }
             }
         }
@@ -73,7 +81,7 @@ struct ServiceSelectionView: View {
         .sheet(item: $selectedCategory) { category in
             switch category {
             case .video:
-                ServiceGridScreen(
+                ServiceListScreen(
                     title: "Видеосервисы",
                     services: videoServices,
                     onSelect: { service in
@@ -82,7 +90,7 @@ struct ServiceSelectionView: View {
                     }
                 )
             case .cinema:
-                ServiceGridScreen(
+                ServiceListScreen(
                     title: "Кинотеатры",
                     services: cinemaServices,
                     onSelect: { service in
@@ -129,42 +137,68 @@ struct ServiceSelectionView: View {
         .padding(.top, 8)
     }
 
-    // MARK: - Hyper Button (крупная карточка-категория)
+    // MARK: - Category Card
 
-    private func hyperButton(title: String, subtitle: String, icon: String, gradient: [Color], action: @escaping () -> Void) -> some View {
+    private func categoryCard(
+        title: String,
+        subtitle: String,
+        icon: String,
+        iconColor: Color,
+        count: Int?,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: {
             HapticManager.impact(.medium)
             action()
         }) {
-            HStack(spacing: 16) {
+            HStack(spacing: 14) {
+                // Icon in colored rounded square
                 ZStack {
-                    Circle()
-                        .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 56, height: 56)
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(iconColor.opacity(0.18))
+                        .frame(width: 48, height: 48)
                     Image(systemName: icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(iconColor)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 19, weight: .bold, design: .rounded))
-                        .foregroundColor(.raveTextPrimary)
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundColor(.raveTextPrimary)
+                        if let count {
+                            Text("\(count)")
+                                .font(.system(size: 11, weight: .bold).monospacedDigit())
+                                .foregroundColor(.raveTextSecondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                        }
+                    }
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
                         .foregroundColor(.raveTextSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.raveTextTertiary)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .glassCard(cornerRadius: 20, opacity: 0.04)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
         .opacity(appeared ? 1 : 0)
@@ -172,55 +206,61 @@ struct ServiceSelectionView: View {
     }
 }
 
-// MARK: - Service Grid Screen (сетка 2×2 или 3×2 сервисов)
+// MARK: - Service List Screen (Premium scrollable list — replaces grid)
 ///
-/// Полноэкранный экран категории с плитками-сервисами.
-struct ServiceGridScreen: View {
+/// 🔧 REDESIGNED: Was a 2×N LazyVGrid ("сетка-винегрет"). Now a clean
+/// vertical List with real brand logos, premium row design, and proper
+/// section dividers.
+struct ServiceListScreen: View {
     @Environment(\.dismiss) private var dismiss
     let title: String
     let services: [VideoService]
     var onSelect: (VideoService) -> Void
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16),
-    ]
-
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                BioluminescentBackground(energy: 0.4, dimming: 0)
+                    .ignoresSafeArea()
 
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(services) { service in
-                            Button {
-                                HapticManager.impact(.medium)
-                                onSelect(service)
-                            } label: {
-                                VStack(spacing: 12) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(service.accentColor.opacity(0.12))
-                                            .frame(width: 64, height: 64)
-                                        ServiceLogoIcon(service: service, size: 32)
-                                    }
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        // Section header
+                        PlinkSectionHeader(text: "Доступные сервисы")
+                            .padding(.top, 16)
+                            .padding(.bottom, 8)
 
-                                    Text(service.title)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.raveTextPrimary)
-                                        .multilineTextAlignment(.center)
-                                        .lineLimit(2)
+                        // Grouped list in a single material card
+                        VStack(spacing: 0) {
+                            ForEach(Array(services.enumerated()), id: \.element) { index, service in
+                                serviceRow(service)
+
+                                // Thin divider between rows (not after last)
+                                if index < services.count - 1 {
+                                    Divider()
+                                        .background(Color.white.opacity(0.06))
+                                        .padding(.leading, 72)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
-                                .glassCard(cornerRadius: 18, opacity: 0.04)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                        )
+                        .padding(.horizontal, 16)
+
+                        // Footer info
+                        Text("Выберите сервис, чтобы создать комнату для совместного просмотра")
+                            .font(.system(size: 11))
+                            .foregroundColor(.raveTextTertiary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                            .padding(.top, 16)
+
+                        Spacer(minLength: 32)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
                 }
             }
             .navigationTitle(title)
@@ -231,17 +271,56 @@ struct ServiceGridScreen: View {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.ravePrimary)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.bioCyan)
                     }
                 }
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
     }
+
+    // MARK: - Service Row (premium list row with real logo)
+
+    @ViewBuilder
+    private func serviceRow(_ service: VideoService) -> some View {
+        Button {
+            HapticManager.impact(.medium)
+            onSelect(service)
+        } label: {
+            HStack(spacing: 14) {
+                // Real brand logo from Assets.xcassets
+                ServiceLogoView(service: service, size: 40)
+                    .frame(width: 48, height: 48)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(service.title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.raveTextPrimary)
+                    Text(service.subtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(.raveTextSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.raveTextTertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 }
 
-// MARK: - Browser Input Screen (поле ввода URL)
+// MARK: - Browser Input Screen (поле ввода URL) — unchanged
 struct BrowserInputScreen: View {
     @Environment(\.dismiss) private var dismiss
     var onSelect: (VideoService) -> Void
@@ -250,18 +329,19 @@ struct BrowserInputScreen: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground(orbColors: [Color(hex: 0x22D3EE), Color.bioCyan, Color(hex: 0x1A2A6C)])
+                BioluminescentBackground(energy: 0.4, dimming: 0)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 28) {
                     Spacer()
 
                     ZStack {
                         Circle()
-                            .fill(Color.raveCyan.opacity(0.12))
+                            .fill(Color.bioCyan.opacity(0.12))
                             .frame(width: 80, height: 80)
                         Image(systemName: "safari.fill")
                             .font(.system(size: 36))
-                            .foregroundColor(.raveCyan)
+                            .foregroundColor(.bioCyan)
                     }
 
                     VStack(spacing: 8) {
@@ -298,9 +378,9 @@ struct BrowserInputScreen: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(Color.raveCyan.opacity(0.2))
+                            .background(Color.bioCyan.opacity(0.2))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.raveCyan.opacity(0.4), lineWidth: 0.5))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.bioCyan.opacity(0.4), lineWidth: 0.5))
                         }
 
                         Button {
@@ -333,11 +413,12 @@ struct BrowserInputScreen: View {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.ravePrimary)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.bioCyan)
                     }
                 }
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
     }

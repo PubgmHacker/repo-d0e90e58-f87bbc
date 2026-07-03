@@ -156,10 +156,17 @@ final class RoomViewModel: WebSocketClientDelegate {
         let trimmed = chatText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
 
-        let payload = ChatPayload(type: "chat", roomID: room.id,
-                                  senderID: currentUserId,
-                                  senderName: "You", text: trimmed)
-        if let data = try? JSONEncoder().encode(payload),
+        // 🔧 FIX 3.3 (client-side): Don't send senderID/senderName in payload.
+        // Server will inject them from JWT. Client sends only text + roomID.
+        // This prevents identity spoofing even if client is compromised.
+        let payload: [String: Any] = [
+            "type": "chat",
+            "roomID": room.id,
+            "text": trimmed
+            // senderID and senderName intentionally omitted — server adds from JWT
+        ]
+
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
             wsClient.send(json)
         }

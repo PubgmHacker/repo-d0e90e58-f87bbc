@@ -22,9 +22,11 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         participants.count >= maxParticipants
     }
 
-    var isHost: Bool {
-        // Set at runtime by ViewModel based on current user
-        false
+    /// 🔧 FIX M8: Was a dead computed property that always returned false.
+    /// Now takes the current user id as a parameter and actually checks.
+    /// Usage: `room.isHost(userId: currentUserId)` instead of `room.isHost`.
+    func isHost(userId: String) -> Bool {
+        hostID == userId
     }
 
     var formattedDate: String {

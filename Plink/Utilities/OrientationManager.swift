@@ -35,15 +35,23 @@ final class OrientationManager {
     }
 
     /// Текущая ориентация портретная?
+    /// 🔧 FIX M9: Added explicit parentheses — `??` has lower precedence than `&&`,
+    /// so the old expression parsed as `interfaceOrientation.isPortrait ?? (true && (...))`
+    /// which returned true for landscape orientations when UIDevice was .unknown.
     var isPortrait: Bool {
-        UIDevice.current.orientation.isPortrait || // когда UIDevice даёт корректное значение
-        (UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?
-            .interfaceOrientation.isPortrait ?? true &&
-         // Если UIDevice.unknown (лежит на столе) — проверяем window
-         (UIDevice.current.orientation == .unknown ||
-          UIDevice.current.orientation == .faceUp ||
-          UIDevice.current.orientation == .faceDown))
+        if UIDevice.current.orientation.isPortrait {
+            return true
+        }
+        // Если UIDevice.unknown (лежит на столе) — проверяем window scene
+        if UIDevice.current.orientation == .unknown ||
+           UIDevice.current.orientation == .faceUp ||
+           UIDevice.current.orientation == .faceDown {
+            let windowIsPortrait = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first?
+                .interfaceOrientation.isPortrait ?? true
+            return windowIsPortrait
+        }
+        return false
     }
 }

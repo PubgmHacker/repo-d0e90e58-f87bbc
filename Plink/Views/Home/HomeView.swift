@@ -177,6 +177,12 @@ struct HomeView: View {
             }
             startCTACollapseTimer()
         }
+        // 🔧 FIX M15: Invalidate the CTA collapse timer on disappear so it
+        // doesn't fire on a stale view (was: stored in @State with no cleanup).
+        .onDisappear {
+            ctaCollapseTimer?.invalidate()
+            ctaCollapseTimer = nil
+        }
     }
 
     // MARK: - Header (минимализм: приветствие + аватар)

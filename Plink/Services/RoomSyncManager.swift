@@ -91,6 +91,10 @@ final class RoomSyncManager: ObservableObject {
         self.wsClient = wsClient
         self.roomID = roomID
         self.blockManager = blockManager ?? UserBlockManager()
+        // 🔧 FIX M14: Reset stale background-disconnect flag on init — if the OS
+        // killed the app while in background, didDisconnectInBackground would stay
+        // true on the next launch, leaving connectionStatus stuck at .reconnecting.
+        self.didDisconnectInBackground = false
 
         setupBackgroundObservers()
     }

@@ -83,8 +83,10 @@ struct RoomView: View {
         .task {
             guard let viewModel else { return }
             await viewModel.joinRoomFlow()
-            // Активируем голосовой чат при входе в комнату
-            try? await voiceChat?.startCall(roomId: room.id)
+            // 🔧 FIX M10: Removed redundant voiceChat.startCall call —
+            // joinRoomFlow already calls voiceChat.startCall(roomId:) at line 102.
+            // The second call was idempotent (VoiceChatService.startCall has guard
+            // !isActive), but its try? swallowed any legitimate error from setup.
 
             // Восстановление позиции (авто-пауза → продолжить с того же места)
             let savedPosition = UserDefaults.standard.double(forKey: "room_position_\(room.id)")

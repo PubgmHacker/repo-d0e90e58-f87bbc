@@ -75,6 +75,12 @@ final class AuthService: AuthServiceProtocol {
         let expiry = Date().addingTimeInterval(86400).timeIntervalSince1970  // JWT ~24h
         await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken)
         cacheUser(user)
+        // 🔧 FIX M6: Sync premium status from server (authoritative source).
+        // Local UserDefaults flag is now a hint, not authority.
+        PremiumStatusManager.shared.syncFromServer(
+            isPremium: user.isPremium,
+            expiry: PremiumStatusManager.shared.subscriptionExpiry
+        )
         await registerFCMIfPresent()
         return user
     }
@@ -99,6 +105,11 @@ final class AuthService: AuthServiceProtocol {
         let expiry = Date().addingTimeInterval(86400).timeIntervalSince1970
         await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken)
         cacheUser(user)
+        // 🔧 FIX M6: Sync premium status from server (authoritative source).
+        PremiumStatusManager.shared.syncFromServer(
+            isPremium: user.isPremium,
+            expiry: PremiumStatusManager.shared.subscriptionExpiry
+        )
         await registerFCMIfPresent()
         return user
     }

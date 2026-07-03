@@ -1,12 +1,11 @@
 import SwiftUI
 
-// MARK: - Controls Overlay v2 (YouTube-style)
-/// Кнопки управления по центру видео. Появляются по тапу, скрываются через 3с.
-///
-/// Структура:
-/// - Сверху: название комнаты, аватары участников, кнопка закрыть
-/// - Центр: play/pause (большая), seek ±10
-/// - Снизу: ползунок времени + тайминги
+// MARK: - Controls Overlay v3 (Premium Glass)
+/// 🔧 REDESIGNED: Glass-transparent controls that don't distract from the movie.
+/// • Side buttons (mic, share, chat) are very subtle — low opacity glass
+/// • Center controls (play/pause/seek) are prominent when visible
+/// • All controls fade in/out smoothly with `isVisible`
+/// • Buttons highlight on press via buttonStyle
 struct ControlsOverlay: View {
     let isPlaying: Bool
     let currentTime: TimeInterval
@@ -26,12 +25,12 @@ struct ControlsOverlay: View {
 
     var body: some View {
         ZStack {
-            // Тёмный gradient для читаемости (появляется с контролами)
+            // Subtle gradient for readability (very light)
             LinearGradient(
                 colors: [
-                    .black.opacity(0.5),
+                    .black.opacity(0.3),
                     .clear,
-                    .black.opacity(0.5),
+                    .black.opacity(0.3),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -53,23 +52,20 @@ struct ControlsOverlay: View {
         .allowsHitTesting(isVisible)
     }
 
-    // MARK: - Top Bar
+    // MARK: - Top Bar (glass, very subtle)
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            Button(action: onClose) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-            }
+            glassCircleButton(icon: "chevron.down", size: 30, action: onClose)
 
             Text(roomName)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(.white.opacity(0.85))
                 .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
 
             Spacer()
 
@@ -77,36 +73,40 @@ struct ControlsOverlay: View {
         }
     }
 
-    // MARK: - Center Controls (YouTube-style)
+    // MARK: - Center Controls (prominent when visible)
 
     private var centerControls: some View {
-        HStack(spacing: 32) {
-            Button(action: { onSeekRelative(-10) }) {
-                Image(systemName: "gobackward.10")
-                    .font(.system(size: 22))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-            }
+        HStack(spacing: 36) {
+            glassCircleButton(
+                icon: "gobackward.10",
+                size: 44,
+                iconSize: 20,
+                action: { onSeekRelative(-10) }
+            )
 
+            // Play/pause — larger, more prominent
             Button(action: onTogglePlay) {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 32))
+                    .font(.system(size: 28))
                     .foregroundColor(.white)
-                    .frame(width: 64, height: 64)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
+                    .frame(width: 60, height: 60)
+                    .background(
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                            )
+                    )
             }
+            .buttonStyle(GlassButtonStyle())
 
-            Button(action: { onSeekRelative(10) }) {
-                Image(systemName: "goforward.10")
-                    .font(.system(size: 22))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-            }
+            glassCircleButton(
+                icon: "goforward.10",
+                size: 44,
+                iconSize: 20,
+                action: { onSeekRelative(10) }
+            )
         }
     }
 
@@ -116,7 +116,7 @@ struct ControlsOverlay: View {
         HStack(spacing: 8) {
             Text(formattedTime(currentTime))
                 .font(.system(size: 11).monospacedDigit())
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.white.opacity(0.7))
 
             SeekBar(
                 progress: duration > 0 ? currentTime / duration : 0,
@@ -125,19 +125,38 @@ struct ControlsOverlay: View {
 
             Text(formattedTime(duration))
                 .font(.system(size: 11).monospacedDigit())
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.white.opacity(0.7))
 
-            // YouTube-style fullscreen toggle (правый нижний угол)
-            Button(action: onToggleFullscreen) {
-                Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left"
-                                               : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-            }
+            glassCircleButton(
+                icon: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                size: 28,
+                iconSize: 12,
+                action: onToggleFullscreen
+            )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    // MARK: - Glass Circle Button Helper
+
+    @ViewBuilder
+    private func glassCircleButton(icon: String, size: CGFloat, iconSize: CGFloat = 14, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: iconSize, weight: .medium))
+                .foregroundColor(.white.opacity(0.85))
+                .frame(width: size, height: size)
+                .background(
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.1), lineWidth: 0.3)
+                        )
+                )
+        }
+        .buttonStyle(GlassButtonStyle())
     }
 
     // MARK: - Helpers
@@ -152,8 +171,17 @@ struct ControlsOverlay: View {
     }
 }
 
-// MARK: - Seek Bar
+// MARK: - Glass Button Style (highlight on press)
+struct GlassButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
 
+// MARK: - Seek Bar
 private struct SeekBar: View {
     let progress: Double
     var onSeek: (Double) -> Void
@@ -162,17 +190,18 @@ private struct SeekBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(height: 4)
+                    .fill(Color.white.opacity(0.2))
+                    .frame(height: 3)
 
                 Capsule()
-                    .fill(Color.white)
-                    .frame(width: geo.size.width * progress, height: 4)
+                    .fill(Color.white.opacity(0.8))
+                    .frame(width: geo.size.width * progress, height: 3)
 
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 14, height: 14)
-                    .offset(x: geo.size.width * progress - 7)
+                    .frame(width: 12, height: 12)
+                    .offset(x: geo.size.width * progress - 6)
+                    .opacity(progress > 0 && progress < 1 ? 1 : 0)
             }
             .frame(height: 20)
             .contentShape(Rectangle())
@@ -188,8 +217,7 @@ private struct SeekBar: View {
     }
 }
 
-// MARK: - Participant Avatars
-
+// MARK: - Participant Avatars (glass, subtle)
 private struct ParticipantAvatars: View {
     let count: Int
     var onTap: () -> Void
@@ -199,18 +227,18 @@ private struct ParticipantAvatars: View {
             HStack(spacing: -6) {
                 ForEach(0..<min(count, 4), id: \.self) { i in
                     Circle()
-                        .fill(Color(hue: Double(i) / 4.0, saturation: 0.6, brightness: 0.8))
-                        .frame(width: 26, height: 26)
-                        .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 2))
+                        .fill(Color(hue: Double(i) / 4.0, saturation: 0.5, brightness: 0.7))
+                        .frame(width: 24, height: 24)
+                        .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1.5))
                 }
                 if count > 4 {
                     Text("+\(count - 4)")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 26, height: 26)
-                        .background(Color.black.opacity(0.5))
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(width: 24, height: 24)
+                        .background(.ultraThinMaterial)
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 2))
+                        .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1.5))
                 }
             }
         }

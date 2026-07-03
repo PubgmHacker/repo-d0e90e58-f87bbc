@@ -37,6 +37,7 @@ struct RoomView: View {
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var showEmojiPicker = false
     @State private var shareSheetPresented = false
+    @State private var showParticipants = false
     /// YouTube-style: кнопка fullscreen разворачивает видео на весь экран
     /// с авторотацией в ландшафт. ВАЖНО: используется ТОЛЬКО для управления
     /// ориентацией устройства, а НЕ для выбора layout (layout зависит от геометрии).
@@ -126,6 +127,9 @@ struct RoomView: View {
             if let url = URL(string: "https://raveclone.com/join/\(room.code)") {
                 ShareSheet(items: [url])
             }
+        }
+        .sheet(isPresented: $showParticipants) {
+            ParticipantListView(room: room)
         }
     }
 
@@ -308,7 +312,7 @@ struct RoomView: View {
                     }
                 },
                 onShowParticipants: {
-                    // TODO: show participants sheet
+                    showParticipants = true
                 },
                 onToggleFullscreen: {
                     HapticManager.impact(.light)
@@ -321,10 +325,11 @@ struct RoomView: View {
                 isVisible: $showControls
             )
 
-            // Discord-style кнопка микрофона (левый нижний угол) + share (правый верхний угол)
+            // 🔧 GLASS CONTROLS: Mic, share, chat buttons — very transparent glass
+            // that fades with showControls so they don't distract from the movie.
             if let voiceChat {
                 VStack {
-                    // ── Share: правый верхний угол (22pt прозрачная иконка) ──
+                    // ── Share: правый верхний угол ──
                     HStack {
                         Spacer()
                         Button {
@@ -332,29 +337,35 @@ struct RoomView: View {
                             shareSheetPresented = true
                         } label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 22, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                                .frame(width: 36, height: 36)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white.opacity(0.85))
+                                .frame(width: 34, height: 34)
+                                .background(
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 0.3))
+                                )
                         }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, 16)
-                        .padding(.top, 8)
+                        .buttonStyle(GlassButtonStyle())
+                        .opacity(showControls ? 1 : 0)
+                        .padding(.trailing, 14)
+                        .padding(.top, 6)
                     }
 
                     Spacer()
 
-                    // ── Микрофон: левый нижний угол (не перекрывает fullscreen) ──
+                    // ── Микрофон: левый нижний угол ──
                     HStack(spacing: 12) {
                         VoiceChatButton(voiceChat: voiceChat) {
                             voiceChat.toggleMute()
                         }
+                        .opacity(showControls ? 1 : 0.3)  // dim but visible when controls hidden
                         Spacer()
                     }
-                    .padding(.leading, 16)
-                    .padding(.bottom, 8)
+                    .padding(.leading, 14)
+                    .padding(.bottom, 6)
                 }
+                .animation(.easeInOut(duration: 0.25), value: showControls)
             }
 
             // Бегущая строка (marquee) — последнее сообщение

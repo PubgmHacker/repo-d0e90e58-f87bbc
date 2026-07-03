@@ -14,6 +14,10 @@ struct DMChatView: View {
     @State private var messageText = ""
     @State private var showEmojiPicker = false
     @FocusState private var isInputFocused: Bool
+    /// 🔧 CHAR LIMIT: 200 chars max per DM — prevents spam
+    private let charLimit = 200
+    /// 🔧 RATE LIMIT: min 1s between DMs
+    @State private var lastSendTime: Date = .distantPast
 
     var body: some View {
         ZStack {
@@ -135,6 +139,13 @@ struct DMChatView: View {
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5))
                 .onSubmit { sendAction() }
+                .onChange(of: messageText) { _, newValue in
+                    // 🔧 CHAR LIMIT: Truncate at 200 chars
+                    if newValue.count > charLimit {
+                        messageText = String(newValue.prefix(charLimit))
+                        HapticManager.impact(.light)
+                    }
+                }
 
             // Кнопка отправки — ледяной голубой
             Button(action: sendAction) {
@@ -153,6 +164,15 @@ struct DMChatView: View {
     private func sendAction() {
         let text = messageText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
+
+        // 🔧 RATE LIMIT: min 1s between DMs
+        let now = Date()
+        guard now.timeIntervalSince(lastSendTime) >= 1 else {
+            HapticManager.impact(.light)
+            return
+        }
+        lastSendTime = now
+
         dmService.sendMessage(text, to: friend)
         messageText = ""
         HapticManager.impact(.light)

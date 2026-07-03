@@ -115,10 +115,10 @@ struct ServiceSelectionView: View {
         }
         // 🔧 NEW: When user picks a service, open the full-screen browser
         .sheet(item: $browseService) { service in
-            ServiceBrowserView(service: service) { contentURL in
+            ServiceBrowserView(service: service) { contentURL, contentTitle in
                 browseService = nil
                 // Pass to the parent — it will open RoomSetupView
-                onContentSelected(service, contentURL, "")
+                onContentSelected(service, contentURL, contentTitle)
             }
         }
     }

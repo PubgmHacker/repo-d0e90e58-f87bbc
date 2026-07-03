@@ -9,6 +9,11 @@ struct AIAssistantView: View {
     @State private var isLoading = false
     @FocusState private var isInputFocused: Bool
 
+    /// 🔧 CHAR LIMIT: 200 chars max per message — prevents spam + API abuse
+    private let charLimit = 200
+    /// 🔧 RATE LIMIT: min 2s between messages — prevents spam
+    @State private var lastSendTime: Date = .distantPast
+
     private let storageKey = "ai_chat_history"
 
     var body: some View {
@@ -154,6 +159,13 @@ struct AIAssistantView: View {
                 .padding(.vertical, 12)
                 .glassCard(cornerRadius: 22, opacity: 0.06)
                 .focused($isInputFocused)
+                .onChange(of: inputText) { _, newValue in
+                    // 🔧 CHAR LIMIT: Truncate at 200 chars
+                    if newValue.count > charLimit {
+                        inputText = String(newValue.prefix(charLimit))
+                        HapticManager.impact(.light)
+                    }
+                }
 
             Button {
                 sendMessage()
@@ -182,6 +194,14 @@ struct AIAssistantView: View {
     private func sendMessage() {
         let query = inputText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty, !isLoading else { return }
+
+        // 🔧 RATE LIMIT: min 2s between messages
+        let now = Date()
+        if now.timeIntervalSince(lastSendTime) < 2 {
+            HapticManager.impact(.light)
+            return
+        }
+        lastSendTime = now
 
         let userMsg = AIMessage(id: UUID().uuidString, role: .user, text: query, timestamp: Date())
         messages.append(userMsg)

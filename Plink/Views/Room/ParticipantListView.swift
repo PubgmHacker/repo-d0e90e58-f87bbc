@@ -1,148 +1,229 @@
 import SwiftUI
 
-// MARK: - Participant List View
+// MARK: - Participant List View (Premium)
+/// 🔧 REDESIGNED: Full premium redesign with:
+///   • Russian localization
+///   • Glass cards (ultraThinMaterial)
+///   • User IDs shown in small monospaced font
+///   • Host badge + online indicator
+///   • Copy room code + share
+///   • Proper section headers
 struct ParticipantListView: View {
     let room: Room
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                BioluminescentBackground(energy: 0.35, dimming: 0)
+                    .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 16) {
-                    // Header
-                    HStack {
-                        Text("Participants")
-                            .font(.headline)
-                            .foregroundColor(.raveTextPrimary)
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // ── Room Info Card ──
+                        roomInfoCard
 
-                        Spacer()
+                        // ── Participants Section ──
+                        PlinkSectionHeader(text: "В комнате (\(room.participantCount)/\(room.maxParticipants))")
+                            .padding(.horizontal, 16)
 
-                        Text("\(room.participantCount)/\(room.maxParticipants)")
-                            .font(.subheadline.bold().monospacedDigit())
-                            .foregroundColor(.ravePrimary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.raveCard)
-                            .clipShape(Capsule())
-                    }
-
-                    // Room code share
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Room Code")
-                                .font(.caption)
-                                .foregroundColor(.raveTextSecondary)
-                            Text(room.code)
-                                .font(.title2.bold().monospaced())
-                                .foregroundColor(.ravePrimary)
-                        }
-
-                        Spacer()
-
-                        Button {
-                            UIPasteboard.general.string = room.code
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "doc.on.doc")
-                                Text("Copy")
+                        PlinkSettingsCard {
+                            // Host first
+                            if let host = room.participants.first(where: { $0.id == room.hostID }) {
+                                participantRow(host, isHost: true)
+                                if room.participants.count > 1 {
+                                    Divider()
+                                        .background(Color.white.opacity(0.06))
+                                        .padding(.leading, 56)
+                                }
                             }
-                            .font(.caption.bold())
-                            .foregroundColor(.ravePrimary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.ravePrimary.opacity(0.15))
-                            .clipShape(Capsule())
+
+                            // Other participants
+                            ForEach(Array(room.participants.filter { $0.id != room.hostID }.enumerated()), id: \.element.id) { index, user in
+                                participantRow(user, isHost: false)
+                                if index < room.participants.filter({ $0.id != room.hostID }).count - 1 {
+                                    Divider()
+                                        .background(Color.white.opacity(0.06))
+                                        .padding(.leading, 56)
+                                }
+                            }
+
+                            // Empty state
+                            if room.participants.isEmpty {
+                                HStack {
+                                    Spacer()
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "person.2.slash")
+                                            .font(.system(size: 28))
+                                            .foregroundColor(.raveTextTertiary)
+                                        Text("Нет участников")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.raveTextTertiary)
+                                    }
+                                    .padding(.vertical, 24)
+                                    Spacer()
+                                }
+                            }
                         }
+                        .padding(.horizontal, 16)
+
+                        Spacer(minLength: 32)
                     }
-                    .padding(14)
-                    .background(Color.raveCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                    Divider()
-                        .background(Color.raveSurface)
-
-                    // Participant list
-                    Text("In Room")
-                        .font(.caption.bold())
-                        .foregroundColor(.raveTextSecondary)
-
-                    LazyVStack(spacing: 10) {
-                        // Host first
-                        if let host = room.participants.first(where: { $0.id == room.hostID }) {
-                            ParticipantRow(user: host, isHost: true)
-                        }
-
-                        // Other participants
-                        ForEach(room.participants.filter { $0.id != room.hostID }) { user in
-                            ParticipantRow(user: user, isHost: false)
-                        }
+                    .padding(.top, 8)
+                }
+            }
+            .navigationTitle("Участники")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.bioCyan)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .preferredColorScheme(.dark)
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .preferredColorScheme(.dark)
     }
-}
 
-// MARK: - Participant Row
-private struct ParticipantRow: View {
-    let user: UserPreview
-    let isHost: Bool
+    // MARK: - Room Info Card
 
-    var body: some View {
+    private var roomInfoCard: some View {
+        HStack(spacing: 16) {
+            // Room icon
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.bioCyan.opacity(0.2), Color.bioEmerald.opacity(0.15)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 52, height: 52)
+                Image(systemName: "rectangle.stack.fill.badge.play")
+                    .font(.system(size: 20))
+                    .foregroundColor(.bioCyan)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(room.name)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.raveTextPrimary)
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    // Room code
+                    HStack(spacing: 4) {
+                        Text("Код:")
+                            .font(.system(size: 11))
+                            .foregroundColor(.raveTextTertiary)
+                        Text(room.code)
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundColor(.bioCyan)
+                    }
+
+                    // Copy button
+                    Button {
+                        HapticManager.impact(.light)
+                        UIPasteboard.general.string = room.code
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundColor(.raveTextTertiary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            // Participant count badge
+            VStack(spacing: 2) {
+                Text("\(room.participantCount)")
+                    .font(.system(size: 18, weight: .heavy, design: .rounded).monospacedDigit())
+                    .foregroundColor(.raveTextPrimary)
+                Text("/ \(room.maxParticipants)")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor(.raveTextTertiary)
+            }
+            .frame(width: 44, height: 44)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Participant Row
+
+    @ViewBuilder
+    private func participantRow(_ user: UserPreview, isHost: Bool) -> some View {
         HStack(spacing: 12) {
-            // Avatar
+            // Avatar with online indicator
             ZStack(alignment: .bottomTrailing) {
                 Circle()
-                    .fill(Color.ravePrimary)
+                    .fill(
+                        LinearGradient(
+                            colors: isHost
+                                ? [Color.bioEmerald.opacity(0.6), Color.bioCyan.opacity(0.4)]
+                                : [Color.bioCyan.opacity(0.3), Color.bioTeal.opacity(0.2)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(width: 40, height: 40)
                     .overlay(
                         Text(user.username.prefix(1).uppercased())
-                            .font(.subheadline.bold())
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.white)
                     )
 
-                // Online indicator
+                // Online dot
                 Circle()
-                    .fill(user.isOnline ? Color.raveGreen : Color.raveTextSecondary.opacity(0.3))
+                    .fill(user.isOnline ? Color.bioEmerald : Color.raveTextTertiary.opacity(0.3))
                     .frame(width: 10, height: 10)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.raveBackground, lineWidth: 2)
-                    )
+                    .overlay(Circle().stroke(Color.raveBackground, lineWidth: 2))
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(user.username)
-                        .font(.subheadline.bold())
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.raveTextPrimary)
 
                     if isHost {
-                        Text("HOST")
-                            .font(.caption2.bold())
-                            .foregroundColor(.raveWarning)
-                            .padding(.horizontal, 6)
+                        Text("ХОСТ")
+                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color.raveWarning.opacity(0.15))
+                            .background(Color.bioEmerald.opacity(0.3))
                             .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Color.bioEmerald.opacity(0.5), lineWidth: 0.5))
                     }
+
+                    // 🔧 User ID (small, monospaced)
+                    Text("#\(String(user.id.suffix(8)))")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(.raveTextTertiary)
                 }
 
-                Text(user.isOnline ? "Online" : "Offline")
-                    .font(.caption2)
-                    .foregroundColor(.raveTextSecondary)
+                Text(user.isOnline ? "В сети" : "Не в сети")
+                    .font(.system(size: 11))
+                    .foregroundColor(user.isOnline ? .bioEmerald : .raveTextTertiary)
             }
 
             Spacer()
         }
-        .padding(10)
-        .background(Color.raveCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }

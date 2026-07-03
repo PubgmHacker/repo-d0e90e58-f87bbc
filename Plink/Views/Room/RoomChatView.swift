@@ -23,6 +23,11 @@ struct RoomChatView: View {
     /// Фокус на текстовом поле (чтобы убирать клавиатуру)
     @FocusState private var isInputFocused: Bool
 
+    /// 🔧 CHAR LIMIT: 200 chars max per chat message — prevents spam
+    private let charLimit = 200
+    /// 🔧 RATE LIMIT: min 1s between chat messages
+    @State private var lastSendTime: Date = .distantPast
+
     enum LayoutMode {
         case portrait   // снизу под видео
         case landscape  // справа поверх видео
@@ -214,7 +219,20 @@ struct RoomChatView: View {
                 .background(Color.white.opacity(0.08))
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.5))
-                .onSubmit { onSend() }
+                .onSubmit {
+                    // 🔧 RATE LIMIT: min 1s between chat messages
+                    let now = Date()
+                    guard now.timeIntervalSince(lastSendTime) >= 1 else { return }
+                    lastSendTime = now
+                    onSend()
+                }
+                .onChange(of: chatText) { _, newValue in
+                    // 🔧 CHAR LIMIT: Truncate at 200 chars
+                    if newValue.count > charLimit {
+                        chatText = String(newValue.prefix(charLimit))
+                        HapticManager.impact(.light)
+                    }
+                }
 
             Button(action: onSend) {
                 Image(systemName: "arrow.up.circle.fill")

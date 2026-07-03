@@ -14,6 +14,11 @@ final class RoomViewModel: WebSocketClientDelegate {
     var chatText = ""
     var errorMessage: String?
     var connectionStatus: ConnectionStatus = .connecting
+    /// 🔧 FIX C8: Host's premium status — used by AdSessionManager to skip ads.
+    /// Set by RoomView.setupViewModel from PremiumStatusManager.shared.isPremium.
+    var hostIsPremium: Bool = false
+    /// Cap on message history to prevent unbounded memory growth (FIX H13)
+    private let maxMessages = 200
     /// Защита от повторного входа в joinRoomFlow / cleanup.
     private var isJoining = false
     private var didCleanup = false
@@ -232,6 +237,11 @@ final class RoomViewModel: WebSocketClientDelegate {
         // 3. Chat-сообщение.
         if let chatMsg = try? JSONDecoder().decode(ChatMessage.self, from: data) {
             messages.append(chatMsg)
+            // 🔧 FIX H13: Cap message history to prevent unbounded memory growth.
+            // Long rooms with active chat could leak tens of MB before this fix.
+            if messages.count > maxMessages {
+                messages.removeFirst(messages.count - maxMessages)
+            }
             return
         }
 

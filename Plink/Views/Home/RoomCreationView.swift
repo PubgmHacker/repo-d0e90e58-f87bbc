@@ -466,19 +466,37 @@ struct RoomCreationView: View {
             source: .url
         )
 
+        // 🔧 FIX C8: Resolve real host identity + premium status
+        // (was: hardcoded hostID="current_user" and hostIsPremium=false)
+        let hostID: String = {
+            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
+               let user = try? JSONDecoder().decode(User.self, from: data) {
+                return user.id
+            }
+            return UUID().uuidString
+        }()
+        let hostName: String = {
+            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
+               let user = try? JSONDecoder().decode(User.self, from: data) {
+                return user.username
+            }
+            return "You"
+        }()
+        let hostIsPremium = PremiumStatusManager.shared.isPremium
+
         let room = Room(
             id: UUID().uuidString,
             name: roomName.trimmingCharacters(in: .whitespaces).isEmpty
                 ? (isDemo ? "Комната \(generateRoomCode())" : roomName.trimmingCharacters(in: .whitespaces))
                 : roomName.trimmingCharacters(in: .whitespaces),
-            hostID: "current_user",
-            hostName: "You",
+            hostID: hostID,
+            hostName: hostName,
             code: generateRoomCode(),
             participants: [],
             mediaItem: finalMediaItem,
             isActive: true,
             maxParticipants: maxParticipants,
-            hostIsPremium: false,
+            hostIsPremium: hostIsPremium,
             createdAt: Date()
         )
 

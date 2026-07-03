@@ -14,6 +14,10 @@ import StoreKit
 @MainActor
 final class StoreManager: ObservableObject {
 
+    /// 🔧 FIX C9: Singleton — ProfileView and SettingsSlidePanel call .purchase()
+    /// and .restorePurchases() without needing to instantiate.
+    static let shared = StoreManager()
+
     // MARK: - Published State
 
     @Published private(set) var products: [Product] = []
@@ -75,6 +79,22 @@ final class StoreManager: ObservableObject {
 
     // MARK: - Purchase
 
+    /// 🔧 FIX C9: Convenience purchase() — picks the default (monthly) product.
+    /// Used by ProfileView and SettingsSlidePanel when no specific product is selected.
+    func purchase() async {
+        // Load products if not already loaded
+        if products.isEmpty {
+            await loadProducts()
+        }
+        // Pick the cheapest product (monthly) as default
+        guard let product = products.first else {
+            errorMessage = "Не удалось загрузить продукты подписки"
+            purchaseState = .failed
+            return
+        }
+        await purchase(product)
+    }
+
     func purchase(_ product: Product) async {
         purchaseState = .purchasing
         errorMessage = nil
@@ -112,13 +132,37 @@ final class StoreManager: ObservableObject {
 
     // MARK: - Restore Purchases
 
+    /// 🔧 FIX M5: restorePurchases was a no-op — AppStore.sync() only re-syncs
+    /// the StoreKit cache; it doesn't iterate active entitlements. Now we
+    /// explicitly walk Transaction.currentEntitlements and apply each verified
+    /// transaction to PremiumStatusManager. App Store Review REQUIRES this to work.
     func restorePurchases() async {
         purchaseState = .restoring
         errorMessage = nil
 
         do {
+            // 1. Re-sync StoreKit cache with Apple's servers
             try await AppStore.sync()
-            purchaseState = .idle
+
+            // 2. Iterate all active entitlements and apply them
+            var restored = false
+            for await result in Transaction.currentEntitlements {
+                guard let transaction = try? Self.checkVerified(result) else { continue }
+                handleSuccessfulPurchase(transaction)
+                restored = true
+            }
+
+            if restored {
+                purchaseState = .success
+                // Reset to idle after 2s
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    self?.purchaseState = .idle
+                }
+            } else {
+                purchaseState = .idle
+                errorMessage = "Активные подписки не найдены"
+            }
         } catch {
             purchaseState = .failed
             errorMessage = "Не удалось восстановить покупки: \(error.localizedDescription)"
@@ -162,6 +206,10 @@ final class StoreManager: ObservableObject {
             // Fallback: 30 дней от покупки.
             expiryDate = Date().addingTimeInterval(30 * 24 * 3600)
         }
+
+        // 🔧 FIX C9: Activate premium via PremiumStatusManager.activatePremium
+        // (the only public entry point — was: setPremium which we removed).
+        PremiumStatusManager.shared.activatePremium(expiryDate: expiryDate)
 
         onPurchaseSuccess?(expiryDate)
         purchaseState = .success

@@ -16,15 +16,25 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
         timestamp.formatted(.dateTime.hour().minute())
     }
 
+    /// 🔧 FIX C11: Compare against the REAL current user id (was: "current_user").
+    /// Reads the saved user profile from UserDefaults (non-secret profile data).
     var isOwnMessage: Bool {
-        senderID == "current_user"
+        guard let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
+              let user = try? JSONDecoder().decode(User.self, from: data) else {
+            return false
+        }
+        return senderID == user.id
     }
 
     /// Премиум-статус отправителя — true для своих сообщений,
     /// когда текущий юзер премиум (проверяется через PremiumStatusManager).
+    /// 🔧 FIX N3 (NEW): Replaced MainActor.assumeIsolated with a thread-safe check.
     var isOwnPremium: Bool {
         guard isOwnMessage else { return false }
-        return MainActor.assumeIsolated { PremiumStatusManager.shared.isPremium }
+        // 🔧 FIX N3: MainActor.assumeIsolated crashes if called off-main.
+        // Use Thread.isMainThread check before touching @MainActor state.
+        guard Thread.isMainThread else { return false }
+        return PremiumStatusManager.shared.isPremium
     }
 
     var initials: String {

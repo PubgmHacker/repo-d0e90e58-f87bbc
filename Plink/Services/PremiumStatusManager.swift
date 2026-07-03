@@ -40,6 +40,8 @@ final class PremiumStatusManager: ObservableObject {
 
     // MARK: - Premium Activation (от StoreKit 2)
 
+    /// 🔧 FIX C9: This is the ONLY public entry point for activating premium.
+    /// Called from StoreManager.handleSuccessfulPurchase after server-side IAP verification.
     func activatePremium(expiryDate: Date) {
         isPremium = true
         subscriptionExpiry = expiryDate
@@ -57,18 +59,27 @@ final class PremiumStatusManager: ObservableObject {
         onPremiumStatusChanged?(false)
     }
 
-    /// Ручное включение премиума (для тестов / кнопки «Оформить»).
-    /// Устанавливает срок на 30 дней и сохраняет в UserDefaults.
-    func setPremium(_ active: Bool) {
-        if active {
-            isPremium = true
-            subscriptionExpiry = Calendar.current.date(byAdding: .day, value: 30, to: Date())
+    // 🔧 FIX C9: REMOVED setPremium(_:) — it allowed trivial IAP bypass.
+    // Premium can only be activated via activatePremium(expiryDate:) which
+    // is called from StoreManager.handleSuccessfulPurchase after server-side
+    // IAP verification. Local UserDefaults flag is now a hint, not authority.
+
+    /// 🔧 FIX C9+M6: Update premium status from server response (User.isPremium).
+    /// Called after AuthService.signIn/signUp/getFreshToken resolves the user.
+    /// This is the authoritative source — server decision overrides any local cache.
+    func syncFromServer(isPremium serverIsPremium: Bool, expiry: Date?) {
+        if serverIsPremium {
+            if isPremium != true || subscriptionExpiry != expiry {
+                isPremium = true
+                subscriptionExpiry = expiry
+                persist()
+                onPremiumStatusChanged?(true)
+            }
         } else {
-            deactivatePremium()
-            return
+            if isPremium == true {
+                deactivatePremium()
+            }
         }
-        persist()
-        onPremiumStatusChanged?(active)
     }
 
     // MARK: - Feature Access Checks

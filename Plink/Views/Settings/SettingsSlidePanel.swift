@@ -384,7 +384,8 @@ struct PremiumManagementView: View {
                             .buttonStyle(.plain)
 
                             Button(role: .destructive) {
-                                PremiumStatusManager.shared.setPremium(false)
+                                // 🔧 FIX C9: Use deactivatePremium() instead of setPremium(false)
+                                PremiumStatusManager.shared.deactivatePremium()
                                 withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
                                     isPremium = false
                                 }
@@ -402,9 +403,12 @@ struct PremiumManagementView: View {
                             .buttonStyle(.plain)
                         } else {
                             Button {
-                                PremiumStatusManager.shared.setPremium(true)
-                                withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                                    isPremium = true
+                                // 🔧 FIX C9: Route through StoreManager.purchase() instead of setPremium(true)
+                                Task {
+                                    await StoreManager.shared.purchase()
+                                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+                                        isPremium = PremiumStatusManager.shared.isPremium
+                                    }
                                 }
                             } label: {
                                 HStack {

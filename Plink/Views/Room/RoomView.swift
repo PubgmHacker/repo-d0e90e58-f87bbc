@@ -44,6 +44,9 @@ struct RoomView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    // 🔧 FIX C7: Receive shared authenticated APIClient + AuthService from environment
+    // (was: setupViewModel created own unauth APIClient() and AuthService())
+    @EnvironmentObject private var apiClient: APIClient
 
     private let controlsHideDelay: UInt64 = 3_000_000_000
 
@@ -468,30 +471,49 @@ struct RoomView: View {
     // MARK: - Setup (DI)
 
     private func setupViewModel() {
-        let api = APIClient()
+        // 🔧 FIX C7 + H9: Use shared authenticated APIClient from environment
+        // (was: created own unauth APIClient() + AuthService() on every appear)
+        let api = apiClient
         let wsClient = WebSocketClient()
         let roomService = RoomService(api: api)
         let authService = AuthService(api: api)
 
+        // 🔧 FIX C7: Resolve real currentUserId from saved user profile
+        // (was: hardcoded "current_user" — isHost was always false)
+        let currentUserId: String = {
+            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
+               let user = try? JSONDecoder().decode(User.self, from: data) {
+                return user.id
+            }
+            return UUID().uuidString  // fallback for unauthenticated (shouldn't happen)
+        }()
+        let isHost = room.hostID == currentUserId
+
+        // 🔧 FIX C8: Resolve real hostIsPremium from PremiumStatusManager
+        // (was: hardcoded false — premium hosts still saw ads)
+        let hostIsPremium = PremiumStatusManager.shared.isPremium
+
         let signaling = SignalingClient(ws: wsClient)
-        let voiceChat = VoiceChatService(signaling: signaling, localPeerId: "current_user")
+        let voiceChat = VoiceChatService(signaling: signaling, localPeerId: currentUserId)
 
         let syncEngine = SyncEngine(
             wsClient: wsClient,
             roomID: room.id,
-            userID: "current_user",
-            isHost: room.hostID == "current_user"
+            userID: currentUserId,
+            isHost: isHost
         )
 
         let vm = RoomViewModel(
             room: room,
-            currentUserId: "current_user",
+            currentUserId: currentUserId,
             wsClient: wsClient,
             roomService: roomService,
             authService: authService,
             syncEngine: syncEngine,
             voiceChat: voiceChat
         )
+        // Propagate premium flag for ad logic (C10 fix uses this)
+        vm.hostIsPremium = hostIsPremium
 
         let manager = RoomSyncManager(wsClient: wsClient, roomID: room.id)
         manager.onPlayCommand = { pos in

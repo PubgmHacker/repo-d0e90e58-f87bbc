@@ -83,14 +83,22 @@ struct ProfileView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView(
                 onPurchase: {
-                    PremiumStatusManager.shared.setPremium(true)
-                    isPremium = true
-                    showPaywall = false
+                    // 🔧 FIX C9: Premium activation goes through StoreManager.handleSuccessfulPurchase
+                    // → activatePremium(expiryDate:). Direct setPremium() removed.
+                    Task {
+                        await StoreManager.shared.purchase()
+                        isPremium = PremiumStatusManager.shared.isPremium
+                        showPaywall = false
+                    }
                 },
                 onRestore: {
-                    PremiumStatusManager.shared.setPremium(true)
-                    isPremium = true
-                    showPaywall = false
+                    // 🔧 FIX C9: Restore goes through StoreManager.restorePurchases
+                    // which iterates Transaction.currentEntitlements (FIX M5).
+                    Task {
+                        await StoreManager.shared.restorePurchases()
+                        isPremium = PremiumStatusManager.shared.isPremium
+                        showPaywall = false
+                    }
                 },
                 onDismiss: { showPaywall = false }
             )

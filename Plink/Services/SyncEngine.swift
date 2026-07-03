@@ -389,20 +389,34 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     /// SEEK command received (also used as periodic state pulse from host).
     /// Compensate for latency so we land where the host actually is now.
+    ///
+    /// 🔧 FIX M1: Was using `elapsedSinceEvent < stateBroadcastInterval + 1` as a
+    /// heuristic to detect state pulses vs real seeks. But the host's periodic
+    /// state broadcast (every 2s) and a user-initiated seek can both arrive within
+    /// that 3s window, causing real seeks to be silently reverted (extrapolated
+    /// back to the original position).
+    ///
+    /// New heuristic: a state pulse is a seek where |eventMediaTime - lastSyncMediaTime|
+    /// is small (≤ 2s, normal playback progress). A real seek has a large jump.
+    /// This distinguishes "host is just broadcasting position" from "host actually
+    /// jumped to a new position".
     private func handleSeek(_ message: SyncMessage) {
         guard let eventMediaTime = message.mediaTime else { return }
         let eventServerTime = message.timestamp
         let elapsedSinceEvent = max(0, currentServerTime - eventServerTime)
 
-        // If host is playing, extrapolate forward; if paused, hold position.
-        // We infer "playing" from whether this seek arrived as a state pulse
-        // vs an explicit seek — but conservatively, we extrapolate only if
-        // the gap is small (state pulse) to avoid over-jumping on real seeks.
-        let isStatePulse = elapsedSinceEvent < Constants.stateBroadcastInterval + 1
+        // 🔧 FIX M1: Detect state pulse by comparing media time delta, NOT time elapsed.
+        // A state pulse has media time ≈ lastSyncMediaTime + (elapsed * playbackRate).
+        // A real seek has a large jump in media time relative to lastSyncMediaTime.
+        let expectedProgress = isPlaying ? elapsedSinceEvent : 0
+        let mediaTimeDelta = abs(eventMediaTime - (lastSyncMediaTime + expectedProgress))
+        let isStatePulse = mediaTimeDelta < Constants.stateBroadcastInterval  // ≤ 2s drift = pulse
+
         let compensatedTarget: TimeInterval
         if isStatePulse && isPlaying {
             compensatedTarget = min(eventMediaTime + elapsedSinceEvent, duration > 0 ? duration : .infinity)
         } else {
+            // Real seek — don't extrapolate, just go to the exact position.
             compensatedTarget = eventMediaTime
         }
 
@@ -413,7 +427,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         }
 
         recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
-        Logger.sync.info("⏩ SEEK  host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s")
+        Logger.sync.info("⏩ SEEK  host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s [\(isStatePulse ? "pulse" : "real-seek")]")
 
         let wasPlaying = isPlaying
         seekSilently(to: compensatedTarget, preserveRate: wasPlaying)

@@ -219,43 +219,57 @@ final class RoomViewModel: WebSocketClientDelegate {
     // MARK: - Inbound Routing
 
     /// Маршрутизация входящих WS-сообщений по типу payload.
+    /// 🔧 FIX M3: Was decoding every message up to 4 times via try? JSONDecoder
+    /// chain — CPU waste on the hot path + mis-routing risk if fields overlap.
+    /// Now peeks at a single discriminator field once, then dispatches.
     private func routeInbound(_ raw: String) {
         guard let data = raw.data(using: .utf8) else { return }
 
-        // 1. Sync-команда (play/pause/seek/...)
-        if let syncMsg = try? JSONDecoder().decode(SyncMessage.self, from: data) {
-            syncEngine.handleSyncMessage(syncMsg)
+        // Peek at the JSON once to determine the message type
+        guard let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
         }
 
-        // 2. WebRTC-сигналинг → VoiceChatService.
-        //    ingest(raw:) возвращает true только для сигнальных payload.
-        if voiceChat.ingest(raw: raw) {
-            return
+        // 1. WebRTC signaling (kind field) → VoiceChatService
+        if let kind = jsonObject["kind"] as? String,
+           SignalingMessage.Kind(rawValue: kind) != nil {
+            if voiceChat.ingest(raw: raw) { return }
         }
 
-        // 3. Chat-сообщение.
-        if let chatMsg = try? JSONDecoder().decode(ChatMessage.self, from: data) {
-            messages.append(chatMsg)
-            // 🔧 FIX H13: Cap message history to prevent unbounded memory growth.
-            // Long rooms with active chat could leak tens of MB before this fix.
-            if messages.count > maxMessages {
-                messages.removeFirst(messages.count - maxMessages)
+        // 2. Sync command (command field) → SyncEngine
+        if jsonObject["command"] != nil {
+            if let syncMsg = try? JSONDecoder().decode(SyncMessage.self, from: data) {
+                syncEngine.handleSyncMessage(syncMsg)
+                return
             }
-            return
         }
 
-        // 4. Обновление участников (join/leave).
-        if let payload = try? JSONDecoder().decode(ParticipantUpdate.self, from: data) {
-            handleParticipantUpdate(payload)
-            return
+        // 3. Chat message (senderID + text fields) → messages array
+        if jsonObject["senderID"] != nil || jsonObject["sender_id"] != nil {
+            if let chatMsg = try? JSONDecoder().decode(ChatMessage.self, from: data) {
+                messages.append(chatMsg)
+                if messages.count > maxMessages {
+                    messages.removeFirst(messages.count - maxMessages)
+                }
+                return
+            }
         }
 
-        // 5. Закрытие комнаты (хост вышел).
-        if let closed = try? JSONDecoder().decode(RoomClosedPayload.self, from: data) {
-            errorMessage = "Хост завершил комнату."
-            connectionStatus = .disconnected
-            Logger.ws.info("Room closed: \(closed.reason)")
+        // 4. Participant update (action + userID fields) → handleParticipantUpdate
+        if jsonObject["action"] != nil, jsonObject["userID"] != nil || jsonObject["user_id"] != nil {
+            if let payload = try? JSONDecoder().decode(ParticipantUpdate.self, from: data) {
+                handleParticipantUpdate(payload)
+                return
+            }
+        }
+
+        // 5. Room closed (reason field) → disconnect
+        if jsonObject["reason"] != nil {
+            if let closed = try? JSONDecoder().decode(RoomClosedPayload.self, from: data) {
+                errorMessage = "Хост завершил комнату."
+                connectionStatus = .disconnected
+                Logger.ws.info("Room closed: \(closed.reason)")
+            }
         }
     }
 

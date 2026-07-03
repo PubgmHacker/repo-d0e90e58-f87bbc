@@ -199,29 +199,42 @@ final class RoomSyncManager: ObservableObject {
     func handleRawMessage(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
 
-        // Игнорируем ping/pong (обрабатываются в WebSocketClient).
-        if let pingPong = try? JSONDecoder().decode(WSPingPong.self, from: data) {
-            if pingPong.command == "ping" || pingPong.command == "pong" { return }
-        }
-
-        // 0. Ad Command (Блок 2 — синхронизированная реклама).
-        if let adCmd = try? JSONDecoder().decode(AdCommandPayload.self, from: data) {
-            handleAdCommand(adCmd)
+        // 🔧 FIX M4: Was decoding every message up to 4 times via try? JSONDecoder
+        // chain (WSPingPong, AdCommandPayload, SyncMessage, RoomEventEnvelope).
+        // Now peeks at the "command" field once to dispatch correctly.
+        guard let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
         }
 
-        // 1. Пробуем разобрать как SyncMessage (существующий протокол синхронизации).
-        if let syncMsg = try? JSONDecoder().decode(SyncMessage.self, from: data) {
-            handleSyncMessage(syncMsg)
+        // 0. ping/pong (обрабатываются в WebSocketClient, ignore here)
+        if let cmd = jsonObject["command"] as? String,
+           cmd == "ping" || cmd == "pong" {
             return
         }
 
-        // 2. Пробуем универсальный конверт (реакции, чат, участники).
-        guard let envelope = try? JSONDecoder().decode(RoomEventEnvelope.self, from: data) else {
-            return
+        // 1. Ad command (has "adCommand" or "ad_command" field)
+        if jsonObject["adCommand"] != nil || jsonObject["ad_command"] != nil {
+            if let adCmd = try? JSONDecoder().decode(AdCommandPayload.self, from: data) {
+                handleAdCommand(adCmd)
+                return
+            }
         }
 
-        handleEnvelope(envelope)
+        // 2. SyncMessage (has "command" field matching SyncCommand enum)
+        if jsonObject["command"] != nil {
+            if let syncMsg = try? JSONDecoder().decode(SyncMessage.self, from: data) {
+                handleSyncMessage(syncMsg)
+                return
+            }
+        }
+
+        // 3. RoomEventEnvelope (has "type" field for reactions/chat/participants)
+        if jsonObject["type"] != nil {
+            if let envelope = try? JSONDecoder().decode(RoomEventEnvelope.self, from: data) {
+                handleEnvelope(envelope)
+                return
+            }
+        }
     }
 
     // MARK: - SyncMessage Routing

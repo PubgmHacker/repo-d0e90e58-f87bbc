@@ -40,9 +40,18 @@ struct SignalingMessage: Codable, Sendable, Equatable {
         SignalingMessage(kind: .leaveRoom, senderId: senderId, roomId: roomId)
     }
 
+    /// 🔧 FIX M2: Was using raw.contains("\"kind\"") string scan to detect payload
+    /// type — chat messages containing the literal "kind" substring would pass the
+    /// guard and be mis-routed to the signaling layer.
+    /// Now peeks at the parsed JSON object's "kind" field explicitly.
     public static func decode(from raw: String) -> SignalingMessage? {
-        guard raw.contains("\"kind\"") else { return nil }
         guard let data = raw.data(using: .utf8) else { return nil }
+        // Peek at the JSON to verify this is actually a SignalingMessage payload
+        guard let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let kindValue = jsonObject["kind"] as? String,
+              Kind(rawValue: kindValue) != nil else {
+            return nil
+        }
         return try? JSONDecoder().decode(SignalingMessage.self, from: data)
     }
 }

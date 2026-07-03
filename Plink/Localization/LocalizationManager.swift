@@ -762,9 +762,9 @@ enum L10n {
             .chinese: "与好友分享邀请链接"
         ],
         .friendsSearchPlaceholder: [
-            .russian: "Поиск по имени...",
-            .english: "Search by name...",
-            .chinese: "按名字搜索..."
+            .russian: "Поиск по имени, нику или ID...",
+            .english: "Search by name, nickname or ID...",
+            .chinese: "按名字、昵称或ID搜索..."
         ],
         .friendsNoResults: [
             .russian: "Ничего не найдено",

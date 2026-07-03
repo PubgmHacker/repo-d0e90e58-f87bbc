@@ -427,9 +427,15 @@ private struct UserSearchRow: View {
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.username)
-                    .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                HStack(spacing: 6) {
+                    Text(user.username)
+                        .font(.subheadline.bold())
+                        .foregroundColor(.raveTextPrimary)
+                    // 🔧 NEW: Show short ID next to username in search results
+                    Text("#\(String(user.id.suffix(8)))")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(.raveTextTertiary)
+                }
                 Text(user.isOnline ? loc.string(.friendsOnline) : loc.string(.friendsOffline))
                     .font(.caption)
                     .foregroundColor(.raveTextSecondary)

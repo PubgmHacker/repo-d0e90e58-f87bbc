@@ -279,6 +279,26 @@ struct SettingsView: View {
                             .foregroundColor(.raveTextTertiary)
                             .lineLimit(1)
                     }
+                    // 🔧 NEW: Short user ID for friend search
+                    if let userId = profileVM?.user?.id {
+                        HStack(spacing: 4) {
+                            Text("ID:")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.raveTextTertiary)
+                            Text(userId.shortId)
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.raveTextSecondary)
+                            Button {
+                                UIPasteboard.general.string = userId.fullId
+                                HapticManager.impact(.light)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.raveTextTertiary)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                 }
 
                 Spacer()

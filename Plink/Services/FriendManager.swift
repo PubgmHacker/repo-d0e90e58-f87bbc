@@ -138,6 +138,13 @@ final class FriendManager: ObservableObject {
     }
 
     // MARK: - Search (GET /api/friends/search?q=)
+    /// 🔧 Supports search by:
+    ///   - Username (e.g. "alex")
+    ///   - User ID (full UUID, e.g. "a1b2c3d4-e5f6-...")
+    ///   - Short ID (e.g. "#ef1234567890" or "ef1234567890")
+    ///   - Nickname/display name
+    /// The server's /api/friends/search endpoint should handle all these cases.
+    /// If the user typed a "#", we strip it before sending to the server.
 
     func searchUsers(query: String) async {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -151,11 +158,19 @@ final class FriendManager: ObservableObject {
             return
         }
 
+        // 🔧 Strip leading "#" if user typed a short ID like "#ef1234567890"
+        let cleanedQuery = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let dtos: [UserPreviewDTO] = try await api.request("friends/search", query: ["q": trimmed])
+            // 🔧 Pass the cleaned query to the server. The server should:
+            //   1. Match by exact ID (if cleanedQuery is a valid UUID)
+            //   2. Match by short ID suffix (if cleanedQuery is 8+ chars)
+            //   3. Match by username (case-insensitive LIKE)
+            //   4. Match by display name (case-insensitive LIKE)
+            let dtos: [UserPreviewDTO] = try await api.request("friends/search", query: ["q": cleanedQuery])
             searchResults = dtos.map { $0.toUserPreview() }
         } catch {
             print("[Friends] search error: \(error.localizedDescription)")

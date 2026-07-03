@@ -24,6 +24,20 @@ struct User: Codable, Identifiable, Sendable {
         (role ?? "").uppercased() == "ADMIN"
     }
 
+    /// 🔧 NEW: Short display ID — last 8 chars of the UUID, prefixed with #.
+    /// Shown in small text under the username so users can find each other by ID.
+    /// Example: id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890" → "#ef1234567890" (last 12 chars)
+    var shortId: String {
+        guard id.count >= 12 else { return "#\(id)" }
+        let short = String(id.suffix(8))
+        return "#\(short)"
+    }
+
+    /// 🔧 NEW: Full ID for copy-to-clipboard / share. Used in friend search.
+    var fullId: String {
+        id
+    }
+
     static var preview: User {
         User(
             id: "user_001",

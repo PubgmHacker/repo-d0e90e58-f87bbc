@@ -4,6 +4,9 @@ import Combine
 // MARK: - Friend Manager v2 (Real API)
 /// Менеджер друзей через реальный бэкенд Railway.
 /// Все методы делают HTTP-запросы к /api/friends/*.
+///
+/// 🔧 FIX C5: Now accepts an authenticated APIClient via init (was: own unauth client).
+/// 🔧 FIX M13: loadAll() no longer auto-fires in init — caller must trigger after auth.
 @MainActor
 final class FriendManager: ObservableObject {
 
@@ -23,11 +26,13 @@ final class FriendManager: ObservableObject {
 
     // MARK: - API
 
-    private let api = APIClient()
+    private let api: APIClient
 
-    init() {
-        // Загружаем данные при создании (если есть токен)
-        Task { await loadAll() }
+    /// 🔧 FIX C5: Inject shared APIClient from RaveCloneApp
+    /// 🔧 FIX M13: Removed auto-loadAll() in init — caller (RaveCloneApp.checkAuth)
+    /// must call loadAll() explicitly after the auth token is propagated.
+    init(api: APIClient) {
+        self.api = api
     }
 
     // MARK: - Load All

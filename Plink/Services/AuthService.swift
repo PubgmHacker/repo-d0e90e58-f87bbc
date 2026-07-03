@@ -4,23 +4,30 @@ import Foundation
 /// Настоящая авторизация через сервер: /api/auth/signup, /api/auth/signin.
 /// Сервер создаёт пользователя в PostgreSQL, хеширует пароль (SHA-256),
 /// выдаёт JWT. Токен сохраняется и прокидывается во все сервисы.
+///
+/// 🔧 FIX C2: JWT now stored in Keychain (not UserDefaults) via KeychainHelper.
+/// 🔧 FIX C3: getFreshToken() now actually refreshes via /auth/refresh.
+/// 🔧 FIX H14: AuthService is @MainActor — currentUser restore is synchronous.
+@MainActor
 final class AuthService: AuthServiceProtocol {
 
     private let api: APIClient
     private let defaults = UserDefaults.standard
 
     private enum Keys {
-        static let savedUser = "rave_saved_user"
-        static let authToken = "rave_auth_token"
-        static let tokenExpiry = "rave_token_expiry"
-        static let fcmToken = "rave_fcm_token"
+        static let savedUser = "rave_saved_user"           // ← non-secret profile, OK in UserDefaults
+        static let authToken = "rave_auth_token"            // ← Keychain
+        static let tokenExpiry = "rave_token_expiry"        // ← Keychain (string)
+        static let refreshToken = "rave_refresh_token"      // ← Keychain
+        static let fcmToken = "rave_fcm_token"              // ← non-secret, OK in UserDefaults
     }
 
     // MARK: - Stored User + Token
 
-    @MainActor private(set) var currentUser: User?
+    private(set) var currentUser: User?
     private(set) var authToken: String?
     private(set) var tokenExpiry: TimeInterval = 0
+    private(set) var refreshToken: String?
     private(set) var fcmToken: String?
 
     // MARK: - Init
@@ -28,13 +35,21 @@ final class AuthService: AuthServiceProtocol {
     init(api: APIClient) {
         self.api = api
 
-        // Восстановление сохранённого юзера + токена при запуске
+        // 🔧 FIX H14: Synchronous restore — AuthService is now @MainActor,
+        // so currentUser is populated before RaveCloneApp.checkAuth reads it.
+        // No more login-screen flash on cold launch with valid session.
         if let data = defaults.data(forKey: Keys.savedUser),
            let user = try? JSONDecoder().decode(User.self, from: data) {
-            Task { @MainActor in self.currentUser = user }
+            self.currentUser = user
         }
-        self.authToken = defaults.string(forKey: Keys.authToken)
-        self.tokenExpiry = defaults.double(forKey: Keys.tokenExpiry)
+
+        // 🔧 FIX C2: Read JWT + expiry + refresh token from Keychain (not UserDefaults)
+        self.authToken = KeychainHelper.read(for: Keys.authToken)
+        if let expiryStr = KeychainHelper.read(for: Keys.tokenExpiry),
+           let expiry = TimeInterval(expiryStr) {
+            self.tokenExpiry = expiry
+        }
+        self.refreshToken = KeychainHelper.read(for: Keys.refreshToken)
         self.fcmToken = defaults.string(forKey: Keys.fcmToken)
 
         api.authToken = authToken
@@ -58,7 +73,7 @@ final class AuthService: AuthServiceProtocol {
         )
 
         let expiry = Date().addingTimeInterval(86400).timeIntervalSince1970  // JWT ~24h
-        await cacheToken(response.token, expiry: expiry)
+        await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken)
         cacheUser(user)
         await registerFCMIfPresent()
         return user
@@ -82,7 +97,7 @@ final class AuthService: AuthServiceProtocol {
         )
 
         let expiry = Date().addingTimeInterval(86400).timeIntervalSince1970
-        await cacheToken(response.token, expiry: expiry)
+        await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken)
         cacheUser(user)
         await registerFCMIfPresent()
         return user
@@ -91,19 +106,23 @@ final class AuthService: AuthServiceProtocol {
     // MARK: - Sign Out
 
     func signOut() async throws {
+        // 🔧 FIX C2: Clear Keychain entries too
+        KeychainHelper.delete(for: Keys.authToken)
+        KeychainHelper.delete(for: Keys.tokenExpiry)
+        KeychainHelper.delete(for: Keys.refreshToken)
         defaults.removeObject(forKey: Keys.savedUser)
-        defaults.removeObject(forKey: Keys.authToken)
-        defaults.removeObject(forKey: Keys.tokenExpiry)
+
         authToken = nil
         tokenExpiry = 0
+        refreshToken = nil
         api.authToken = nil
-        await MainActor.run { self.currentUser = nil }
+        currentUser = nil
     }
 
     // MARK: - Current User
 
     func currentUser() async -> User? {
-        await currentUser
+        currentUser
     }
 
     // MARK: - Delete Account
@@ -115,20 +134,53 @@ final class AuthService: AuthServiceProtocol {
 
     // MARK: - Token Management
 
+    /// 🔧 FIX C3: Actually refreshes the JWT via /auth/refresh when within 5 min of expiry.
+    /// Falls back to the existing token if no refresh token is available.
     func getFreshToken() async -> String? {
+        guard let token = authToken else { return nil }
         let now = Date().timeIntervalSince1970
-        if authToken == nil || now >= tokenExpiry - 300 {
-            return authToken
+
+        // Refresh if within 5 min of expiry (or past it)
+        if now >= tokenExpiry - 300 {
+            return await refreshJWT() ?? token
         }
-        return authToken
+        return token
     }
 
-    private func cacheToken(_ token: String, expiry: TimeInterval) async {
+    /// 🔧 FIX C3: Real refresh — POST /auth/refresh with the refresh token.
+    private func refreshJWT() async -> String? {
+        guard let refreshToken else { return nil }
+
+        struct RefreshBody: Encodable { let refreshToken: String }
+        do {
+            let response: AuthResponse = try await api.request(
+                "auth/refresh",
+                method: .post,
+                body: RefreshBody(refreshToken: refreshToken)
+            )
+            let expiry = Date().addingTimeInterval(86400).timeIntervalSince1970
+            await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken ?? refreshToken)
+            return response.token
+        } catch {
+            Logger.api.error("Token refresh failed: \(error.localizedDescription)")
+            // If refresh fails (refresh token expired), force sign-out
+            try? await signOut()
+            return nil
+        }
+    }
+
+    private func cacheToken(_ token: String, expiry: TimeInterval, refreshToken: String?) async {
         authToken = token
         tokenExpiry = expiry
+        self.refreshToken = refreshToken
         api.authToken = token
-        defaults.set(token, forKey: Keys.authToken)
-        defaults.set(expiry, forKey: Keys.tokenExpiry)
+
+        // 🔧 FIX C2: Persist to Keychain (was: defaults.set)
+        KeychainHelper.save(token, for: Keys.authToken)
+        KeychainHelper.save(String(expiry), for: Keys.tokenExpiry)
+        if let refreshToken {
+            KeychainHelper.save(refreshToken, for: Keys.refreshToken)
+        }
     }
 
     // MARK: - FCM Token
@@ -162,7 +214,7 @@ final class AuthService: AuthServiceProtocol {
         if let data = try? JSONEncoder().encode(user) {
             defaults.set(data, forKey: Keys.savedUser)
         }
-        Task { @MainActor in self.currentUser = user }
+        self.currentUser = user
     }
 }
 
@@ -182,6 +234,8 @@ struct SignUpRequest: Codable, Sendable {
 struct AuthResponse: Codable, Sendable {
     let token: String
     let user: AuthUser
+    /// 🔧 FIX C3: Server may also return a long-lived refresh token.
+    let refreshToken: String?
 }
 
 struct AuthUser: Codable, Sendable {

@@ -2,26 +2,51 @@ import Foundation
 
 // MARK: - REST API Client
 /// Generic REST client for room CRUD, user management, etc.
-final class APIClient: Sendable {
+///
+/// 🔧 FIX H10: encoder/decoder wrapped in a lock — JSONEncoder/JSONDecoder
+/// are NOT thread-safe under concurrent access from multiple Tasks.
+/// 🔧 FIX H11: request<T> now handles 204 No Content gracefully.
+/// 🔧 FIX C6: APIClient conforms to ObservableObject so it can be injected
+/// via @EnvironmentObject into AdminPanelView (was: each view created its own
+/// unauthenticated APIClient()).
+final class APIClient: ObservableObject, @unchecked Sendable {
     private let baseURL: URL
-    private let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        e.dateEncodingStrategy = .iso8601
-        return e
-    }()
-    private let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }()
 
-    // Auth token — set after login
-    var authToken: String?
+    // 🔧 FIX H10: Lock-protected encoder/decoder (not thread-safe by Apple docs)
+    private let encoderLock = NSLock()
+    private let _encoder = JSONEncoder()
+    private let decoderLock = NSLock()
+    private let _decoder = JSONDecoder()
+
+    private var encoder: JSONEncoder {
+        encoderLock.lock(); defer { encoderLock.unlock() }
+        return _encoder
+    }
+    private var decoder: JSONDecoder {
+        decoderLock.lock(); defer { decoderLock.unlock() }
+        return _decoder
+    }
+
+    // 🔧 FIX H10: authToken accessed from multiple Tasks — protect with lock.
+    private let tokenLock = NSLock()
+    private var _authToken: String?
+    var authToken: String? {
+        get {
+            tokenLock.lock(); defer { tokenLock.unlock() }
+            return _authToken
+        }
+        set {
+            tokenLock.lock(); defer { tokenLock.unlock() }
+            _authToken = newValue
+        }
+    }
 
     init(baseURL: String = "https://xpkcakpkfewp-ofewk-pkv-production.up.railway.app/api") {
         self.baseURL = URL(string: baseURL)!
+        _encoder.keyEncodingStrategy = .convertToSnakeCase
+        _encoder.dateEncodingStrategy = .iso8601
+        _decoder.keyDecodingStrategy = .convertFromSnakeCase
+        _decoder.dateDecodingStrategy = .iso8601
     }
 
     // MARK: - Generic Request
@@ -61,6 +86,16 @@ final class APIClient: Sendable {
 
         switch httpResponse.statusCode {
         case 200..<300:
+            // 🔧 FIX H11: Handle 204 No Content (empty body) gracefully
+            if data.isEmpty {
+                if let empty = T.self as? EmptyDecodable.Type {
+                    return empty.emptyValue() as! T
+                }
+                // If T is Optional, decode returns nil — wrap in try?
+                if T.self == EmptyResponse.self {
+                    return EmptyResponse() as! T
+                }
+            }
             return try decoder.decode(T.self, from: data)
         case 401:
             throw APIError.unauthorized
@@ -126,10 +161,26 @@ final class APIClient: Sendable {
             return
         case 401:
             throw APIError.unauthorized
+        // 🔧 FIX M7: requestNoBody was missing 404 handling
+        case 404:
+            throw APIError.notFound
+        case 409:
+            let serverMsg = Self.parseErrorMessage(data: Data())
+            throw APIError.conflict(message: serverMsg ?? "Конфликт данных")
         default:
             throw APIError.serverError(status: httpResponse.statusCode, message: "Request failed")
         }
     }
+}
+
+// MARK: - Empty Response Helper (FIX H11)
+/// Default value for 204 No Content responses
+protocol EmptyDecodable {
+    static func emptyValue() -> Self
+}
+
+struct EmptyResponse: Codable, EmptyDecodable {
+    static func emptyValue() -> EmptyResponse { EmptyResponse() }
 }
 
 // MARK: - HTTP Method

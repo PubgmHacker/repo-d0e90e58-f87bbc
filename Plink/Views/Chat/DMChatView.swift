@@ -5,7 +5,9 @@ import SwiftUI
 /// чужие слева (тёмно-серый). Аватарки 28pt у чужих. Время 12pt.
 /// Разделители по дням. Шрифт 16pt.
 struct DMChatView: View {
-    @StateObject private var dmService = DMChatService()
+    // 🔧 FIX C4: DMChatService injected from RaveCloneApp via EnvironmentObject
+    // (was: @StateObject DMChatService() — created own unauth APIClient)
+    @EnvironmentObject private var dmService: DMChatService
     @Environment(\.dismiss) private var dismiss
 
     let friend: Friend

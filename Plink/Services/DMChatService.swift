@@ -5,6 +5,9 @@ import Combine
 /// Личные сообщения через реальный бэкенд.
 /// Отправка: POST /api/messages/dm
 /// История: GET /api/messages/dm/:friendId
+///
+/// 🔧 FIX C4: Now accepts an authenticated APIClient via init (was: own unauth client).
+/// 🔧 FIX C11: isOwnMessage compares against real currentUserId (was: "current_user").
 @MainActor
 final class DMChatService: ObservableObject {
 
@@ -13,14 +16,18 @@ final class DMChatService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let api = APIClient()
+    private let api: APIClient
+
+    /// 🔧 FIX C4: Inject shared APIClient from RaveCloneApp
+    init(api: APIClient) {
+        self.api = api
+    }
+
     private var currentUserId: String? {
-        // Получаем ID текущего юзера из сохранённого токена
+        // Получаем ID текущего юзера из сохранённого профиля (non-secret)
         UserDefaults.standard.data(forKey: "rave_saved_user")
             .flatMap { try? JSONDecoder().decode(User.self, from: $0) }?.id
     }
-
-    init() {}
 
     // MARK: - Load History (GET /api/messages/dm/:friendId)
 

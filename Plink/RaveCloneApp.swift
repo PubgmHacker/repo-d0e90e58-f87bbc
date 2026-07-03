@@ -16,7 +16,11 @@ struct PlinkApp: App {
     private let roomService: RoomService
 
     // Социальный слой (Блок 3)
-    @State private var friendManager = FriendManager()
+    // 🔧 FIX C5: Inject shared apiClient into FriendManager (was: own unauth client)
+    @State private var friendManager: FriendManager
+
+    // 🔧 FIX C4: Inject shared apiClient into DMChatService (was: own unauth client)
+    @State private var dmChatService: DMChatService
 
     // Deep-linking (Блок 3)
     @StateObject private var deepLinkRouter = DeepLinkRouter()
@@ -47,6 +51,10 @@ struct PlinkApp: App {
         mediaService = MediaService()
         wsClient = WebSocketClient()
         roomService = RoomService(api: api)
+        // 🔧 FIX C5: Shared authenticated client injected into social layer
+        _friendManager = State(initialValue: FriendManager(api: api))
+        // 🔧 FIX C4: Shared authenticated client injected into DM layer
+        _dmChatService = State(initialValue: DMChatService(api: api))
     }
 
     // MARK: - Root View
@@ -95,6 +103,9 @@ struct PlinkApp: App {
         MainTabView()
             .environmentObject(deepLinkRouter)
             .environmentObject(friendManager)
+            // 🔧 FIX C4+C6: Inject shared services for DM and Admin panels
+            .environmentObject(dmChatService)
+            .environmentObject(apiClient)
     }
 
     // MARK: - Login Content
@@ -107,6 +118,8 @@ struct PlinkApp: App {
                 onSignIn: {
                     bridgeAuthToken()   // push jwt to WS + MediaService before entering
                     isSignedIn = true
+                    // 🔧 FIX M13: Trigger friends load after sign-in
+                    Task { await friendManager.loadAll() }
                 }
             )
         }
@@ -165,7 +178,7 @@ struct PlinkApp: App {
     /// Проверяет сохранённую сессию. Минимальная задержка Splash (≥0.8s) —
     /// чтобы переход был плавным, а не мигал белым при быстром ответе.
     private func checkAuth() {
-        Task { [authService] in
+        Task { [authService, friendManager] in
             async let userTask = authService.currentUser()
             async let minDelay: Void = Task { try? await Task.sleep(nanoseconds: 900_000_000); } .value
 
@@ -176,6 +189,8 @@ struct PlinkApp: App {
                 if user != nil {
                     bridgeAuthToken()
                     isSignedIn = true
+                    // 🔧 FIX M13: Trigger friends load AFTER auth token is propagated
+                    Task { await friendManager.loadAll() }
                 }
                 // Плавный уход splash (transition opacity)
                 withAnimation(.easeInOut(duration: 0.5)) {

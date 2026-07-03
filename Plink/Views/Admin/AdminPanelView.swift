@@ -5,7 +5,10 @@ import SwiftUI
 /// Доступна только для пользователей с ролью ADMIN.
 struct AdminPanelView: View {
     @Environment(\.dismiss) private var dismiss
-    private let api = APIClient()
+    // 🔧 FIX C6: Use shared APIClient from environment (was: own unauth APIClient())
+    @EnvironmentObject private var apiClient: APIClient
+
+    private var api: APIClient { apiClient }
 
     @State private var selectedTab: AdminTab = .users
     @State private var users: [AdminUser] = []

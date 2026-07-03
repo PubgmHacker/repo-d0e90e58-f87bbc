@@ -142,6 +142,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         observeDuration(playerItem)
         observeStatus(playerItem)
         addTimeObserver()
+        observeBufferUnderrun(playerItem)  // 🔧 FIX C3: Wire up buffer observer
 
         // Host broadcasts the new media so participants load the same item
         if isHost {
@@ -607,6 +608,10 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             player?.removeTimeObserver(observer)
             timeObserver = nil
         }
+        if let observer = bufferObserver {  // 🔧 FIX C3: cleanup
+            NotificationCenter.default.removeObserver(observer)
+            bufferObserver = nil
+        }
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -642,6 +647,32 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
                     Logger.sync.error("AVPlayerItem failed: \(self?.errorMessage ?? "unknown")")
                 default:
                     break
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    // 🔧 FIX C3: Buffer underrun observer — detects AVPlayer stalling
+    private func observeBufferUnderrun(_ item: AVPlayerItem) {
+        bufferObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemPlaybackStalled,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, !self.isHost else { return }
+            self.bufferUnderrunCount += 1
+            Logger.sync.warn("Buffer underrun #\(self.bufferUnderrunCount) — local pause (no broadcast)")
+            self.player?.pause()
+        }
+
+        item.publisher(for: \.isPlaybackLikelyToKeepUp, options: .new)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] canKeepUp in
+                guard let self, !self.isHost else { return }
+                if canKeepUp && self.isPlaying {
+                    Logger.sync.info("Buffer recovered — resuming + requesting fresh state")
+                    self.player?.play()
+                    self.requestStateFromHost()
                 }
             }
             .store(in: &cancellables)

@@ -6,13 +6,13 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab: Tab = .home
     @State private var showSettings = false
-    // 🔧 FIX: Receive shared services from RaveCloneApp via EnvironmentObject.
     @EnvironmentObject private var apiClient: APIClient
-    /// AuthService is not ObservableObject — passed via init from RaveCloneApp.
     let authService: AuthService
+    /// 🔧 NEW: Room invite service for badge count on Rooms tab
+    @StateObject private var inviteService = RoomInviteService.shared
 
     enum Tab: Hashable {
-        case home, rooms, join, ai, friends, settings
+        case home, rooms, ai, friends, settings
     }
 
     init(authService: AuthService) {
@@ -27,6 +27,10 @@ struct MainTabView: View {
                     onSwitchToAITab: {
                         HapticManager.impact(.light)
                         withAnimation { selectedTab = .ai }
+                    },
+                    onSwitchToJoinTab: {
+                        HapticManager.impact(.light)
+                        withAnimation { selectedTab = .rooms }
                     }
                 )
                     .tabItem {
@@ -36,19 +40,11 @@ struct MainTabView: View {
 
                 RoomsTabContent()
                     .tabItem {
+                        // 🔧 Badge: red count on Rooms icon when invites pending
                         Label("Комнаты", systemImage: "rectangle.stack.fill")
                     }
+                    .badge(inviteService.inviteCount > 0 ? inviteService.inviteCount : 0)
                     .tag(Tab.rooms)
-
-                // 🔧 NEW: Join Room tab — full-screen join with code + password
-                JoinRoomView { room in
-                    // Navigate to room after joining
-                    withAnimation { selectedTab = .home }
-                }
-                .tabItem {
-                    Label("Войти", systemImage: "arrow.right.circle.fill")
-                }
-                .tag(Tab.join)
 
                 AIAssistantView()
                     .tabItem {
@@ -71,15 +67,9 @@ struct MainTabView: View {
                     .tag(Tab.settings)
             }
             .tint(.ravePrimary)
-            // Прозрачный фон TabBar — сквозь него виден биолюминесцентный фон
             .toolbarBackground(.hidden, for: .tabBar)
             .toolbarBackground(.hidden, for: .navigationBar)
-
-            // 🔧 REPLACED slide-out panel with full-screen SettingsView.
-            // Uses .fullScreenCover so settings open as a proper full-screen
-            // modal (like iOS Settings → Apple Account), not a bottom sheet.
         }
-        // 🔧 FIX: fullScreenCover for the new Apple ID-style SettingsView
         .fullScreenCover(isPresented: $showSettings) {
             SettingsView(isPresented: $showSettings, authService: authService)
                 .environmentObject(apiClient)
@@ -107,105 +97,56 @@ struct MainTabView: View {
 
 struct RoomsTabContent: View {
     @EnvironmentObject private var apiClient: APIClient
+    @ObservedObject private var inviteService = RoomInviteService.shared
     @State private var viewModel: HomeViewModel?
     @State private var navigateToRoom: Room?
+    @State private var selectedSubTab: RoomSubTab = .discover
+
+    /// 🔧 NEW: Internal tabs within the Rooms tab
+    enum RoomSubTab: String, CaseIterable, Identifiable {
+        case discover = "Общие"
+        case mine = "Мои"
+        case join = "Войти"
+        case requests = "Запросы"
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .discover: return "globe"
+            case .mine: return "clock.arrow.circlepath"
+            case .join: return "arrow.right.circle"
+            case .requests: return "envelope.badge"
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                BioluminescentBackground(energy: 0.35, dimming: 0)
+                    .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        // Общедоступные комнаты
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Общедоступные комнаты")
-                                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                                    .foregroundColor(.raveTextPrimary)
-                                Spacer()
-                                Image(systemName: "globe")
-                                    .foregroundColor(.ravePrimary)
-                            }
+                VStack(spacing: 0) {
+                    // ── Sub-tab segmented control ──
+                    subTabBar
 
-                            if let rooms = viewModel?.filteredRooms.filter({ $0.isActive }), !rooms.isEmpty {
-                                ForEach(rooms.prefix(5)) { room in
-                                    Button {
-                                        navigateToRoom = room
-                                    } label: {
-                                        RoomCardView(room: room, onReport: nil, onBlock: nil)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            } else {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "globe.americas.fill")
-                                        .font(.system(size: 32))
-                                        .foregroundColor(.raveTextTertiary)
-                                    Text("Нет активных комнат")
-                                        .font(.subheadline)
-                                        .foregroundColor(.raveTextSecondary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 30)
-                                .glassCard(cornerRadius: 16, opacity: 0.04)
-                            }
-                        }
-
-                        Divider().background(Color.white.opacity(0.06))
-
-                        // ── Мои комнаты (с реальными данными) ──
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Мои комнаты")
-                                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                                    .foregroundColor(.raveTextPrimary)
-                                Spacer()
-                                if let count = viewModel?.myRooms.count, count > 0 {
-                                    Text("\(count)")
-                                        .font(.system(size: 12, weight: .bold).monospacedDigit())
-                                        .foregroundColor(.raveTextSecondary)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(Color.white.opacity(0.08))
-                                        .clipShape(Capsule())
-                                }
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .foregroundColor(.bioCyan)
-                            }
-
-                            if let myRooms = viewModel?.myRooms, !myRooms.isEmpty {
-                                ForEach(myRooms) { room in
-                                    Button {
-                                        navigateToRoom = room
-                                    } label: {
-                                        myRoomCard(room)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            } else {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "rectangle.stack.badge.plus")
-                                        .font(.system(size: 32))
-                                        .foregroundColor(.raveTextTertiary)
-                                    Text("Создайте комнату с главной")
-                                        .font(.subheadline)
-                                        .foregroundColor(.raveTextSecondary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 30)
-                                .glassCard(cornerRadius: 16, opacity: 0.04)
-                            }
-                        }
+                    // ── Content ──
+                    switch selectedSubTab {
+                    case .discover:
+                        discoverContent
+                    case .mine:
+                        myRoomsContent
+                    case .join:
+                        joinContent
+                    case .requests:
+                        requestsContent
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 40)
                 }
             }
             .navigationTitle("Комнаты")
             .navigationBarTitleDisplayMode(.large)
-            .navigationDestination(item: $navigateToRoom) { room in
+            .navigationDestination(item: ) { room in
                 RoomView(room: room)
                     .toolbar(.hidden, for: .tabBar)
             }
@@ -230,7 +171,215 @@ struct RoomsTabContent: View {
         }
     }
 
-    // MARK: - My Room Card (compact, shows participant count)
+    // MARK: - Sub-Tab Bar
+
+    private var subTabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(RoomSubTab.allCases) { tab in
+                subTabButton(tab)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func subTabButton(_ tab: RoomSubTab) -> some View {
+        let isActive = selectedSubTab == tab
+        let showBadge = tab == .requests && inviteService.inviteCount > 0
+
+        Button {
+            HapticManager.impact(.light)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedSubTab = tab
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 12))
+                Text(tab.rawValue)
+                    .font(.system(size: 13, weight: isActive ? .bold : .medium))
+
+                // 🔧 Red badge on Requests tab
+                if showBadge {
+                    Text("\(inviteService.inviteCount)")
+                        .font(.system(size: 9, weight: .heavy).monospacedDigit())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.raveDanger)
+                        .clipShape(Capsule())
+                }
+            }
+            .foregroundColor(isActive ? .white : .raveTextSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                isActive
+                    ? AnyShapeStyle(Color.raveGradient)
+                    : AnyShapeStyle(Color.clear)
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Discover Content (Общедоступные комнаты)
+
+    private var discoverContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                if let rooms = viewModel?.filteredRooms.filter({ /bin/bash.isActive }), !rooms.isEmpty {
+                    ForEach(rooms.prefix(10)) { room in
+                        Button { navigateToRoom = room } label: {
+                            RoomCardView(room: room, onReport: nil, onBlock: nil)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    emptyState(icon: "globe.americas.fill", text: "Нет активных комнат")
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - My Rooms Content
+
+    private var myRoomsContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                if let myRooms = viewModel?.myRooms, !myRooms.isEmpty {
+                    ForEach(myRooms) { room in
+                        Button { navigateToRoom = room } label: {
+                            myRoomCard(room)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    emptyState(icon: "rectangle.stack.badge.plus", text: "Создайте комнату с главной")
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - Join Content (embedded JoinRoomView)
+
+    private var joinContent: some View {
+        ScrollView(showsIndicators: false) {
+            JoinRoomView { room in
+                navigateToRoom = room
+            }
+            .frame(minHeight: 500)
+            .padding(.top, 8)
+        }
+    }
+
+    // MARK: - Requests Content (Room invites)
+
+    private var requestsContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                if inviteService.pendingInvites.isEmpty {
+                    emptyState(icon: "envelope.open", text: "Нет запросов на присоединение")
+                } else {
+                    ForEach(inviteService.pendingInvites) { invite in
+                        inviteCard(invite)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - Invite Card
+
+    @ViewBuilder
+    private func inviteCard(_ invite: RoomInvite) -> some View {
+        HStack(spacing: 14) {
+            // Avatar
+            ZStack {
+                Circle()
+                    .fill(Color.bioCyan.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                Text(invite.fromUsername.prefix(1).uppercased())
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.bioCyan)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(invite.fromUsername)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.raveTextPrimary)
+                Text("приглашает в «\(invite.roomName)»")
+                    .font(.system(size: 13))
+                    .foregroundColor(.raveTextSecondary)
+                    .lineLimit(1)
+                Text("Код: \(invite.roomCode)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.raveTextTertiary)
+            }
+
+            Spacer()
+
+            VStack(spacing: 8) {
+                Button {
+                    HapticManager.impact(.medium)
+                    Task {
+                        if let room = await inviteService.acceptInvite(invite) {
+                            navigateToRoom = room
+                        }
+                    }
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.bioEmerald)
+                }
+
+                Button {
+                    HapticManager.impact(.light)
+                    inviteService.declineInvite(invite)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.raveDanger)
+                }
+            }
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+    }
+
+    // MARK: - Empty State
+
+    private func emptyState(icon: String, text: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundColor(.raveTextTertiary)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.raveTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .glassCard(cornerRadius: 16, opacity: 0.04)
+    }
+
+    // MARK: - My Room Card
 
     @ViewBuilder
     private func myRoomCard(_ room: Room) -> some View {
@@ -306,7 +455,7 @@ struct RoomsTabContent: View {
     }
 }
 
-// MARK: - Tab Contents
+// MARK: - Tab Contents Contents
 
 /// Главная — экран Discover
 struct HomeTabContent: View {
@@ -315,17 +464,20 @@ struct HomeTabContent: View {
     var onProfileTap: () -> Void
     /// 🔧 NEW: Closure to switch to the AI tab from Home's AI CTA card.
     var onSwitchToAITab: (() -> Void)?
+    var onSwitchToJoinTab: (() -> Void)?
 
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                BioluminescentBackground(energy: 0.45, dimming: 0)
+                    .ignoresSafeArea()
 
                 if let viewModel {
                     HomeView(
                         viewModel: viewModel,
                         onProfileTap: onProfileTap,
-                        onSwitchToAITab: onSwitchToAITab
+                        onSwitchToAITab: onSwitchToAITab,
+                        onSwitchToJoinTab: onSwitchToJoinTab
                     )
                 } else {
                     ProgressView()

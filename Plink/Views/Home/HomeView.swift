@@ -366,6 +366,8 @@ struct HomeView: View {
 
     /// Closure called when user taps the AI CTA — MainTabView switches to AI tab.
     var onSwitchToAITab: (() -> Void)?
+    /// 🔧 NEW: Closure to switch to the Join tab from Home's "Присоединиться" button.
+    var onSwitchToJoinTab: (() -> Void)?
 
     // MARK: - AI Results Section (REMOVED — AI only via tab bar)
 
@@ -375,107 +377,119 @@ struct HomeView: View {
     // now live ONLY in the AI tab in the bottom tab bar. Home shows a
     // CTA card (aiCTACard) that deep-links to the AI tab.
 
-    // MARK: - Floating CTA (Создать комнату) — плавная анимация морфинга
+    // MARK: - Floating Dual CTA (Создать + Присоединиться)
     //
-    // Один и тот же view, у которого плавно меняются: ширина (full → 56),
-    // cornerRadius (20 → 28), прозрачность текста (1 → 0).
-    // Так SwiftUI анимирует морфинг без cross-fade.
+    // 🔧 REDESIGNED: Two glass buttons side by side — "Создать комнату" and
+    // "Присоединиться". Both use liquid glass (.ultraThinMaterial + subtle
+    // gradient border). After 6 seconds of inactivity, text fades out and
+    // they collapse into icon-only circles (smooth spring animation).
 
     private var floatingCTA: some View {
-        Button {
-            HapticManager.impact(.medium)
-            if isCTACollapsed {
-                // Тап по свёрнутой иконке — ТОЛЬКО разворачивает (без создания комнаты).
-                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
-                    isCTACollapsed = false
+        HStack(spacing: 12) {
+            // ── Create Room Button ──
+            dualGlassButton(
+                icon: "plus",
+                text: loc.string(.homeCreateRoom),
+                gradient: Color.raveGradient,
+                isCollapsed: isCTACollapsed,
+                action: {
+                    HapticManager.impact(.medium)
+                    showCreateRoom = true
                 }
-                resetCTACollapseTimer()
-            } else {
-                // Тап по развёрнутой кнопке — открывает создание комнаты.
-                showCreateRoom = true
-            }
-        } label: {
-            ctaLabel
+            )
+
+            // ── Join Room Button ──
+            dualGlassButton(
+                icon: "arrow.right.circle.fill",
+                text: "Присоединиться",
+                gradient: LinearGradient(
+                    colors: [Color.bioCyan, Color.bioEmerald],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                ),
+                isCollapsed: isCTACollapsed,
+                action: {
+                    HapticManager.impact(.medium)
+                    onSwitchToJoinTab?()
+                }
+            )
         }
-        .buttonStyle(CTAPressStyle())
-        // Позиционирование: всегда по центру внизу (не смещается в угол)
-        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 20)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 40)
     }
 
-    /// Единый лейбл кнопки — анимируется через интерполяцию параметров.
-    private var ctaLabel: some View {
-        HStack(spacing: isCTACollapsed ? 0 : 12) {
-            // Иконка плюса — всегда видна
-            ZStack {
-                Circle()
-                    .fill(Color.premiumGradient)
-                    .frame(width: isCTACollapsed ? 56 : 36,
-                           height: isCTACollapsed ? 56 : 36)
-                Image(systemName: "plus")
-                    .font(.system(size: isCTACollapsed ? 22 : 18, weight: .bold))
+    /// 🔧 NEW: Reusable glass button — collapses from full label to icon-only.
+    private func dualGlassButton(
+        icon: String,
+        text: String,
+        gradient: LinearGradient,
+        isCollapsed: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: isCollapsed ? 20 : 16, weight: .bold))
                     .foregroundColor(.white)
-            }
 
-            // Текст — исчезает при сворачивании (плавная прозрачность + сжатие)
-            Group {
-                if !isCTACollapsed {
-                    Text(loc.string(.homeCreateRoom))
-                        .font(.system(size: 17, weight: .bold))
+                if !isCollapsed {
+                    Text(text)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
-                        .transition(.opacity)
-                    Spacer(minLength: 0)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.raveAccent)
+                        .transition(.opacity.combined(with: .scale))
                 }
             }
-            .opacity(isCTACollapsed ? 0 : 1)
+            .padding(.horizontal, isCollapsed ? 12 : 18)
+            .padding(.vertical, isCollapsed ? 12 : 14)
+            .frame(
+                width: isCollapsed ? 46 : nil,
+                height: isCollapsed ? 46 : nil
+            )
+            .background(
+                ZStack {
+                    // Liquid glass base
+                    RoundedRectangle(cornerRadius: isCollapsed ? 23 : 16)
+                        .fill(.ultraThinMaterial)
+                    // Subtle gradient overlay for depth
+                    RoundedRectangle(cornerRadius: isCollapsed ? 23 : 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    gradient.colors.first?.opacity(0.15) ?? Color.white.opacity(0.05),
+                                    Color.clear,
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            )
+            .overlay(
+                // Glass border — thin gradient stroke
+                RoundedRectangle(cornerRadius: isCollapsed ? 23 : 16)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.2),
+                                Color.white.opacity(0.04),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .shadow(color: (gradient.colors.first ?? .ravePrimary).opacity(0.3), radius: 8, y: 3)
         }
-        .padding(.horizontal, isCTACollapsed ? 0 : 20)
-        .padding(.vertical, isCTACollapsed ? 0 : 16)
-        .frame(
-            width: isCTACollapsed ? 56 : nil,
-            height: isCTACollapsed ? 56 : nil
-        )
-        .background(
-            ZStack {
-                if isCTACollapsed {
-                    // Свёрнутая — только круг
-                    Circle()
-                        .fill(Color.premiumGradient)
-                } else {
-                    // Развёрнутая — чёрная плашка
-                    Color.black.opacity(0.8)
-                }
-            }
-        )
-        // Скругление: 28 для круга (56/2), 20 для плашки
-        .clipShape(RoundedRectangle(cornerRadius: isCTACollapsed ? 28 : 20))
-        .overlay(
-            // Обводка только в развёрнутом состоянии
-            RoundedRectangle(cornerRadius: isCTACollapsed ? 28 : 20)
-                .stroke(
-                    LinearGradient(
-                        colors: isCTACollapsed
-                            ? [.clear]
-                            : [Color.ravePrimary.opacity(0.8), Color.raveAccent.opacity(0.4)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    lineWidth: isCTACollapsed ? 0 : 1.5
-                )
-        )
-        .shadow(color: .ravePrimary.opacity(0.4), radius: 16, y: 6)
+        .buttonStyle(GlassButtonStyle())
     }
 
-    // MARK: - CTA Collapse Timer (сборос на скролл/тап)
+    // MARK: - CTA Collapse Timer
 
     private func startCTACollapseTimer() {
         ctaCollapseTimer?.invalidate()
-        ctaCollapseTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { _ in
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+        ctaCollapseTimer = Timer.scheduledTimer(withTimeInterval: 6.0, repeats: false) { _ in
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
                 isCTACollapsed = true
             }
         }
@@ -483,9 +497,8 @@ struct HomeView: View {
 
     private func resetCTACollapseTimer() {
         ctaCollapseTimer?.invalidate()
-        // Если была свёрнута — разворачиваем
         if isCTACollapsed {
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
                 isCTACollapsed = false
             }
         }

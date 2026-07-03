@@ -53,20 +53,16 @@ struct JoinRoomView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                BioluminescentBackground(energy: 0.35, dimming: 0)
-                    .ignoresSafeArea()
+        ZStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 24) {
+                    // ── Tab Switcher ──
+                    VStack(alignment: .leading, spacing: 6) {
+                        PlinkSectionHeader(text: "Тип комнаты")
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // ── Tab Switcher ──
-                        VStack(alignment: .leading, spacing: 6) {
-                            PlinkSectionHeader(text: "Тип комнаты")
-
-                            HStack(spacing: 12) {
-                                ForEach(JoinTab.allCases) { tab in
-                                    tabButton(tab)
+                        HStack(spacing: 12) {
+                            ForEach(JoinTab.allCases) { tab in
+                                tabButton(tab)
                                 }
                             }
                         }
@@ -152,30 +148,14 @@ struct JoinRoomView: View {
                     .padding(.top, 8)
                 }
 
-                // ── Join Button (bottom) ──
-                VStack {
-                    Spacer()
-                    joinButton
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 24)
-                }
+            // ── Join Button (bottom) ──
+            VStack {
+                Spacer()
+                joinButton
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
             }
-            .navigationTitle("Присоединиться")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
-                    }
-                }
-            }
-            .toolbarBackground(.hidden, for: .navigationBar)
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Tab Button

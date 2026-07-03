@@ -78,7 +78,7 @@ struct RoomSetupView: View {
                                 }
                             }
 
-                            // 🔧 NEW: Password field — shown when privacy = .privateRoom
+                            // 🔧 NEW: Password field — shown when privacy = .privateRoom (locked)
                             if privacy == .privateRoom {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Пароль комнаты")
@@ -91,7 +91,7 @@ struct RoomSetupView: View {
                                         Image(systemName: "lock.fill")
                                             .font(.system(size: 14))
                                             .foregroundColor(.bioTeal)
-                                        SecureField("Введите пароль (необязательно)", text: $roomPassword)
+                                        SecureField("Введите пароль", text: $roomPassword)
                                             .font(.system(size: 16))
                                             .foregroundColor(.raveTextPrimary)
                                             .autocapitalization(.none)

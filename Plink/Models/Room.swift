@@ -164,33 +164,33 @@ struct JoinRoomRequest: Codable, Sendable {
 // MARK: - Room Privacy Level (Блок 4 — Studio)
 /// Режим приватности комнаты.
 enum RoomPrivacy: String, CaseIterable, Identifiable, Codable, Sendable {
-    case publicRoom = "public"      // Discovery Dashboard для всех
-    case friendsOnly = "friends"    // только для друзей хоста
-    case privateRoom = "private"    // строго по ссылке-приглашению
+    case publicRoom = "public"      // видна всем на главной
+    case privateRoom = "private"    // закрытая, с паролем
+    case byLink = "link"            // только по ссылке, без пароля
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .publicRoom: return "Публичная"
-        case .friendsOnly: return "Только для друзей"
         case .privateRoom: return "Приватная"
+        case .byLink: return "По ссылке"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .publicRoom: return "Видна всем в ленте"
-        case .friendsOnly: return "Только ваши друзья"
-        case .privateRoom: return "Только по ссылке"
+        case .publicRoom: return "Видна всем на главной"
+        case .privateRoom: return "Только по коду + паролю"
+        case .byLink: return "Только по ссылке без пароля"
         }
     }
 
     var icon: String {
         switch self {
         case .publicRoom: return "globe"
-        case .friendsOnly: return "person.2"
-        case .privateRoom: return "lock"
+        case .privateRoom: return "lock.fill"
+        case .byLink: return "link"
         }
     }
 }

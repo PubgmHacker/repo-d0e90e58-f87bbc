@@ -1,59 +1,155 @@
 import SwiftUI
 
-// MARK: - Notifications Settings View
-/// Экран настроек уведомлений.
+// MARK: - Notifications Settings View (Premium)
+/// 🔧 REDESIGNED: Full-screen settings window with premium toggle design.
+/// Was: bottom sheet with default iOS Toggle and visible Divider gaps.
+/// Now: full-screen NavigationStack with custom PlinkToggle, grouped cards
+/// without internal dividers (clean continuous look like iOS Settings / Telegram).
+///
+/// Toggles persist to UserDefaults immediately (was: @State with no persistence).
 struct NotificationsView: View {
     @ObservedObject private var loc = LocalizationManager.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var pushNotifications = true
-    @State private var notificationSounds = true
-    @State private var friendsOnline = false
-    @State private var newRooms = true
+
+    // Persisted state (UserDefaults-backed)
+    @AppStorage("notif_push_enabled") private var pushNotifications = true
+    @AppStorage("notif_sounds_enabled") private var notificationSounds = true
+    @AppStorage("notif_friends_online") private var friendsOnline = false
+    @AppStorage("notif_new_rooms") private var newRooms = true
+    @AppStorage("notif_friend_requests") private var friendRequests = true
+    @AppStorage("notif_room_invites") private var roomInvites = true
+    @AppStorage("notif_mentions") private var mentions = true
+    @AppStorage("notif_do_not_disturb") private var doNotDisturb = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                // Bioluminescent background
+                BioluminescentBackground(energy: 0.4, dimming: 0)
+                    .ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 20) {
-                        // Уведомления
-                        settingsCard {
-                            ToggleRow(
-                                icon: "bell.badge.fill",
-                                title: loc.string(.notifPush),
-                                subtitle: loc.string(.notifPushSubtitle),
-                                isOn: $pushNotifications
+                    VStack(alignment: .leading, spacing: 24) {
+                        // ── DND banner (top priority) ──
+                        if doNotDisturb {
+                            HStack(spacing: 10) {
+                                Image(systemName: "moon.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.raveWarning)
+                                Text("Режим «Не беспокоить» включён — вы не получите никаких уведомлений.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.raveTextSecondary)
+                            }
+                            .padding(12)
+                            .background(Color.raveWarning.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.raveWarning.opacity(0.2), lineWidth: 0.5)
                             )
-                            Divider().padding(.leading, 52)
-                            ToggleRow(
-                                icon: "speaker.wave.2.fill",
-                                title: loc.string(.notifSounds),
-                                subtitle: loc.string(.notifSoundsSubtitle),
-                                isOn: $notificationSounds
-                            )
-                            Divider().padding(.leading, 52)
-                            ToggleRow(
-                                icon: "person.wave.2",
-                                title: loc.string(.notifFriendsOnline),
-                                subtitle: loc.string(.notifFriendsOnlineSubtitle),
-                                isOn: $friendsOnline
-                            )
-                            Divider().padding(.leading, 52)
-                            ToggleRow(
-                                icon: "plus.circle.fill",
-                                title: loc.string(.notifNewRooms),
-                                subtitle: loc.string(.notifNewRoomsSubtitle),
-                                isOn: $newRooms
-                            )
+                            .padding(.horizontal, 16)
                         }
 
-                        Spacer(minLength: 40)
+                        // ── General Section ──
+                        VStack(alignment: .leading, spacing: 6) {
+                            PlinkSectionHeader(text: "Общие")
+
+                            PlinkSettingsCard {
+                                PlinkToggleRow(
+                                    icon: "moon.fill",
+                                    title: "Не беспокоить",
+                                    subtitle: "Отключить все уведомления",
+                                    iconColor: .raveWarning,
+                                    isOn: $doNotDisturb
+                                )
+                                PlinkToggleRow(
+                                    icon: "bell.badge.fill",
+                                    title: loc.string(.notifPush),
+                                    subtitle: loc.string(.notifPushSubtitle),
+                                    iconColor: .bioCyan,
+                                    isOn: $pushNotifications,
+                                    enabled: !doNotDisturb
+                                )
+                                PlinkToggleRow(
+                                    icon: "speaker.wave.2.fill",
+                                    title: loc.string(.notifSounds),
+                                    subtitle: loc.string(.notifSoundsSubtitle),
+                                    iconColor: .bioEmerald,
+                                    isOn: $notificationSounds,
+                                    enabled: !doNotDisturb
+                                )
+                            }
+                        }
+
+                        // ── Friends & Social Section ──
+                        VStack(alignment: .leading, spacing: 6) {
+                            PlinkSectionHeader(text: "Друзья и соцсети")
+
+                            PlinkSettingsCard {
+                                PlinkToggleRow(
+                                    icon: "person.wave.2",
+                                    title: loc.string(.notifFriendsOnline),
+                                    subtitle: loc.string(.notifFriendsOnlineSubtitle),
+                                    iconColor: .bioTeal,
+                                    isOn: $friendsOnline,
+                                    enabled: !doNotDisturb
+                                )
+                                PlinkToggleRow(
+                                    icon: "person.badge.plus",
+                                    title: "Запросы в друзья",
+                                    subtitle: "Когда кто-то хочет добавить вас",
+                                    iconColor: .bioCyan,
+                                    isOn: $friendRequests,
+                                    enabled: !doNotDisturb
+                                )
+                                PlinkToggleRow(
+                                    icon: "envelope.fill",
+                                    title: "Приглашения в комнаты",
+                                    subtitle: "Когда друзья зовут вас смотреть вместе",
+                                    iconColor: .bioEmerald,
+                                    isOn: $roomInvites,
+                                    enabled: !doNotDisturb
+                                )
+                            }
+                        }
+
+                        // ── Rooms & Content Section ──
+                        VStack(alignment: .leading, spacing: 6) {
+                            PlinkSectionHeader(text: "Комнаты и контент")
+
+                            PlinkSettingsCard {
+                                PlinkToggleRow(
+                                    icon: "plus.circle.fill",
+                                    title: loc.string(.notifNewRooms),
+                                    subtitle: loc.string(.notifNewRoomsSubtitle),
+                                    iconColor: .bioTeal,
+                                    isOn: $newRooms,
+                                    enabled: !doNotDisturb
+                                )
+                                PlinkToggleRow(
+                                    icon: "at",
+                                    title: "Упоминания в чате",
+                                    subtitle: "Когда кто-то упоминает вас в чате комнаты",
+                                    iconColor: .bioCyan,
+                                    isOn: $mentions,
+                                    enabled: !doNotDisturb
+                                )
+                            }
+                        }
+
+                        // ── Footer Info ──
+                        Text("Настройки уведомлений сохраняются на этом устройстве. Push-уведомления доставляются через Apple Push Notification Service.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.raveTextTertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle(loc.string(.notifTitle))
+            .navigationTitle("Уведомления")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -61,53 +157,13 @@ struct NotificationsView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.ravePrimary)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.bioCyan)
                     }
                 }
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
-    }
-
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(14)
-            .background(Color.raveCard)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.raveSurface, lineWidth: 1)
-            )
-    }
-}
-
-// MARK: - Toggle Row
-private struct ToggleRow: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundColor(.ravePrimary)
-                    .frame(width: 30, height: 30)
-                    .background(Color.ravePrimary.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundColor(.raveTextPrimary)
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundColor(.raveTextSecondary)
-                }
-            }
-        }
-        .tint(.raveWarning)
-        .padding(.vertical, 4)
+        .preferredColorScheme(.dark)
     }
 }

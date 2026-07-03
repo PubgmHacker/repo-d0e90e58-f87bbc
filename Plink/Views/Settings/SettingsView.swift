@@ -29,16 +29,16 @@ struct SettingsView: View {
 
     @State private var profileVM: ProfileViewModel?
     @State private var showFullProfile = false
-    @State private var showPrivacy = false
-    @State private var showNotifications = false
     @State private var showPremium = false
     @State private var showAdminPanel = false
-    @State private var showLanguage = false
     @State private var isPremium = false
     @State private var user: User?
+    // 🔧 Navigation destinations for full-screen push (was: .sheet which opened
+    // as overlay). Now uses NavigationLink for proper full-screen push transitions.
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 // Биолюминесцентный фон
                 BioluminescentBackground(energy: 0.45, dimming: 0)
@@ -73,28 +73,39 @@ struct SettingsView: View {
 
                         // ── Privacy & Notifications Section ──
                         settingsSection("Конфиденциальность") {
-                            settingsRow(
-                                icon: "lock.shield.fill",
-                                title: "Конфиденциальность",
-                                color: .bioTeal
-                            ) {
-                                showPrivacy = true
+                            // 🔧 FIX: Open as full-screen push via NavigationLink, not .sheet
+                            NavigationLink(value: SettingsDestination.privacy) {
+                                rowContent(
+                                    icon: "lock.shield.fill",
+                                    title: "Конфиденциальность",
+                                    subtitle: nil,
+                                    color: .bioTeal,
+                                    showChevron: true
+                                )
                             }
-                            settingsRow(
-                                icon: "bell.badge.fill",
-                                title: "Уведомления",
-                                color: .bioEmerald
-                            ) {
-                                showNotifications = true
+                            .buttonStyle(.plain)
+
+                            NavigationLink(value: SettingsDestination.notifications) {
+                                rowContent(
+                                    icon: "bell.badge.fill",
+                                    title: "Уведомления",
+                                    subtitle: nil,
+                                    color: .bioEmerald,
+                                    showChevron: true
+                                )
                             }
-                            settingsRow(
-                                icon: "globe",
-                                title: "Язык",
-                                subtitle: LocalizationManager.shared.currentLanguageName,
-                                color: .bioCyan
-                            ) {
-                                showLanguage = true
+                            .buttonStyle(.plain)
+
+                            NavigationLink(value: SettingsDestination.language) {
+                                rowContent(
+                                    icon: "globe",
+                                    title: "Язык",
+                                    subtitle: LocalizationManager.shared.currentLanguageName,
+                                    color: .bioCyan,
+                                    showChevron: true
+                                )
                             }
+                            .buttonStyle(.plain)
                         }
 
                         // ── Admin Section (только для админов) ──
@@ -182,6 +193,17 @@ struct SettingsView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
+            // 🔧 FIX: Full-screen push navigation for sub-screens (was: .sheet overlay)
+            .navigationDestination(for: SettingsDestination.self) { destination in
+                switch destination {
+                case .privacy:
+                    PrivacySettingsView()
+                case .notifications:
+                    NotificationsView()
+                case .language:
+                    LanguagePickerView()
+                }
+            }
         }
         .preferredColorScheme(.dark)
         .task {
@@ -200,27 +222,11 @@ struct SettingsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showPrivacy) {
-            PrivacySettingsView()
-                .preferredColorScheme(.dark)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showNotifications) {
-            NotificationsView()
-                .preferredColorScheme(.dark)
-                .presentationDetents([.medium, .large])
-        }
         .sheet(isPresented: $showPremium) {
             PremiumManagementView(isPremium: $isPremium)
         }
         .sheet(isPresented: $showAdminPanel) {
             AdminPanelView()
-        }
-        .sheet(isPresented: $showLanguage) {
-            NavigationStack {
-                LanguagePickerView()
-            }
-            .preferredColorScheme(.dark)
         }
     }
 
@@ -425,4 +431,12 @@ extension LocalizationManager {
         default: return "Русский"
         }
     }
+}
+
+// MARK: - Settings Navigation Destinations
+/// 🔧 FIX: Type-safe navigation destinations for full-screen push transitions.
+enum SettingsDestination: Hashable {
+    case privacy
+    case notifications
+    case language
 }

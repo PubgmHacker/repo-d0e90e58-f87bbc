@@ -22,7 +22,13 @@ struct MainTabView: View {
     var body: some View {
         ZStack {
             TabView(selection: tabSelection) {
-                HomeTabContent(onProfileTap: { showSettings = true })
+                HomeTabContent(
+                    onProfileTap: { showSettings = true },
+                    onSwitchToAITab: {
+                        HapticManager.impact(.light)
+                        withAnimation { selectedTab = .ai }
+                    }
+                )
                     .tabItem {
                         Label("Главная", systemImage: "house.fill")
                     }
@@ -193,6 +199,8 @@ struct HomeTabContent: View {
     @State private var navigateToRoom: Room?
     @State private var viewModel: HomeViewModel?
     var onProfileTap: () -> Void
+    /// 🔧 NEW: Closure to switch to the AI tab from Home's AI CTA card.
+    var onSwitchToAITab: (() -> Void)?
 
     var body: some View {
         NavigationStack {
@@ -202,7 +210,8 @@ struct HomeTabContent: View {
                 if let viewModel {
                     HomeView(
                         viewModel: viewModel,
-                        onProfileTap: onProfileTap
+                        onProfileTap: onProfileTap,
+                        onSwitchToAITab: onSwitchToAITab
                     )
                 } else {
                     ProgressView()

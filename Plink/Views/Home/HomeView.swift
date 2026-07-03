@@ -33,12 +33,8 @@ struct HomeView: View {
     @State private var ctaCollapseTimer: Timer?
     @State private var userInteracted = false
 
-    // ИИ-помощник
-    @State private var aiQuery = ""
-    @State private var aiResults: [Room] = []
-    @State private var aiSearching = false
-    /// 🔧 NEW: Natural-language response from the AI (shown above matching rooms).
-    @State private var aiResponseText: String?
+    // 🔧 REMOVED: aiQuery, aiResults, aiSearching, aiResponseText
+    // AI recommendations now live ONLY in the AI tab — no inline AI on Home.
     @State private var showProfile = false
 
     // onProfileTap больше не используется (профиль открывается через sheet).
@@ -63,16 +59,12 @@ struct HomeView: View {
                             .padding(.horizontal, 20)
                             .padding(.top, 8)
 
-                        // ИИ-помощник «Что посмотреть?»
-                        aiAssistantBar
+                        // 🔧 REMOVED: aiAssistantBar + aiResultsSection
+                        // AI recommendations now live ONLY in the AI tab (bottom tab bar).
+                        // Home shows a CTA card that deep-links to the AI tab instead.
+                        aiCTACard
                             .padding(.horizontal, 20)
                             .padding(.top, 16)
-
-                        // Результаты ИИ
-                        if !aiResults.isEmpty {
-                            aiResultsSection
-                                .padding(.top, 16)
-                        }
 
                         // Секция 1: Сейчас в эфире
                         if !liveRooms.isEmpty {
@@ -306,151 +298,81 @@ struct HomeView: View {
         .offset(y: appeared ? 0 : 30)
     }
 
-    // MARK: - AI Results Section
+    // MARK: - AI CTA Card (replaces aiAssistantBar + aiResultsSection)
+    /// 🔧 REDESIGNED: Was a search bar with inline AI response. Now a CTA card
+    /// that deep-links to the AI tab. Per user request: AI only works through
+    /// the dedicated tab in the bottom tab bar — no inline AI responses on Home.
 
-    private var aiResultsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14))
-                    .foregroundColor(.bioCyan)
-                Text("Рекомендации ИИ")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
-            }
-            .padding(.horizontal, 20)
-
-            // 🔧 NEW: Show the AI's natural-language response in a featured card
-            if let aiResponseText, !aiResponseText.isEmpty {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14))
-                        .foregroundColor(.bioCyan)
-                        .frame(width: 28, height: 28)
-                        .background(Color.bioCyan.opacity(0.18))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-
-                    Text(aiResponseText)
-                        .font(.system(size: 14))
-                        .foregroundColor(.raveTextPrimary)
-                        .multilineTextAlignment(.leading)
-
-                    Spacer(minLength: 0)
-                }
-                .padding(14)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(
+    private var aiCTACard: some View {
+        Button {
+            HapticManager.impact(.light)
+            // Switch to AI tab — MainTabView observes this via onProfileTap-like callback
+            onSwitchToAITab?()
+        } label: {
+            HStack(spacing: 14) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(
                             LinearGradient(
-                                colors: [Color.bioCyan.opacity(0.3), Color.white.opacity(0.04)],
+                                colors: [Color.bioCyan, Color.bioEmerald],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.5
+                            )
                         )
-                )
-                .padding(.horizontal, 20)
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(aiResults) { room in
-                        Button {
-                            HapticManager.impact(.light)
-                            navigateToRoom = room
-                        } label: { RecommendationCardView(room: room) }
-                        .buttonStyle(.plain)
-                    }
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
                 }
-                .padding(.horizontal, 20)
-            }
-        }
-    }
+                .shadow(color: Color.bioCyan.opacity(0.4), radius: 8, y: 3)
 
-    // MARK: - AI Assistant Bar («Что посмотреть?»)
-
-    private var aiAssistantBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.ravePrimary)
-
-            TextField("Что посмотреть?", text: $aiQuery)
-                .font(.system(size: 16))
-                .foregroundColor(.raveTextPrimary)
-                .submitLabel(.search)
-                .onSubmit {
-                    Task { await searchAI() }
-                }
-
-            if aiSearching {
-                ProgressView()
-                    .tint(.ravePrimary)
-                    .scaleEffect(0.8)
-            } else if !aiQuery.isEmpty {
-                Button { aiQuery = ""; aiResults = []; aiResponseText = nil } label: {
-                    Image(systemName: "xmark.circle.fill")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Что посмотреть?")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.raveTextPrimary)
+                    Text("Спроси ИИ — подберёт фильм для совместного просмотра")
+                        .font(.system(size: 12))
                         .foregroundColor(.raveTextSecondary)
+                        .lineLimit(1)
                 }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.raveTextTertiary)
             }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .glassCard(cornerRadius: 14, opacity: 0.05)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.ravePrimary.opacity(0.15), lineWidth: 0.5)
-        )
-    }
-
-    /// 🔧 REAL AI: Now calls OpenRouter via AIService.recommend() instead of
-    /// doing a local name-based filter. The AI sees the user's query + the list
-    /// of available room names and returns a natural-language recommendation.
-    /// The response is shown in the AI results section as a special "AI card"
-    /// alongside any matching rooms.
-    private func searchAI() async {
-        let query = aiQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return }
-
-        aiSearching = true
-        defer { aiSearching = false }
-
-        // Get available room names for context
-        let all = viewModel.filteredRooms
-        let roomNames = all.prefix(20).map { $0.name }
-
-        do {
-            // 🔧 Real AI call via OpenRouter
-            let aiResponse = try await AIService.shared.recommend(
-                query: query,
-                availableRooms: roomNames
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.bioCyan.opacity(0.3), Color.white.opacity(0.04)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
             )
-
-            // Also filter rooms by query (for showing matching rooms alongside)
-            let matchingRooms = all.filter {
-                $0.name.localizedCaseInsensitiveContains(query) ||
-                $0.mediaItem?.title.localizedCaseInsensitiveContains(query) == true
-            }
-
-            // Store the AI text response in a new state property
-            aiResponseText = aiResponse
-
-            // Show matching rooms (or top 3 if AI suggested something)
-            aiResults = matchingRooms.isEmpty ? Array(all.prefix(3)) : matchingRooms
-        } catch {
-            // Fall back to local filter if AI fails
-            aiResponseText = "⚠️ ИИ недоступен. Показываю результаты локального поиска."
-            aiResults = all.filter {
-                $0.name.localizedCaseInsensitiveContains(query) ||
-                $0.mediaItem?.title.localizedCaseInsensitiveContains(query) == true
-            }
-            if aiResults.isEmpty {
-                aiResults = Array(all.prefix(3))
-            }
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
+        .buttonStyle(.plain)
     }
+
+    /// Closure called when user taps the AI CTA — MainTabView switches to AI tab.
+    var onSwitchToAITab: (() -> Void)?
+
+    // MARK: - AI Results Section (REMOVED — AI only via tab bar)
+
+    // MARK: - AI Assistant Bar (REMOVED — AI only via tab bar)
+    // The old aiAssistantBar (search field with inline AI response) and
+    // searchAI() function were removed per user request. AI recommendations
+    // now live ONLY in the AI tab in the bottom tab bar. Home shows a
+    // CTA card (aiCTACard) that deep-links to the AI tab.
 
     // MARK: - Floating CTA (Создать комнату) — плавная анимация морфинга
     //

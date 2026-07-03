@@ -167,14 +167,67 @@ final class AIService: ObservableObject {
 
     /// Get AI recommendations for what to watch together.
     /// Uses the lighter/faster model since this is a quick single-shot query.
+    /// 🔧 STRICT MODE: The system prompt that locks the AI to ONLY film/series/video
+    /// recommendations, comparisons, and related queries. Off-topic requests (weather,
+    /// news, coding, general chat) are politely refused with a redirect.
+    static let strictSystemPrompt = """
+    Ты — ИИ-помощник Плинка, приложения для СОВМЕСТНОГО ПРОСМОТРА ВИДЕО.
+
+    ТВОЯ ЕДИНСТВЕННАЯ ЗАДАЧА:
+    • Подбирать фильмы, сериалы, видео, мультфильмы, аниме для совместного просмотра
+    • Сравнивать фильмы (что лучше посмотреть, чем отличаются)
+    • Давать рекомендации по жанрам, настроению, случаю (вечер с друзьями, семейный просмотр)
+    • Помогать выбрать между несколькими вариантами
+
+    КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО отвечать на:
+    • Вопросы о погоде, новостях, политике, спорте
+    • Запросы написать код, решить математику, перевести текст
+    • Личные советы (отношения, здоровье, финансы)
+    • Общие разговоры («как дела», «расскажи о себе»)
+    • Любые запросы, не связанные с фильмами/сериалами/видео
+
+    Если запрос не связан с фильмами — отвечай ОДНОЙ фразой:
+    «Я помогаю только с подбором фильмов и сериалов для совместного просмотра. Расскажи, что хочешь посмотреть 🎬»
+
+    ПРАВИЛА ОТВЕТА:
+    • Отвечай на русском, дружелюбно, кратко (1-4 предложения)
+    • Если просят фильм — предложи 1-2 варианта с кратким описанием и почему стоит посмотреть ВМЕСТЕ
+    • Если сравнивают — объясни разницу в 1-2 предложениях и дай рекомендацию
+    • Не выдумывай факты, не выдумывай несуществующие фильмы
+    • Упоминай жанр и примерную длительность
+    """
+
+    /// 🔧 GUARD: Returns true if the query looks off-topic (not about films/series/videos).
+    /// Used to short-circuit obvious non-film queries without calling the API.
+    static func isOffTopic(_ query: String) -> Bool {
+        let lower = query.lowercased()
+        // Obvious off-topic keywords (weather, news, code, math, personal)
+        let offTopicKeywords = [
+            // weather
+            "погод", "температур", "дождь", "снег", " forecast",
+            // news / politics
+            "новост", "политик", "выбор", "президент", "войн",
+            // coding / math
+            "код", "программ", "функци", "python", "javascript", "swift",
+            "математик", "уравнен", "задач", "пример",
+            // personal advice
+            "отношени", "здоров", "болезн", "диет", "финанс", "деньг", "кредит",
+            // general chat
+            "как дела", "расскажи о себе", "кто ты", "тебя зовут", "твое имя",
+            // other non-film
+            "рецепт", "кулинар", "вязан", "шить",
+        ]
+        return offTopicKeywords.contains { lower.contains($0) }
+    }
+
+    /// 🔧 REDESIGNED: Strict recommend() — only answers film-related queries.
+    /// Off-topic queries get a canned redirect response without calling the API.
     func recommend(query: String, availableRooms: [String] = []) async throws -> String {
-        let systemPrompt = """
-        Ты — ИИ-помощник Плинка, приложения для совместного просмотра видео.
-        Пользователь ищет, что посмотреть вместе с друзьями.
-        Ответь кратко (1-3 предложения), дружелюбно, на русском языке.
-        Если в списке доступных комнат есть что-то подходящее — порекомендуй.
-        Иначе предложи жанр или тип контента.
-        """
+        // Guard: short-circuit obvious off-topic queries
+        if Self.isOffTopic(query) {
+            return "Я помогаю только с подбором фильмов и сериалов для совместного просмотра. Расскажи, что хочешь посмотреть 🎬"
+        }
+
         let userPrompt: String
         if availableRooms.isEmpty {
             userPrompt = "Запрос: \(query)"
@@ -183,7 +236,7 @@ final class AIService: ObservableObject {
         }
 
         let messages = [
-            ChatMessage(role: "system", content: systemPrompt),
+            ChatMessage(role: "system", content: Self.strictSystemPrompt),
             ChatMessage(role: "user", content: userPrompt),
         ]
 

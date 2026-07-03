@@ -205,7 +205,22 @@ struct AIAssistantView: View {
     /// 🔧 NEW: Real AI integration via OpenRouter. Streams tokens live into the
     /// AI message bubble identified by `messageId` — tokens appear as they're
     /// generated, like ChatGPT.
+    ///
+    /// 🔧 STRICT MODE: Uses AIService.strictSystemPrompt — only film/series/video
+    /// queries are answered. Off-topic queries get a canned redirect response.
     private func streamAIResponse(into messageId: String, userQuery: String) async {
+        // 🔧 Guard: short-circuit obvious off-topic queries without calling the API
+        if AIService.isOffTopic(userQuery) {
+            await MainActor.run {
+                if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                    self.messages[idx].text = "Я помогаю только с подбором фильмов и сериалов для совместного просмотра. Расскажи, что хочешь посмотреть 🎬"
+                }
+                self.isLoading = false
+                self.saveHistory()
+            }
+            return
+        }
+
         // Build conversation context from history (last 10 messages)
         let historyMessages = messages.suffix(10).map { msg in
             AIService.ChatMessage(
@@ -214,17 +229,10 @@ struct AIAssistantView: View {
             )
         }
 
-        // System prompt — defines the AI's persona for Plink
+        // 🔧 STRICT: Use the locked-down system prompt (films only)
         let systemMessage = AIService.ChatMessage(
             role: "system",
-            content: """
-            Ты — ИИ-помощник Плинка, приложения для совместного просмотра видео с друзьями.
-            Помогаешь подобрать контент для совместного просмотра: фильмы, сериалы, видео, музыку.
-            Отвечай дружелюбно, кратко (1-4 предложения), на русском языке.
-            Если просят фильм — предложи 1-2 варианта с кратким описанием и почему стоит посмотреть вместе.
-            Если спрашивают о комнате — объясни, как создать или присоединиться.
-            Не выдумывай факты. Если не знаешь — честно скажи.
-            """
+            content: AIService.strictSystemPrompt
         )
 
         let allMessages = [systemMessage] + historyMessages

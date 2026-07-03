@@ -11,10 +11,16 @@ import SwiftUI
 ///   3. Each service row: real logo + name + subtitle + chevron
 struct ServiceSelectionView: View {
     @Environment(\.dismiss) private var dismiss
+    /// 🔧 LEGACY: Called for browser/customURL (no content browsing needed).
     var onSelect: (VideoService) -> Void
+    /// 🔧 NEW: Called when user picks content in a service browser.
+    /// Passes: service, content URL, content title → parent opens RoomSetupView.
+    var onContentSelected: (VideoService, String, String) -> Void = { _, _, _ in }
 
     @State private var appeared = false
     @State private var selectedCategory: ServiceCategory?
+    /// 🔧 NEW: When set, opens ServiceBrowserView for the selected service.
+    @State private var browseService: VideoService?
 
     enum ServiceCategory: String, Identifiable {
         case video, cinema, browser
@@ -86,7 +92,8 @@ struct ServiceSelectionView: View {
                     services: videoServices,
                     onSelect: { service in
                         selectedCategory = nil
-                        onSelect(service)
+                        // 🔧 NEW: Open ServiceBrowserView to browse content
+                        browseService = service
                     }
                 )
             case .cinema:
@@ -95,7 +102,8 @@ struct ServiceSelectionView: View {
                     services: cinemaServices,
                     onSelect: { service in
                         selectedCategory = nil
-                        onSelect(service)
+                        // 🔧 NEW: Open ServiceBrowserView to browse content
+                        browseService = service
                     }
                 )
             case .browser:
@@ -103,6 +111,14 @@ struct ServiceSelectionView: View {
                     selectedCategory = nil
                     onSelect(service)
                 }
+            }
+        }
+        // 🔧 NEW: When user picks a service, open the full-screen browser
+        .sheet(item: $browseService) { service in
+            ServiceBrowserView(service: service) { contentURL in
+                browseService = nil
+                // Pass to the parent — it will open RoomSetupView
+                onContentSelected(service, contentURL, "")
             }
         }
     }
@@ -281,7 +297,7 @@ struct ServiceListScreen: View {
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - Service Row (premium list row with real logo)
+    // MARK: - Service Row (premium list row with real logo + full brand name)
 
     @ViewBuilder
     private func serviceRow(_ service: VideoService) -> some View {
@@ -290,14 +306,15 @@ struct ServiceListScreen: View {
             onSelect(service)
         } label: {
             HStack(spacing: 14) {
-                // Real brand logo from Assets.xcassets
+                // 🔧 Real brand logo from Assets.xcassets (icon mode)
                 ServiceLogoView(service: service, size: 40)
                     .frame(width: 48, height: 48)
                     .background(Color.white.opacity(0.04))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(service.title)
+                    // 🔧 Show full brand name (e.g. "VK Видео" not "VK")
+                    Text(service.brandName)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.raveTextPrimary)
                     Text(service.subtitle)

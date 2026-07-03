@@ -2,36 +2,66 @@ import SwiftUI
 
 // MARK: - ServiceLogoView
 /// 🔧 REAL LOGOS: Uses actual brand logos from Assets.xcassets.
+/// Two modes:
+///   1. Icon mode (default): square logo only
+///   2. Wordmark mode: logo + full brand name text beside it
+///
 /// Logos were downloaded from:
 ///   - Wikimedia Commons (SVG → PNG) for: YouTube, VK, Netflix, Disney+
 ///   - Official site favicons (Google S2 favicon API, 128px) for:
 ///     Rutube, Кинопоиск, Ivi, Okko, Wink, Start, Premier, Smotrim, KION
-///
-/// Asset names follow the pattern: ServiceLogo{ServiceName}
-///   - ServiceLogoYoutube, ServiceLogoVk, ServiceLogoNetflix, etc.
 struct ServiceLogoView: View {
     let service: VideoService
     var size: CGFloat = 48
+    /// 🔧 NEW: When true, shows the logo + full brand name text beside it (horizontal wordmark).
+    /// When false (default), shows just the square logo icon.
+    var wordmark: Bool = false
 
     var body: some View {
+        if wordmark {
+            wordmarkView
+        } else {
+            iconView
+        }
+    }
+
+    // MARK: - Icon mode (square logo only)
+
+    private var iconView: some View {
         Group {
             if let imageName = service.assetName, let uiImage = UIImage(named: imageName) {
-                // Real logo from Assets.xcassets
                 Image(uiImage: uiImage)
                     .resizable()
-                    .renderingMode(.original)  // preserve brand colors
+                    .renderingMode(.original)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
             } else {
-                // Fallback: brand-colored circle with initial letter
                 fallbackLogo
             }
         }
         .frame(width: size, height: size)
     }
 
+    // MARK: - Wordmark mode (logo + brand name text)
+    /// 🔧 NEW: Shows the real logo + full brand name in the brand's accent color.
+    /// This gives the effect of a full wordmark logo without needing to download
+    /// a separate wordmark image for each service.
+
+    private var wordmarkView: some View {
+        HStack(spacing: 10) {
+            // Real logo icon
+            iconView
+
+            // Full brand name in brand accent color
+            Text(service.brandName)
+                .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+                .foregroundColor(service.accentColor)
+                .lineLimit(1)
+        }
+        .frame(height: size)
+    }
+
     /// Fallback when asset is missing — uses brand accent color + service initial.
-    /// This only shows if the real logo failed to load.
     private var fallbackLogo: some View {
         ZStack {
             Circle()
@@ -44,11 +74,10 @@ struct ServiceLogoView: View {
     }
 }
 
-// MARK: - VideoService + Asset Name
+// MARK: - VideoService + Asset Name + Brand Name
 
 extension VideoService {
     /// Asset catalog image name for this service's real logo, or nil if no asset.
-    /// Asset names follow the pattern: ServiceLogo{ServiceName}
     var assetName: String? {
         switch self {
         case .youtube:      return "ServiceLogoYoutube"
@@ -64,14 +93,55 @@ extension VideoService {
         case .premier:      return "ServiceLogoPremier"
         case .smotrim:      return "ServiceLogoSmotrim"
         case .kion:         return "ServiceLogoKion"
-        case .browser:      return nil  // uses SF Symbol
-        case .customURL:    return nil  // uses SF Symbol
+        case .browser:      return nil
+        case .customURL:    return nil
+        }
+    }
+
+    /// 🔧 NEW: Full brand name for wordmark display.
+    /// Uses the official marketing name, not the short title.
+    var brandName: String {
+        switch self {
+        case .youtube:      return "YouTube"
+        case .vk:           return "VK Видео"        // 🔧 was "VK", now "VK Видео" per user request
+        case .rutube:       return "Rutube"
+        case .netflix:      return "Netflix"
+        case .disney:       return "Disney+"
+        case .browser:      return "Браузер"
+        case .customURL:    return "Своя ссылка"
+        case .kinopoisk:    return "Кинопоиск"
+        case .ivi:          return "ivi"
+        case .okko:         return "OKKO"
+        case .wink:         return "Wink"
+        case .start:        return "START"
+        case .premier:      return "PREMIER"
+        case .smotrim:      return "Смотрим"
+        case .kion:         return "KION"
+        }
+    }
+
+    /// 🔧 NEW: The URL to browse this service's content in a WebView.
+    /// Used by ServiceBrowserView to load the service's catalog page.
+    var browseURL: String {
+        switch self {
+        case .youtube:      return "https://www.youtube.com/"
+        case .vk:           return "https://vk.com/video"
+        case .rutube:       return "https://rutube.ru/"
+        case .netflix:      return "https://www.netflix.com/browse"
+        case .disney:       return "https://www.disneyplus.com/"
+        case .kinopoisk:    return "https://kinopoisk.ru/"
+        case .ivi:          return "https://www.ivi.ru/"
+        case .okko:         return "https://okko.tv/"
+        case .wink:         return "https://wink.ru/"
+        case .start:        return "https://start.ru/"
+        case .premier:      return "https://premier.one/"
+        case .smotrim:      return "https://smotrim.ru/"
+        case .kion:         return "https://kion.ru/"
+        case .browser:      return "https://www.google.com/"
+        case .customURL:    return ""
         }
     }
 }
 
 // MARK: - Backwards Compatibility Alias
-/// 🔧 ServiceLogoIcon is the legacy name used in RoomCreationView, ServiceSelectionView,
-/// and HomeView. We alias it to ServiceLogoView so all existing call sites
-/// automatically get the real brand logos without source changes.
 typealias ServiceLogoIcon = ServiceLogoView

@@ -24,6 +24,12 @@ struct RoomCreationView: View {
     @State private var isCreating = false
     @State private var showPaywallForLimit = false
 
+    // 🔧 NEW: RoomSetupView state (for the new flow: Service → Browser → Setup → Room)
+    @State private var showRoomSetup = false
+    @State private var setupService: VideoService = .youtube
+    @State private var setupContentURL: String = ""
+    @State private var setupContentTitle: String = ""
+
     // Ошибки валидации
     @State private var nameError: String?
     @State private var urlError: String?
@@ -38,12 +44,23 @@ struct RoomCreationView: View {
 
             switch currentStep {
             case .service:
-                ServiceSelectionView { service in
-                    selectedService = service
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                        currentStep = .details
+                ServiceSelectionView(
+                    onSelect: { service in
+                        // Browser / customURL — go straight to details (URL entry)
+                        selectedService = service
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                            currentStep = .details
+                        }
+                    },
+                    onContentSelected: { service, contentURL, contentTitle in
+                        // 🔧 NEW: User browsed content in ServiceBrowserView.
+                        // Skip details step — go straight to RoomSetupView.
+                        showRoomSetup = true
+                        setupService = service
+                        setupContentURL = contentURL
+                        setupContentTitle = contentTitle
                     }
-                }
+                )
 
             case .details:
                 detailsStep
@@ -58,6 +75,18 @@ struct RoomCreationView: View {
                 onPurchase: { showPaywallForLimit = false },
                 onRestore: { },
                 onDismiss: { showPaywallForLimit = false }
+            )
+        }
+        // 🔧 NEW: RoomSetupView — final step after browsing content
+        .sheet(isPresented: $showRoomSetup) {
+            RoomSetupView(
+                service: setupService,
+                contentURL: setupContentURL,
+                contentTitle: setupContentTitle,
+                onRoomCreated: { room in
+                    showRoomSetup = false
+                    onRoomCreated(room)
+                }
             )
         }
     }
@@ -79,7 +108,7 @@ struct RoomCreationView: View {
                             ServiceLogoIcon(service: selectedService, size: 24)
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(selectedService.title)
+                            Text(selectedService.brandName)
                                 .font(.subheadline.bold())
                                 .foregroundColor(.raveTextPrimary)
                             Text(selectedService.subtitle)

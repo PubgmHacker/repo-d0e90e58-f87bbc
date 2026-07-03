@@ -14,7 +14,7 @@ import Foundation
 /// and recover transparently so SyncEngine can resume sync.
 
 @MainActor
-final class WebSocketClient: WebSocketClientProtocol {
+final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
 
     // MARK: - Public State
 

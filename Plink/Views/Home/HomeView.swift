@@ -672,7 +672,14 @@ private struct LiveCardView: View {
                 .overlay(Capsule().stroke(Color.raveDanger.opacity(0.5), lineWidth: 0.5))
                 .padding(10)
 
-                // 🔧 Participant count badge (top-right, prominent)
+                // 🔧 Service logo (top-right, small)
+                if let media = room.mediaItem {
+                    ServiceLogoView(service: media.source, size: 18)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(10)
+                }
+
+                // 🔧 Participant count badge (bottom-right, glass capsule)
                 HStack(spacing: 3) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 9))
@@ -685,15 +692,8 @@ private struct LiveCardView: View {
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.5))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(10)
-
-                // Service logo (bottom-right)
-                if let media = room.mediaItem {
-                    ServiceLogoView(service: media.source, size: 20)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .padding(10)
-                }
             }
             .frame(width: 280, height: 158)
             .clipShape(RoundedRectangle(cornerRadius: 14))

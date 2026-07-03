@@ -225,13 +225,16 @@ struct RoomsTabContent: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Discover Content (Общедоступные комнаты)
+    // MARK: - Discover Content (5 рандомных открытых комнат)
 
+    /// 🔧 Shows 5 RANDOM public rooms (not top, not sorted — random each time)
     private var discoverContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
-                if let rooms = viewModel?.filteredRooms.filter({ /bin/bash.isActive }), !rooms.isEmpty {
-                    ForEach(rooms.prefix(10)) { room in
+                let publicRooms = (viewModel?.filteredRooms ?? [])
+                    .filter({ room in room.isActive && room.privacy == .publicRoom })
+                if !publicRooms.isEmpty {
+                    ForEach(Array(publicRooms.shuffled().prefix(5))) { room in
                         Button { navigateToRoom = room } label: {
                             RoomCardView(room: room, onReport: nil, onBlock: nil)
                         }
@@ -305,94 +308,76 @@ struct RoomsTabContent: View {
     @ViewBuilder
     private func inviteCard(_ invite: RoomInvite) -> some View {
         VStack(spacing: 0) {
-            // ── Top: Inviter info ──
+            // ── Top: Inviter avatar + nick + invite text ──
             HStack(spacing: 12) {
                 // Inviter avatar
                 ZStack {
                     Circle()
                         .fill(Color.bioCyan.opacity(0.15))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                     Text(invite.fromUsername.prefix(1).uppercased())
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.bioCyan)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(invite.fromUsername)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.raveTextPrimary)
-                    Text("приглашает вас в комнату")
-                        .font(.system(size: 11))
-                        .foregroundColor(.raveTextSecondary)
-                }
-
-                Spacer()
-
-                // Time
-                Text(invite.timestamp, style: .relative)
-                    .font(.system(size: 10))
-                    .foregroundColor(.raveTextTertiary)
-            }
-
-            Divider()
-                .background(Color.white.opacity(0.06))
-                .padding(.vertical, 10)
-
-            // ── Middle: Room info with service logo + media title ──
-            HStack(spacing: 12) {
-                // Service logo
-                if let service = invite.service {
-                    ServiceLogoView(service: service, size: 36)
-                        .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.bioCyan.opacity(0.1))
-                            .frame(width: 44, height: 44)
-                        Image(systemName: "play.rectangle.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.bioCyan)
-                    }
-                }
-
                 VStack(alignment: .leading, spacing: 3) {
-                    // Room name
-                    Text(invite.roomName)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.raveTextPrimary)
-                        .lineLimit(2)
-
-                    // Media title (what they're watching)
-                    if let mediaTitle = invite.mediaTitle, !mediaTitle.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "film")
-                                .font(.system(size: 9))
-                            Text(mediaTitle)
-                                .font(.system(size: 11))
-                                .foregroundColor(.raveTextSecondary)
-                        }
-                        .lineLimit(1)
+                    // Nick + invite text
+                    HStack(spacing: 4) {
+                        Text(invite.fromUsername)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.raveTextPrimary)
+                        Text("приглашает посмотреть")
+                            .font(.system(size: 12))
+                            .foregroundColor(.raveTextSecondary)
                     }
 
-                    // Service name + code
-                    HStack(spacing: 6) {
-                        if let service = invite.service {
-                            Text(service.brandName)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.bioCyan)
-                        }
-                        Text("· Код: \(invite.roomCode)")
-                            .font(.system(size: 10, design: .monospaced))
+                    // 🔧 What they're watching — media title in quotes
+                    if let mediaTitle = invite.mediaTitle, !mediaTitle.isEmpty {
+                        Text("«\(mediaTitle)»")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.bioCyan)
+                            .lineLimit(1)
+                    } else {
+                        Text("«\(invite.roomName)»")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.bioCyan)
+                            .lineLimit(1)
+                    }
+
+                    // Service name
+                    if let service = invite.service {
+                        Text(service.brandName)
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.raveTextTertiary)
                     }
                 }
 
                 Spacer()
+
+                // 🔧 Service logo (small, right side)
+                if let service = invite.service {
+                    ServiceLogoView(service: service, size: 28)
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
             }
 
-            // ── Bottom: Accept / Decline buttons ──
+            // ── Room code (small, subtle) ──
+            HStack {
+                Image(systemName: "number")
+                    .font(.system(size: 9))
+                Text(invite.roomCode)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.raveTextTertiary)
+                Spacer()
+                Text(invite.timestamp, style: .relative)
+                    .font(.system(size: 10))
+                    .foregroundColor(.raveTextTertiary)
+            }
+            .padding(.top, 8)
+
+            // ── Accept / Decline buttons ──
             HStack(spacing: 12) {
                 Button {
                     HapticManager.impact(.light)

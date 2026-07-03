@@ -142,6 +142,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         observeDuration(playerItem)
         observeStatus(playerItem)
         addTimeObserver()
+        observeBufferUnderrun(playerItem)  // 🔧 FIX 1.2: Wire up buffer observer
 
         // Host broadcasts the new media so participants load the same item
         if isHost {
@@ -607,6 +608,11 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             player?.removeTimeObserver(observer)
             timeObserver = nil
         }
+        // 🔧 FIX 1.2: Remove buffer observer on teardown
+        if let observer = bufferObserver {
+            NotificationCenter.default.removeObserver(observer)
+            bufferObserver = nil
+        }
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -642,6 +648,40 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
                     Logger.sync.error("AVPlayerItem failed: \(self?.errorMessage ?? "unknown")")
                 default:
                     break
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    // 🔧 FIX 1.2: Buffer underrun observer — detects when AVPlayer stalls
+    // due to slow network. Pauses local playback (without broadcasting pause
+    // to other participants), then resumes + requests fresh state from host
+    // when buffer recovers. Prevents visible desync during buffering.
+    private func observeBufferUnderrun(_ item: AVPlayerItem) {
+        // Listen for playback stall notification
+        bufferObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemPlaybackStalled,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, !self.isHost else { return }
+            self.bufferUnderrunCount += 1
+            Logger.sync.warn("Buffer underrun #\(self.bufferUnderrunCount) — local pause (no broadcast)")
+            // Locally pause — do NOT broadcast pause to other participants.
+            // The host and other guests continue playing.
+            self.player?.pause()
+        }
+
+        // Also observe isPlaybackLikelyToKeepUp for recovery
+        item.publisher(for: \.isPlaybackLikelyToKeepUp, options: .new)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] canKeepUp in
+                guard let self, !self.isHost else { return }
+                if canKeepUp && self.isPlaying {
+                    // Buffer recovered — resume local playback + request fresh state
+                    Logger.sync.info("Buffer recovered — resuming + requesting fresh state from host")
+                    self.player?.play()
+                    self.requestStateFromHost()
                 }
             }
             .store(in: &cancellables)

@@ -3,23 +3,33 @@ import SwiftUI
 // MARK: - BioluminescentBackground — глубоководный туман
 //
 // Премиальный фон: 4 крупных размытых светящихся облака (blur 20-40pt),
-// плавно дрейфующих по экрану. Выглядит как объёмная биолюминесцентная
-// взвесь в глубоком океане, а не как векторные линии.
+// плавно дрейфующих по экрану.
 //
-// Производительность: Canvas + TimelineView (.animation) = GPU,
-// 60-120 FPS, минимум нагрузки (4 облака, не 60 частиц).
-// Дополнительно: лёгкая зернистость (noise) для «дорогого» вида.
+// Производительность: Canvas + TimelineView (30fps cap) = GPU.
+// 🔧 FIX 4.4: Рендеринг полностью останавливается когда приложение
+// уходит в background (экономия батареи).
 struct BioluminescentBackground: View {
     var energy: Double = 0.5
     var dimming: Double = 0
     var palette: BioPalette = .ocean
 
+    // 🔧 FIX 4.4: Track app state to pause rendering in background
+    @State private var isInBackground = false
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0/30.0)) { timeline in  // 🔧 FIX 4.4: cap at 30fps
-            Canvas { context, size in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                drawDepth(context: context, size: size)
-                drawClouds(context: context, size: size, time: t)
+        // 🔧 FIX 4.4: Use pausable timeline — renders only when in foreground
+        Group {
+            if !isInBackground {
+                TimelineView(.animation(minimumInterval: 1.0/30.0)) { timeline in
+                    Canvas { context, size in
+                        let t = timeline.date.timeIntervalSinceReferenceDate
+                        drawDepth(context: context, size: size)
+                        drawClouds(context: context, size: size, time: t)
+                    }
+                }
+            } else {
+                // Static frame when in background — just the base color
+                Color.bioObsidian
             }
         }
         .overlay(
@@ -40,6 +50,13 @@ struct BioluminescentBackground: View {
             .allowsHitTesting(false)
         )
         .ignoresSafeArea()
+        // 🔧 FIX 4.4: Pause Canvas rendering when app goes to background
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            isInBackground = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            isInBackground = false
+        }
     }
 
     // MARK: - Слои

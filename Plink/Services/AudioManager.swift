@@ -42,6 +42,11 @@ final class AudioManager: ObservableObject {
     /// Set участников, которые говорят прямо сейчас (по peerId).
     private var speakingPeers: Set<String> = []
 
+    /// 🔧 FIX H6: Track the current volume animation Task so we can cancel it
+    /// before starting a new one. Was: 10 racing Tasks per call, each writing
+    /// player.volume with stale delta values → unpredictable final volume.
+    private var volumeAnimTask: Task<Void, Never>?
+
     // MARK: - Init
 
     init() {}
@@ -100,8 +105,14 @@ final class AudioManager: ObservableObject {
     }
 
     /// Плавно меняет громкость плеера за указанное время.
+    /// 🔧 FIX H6: Cancel any in-flight animation before starting a new one.
+    /// Was: spawned 10 racing Tasks per call, each writing player.volume with
+    /// stale delta values → unpredictable final volume on rapid mute→unmute.
     private func animateVolume(to target: Float, duration: TimeInterval) {
         guard let player else { return }
+
+        // Cancel the previous animation Task — its stale steps will be discarded.
+        volumeAnimTask?.cancel()
 
         let steps = 10
         let stepDuration = duration / Double(steps)
@@ -110,10 +121,13 @@ final class AudioManager: ObservableObject {
 
         currentVolume = target
 
-        for step in 1...steps {
-            Task { @MainActor [weak self, weak player] in
+        volumeAnimTask = Task { @MainActor [weak self, weak player] in
+            guard let player else { return }
+            for step in 1...steps {
+                // Bail out if a newer animation Task was started.
+                if Task.isCancelled { return }
                 try? await Task.sleep(nanoseconds: UInt64(stepDuration * 1_000_000_000))
-                guard let player else { return }
+                if Task.isCancelled { return }
                 let progress = Float(step) / Float(steps)
                 player.volume = startVolume + delta * progress
                 self?.currentVolume = player.volume

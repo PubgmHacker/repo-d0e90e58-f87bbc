@@ -10,6 +10,10 @@ struct AdPlayerView: View {
     let onDismiss: () -> Void
     @State private var adProgress: CGFloat = 0
     @State private var countdown: Int = 15
+    /// 🔧 FIX H5: Hold a strong reference to the timer and invalidate on disappear.
+    /// (was: timer created in startCountdown was held only by the run loop — if the
+    /// view was dismissed before countdown finished, onDismiss was invoked ~15 times.)
+    @State private var countdownTimer: Timer?
 
     var body: some View {
         ZStack {
@@ -68,13 +72,19 @@ struct AdPlayerView: View {
         .onAppear {
             startCountdown()
         }
+        // 🔧 FIX H5: Invalidate the timer when the view disappears to prevent
+        // stale onDismiss() callbacks firing on a dismissed view.
+        .onDisappear {
+            countdownTimer?.invalidate()
+            countdownTimer = nil
+        }
     }
 
     private func startCountdown() {
         let totalSeconds = 15
         countdown = totalSeconds
 
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
             Task { @MainActor in
                 countdown -= 1
                 adProgress = CGFloat(totalSeconds - countdown) / CGFloat(totalSeconds)

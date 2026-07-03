@@ -67,6 +67,11 @@ final class AmbilightSampler: ObservableObject {
 
     /// Обрабатывает кадр — извлекает доминирующие цвета.
     /// Вызывается ~60 раз/сек, но реально сэмплит 2 раза/сек.
+    ///
+    /// 🔧 FIX H7: Manually retain the CVPixelBuffer before passing it to a
+    /// detached Task. Swift doesn't call CVPixelBufferRetain when capturing
+    /// a CVPixelBuffer in a closure — if the source AVPlayerItemVideoOutput
+    /// recycles the buffer before the Task runs, we get use-after-free.
     func processFrame(_ pixelBuffer: CVPixelBuffer) {
         // Throttle: сэмплинг 2 Гц
         let now = CFAbsoluteTimeGetCurrent()
@@ -76,7 +81,11 @@ final class AmbilightSampler: ObservableObject {
         // Проверка энергосбережения
         guard !EnergyController.shared.isLowPower else { return }
 
+        // 🔧 FIX H7: Retain the pixel buffer for the lifetime of the detached Task.
+        CVPixelBufferRetain(pixelBuffer)
         Task.detached(priority: .utility) { [ciContext] in
+            // Release when done — guarantees the buffer outlives the CIImage render.
+            defer { CVPixelBufferRelease(pixelBuffer) }
             let extracted = await Self.extractDominantColors(from: pixelBuffer, context: ciContext)
             await MainActor.run {
                 self.colors = extracted

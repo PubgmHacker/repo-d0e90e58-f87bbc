@@ -1,0 +1,822 @@
+     1→     1→import type { WebSocket } from "ws";
+     2→     2→import type { FastifyBaseLogger } from "fastify";
+     3→     3→import type {
+     4→     4→  SyncMessage,
+     5→     5→  WebRTCSignalingMessage,
+     6→     6→  ScreenShareMessage,
+     7→     7→  ChatPayload,
+     8→     8→  InboundMessage,
+     9→     9→  AuthenticatedUser,
+    10→    10→  SyncCommand,
+    11→    11→} from "../types/index.js";
+    12→    12→import { prisma } from "../config/db.js";
+    13→    13→import { redis, redisKeys } from "../config/redis.js";
+    14→    14→import { HEARTBEAT_TIMEOUT_MS, MAX_ROOM_PARTICIPANTS, ROOM_STATE_TTL } from "../config/index.js";
+    15→    15→import { safeJSONParse } from "../utils/index.js";
+    16→    16→
+    17→    17→// ─── Connection Context ──────────────────────────────
+    18→    18→
+    19→    19→interface ClientConnection {
+    20→    20→  ws: WebSocket;
+    21→    21→  user: AuthenticatedUser;
+    22→    22→  rooms: Set<string>;           // which rooms this client is subscribed to
+    23→    23→  lastPing: number;             // timestamp of last received ping
+    24→    24→  isAlive: boolean;
+    25→    25→}
+    26→    26→
+    27→    27→// ─── Room State (in-memory) ───────────────────────────
+    28→    28→
+    29→    29→interface RoomRuntimeState {
+    30→    30→  roomID: string;
+    31→    31→  hostID: string;
+    32→    32→  isPlaying: boolean;
+    33→    33→  currentMediaTime: number;
+    34→    34→  mediaItemID: string | null;
+    35→    35→  participants: Map<string, ClientConnection>;
+    36→    36→  lastActivity: number;
+    37→    37→}
+    38→    38→
+    39→    39→// ─── WebSocket Manager ──────────────────────────────
+    40→    40→/**
+    41→    41→ * Central manager for all WebSocket connections.
+    42→    42→ *
+    43→    43→ * Responsibilities:
+    44→    44→ * - Authenticate incoming WS connections (JWT from query param)
+    45→    45→ * - Manage room subscriptions (join/leave)
+    46→    46→ * - Broadcast sync commands to room participants
+    47→    47→ * - Relay WebRTC signaling between peers
+    48→    48→ * - Periodic heartbeat monitoring
+    49→    49→ * - Clean disconnect handling
+    50→    50→ */
+    51→    51→export class WebSocketManager {
+    52→    52→  private connections = new Map<string, ClientConnection>();  // ws → client
+    53→    53→  private rooms = new Map<string, RoomRuntimeState>();         // roomID → state
+    54→    54→  private userToConnection = new Map<string, Set<string>>();  // userID → set of ws IDs
+    55→    55→
+    56→    56→  // Chat rate limiting: max 5 messages per 10 seconds per user
+    57→    57→  private chatRateLimits = new Map<string, { count: number; windowStart: number }>();
+    58→    58→  private static readonly CHAT_MAX_LENGTH = 500;
+    59→    59→  private static readonly CHAT_MAX_PER_WINDOW = 5;
+    60→    60→  private static readonly CHAT_WINDOW_MS = 10_000;
+    61→    61→
+    62→    62→  constructor(private log: FastifyBaseLogger) {
+    63→    63→    // Periodic heartbeat check — disconnect dead connections
+    64→    64→    setInterval(() => this.checkHeartbeats(), HEARTBEAT_TIMEOUT_MS);
+    65→    65→    log.info("[WS] Manager initialized");
+    66→    66→  }
+    67→    67→
+    68→    68→  // ─── Connection Lifecycle ────────────────────────────
+    69→    69→
+    70→    70→  /**
+    71→    71→   * Register a new WebSocket connection with an authenticated user.
+    72→    72→   */
+    73→    73→  register(ws: WebSocket, user: AuthenticatedUser): string {
+    74→    74→    const connID = `ws_${user.id}_${Date.now()}`;
+    75→    75→    const conn: ClientConnection = {
+    76→    76→      ws,
+    77→    77→      user,
+    78→    78→      rooms: new Set(),
+    79→    79→      lastPing: Date.now(),
+    80→    80→      isAlive: true,
+    81→    81→    };
+    82→    82→
+    83→    83→    this.connections.set(connID, conn);
+    84→    84→
+    85→    85→    // Track user → connection mapping
+    86→    86→    if (!this.userToConnection.has(user.id)) {
+    87→    87→      this.userToConnection.set(user.id, new Set());
+    88→    88→    }
+    89→    89→    this.userToConnection.get(user.id)!.add(connID);
+    90→    90→
+    91→    91→    this.log.info({ connID, userID: user.id }, "[WS] Connected");
+    92→    92→
+    93→    93→    return connID;
+    94→    94→  }
+    95→    95→
+    96→    96→  /**
+    97→    97→   * Remove a WebSocket connection.
+    98→    98→   */
+    99→    99→  unregister(connID: string): void {
+   100→   100→    const conn = this.connections.get(connID);
+   101→   101→    if (!conn) return;
+   102→   102→
+   103→   103→    // Leave all rooms
+   104→   104→    for (const roomID of conn.rooms) {
+   105→   105→      this.leaveRoom(connID, roomID, false);
+   106→   106→    }
+   107→   107→
+   108→   108→    // Remove from user mapping
+   109→   109→    this.userToConnection.get(conn.user.id)?.delete(connID);
+   110→   110→    if (this.userToConnection.get(conn.user.id)?.size === 0) {
+   111→   111→      this.userToConnection.delete(conn.user.id);
+   112→   112→    }
+   113→   113→
+   114→   114→    this.connections.delete(connID);
+   115→   115→    this.log.info({ connID, userID: conn.user.id }, "[WS] Disconnected");
+   116→   116→  }
+   117→   117→
+   118→   118→  // ─── Room Management ──────────────────────────────────
+   119→   119→
+   120→   120→  /**
+   121→   121→   * Client joins a room. Loads state from DB if needed.
+   122→   122→   */
+   123→   123→  async joinRoom(connID: string, roomID: string): Promise<boolean> {
+   124→   124→    const conn = this.connections.get(connID);
+   125→   125→    if (!conn) return false;
+   126→   126→
+   127→   127→    // Verify membership in DB
+   128→   128→    const membership = await prisma.membership.findUnique({
+   129→   129→      where: { roomID_userID: { roomID, userID: conn.user.id } },
+   130→   130→    });
+   131→   131→
+   132→   132→    if (!membership) {
+   133→   133→      this.sendError(conn.ws, "Not a member of this room");
+   134→   134→      return false;
+   135→   135→    }
+   136→   136→
+   137→   137→    // Get or create room state
+   138→   138→    let room = this.rooms.get(roomID);
+   139→   139→    if (!room) {
+   140→   140→      const roomData = await prisma.room.findUnique({ where: { id: roomID } });
+   141→   141→      if (!roomData || !roomData.isActive) {
+   142→   142→        this.sendError(conn.ws, "Room not found or inactive");
+   143→   143→        return false;
+   144→   144→      }
+   145→   145→
+   146→   146→      room = {
+   147→   147→        roomID,
+   148→   148→        hostID: roomData.hostID,
+   149→   149→        isPlaying: false,
+   150→   150→        currentMediaTime: 0,
+   151→   151→        mediaItemID: roomData.mediaItemID,
+   152→   152→        participants: new Map(),
+   153→   153→        lastActivity: Date.now(),
+   154→   154→      };
+   155→   155→      this.rooms.set(roomID, room);
+   156→   156→    }
+   157→   157→
+   158→   158→    // Check capacity
+   159→   159→    if (room.participants.size >= MAX_ROOM_PARTICIPANTS) {
+   160→   160→      this.sendError(conn.ws, "Room is full");
+   161→   161→      return false;
+   162→   162→    }
+   163→   163→
+   164→   164→    // Add to room
+   165→   165→    room.participants.set(connID, conn);
+   166→   166→    conn.rooms.add(roomID);
+   167→   167→    room.lastActivity = Date.now();
+   168→   168→
+   169→   169→    // Persist participant in Redis
+   170→   170→    await redis.sadd(redisKeys.roomParticipants(roomID), conn.user.id);
+   171→   171→    await redis.expire(redisKeys.roomParticipants(roomID), ROOM_STATE_TTL);
+   172→   172→
+   173→   173→    // Send current state to the joining client
+   174→   174→    this.send(conn.ws, {
+   175→   175→      type: "room_state",
+   176→   176→      roomID,
+   177→   177→      hostID: room.hostID,
+   178→   178→      isPlaying: room.isPlaying,
+   179→   179→      currentMediaTime: room.currentMediaTime,
+   180→   180→      mediaItemID: room.mediaItemID,
+   181→   181→      participantIDs: Array.from(room.participants.values()).map((c) => c.user.id),
+   182→   182→    });
+   183→   183→
+   184→   184→    // Broadcast participant join to others
+   185→   185→    this.broadcastToRoom(roomID, {
+   186→   186→      type: "participant_joined",
+   187→   187→      roomID,
+   188→   188→      userID: conn.user.id,
+   189→   189→      username: conn.user.username,
+   190→   190→      role: conn.user.role,
+   191→   191→      timestamp: Date.now(),
+   192→   192→    }, connID);
+   193→   193→
+   194→   194→    // ─── Системный бродкаст при входе АДМИНИСТРАТОРА ──────────────────────
+   195→   195→    // Глобальный админ при подключении к комнате мгновенно оповещает всех
+   196→   196→    // участников ярким сервисным сообщением в чат.
+   197→   197→    if (conn.user.role === "ADMIN") {
+   198→   198→      this.log.info({ connID, userID: conn.user.id, roomID }, "[WS] ADMIN joined room");
+   199→   199→
+   200→   200→      // 1. Системное сообщение в чат («⚠️ Администратор присоединился»)
+   201→   201→      this.broadcastToRoom(roomID, {
+   202→   202→        type: "chat",
+   203→   203→        id: `sys_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+   204→   204→        roomID,
+   205→   205→        senderID: "system",
+   206→   206→        senderName: "Система",
+   207→   207→        senderRole: "admin",
+   208→   208→        text: "⚠️ Администратор присоединился к комнате",
+   209→   209→        timestamp: new Date().toISOString(),
+   210→   210→        isSystem: true,
+   211→   211→        systemType: "admin_joined",
+   212→   212→        severity: "critical",
+   213→   213→      });
+   214→   214→
+   215→   215→      // 2. Системное событие (для UI: подсветка, звук, анимация)
+   216→   216→      this.broadcastToRoom(roomID, {
+   217→   217→        type: "admin_joined",
+   218→   218→        roomID,
+   219→   219→        userID: conn.user.id,
+   220→   220→        username: conn.user.username,
+   221→   221→        role: "admin",
+   222→   222→        timestamp: Date.now(),
+   223→   223→      });
+   224→   224→    }
+   225→   225→
+   226→   226→    this.log.info({ connID, userID: conn.user.id, roomID }, "[WS] Joined room");
+   227→   227→
+   228→   228→    return true;
+   229→   229→  }
+   230→   230→
+   231→   231→  /**
+   232→   232→   * Client leaves a room. If host leaves, deactivate room.
+   233→   233→   */
+   234→   234→  async leaveRoom(connID: string, roomID: string, notify = true): Promise<void> {
+   235→   235→    const conn = this.connections.get(connID);
+   236→   236→    const room = this.rooms.get(roomID);
+   237→   237→
+   238→   238→    if (!conn || !room || !conn.rooms.has(roomID)) return;
+   239→   239→
+   240→   240→    room.participants.delete(connID);
+   241→   241→    conn.rooms.delete(roomID);
+   242→   242→
+   243→   243→    await redis.srem(redisKeys.roomParticipants(roomID), conn.user.id);
+   244→   244→
+   245→   245→    // Check if host left → deactivate room
+   246→   246→    if (room.hostID === conn.user.id) {
+   247→   247→      this.log.info({ roomID }, "[WS] Host left — deactivating room");
+   248→   248→      await prisma.room.update({
+   249→   249→        where: { id: roomID },
+   250→   250→        data: { isActive: false },
+   251→   251→      });
+   252→   252→
+   253→   253→      // Notify all remaining participants
+   254→   254→      this.broadcastToRoom(roomID, {
+   255→   255→        type: "room_closed",
+   256→   256→        roomID,
+   257→   257→        reason: "host_left",
+   258→   258→        timestamp: Date.now(),
+   259→   259→      });
+   260→   260→
+   261→   261→      // Clean up room from memory
+   262→   262→      this.cleanupRoom(roomID);
+   263→   263→      return;
+   264→   264→    }
+   265→   265→
+   266→   266→    // Notify others
+   267→   267→    if (notify && room.participants.size > 0) {
+   268→   268→      this.broadcastToRoom(roomID, {
+   269→   269→        type: "participant_left",
+   270→   270→        roomID,
+   271→   271→        userID: conn.user.id,
+   272→   272→        username: conn.user.username,
+   273→   273→        timestamp: Date.now(),
+   274→   274→      });
+   275→   275→    }
+   276→   276→
+   277→   277→    // Clean up empty rooms
+   278→   278→    if (room.participants.size === 0) {
+   279→   279→      this.cleanupRoom(roomID);
+   280→   280→    }
+   281→   281→
+   282→   282→    this.log.info({ connID, userID: conn.user.id, roomID }, "[WS] Left room");
+   283→   283→  }
+   284→   284→
+   285→   285→  private cleanupRoom(roomID: string): void {
+   286→   286→    this.rooms.delete(roomID);
+   287→   287→    redis.del(redisKeys.roomState(roomID));
+   288→   288→    redis.del(redisKeys.roomParticipants(roomID));
+   289→   289→    this.log.info({ roomID }, "[WS] Room cleaned up");
+   290→   290→  }
+   291→   291→
+   292→   292→  // ─── Message Routing ───────────────────────────────
+   293→   293→
+   294→   294→  /**
+   295→   295→   * Route an inbound message to the appropriate handler.
+   296→   296→   */
+   297→   297→  async handleMessage(connID: string, raw: string): Promise<void> {
+   298→   298→    const conn = this.connections.get(connID);
+   299→   299→    if (!conn) return;
+   300→   300→
+   301→   301→    const msg = safeJSONParse<InboundMessage>(raw);
+   302→   302→    if (!msg) {
+   303→   303→      this.sendError(conn.ws, "Invalid message format");
+   304→   304→      return;
+   305→   305→    }
+   306→   306→
+   307→   307→    conn.lastPing = Date.now();
+   308→   308→
+   309→   309→    // Route by type
+   310→   310→    if ("type" in msg) {
+   311→   311→      switch (msg.type) {
+   312→   312→        case "join":
+   313→   313→          await this.joinRoom(connID, msg.roomID);
+   314→   314→          break;
+   315→   315→
+   316→   316→        case "leave":
+   317→   317→          await this.leaveRoom(connID, msg.roomID);
+   318→   318→          break;
+   319→   319→
+   320→   320→        case "chat":
+   321→   321→          await this.handleChat(connID, msg as ChatPayload);
+   322→   322→          break;
+   323→   323→
+   324→   324→        case "webrtc_offer":
+   325→   325→        case "webrtc_answer":
+   326→   326→        case "webrtc_ice_candidate":
+   327→   327→        case "webrtc_leave":
+   328→   328→          this.handleWebRTC(connID, msg as WebRTCSignalingMessage);
+   329→   329→          break;
+   330→   330→
+   331→   331→        case "screen_share_start":
+   332→   332→        case "screen_share_stop":
+   333→   333→        case "screen_share_subscribe":
+   334→   334→        case "screen_share_request_offer":
+   335→   335→          this.handleScreenShare(connID, msg as ScreenShareMessage);
+   336→   336→          break;
+   337→   337→
+   338→   338→        case "ping":
+   339→   339→          this.send(conn.ws, { command: "pong", timestamp: Date.now() });
+   340→   340→          break;
+   341→   341→
+   342→   342→        default:
+   343→   343→          this.sendError(conn.ws, `Unknown message type: ${(msg as { type: string }).type}`);
+   344→   344→      }
+   345→   345→      return;
+   346→   346→    }
+   347→   347→
+   348→   348→    // Handle sync commands (SyncMessage format)
+   349→   349→    if ("command" in msg) {
+   350→   350→      this.handleSyncCommand(connID, msg as SyncMessage);
+   351→   351→    }
+   352→   352→  }
+   353→   353→
+   354→   354→  // ─── Sync Command Handler ────────────────────────────
+   355→   355→  /**
+   356→   356→   * Core: broadcast sync commands to all room participants.
+   357→   357→   * Only the HOST can send play/pause/seek/changeMedia.
+   358→   358→   * Participants can send stateRequest.
+   359→   359→   */
+   360→   360→  private handleSyncCommand(connID: string, msg: SyncMessage): void {
+   361→   361→    const conn = this.connections.get(connID);
+   362→   362→    const room = this.rooms.get(msg.roomID);
+   363→   363→    if (!conn || !room) return;
+   364→   364→
+   365→   365→    // Verify the sender is in this room
+   366→   366→    if (!room.participants.has(connID)) {
+   367→   367→      this.sendError(conn.ws, "Not in this room");
+   368→   368→      return;
+   369→   369→    }
+   370→   370→
+   371→   371→    switch (msg.command) {
+   372→   372→      case "play":
+   373→   373→      case "pause":
+   374→   374→      case "seek":
+   375→   375→      case "changeMedia": {
+   376→   376→        // ONLY host can send these
+   377→   377→        if (conn.user.id !== room.hostID) {
+   378→   378→          this.sendError(conn.ws, "Only the host can control playback");
+   379→   379→          return;
+   380→   380→        }
+   381→   381→
+   382→   382→        // Update room state
+   383→   383→        if (msg.command === "play") {
+   384→   384→          room.isPlaying = true;
+   385→   385→          if (msg.mediaTime !== undefined) {
+   386→   386→            room.currentMediaTime = msg.mediaTime;
+   387→   387→          }
+   388→   388→        } else if (msg.command === "pause") {
+   389→   389→          room.isPlaying = false;
+   390→   390→          if (msg.mediaTime !== undefined) {
+   391→   391→            room.currentMediaTime = msg.mediaTime;
+   392→   392→          }
+   393→   393→        } else if (msg.command === "seek") {
+   394→   394→          if (msg.mediaTime !== undefined) {
+   395→   395→            room.currentMediaTime = msg.mediaTime;
+   396→   396→          }
+   397→   397→        } else if (msg.command === "changeMedia" && msg.mediaItem) {
+   398→   398→          room.mediaItemID = msg.mediaItem.id;
+   399→   399→          room.currentMediaTime = 0;
+   400→   400→          room.isPlaying = false;
+   401→   401→
+   402→   402→          // Persist media change in DB
+   403→   403→          prisma.room.update({
+   404→   404→            where: { id: msg.roomID },
+   405→   405→            data: {
+   406→   406→              mediaItemID: msg.mediaItem.id,
+   407→   407→              mediaTitle: msg.mediaItem.title,
+   408→   408→              mediaStreamURL: msg.mediaItem.streamURL,
+   409→   409→              mediaThumbnailURL: msg.mediaItem.thumbnailURL ?? null,
+   410→   410→              mediaType: msg.mediaItem.mediaType,
+   411→   411→              mediaSource: msg.mediaItem.source,
+   412→   412→              mediaDuration: msg.mediaItem.duration ?? null,
+   413→   413→            },
+   414→   414→          }).catch((err) => this.log.error(err));
+   415→   415→        }
+   416→   416→
+   417→   417→        room.lastActivity = Date.now();
+   418→   418→
+   419→   419→        // Broadcast to ALL participants (including sender for consistency)
+   420→   420→        this.broadcastToRoom(msg.roomID, msg);
+   421→   421→
+   422→   422→        // Also persist to Redis for crash recovery
+   423→   423→        redis.set(
+   424→   424→          redisKeys.roomState(msg.roomID),
+   425→   425→          JSON.stringify({
+   426→   426→            roomID: room.roomID,
+   427→   427→            hostID: room.hostID,
+   428→   428→            isPlaying: room.isPlaying,
+   429→   429→            currentMediaTime: room.currentMediaTime,
+   430→   430→            mediaItemID: room.mediaItemID,
+   431→   431→            participantIDs: Array.from(room.participants.keys()),
+   432→   432→            lastActivity: room.lastActivity,
+   433→   433→          }),
+   434→   434→          "EX",
+   435→   435→          ROOM_STATE_TTL
+   436→   436→        ).catch(() => {});
+   437→   437→
+   438→   438→        this.log.debug(
+   439→   439→          { command: msg.command, roomID: msg.roomID, mediaTime: msg.mediaTime, senderID: conn.user.id },
+   440→   440→          "[WS] Sync broadcast"
+   441→   441→        );
+   442→   442→        break;
+   443→   443→      }
+   444→   444→
+   445→   445→      case "stateRequest": {
+   446→   446→        // Participant requests current state from host
+   447→   447→        // Forward only to host
+   448→   448→        if (conn.user.id === room.hostID) return; // Host doesn't request from self
+   449→   449→
+   450→   450→        const hostConn = this.findHostConnection(room);
+   451→   451→        if (hostConn) {
+   452→   452→          this.send(hostConn.ws, msg);
+   453→   453→        } else {
+   454→   454→          this.sendError(conn.ws, "Host not connected");
+   455→   455→        }
+   456→   456→        break;
+   457→   457→      }
+   458→   458→
+   459→   459→      case "stateResponse":
+   460→   460→      case "correction": {
+   461→   461→        // These come from host, broadcast to ALL other participants
+   462→   462→        if (conn.user.id !== room.hostID) {
+   463→   463→          this.sendError(conn.ws, "Only host can send state responses");
+   464→   464→          return;
+   465→   465→        }
+   466→   466→        // Broadcast to all EXCEPT sender (host)
+   467→   467→        this.broadcastToRoom(msg.roomID, msg, connID);
+   468→   468→        break;
+   469→   469→      }
+   470→   470→
+   471→   471→      case "ping":
+   472→   472→      case "pong":
+   473→   473→        break;
+   474→   474→    }
+   475→   475→  }
+   476→   476→
+   477→   477→  // ─── WebRTC Signaling ───────────────────────────────
+   478→   478→  /**
+   479→   479→   * Relay WebRTC signaling messages between peers.
+   480→   480→   * SDP offers, answers, and ICE candidates are forwarded
+   481→   481→   * to the specific target peer or broadcast to all peers in room.
+   482→   482→   */
+   483→   483→  private handleWebRTC(connID: string, msg: WebRTCSignalingMessage): void {
+   484→   484→    const conn = this.connections.get(connID);
+   485→   485→    const room = this.rooms.get(msg.roomID);
+   486→   486→    if (!conn || !room) return;
+   487→   487→
+   488→   488→    if (!room.participants.has(connID)) {
+   489→   489→      return;
+   490→   490→    }
+   491→   491→
+   492→   492→    this.log.debug(
+   493→   493→      { type: msg.type, from: conn.user.id, roomID: msg.roomID, target: msg.targetID },
+   494→   494→      "[WS] WebRTC signaling"
+   495→   495→    );
+   496→   496→
+   497→   497→    if (msg.type === "webrtc_leave") {
+   498→   498→      // Broadcast leave to all in room
+   499→   499→      this.broadcastToRoom(msg.roomID, msg, connID);
+   500→   500→      return;
+   501→   501→    }
+   502→   502→
+   503→   503→    if (msg.targetID) {
+   504→   504→      // Point-to-point: send to specific user
+   505→   505→      const targetConn = this.findConnectionByUser(msg.roomID, msg.targetID);
+   506→   506→      if (targetConn) {
+   507→   507→        this.send(targetConn.ws, msg);
+   508→   508→      } else {
+   509→   509→        this.log.warn(
+   510→   510→          { targetID: msg.targetID, roomID: msg.roomID },
+   511→   511→          "[WS] WebRTC target not found in room"
+   512→   512→        );
+   513→   513→      }
+   514→   514→    } else {
+   515→   515→      // Broadcast to all other participants (mesh topology: everyone connects to everyone)
+   516→   516→      this.broadcastToRoom(msg.roomID, msg, connID);
+   517→   517→    }
+   518→   518→  }
+   519→   519→
+   520→   520→  // ─── Screen Share Signaling ────────────────────────
+   521→   521→  /**
+   522→   522→   * Handle Screen Share coordination messages.
+   523→   523→   *
+   524→   524→   * Flow:
+   525→   525→   * 1. Host sends `screen_share_start` → server tracks host as streamer
+   526→   526→   * 2. Guest sends `screen_share_subscribe` → server notifies host
+   527→   527→   * 3. Host sends `webrtc_offer` to each guest (P2P mesh for now)
+   528→   528→   * 4. Host sends `screen_share_stop` → server notifies all guests
+   529→   529→   *
+   530→   530→   * This is a lightweight relay model — actual WebRTC negotiation
+   531→   531→   * (SDP/ICE) goes through the existing handleWebRTC path.
+   532→   532→   */
+   533→   533→  private handleScreenShare(connID: string, msg: ScreenShareMessage): void {
+   534→   534→    const conn = this.connections.get(connID);
+   535→   535→    const room = this.rooms.get(msg.roomID);
+   536→   536→    if (!conn || !room) return;
+   537→   537→
+   538→   538→    if (!room.participants.has(connID)) return;
+   539→   539→
+   540→   540→    this.log.info(
+   541→   541→      { type: msg.type, from: conn.user.id, roomID: msg.roomID },
+   542→   542→      "[WS] Screen share"
+   543→   543→    );
+   544→   544→
+   545→   545→    switch (msg.type) {
+   546→   546→      case "screen_share_start": {
+   547→   547→        // Host announces streaming. Mark room as having an active stream.
+   548→   548→        (room as RoomRuntimeState & { streamingHostID?: string }).streamingHostID =
+   549→   549→          conn.user.id;
+   550→   550→
+   551→   551→        // Notify all guests that a stream is available
+   552→   552→        this.broadcastToRoom(msg.roomID, {
+   553→   553→          ...msg,
+   554→   554→          hostID: conn.user.id,
+   555→   555→        }, connID);
+   556→   556→        break;
+   557→   557→      }
+   558→   558→
+   559→   559→      case "screen_share_stop": {
+   560→   560→        // Host stopped streaming
+   561→   561→        (room as RoomRuntimeState & { streamingHostID?: string }).streamingHostID =
+   562→   562→          undefined;
+   563→   563→
+   564→   564→        // Notify all guests
+   565→   565→        this.broadcastToRoom(msg.roomID, {
+   566→   566→          ...msg,
+   567→   567→          hostID: conn.user.id,
+   568→   568→        }, connID);
+   569→   569→        break;
+   570→   570→      }
+   571→   571→
+   572→   572→      case "screen_share_subscribe": {
+   573→   573→        // Guest wants to receive the stream → forward request to host
+   574→   574→        const hostID =
+   575→   575→          msg.hostID ?? room.hostID;
+   576→   576→        const hostConn = this.findConnectionByUser(msg.roomID, hostID);
+   577→   577→        if (hostConn) {
+   578→   578→          this.send(hostConn.ws, {
+   579→   579→            ...msg,
+   580→   580→            userID: conn.user.id,
+   581→   581→          });
+   582→   582→        } else {
+   583→   583→          this.log.warn(
+   584→   584→            { hostID, roomID: msg.roomID },
+   585→   585→            "[WS] Screen share host not found"
+   586→   586→          );
+   587→   587→        }
+   588→   588→        break;
+   589→   589→      }
+   590→   590→
+   591→   591→      case "screen_share_request_offer": {
+   592→   592→        // Guest asks host to initiate WebRTC offer
+   593→   593→        const hostConn = this.findConnectionByUser(msg.roomID, room.hostID);
+   594→   594→        if (hostConn) {
+   595→   595→          this.send(hostConn.ws, {
+   596→   596→            ...msg,
+   597→   597→            userID: conn.user.id,
+   598→   598→            targetID: conn.user.id,
+   599→   599→          });
+   600→   600→        }
+   601→   601→        break;
+   602→   602→      }
+   603→   603→    }
+   604→   604→  }
+   605→   605→
+   606→   606→  // ─── Chat Handler ──────────────────────────────────
+   607→   607→  /**
+   608→   608→   * Relay text messages to all room participants.
+   609→   609→   * Optionally persist to DB.
+   610→   610→   */
+   611→   611→  private async handleChat(connID: string, msg: ChatPayload): Promise<void> {
+   612→   612→    const conn = this.connections.get(connID);
+   613→   613→    const room = this.rooms.get(msg.roomID);
+   614→   614→    if (!conn || !room) return;
+   615→   615→
+   616→   616→    if (!room.participants.has(connID)) return;
+   617→   617→
+   618→   618→    // Trim and validate message length
+   619→   619→    const text = (msg.text || "").trim().slice(0, WebSocketManager.CHAT_MAX_LENGTH);
+   620→   620→    if (!text) return;
+   621→   621→
+   622→   622→    // Rate limit check
+   623→   623→    if (!this.checkChatRateLimit(conn.user.id)) {
+   624→   624→      conn.ws.send(JSON.stringify({
+   625→   625→        type: "error",
+   626→   626→        message: "You're sending messages too fast. Please wait a moment.",
+   627→   627→      }));
+   628→   628→      return;
+   629→   629→    }
+   630→   630→
+   631→   631→    // Persist to DB (fire-and-forget)
+   632→   632→    prisma.chatMessage
+   633→   633→      .create({
+   634→   634→        data: {
+   635→   635→          roomID: msg.roomID,
+   636→   636→          senderID: msg.senderID,
+   637→   637→          text,
+   638→   638→        },
+   639→   639→      })
+   640→   640→      .catch((err) => this.log.error(err, "Failed to persist chat message"));
+   641→   641→
+   642→   642→    // Broadcast to all in room (including sender)
+   643→   643→    this.broadcastToRoom(msg.roomID, {
+   644→   644→      ...msg,
+   645→   645→      text,
+   646→   646→      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+   647→   647→      timestamp: new Date().toISOString(),
+   648→   648→    });
+   649→   649→  }
+   650→   650→
+   651→   651→  private checkChatRateLimit(userID: string): boolean {
+   652→   652→    const now = Date.now();
+   653→   653→    let entry = this.chatRateLimits.get(userID);
+   654→   654→
+   655→   655→    if (!entry || now - entry.windowStart > WebSocketManager.CHAT_WINDOW_MS) {
+   656→   656→      entry = { count: 0, windowStart: now };
+   657→   657→      this.chatRateLimits.set(userID, entry);
+   658→   658→    }
+   659→   659→
+   660→   660→    entry.count++;
+   661→   661→    return entry.count <= WebSocketManager.CHAT_MAX_PER_WINDOW;
+   662→   662→  }
+   663→   663→
+   664→   664→  // ─── Heartbeat Monitoring ───────────────────────────
+   665→   665→  /**
+   666→   666→   * Check all connections for heartbeat timeout.
+   667→   667→   * Disconnect connections that haven't sent a ping within the timeout.
+   668→   668→   */
+   669→   669→  private checkHeartbeats(): void {
+   670→   670→    const now = Date.now();
+   671→   671→    for (const [connID, conn] of this.connections) {
+   672→   672→      if (now - conn.lastPing > HEARTBEAT_TIMEOUT_MS) {
+   673→   673→        this.log.warn(
+   674→   674→          { connID, userID: conn.user.id, lastPingAgo: now - conn.lastPing },
+   675→   675→          "[WS] Heartbeat timeout — disconnecting"
+   676→   676→        );
+   677→   677→        conn.ws.terminate();
+   678→   678→        this.unregister(connID);
+   679→   679→      }
+   680→   680→    }
+   681→   681→  }
+   682→   682→
+   683→   683→  // ─── Helpers ────────────────────────────────────────
+   684→   684→
+   685→   685→  /**
+   686→   686→   * Broadcast a message to all participants in a room.
+   687→   687→   * Optionally exclude a connection ID (usually the sender).
+   688→   688→   *
+   689→   689→   * Public — используется admin-routes для системных оповещений.
+   690→   690→   */
+   691→   691→  broadcastToRoom(roomID: string, data: unknown, excludeConnID?: string): void {
+   692→   692→    const room = this.rooms.get(roomID);
+   693→   693→    if (!room) return;
+   694→   694→
+   695→   695→    const payload = typeof data === "string" ? data : JSON.stringify(data);
+   696→   696→
+   697→   697→    let sentCount = 0;
+   698→   698→    for (const [id, conn] of room.participants) {
+   699→   699→      if (id === excludeConnID) continue;
+   700→   700→      if (conn.ws.readyState === conn.ws.OPEN) {
+   701→   701→        conn.ws.send(payload);
+   702→   702→        sentCount++;
+   703→   703→      }
+   704→   704→    }
+   705→   705→
+   706→   706→    if (this.log.level === "debug") {
+   707→   707→      this.log.debug(
+   708→   708→        { roomID, sentCount, total: room.participants.size, excluded: !!excludeConnID },
+   709→   709→        "[WS] Broadcast"
+   710→   710→      );
+   711→   711→    }
+   712→   712→  }
+   713→   713→
+   714→   714→  /**
+   715→   715→   * Find the host's WebSocket connection in a room.
+   716→   716→   */
+   717→   717→  private findHostConnection(room: RoomRuntimeState): ClientConnection | undefined {
+   718→   718→    for (const [, conn] of room.participants) {
+   719→   719→      if (conn.user.id === room.hostID) {
+   720→   720→        return conn;
+   721→   721→      }
+   722→   722→    }
+   723→   723→    return undefined;
+   724→   724→  }
+   725→   725→
+   726→   726→  /**
+   727→   727→   * Find a specific user's connection in a room.
+   728→   728→   */
+   729→   729→  private findConnectionByUser(roomID: string, userID: string): ClientConnection | undefined {
+   730→   730→    const room = this.rooms.get(roomID);
+   731→   731→    if (!room) return undefined;
+   732→   732→    for (const [, conn] of room.participants) {
+   733→   733→      if (conn.user.id === userID) return conn;
+   734→   734→    }
+   735→   735→    return undefined;
+   736→   736→  }
+   737→   737→
+   738→   738→  /**
+   739→   739→   * Send a message to a single WebSocket.
+   740→   740→   */
+   741→   741→  private send(ws: WebSocket, data: unknown): void {
+   742→   742→    if (ws.readyState === ws.OPEN) {
+   743→   743→      ws.send(JSON.stringify(data));
+   744→   744→    }
+   745→   745→  }
+   746→   746→
+   747→   747→  /**
+   748→   748→   * Send an error message to a client.
+   749→   749→   */
+   750→   750→  private sendError(ws: WebSocket, message: string): void {
+   751→   751→    this.send(ws, { type: "error", message });
+   752→   752→  }
+   753→   753→
+   754→   754→  // ─── Admin operations (вызываются из admin-routes) ───────────────────
+   755→   755→
+   756→   756→  /**
+   757→   757→   * Принудительно отключить пользователя от конкретной комнаты.
+   758→   758→   * Используется админом при кике.
+   759→   759→   */
+   760→   760→  kickUserFromRoom(roomID: string, userID: string): void {
+   761→   761→    const connIDs = this.userToConnection.get(userID);
+   762→   762→    if (!connIDs) return;
+   763→   763→
+   764→   764→    for (const connID of connIDs) {
+   765→   765→      const conn = this.connections.get(connID);
+   766→   766→      if (!conn || !conn.rooms.has(roomID)) continue;
+   767→   767→
+   768→   768→      // Уведомляем клиента о кике
+   769→   769→      this.send(conn.ws, {
+   770→   770→        type: "kicked",
+   771→   771→        roomID,
+   772→   772→        reason: "kicked_by_admin",
+   773→   773→        timestamp: Date.now(),
+   774→   774→      });
+   775→   775→
+   776→   776→      // Удаляем из комнаты
+   777→   777→      this.leaveRoom(connID, roomID, false);
+   778→   778→    }
+   779→   779→
+   780→   780→    this.log.info({ roomID, userID }, "[WS] User kicked from room (admin)");
+   781→   781→  }
+   782→   782→
+   783→   783→  /**
+   784→   784→   * Отключить пользователя от ВСЕХ WS-соединений (глобальный бан).
+   785→   785→   */
+   786→   786→  disconnectUserEverywhere(userID: string, reason: string): void {
+   787→   787→    const connIDs = this.userToConnection.get(userID);
+   788→   788→    if (!connIDs || connIDs.size === 0) return;
+   789→   789→
+   790→   790→    for (const connID of connIDs) {
+   791→   791→      const conn = this.connections.get(connID);
+   792→   792→      if (!conn) continue;
+   793→   793→
+   794→   794→      this.send(conn.ws, {
+   795→   795→        type: "force_disconnect",
+   796→   796→        reason,
+   797→   797→        timestamp: Date.now(),
+   798→   798→      });
+   799→   799→
+   800→   800→      conn.ws.close(1008, reason);
+   801→   801→      this.unregister(connID);
+   802→   802→    }
+   803→   803→
+   804→   804→    this.log.info({ userID, reason }, "[WS] User disconnected everywhere (global ban)");
+   805→   805→  }
+   806→   806→
+   807→   807→  // ─── Debug / Admin ────────────────────────────────
+   808→   808→
+   809→   809→  getStats() {
+   810→   810→    return {
+   811→   811→      totalConnections: this.connections.size,
+   812→   812→      activeRooms: this.rooms.size,
+   813→   813→      rooms: Array.from(this.rooms.entries()).map(([id, room]) => ({
+   814→   814→        id,
+   815→   815→        participants: room.participants.size,
+   816→   816→        hostID: room.hostID,
+   817→   817→        isPlaying: room.isPlaying,
+   818→   818→      })),
+   819→   819→    };
+   820→   820→  }
+   821→   821→}
+   822→   822→

@@ -1,0 +1,786 @@
+     1→     1→import SwiftUI
+     2→     2→
+     3→     3→// MARK: - Toast Message
+     4→     4→struct ToastMessage: Identifiable {
+     5→     5→    let id = UUID()
+     6→     6→    let text: String
+     7→     7→    let icon: String
+     8→     8→}
+     9→     9→
+    10→    10→// MARK: - Home View v3 — "Pure Black × Ice Glow"
+    11→    11→///
+    12→    12→/// Минимализм. Только две горизонтальные секции:
+    13→    13→/// 1. «Сейчас в эфире» — live-карточки с индикатором LIVE
+    14→    14→/// 2. «Рекомендации для тебя» — постеры фильмов/видео
+    15→    15→/// Floating CTA «Создать комнату» внизу. Никаких «общих комнат».
+    16→    16→struct HomeView: View {
+    17→    17→    @State private var viewModel: HomeViewModel
+    18→    18→    @State private var showCreateRoom = false
+    19→    19→    @State private var showJoinSheet = false
+    20→    20→    @State private var joinInput = ""
+    21→    21→    @State private var navigateToRoom: Room?
+    22→    22→    @State private var toast: ToastMessage?
+    23→    23→
+    24→    24→    @State private var reportRoomTarget: Room?
+    25→    25→    @State private var blockRoomTarget: Room?
+    26→    26→    @ObservedObject private var loc = LocalizationManager.shared
+    27→    27→
+    28→    28→    // Каскадная анимация появления
+    29→    29→    @State private var appeared = false
+    30→    30→
+    31→    31→    // Кнопка «Создать комнату» — сворачивается в плюсик через 8 сек
+    32→    32→    @State private var isCTACollapsed = false
+    33→    33→    @State private var ctaCollapseTimer: Timer?
+    34→    34→    @State private var userInteracted = false
+    35→    35→
+    36→    36→    // ИИ-помощник
+    37→    37→    @State private var aiQuery = ""
+    38→    38→    @State private var aiResults: [Room] = []
+    39→    39→    @State private var aiSearching = false
+    40→    40→
+    41→    41→    var onProfileTap: () -> Void
+    42→    42→
+    43→    43→    init(viewModel: HomeViewModel, onProfileTap: @escaping () -> Void) {
+    44→    44→        _viewModel = State(initialValue: viewModel)
+    45→    45→        self.onProfileTap = onProfileTap
+    46→    46→    }
+    47→    47→
+    48→    48→    var body: some View {
+    49→    49→        NavigationStack {
+    50→    50→            ZStack {
+    51→    51→                // Чёрный фон + blur-пятна
+    52→    52→                AnimatedGradientBackground()
+    53→    53→
+    54→    54→                // Контент
+    55→    55→                ScrollView(showsIndicators: false) {
+    56→    56→                    VStack(spacing: 0) {
+    57→    57→                        headerView
+    58→    58→                            .padding(.horizontal, 20)
+    59→    59→                            .padding(.top, 8)
+    60→    60→
+    61→    61→                        // ИИ-помощник «Что посмотреть?»
+    62→    62→                        aiAssistantBar
+    63→    63→                            .padding(.horizontal, 20)
+    64→    64→                            .padding(.top, 16)
+    65→    65→
+    66→    66→                        // Результаты ИИ
+    67→    67→                        if !aiResults.isEmpty {
+    68→    68→                            aiResultsSection
+    69→    69→                                .padding(.top, 16)
+    70→    70→                        }
+    71→    71→
+    72→    72→                        // Секция 1: Сейчас в эфире
+    73→    73→                        if !liveRooms.isEmpty {
+    74→    74→                            liveSection
+    75→    75→                                .padding(.top, 24)
+    76→    76→                        }
+    77→    77→
+    78→    78→                        // Секция 2: Рекомендации для тебя
+    79→    79→                        recommendationsSection
+    80→    80→                            .padding(.top, 28)
+    81→    81→                            .padding(.bottom, 120) // место под floating CTA
+    82→    82→                    }
+    83→    83→                }
+    84→    84→                .scrollDismissesKeyboard(.interactively)
+    85→    85→                .onTapGesture {
+    86→    86→                    // Тап по контенту сбрасывает таймер сворачивания CTA
+    87→    87→                    resetCTACollapseTimer()
+    88→    88→                }
+    89→    89→
+    90→    90→                // Floating CTA внизу
+    91→    91→                VStack {
+    92→    92→                    Spacer()
+    93→    93→                    floatingCTA
+    94→    94→                        .padding(.horizontal, 20)
+    95→    95→                        .padding(.bottom, 16)
+    96→    96→                }
+    97→    97→            }
+    98→    98→            .navigationDestination(item: $navigateToRoom) { room in
+    99→    99→                RoomView(room: room)
+   100→   100→            }
+   101→   101→            .sheet(isPresented: $showCreateRoom) {
+   102→   102→                RoomCreationView { room in
+   103→   103→                    showCreateRoom = false
+   104→   104→                    navigateToRoom = room
+   105→   105→                }
+   106→   106→            }
+   107→   107→            .sheet(isPresented: $showJoinSheet) {
+   108→   108→                joinRoomSheet
+   109→   109→            }
+   110→   110→            .overlay(alignment: .top) {
+   111→   111→                if let toast {
+   112→   112→                    Label(toast.text, systemImage: toast.icon)
+   113→   113→                        .font(.subheadline.bold())
+   114→   114→                        .foregroundColor(.raveTextPrimary)
+   115→   115→                        .padding(.horizontal, 16)
+   116→   116→                        .padding(.vertical, 10)
+   117→   117→                        .glassCard(cornerRadius: 14, opacity: 0.08)
+   118→   118→                        .padding(.top, 50)
+   119→   119→                        .transition(.move(edge: .top).combined(with: .opacity))
+   120→   120→                        .onAppear {
+   121→   121→                            Task {
+   122→   122→                                try? await Task.sleep(nanoseconds: 2_000_000_000)
+   123→   123→                                await MainActor.run { self.toast = nil }
+   124→   124→                            }
+   125→   125→                        }
+   126→   126→                }
+   127→   127→            }
+   128→   128→            .task { await viewModel.loadRooms() }
+   129→   129→            .refreshable { await viewModel.refresh() }
+   130→   130→            .alert(loc.string(.reportRoom), isPresented: Binding(
+   131→   131→                get: { reportRoomTarget != nil },
+   132→   132→                set: { if !$0 { reportRoomTarget = nil } }
+   133→   133→            )) {
+   134→   134→                Button(loc.string(.cancel), role: .cancel) { reportRoomTarget = nil }
+   135→   135→                ForEach(ReportReason.allCases) { reason in
+   136→   136→                    Button(reason.rawValue) {
+   137→   137→                        if let target = reportRoomTarget {
+   138→   138→                            toast = ToastMessage(text: loc.string(.reportRoomSent), icon: "flag.fill")
+   139→   139→                            UserBlockManager().reportRoom(target.id, reason: reason.apiCode) { _ in }
+   140→   140→                        }
+   141→   141→                        reportRoomTarget = nil
+   142→   142→                    }
+   143→   143→                }
+   144→   144→            }
+   145→   145→            .alert(loc.string(.blockHost), isPresented: Binding(
+   146→   146→                get: { blockRoomTarget != nil },
+   147→   147→                set: { if !$0 { blockRoomTarget = nil } }
+   148→   148→            )) {
+   149→   149→                Button(loc.string(.cancel), role: .cancel) { blockRoomTarget = nil }
+   150→   150→                Button(loc.string(.blockHostTitle), role: .destructive) {
+   151→   151→                    if let target = blockRoomTarget {
+   152→   152→                        viewModel.blockRoom(target)
+   153→   153→                        toast = ToastMessage(text: loc.string(.blockHostDone), icon: "hand.raised.fill")
+   154→   154→                    }
+   155→   155→                    blockRoomTarget = nil
+   156→   156→                }
+   157→   157→            } message: {
+   158→   158→                Text(loc.string(.blockHostMessage))
+   159→   159→            }
+   160→   160→        }
+   161→   161→        .preferredColorScheme(.dark)
+   162→   162→        .onAppear {
+   163→   163→            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+   164→   164→                appeared = true
+   165→   165→            }
+   166→   166→            startCTACollapseTimer()
+   167→   167→        }
+   168→   168→    }
+   169→   169→
+   170→   170→    // MARK: - Header (минимализм: приветствие + аватар)
+   171→   171→
+   172→   172→    private var headerView: some View {
+   173→   173→        HStack(spacing: 14) {
+   174→   174→            VStack(alignment: .leading, spacing: 4) {
+   175→   175→                Text("Привет 👋")
+   176→   176→                    .font(.system(size: 15, weight: .medium))
+   177→   177→                    .foregroundColor(.raveTextSecondary)
+   178→   178→                    .opacity(appeared ? 1 : 0)
+   179→   179→                    .offset(y: appeared ? 0 : -8)
+   180→   180→
+   181→   181→                Text(loc.string(.homeDiscover))
+   182→   182→                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+   183→   183→                    .foregroundColor(.raveTextPrimary)
+   184→   184→                    .opacity(appeared ? 1 : 0)
+   185→   185→                    .offset(y: appeared ? 0 : -8)
+   186→   186→            }
+   187→   187→
+   188→   188→            Spacer()
+   189→   189→
+   190→   190→            // Аватарка (tap → профиль)
+   191→   191→            Button { onProfileTap() } label: {
+   192→   192→                Circle()
+   193→   193→                    .fill(Color.raveGlass)
+   194→   194→                    .frame(width: 44, height: 44)
+   195→   195→                    .overlay(
+   196→   196→                        Image(systemName: "person.fill")
+   197→   197→                            .font(.system(size: 18))
+   198→   198→                            .foregroundColor(.ravePrimary)
+   199→   199→                    )
+   200→   200→                    .glassCard(cornerRadius: 22, opacity: 0.06)
+   201→   201→            }
+   202→   202→            .buttonStyle(PremiumButtonStyle(glowColor: .ravePrimary))
+   203→   203→
+   204→   204→            // Join по коду
+   205→   205→            Button {
+   206→   206→                showJoinSheet = true
+   207→   207→            } label: {
+   208→   208→                Image(systemName: "link")
+   209→   209→                    .font(.system(size: 17, weight: .semibold))
+   210→   210→                    .foregroundColor(.raveAccent)
+   211→   211→                    .frame(width: 44, height: 44)
+   212→   212→                    .glassCard(cornerRadius: 22, opacity: 0.06)
+   213→   213→            }
+   214→   214→            .buttonStyle(PremiumButtonStyle(glowColor: .raveAccent))
+   215→   215→        }
+   216→   216→        .opacity(appeared ? 1 : 0)
+   217→   217→    }
+   218→   218→
+   219→   219→    // MARK: - Live Section (Сейчас в эфире)
+   220→   220→
+   221→   221→    private var liveSection: some View {
+   222→   222→        VStack(alignment: .leading, spacing: 12) {
+   223→   223→            // Заголовок секции
+   224→   224→            HStack(spacing: 8) {
+   225→   225→                Text(loc.string(.homeWatchingNow))
+   226→   226→                    .font(.system(size: 22, weight: .bold, design: .rounded))
+   227→   227→                    .foregroundColor(.raveTextPrimary)
+   228→   228→                Spacer()
+   229→   229→                Text("\(liveRooms.count)")
+   230→   230→                    .font(.system(size: 13, weight: .bold).monospacedDigit())
+   231→   231→                    .foregroundColor(.raveTextSecondary)
+   232→   232→            }
+   233→   233→            .padding(.horizontal, 20)
+   234→   234→
+   235→   235→            // Горизонтальный скролл live-карточек
+   236→   236→            ScrollView(.horizontal, showsIndicators: false) {
+   237→   237→                HStack(spacing: 14) {
+   238→   238→                    ForEach(liveRooms) { room in
+   239→   239→                        Button {
+   240→   240→                            HapticManager.impact(.light)
+   241→   241→                            navigateToRoom = room
+   242→   242→                        } label: {
+   243→   243→                            LiveCardView(room: room)
+   244→   244→                        }
+   245→   245→                        .buttonStyle(.plain)
+   246→   246→                    }
+   247→   247→                }
+   248→   248→                .padding(.horizontal, 20)
+   249→   249→            }
+   250→   250→        }
+   251→   251→        .opacity(appeared ? 1 : 0)
+   252→   252→        .offset(y: appeared ? 0 : 20)
+   253→   253→    }
+   254→   254→
+   255→   255→    // MARK: - Recommendations Section (Рекомендации для тебя)
+   256→   256→
+   257→   257→    private var recommendationsSection: some View {
+   258→   258→        VStack(alignment: .leading, spacing: 12) {
+   259→   259→            HStack(spacing: 8) {
+   260→   260→                Text("Рекомендации для тебя")
+   261→   261→                    .font(.system(size: 22, weight: .bold, design: .rounded))
+   262→   262→                    .foregroundColor(.raveTextPrimary)
+   263→   263→                Spacer()
+   264→   264→            }
+   265→   265→            .padding(.horizontal, 20)
+   266→   266→
+   267→   267→            // Если сервер пустой — показываем мок-рекомендации
+   268→   268→            ScrollView(.horizontal, showsIndicators: false) {
+   269→   269→                HStack(spacing: 14) {
+   270→   270→                    ForEach(recommendationRooms) { room in
+   271→   271→                        Button {
+   272→   272→                            HapticManager.impact(.light)
+   273→   273→                            navigateToRoom = room
+   274→   274→                        } label: {
+   275→   275→                            RecommendationCardView(room: room)
+   276→   276→                        }
+   277→   277→                        .buttonStyle(.plain)
+   278→   278→                    }
+   279→   279→                }
+   280→   280→                .padding(.horizontal, 20)
+   281→   281→            }
+   282→   282→        }
+   283→   283→        .opacity(appeared ? 1 : 0)
+   284→   284→        .offset(y: appeared ? 0 : 30)
+   285→   285→    }
+   286→   286→
+   287→   287→    // MARK: - AI Results Section
+   288→   288→
+   289→   289→    private var aiResultsSection: some View {
+   290→   290→        VStack(alignment: .leading, spacing: 12) {
+   291→   291→            HStack(spacing: 8) {
+   292→   292→                Image(systemName: "sparkles")
+   293→   293→                    .font(.system(size: 14))
+   294→   294→                    .foregroundColor(.ravePrimary)
+   295→   295→                Text("Рекомендации ИИ")
+   296→   296→                    .font(.system(size: 18, weight: .bold, design: .rounded))
+   297→   297→                    .foregroundColor(.raveTextPrimary)
+   298→   298→            }
+   299→   299→            .padding(.horizontal, 20)
+   300→   300→
+   301→   301→            ScrollView(.horizontal, showsIndicators: false) {
+   302→   302→                HStack(spacing: 14) {
+   303→   303→                    ForEach(aiResults) { room in
+   304→   304→                        Button {
+   305→   305→                            HapticManager.impact(.light)
+   306→   306→                            navigateToRoom = room
+   307→   307→                        } label: { RecommendationCardView(room: room) }
+   308→   308→                        .buttonStyle(.plain)
+   309→   309→                    }
+   310→   310→                }
+   311→   311→                .padding(.horizontal, 20)
+   312→   312→            }
+   313→   313→        }
+   314→   314→    }
+   315→   315→
+   316→   316→    // MARK: - AI Assistant Bar («Что посмотреть?»)
+   317→   317→
+   318→   318→    private var aiAssistantBar: some View {
+   319→   319→        HStack(spacing: 10) {
+   320→   320→            Image(systemName: "sparkles")
+   321→   321→                .font(.system(size: 16, weight: .medium))
+   322→   322→                .foregroundColor(.ravePrimary)
+   323→   323→
+   324→   324→            TextField("Что посмотреть?", text: $aiQuery)
+   325→   325→                .font(.system(size: 16))
+   326→   326→                .foregroundColor(.raveTextPrimary)
+   327→   327→                .submitLabel(.search)
+   328→   328→                .onSubmit {
+   329→   329→                    Task { await searchAI() }
+   330→   330→                }
+   331→   331→
+   332→   332→            if aiSearching {
+   333→   333→                ProgressView()
+   334→   334→                    .tint(.ravePrimary)
+   335→   335→                    .scaleEffect(0.8)
+   336→   336→            } else if !aiQuery.isEmpty {
+   337→   337→                Button { aiQuery = ""; aiResults = [] } label: {
+   338→   338→                    Image(systemName: "xmark.circle.fill")
+   339→   339→                        .foregroundColor(.raveTextSecondary)
+   340→   340→                }
+   341→   341→            }
+   342→   342→        }
+   343→   343→        .padding(.horizontal, 14)
+   344→   344→        .padding(.vertical, 12)
+   345→   345→        .glassCard(cornerRadius: 14, opacity: 0.05)
+   346→   346→        .overlay(
+   347→   347→            RoundedRectangle(cornerRadius: 14)
+   348→   348→                .stroke(Color.ravePrimary.opacity(0.15), lineWidth: 0.5)
+   349→   349→        )
+   350→   350→    }
+   351→   351→
+   352→   352→    private func searchAI() async {
+   353→   353→        let query = aiQuery.trimmingCharacters(in: .whitespaces)
+   354→   354→        guard !query.isEmpty else { return }
+   355→   355→
+   356→   356→        aiSearching = true
+   357→   357→        defer { aiSearching = false }
+   358→   358→
+   359→   359→        // Ищем по реальным комнатам с сервера
+   360→   360→        let all = viewModel.filteredRooms
+   361→   361→        aiResults = all.filter {
+   362→   362→            $0.name.localizedCaseInsensitiveContains(query) ||
+   363→   363→            $0.mediaItem?.title.localizedCaseInsensitiveContains(query) == true
+   364→   364→        }
+   365→   365→
+   366→   366→        if aiResults.isEmpty {
+   367→   367→            // Если ничего не найдено — показываем доступные комнаты
+   368→   368→            aiResults = Array(all.prefix(3))
+   369→   369→        }
+   370→   370→    }
+   371→   371→
+   372→   372→    // MARK: - Floating CTA (Создать комнату) — плавная анимация морфинга
+   373→   373→    //
+   374→   374→    // Один и тот же view, у которого плавно меняются: ширина (full → 56),
+   375→   375→    // cornerRadius (20 → 28), прозрачность текста (1 → 0).
+   376→   376→    // Так SwiftUI анимирует морфинг без cross-fade.
+   377→   377→
+   378→   378→    private var floatingCTA: some View {
+   379→   379→        Button {
+   380→   380→            HapticManager.impact(.medium)
+   381→   381→            if isCTACollapsed {
+   382→   382→                // Тап по свёрнутой иконке — ТОЛЬКО разворачивает (без создания комнаты).
+   383→   383→                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+   384→   384→                    isCTACollapsed = false
+   385→   385→                }
+   386→   386→                resetCTACollapseTimer()
+   387→   387→            } else {
+   388→   388→                // Тап по развёрнутой кнопке — открывает создание комнаты.
+   389→   389→                showCreateRoom = true
+   390→   390→            }
+   391→   391→        } label: {
+   392→   392→            ctaLabel
+   393→   393→        }
+   394→   394→        .buttonStyle(CTAPressStyle())
+   395→   395→        // Позиционирование: всегда по центру внизу (не смещается в угол)
+   396→   396→        .frame(maxWidth: .infinity, alignment: .center)
+   397→   397→        .opacity(appeared ? 1 : 0)
+   398→   398→        .offset(y: appeared ? 0 : 40)
+   399→   399→    }
+   400→   400→
+   401→   401→    /// Единый лейбл кнопки — анимируется через интерполяцию параметров.
+   402→   402→    private var ctaLabel: some View {
+   403→   403→        HStack(spacing: isCTACollapsed ? 0 : 12) {
+   404→   404→            // Иконка плюса — всегда видна
+   405→   405→            ZStack {
+   406→   406→                Circle()
+   407→   407→                    .fill(Color.premiumGradient)
+   408→   408→                    .frame(width: isCTACollapsed ? 56 : 36,
+   409→   409→                           height: isCTACollapsed ? 56 : 36)
+   410→   410→                Image(systemName: "plus")
+   411→   411→                    .font(.system(size: isCTACollapsed ? 22 : 18, weight: .bold))
+   412→   412→                    .foregroundColor(.white)
+   413→   413→            }
+   414→   414→
+   415→   415→            // Текст — исчезает при сворачивании (плавная прозрачность + сжатие)
+   416→   416→            Group {
+   417→   417→                if !isCTACollapsed {
+   418→   418→                    Text(loc.string(.homeCreateRoom))
+   419→   419→                        .font(.system(size: 17, weight: .bold))
+   420→   420→                        .foregroundColor(.white)
+   421→   421→                        .transition(.opacity)
+   422→   422→                    Spacer(minLength: 0)
+   423→   423→                    Image(systemName: "arrow.right")
+   424→   424→                        .font(.system(size: 15, weight: .bold))
+   425→   425→                        .foregroundColor(.raveAccent)
+   426→   426→                }
+   427→   427→            }
+   428→   428→            .opacity(isCTACollapsed ? 0 : 1)
+   429→   429→        }
+   430→   430→        .padding(.horizontal, isCTACollapsed ? 0 : 20)
+   431→   431→        .padding(.vertical, isCTACollapsed ? 0 : 16)
+   432→   432→        .frame(
+   433→   433→            width: isCTACollapsed ? 56 : nil,
+   434→   434→            height: isCTACollapsed ? 56 : nil
+   435→   435→        )
+   436→   436→        .background(
+   437→   437→            ZStack {
+   438→   438→                if isCTACollapsed {
+   439→   439→                    // Свёрнутая — только круг
+   440→   440→                    Circle()
+   441→   441→                        .fill(Color.premiumGradient)
+   442→   442→                } else {
+   443→   443→                    // Развёрнутая — чёрная плашка
+   444→   444→                    Color.black.opacity(0.8)
+   445→   445→                }
+   446→   446→            }
+   447→   447→        )
+   448→   448→        // Скругление: 28 для круга (56/2), 20 для плашки
+   449→   449→        .clipShape(RoundedRectangle(cornerRadius: isCTACollapsed ? 28 : 20))
+   450→   450→        .overlay(
+   451→   451→            // Обводка только в развёрнутом состоянии
+   452→   452→            RoundedRectangle(cornerRadius: isCTACollapsed ? 28 : 20)
+   453→   453→                .stroke(
+   454→   454→                    LinearGradient(
+   455→   455→                        colors: isCTACollapsed
+   456→   456→                            ? [.clear]
+   457→   457→                            : [Color.ravePrimary.opacity(0.8), Color.raveAccent.opacity(0.4)],
+   458→   458→                        startPoint: .leading,
+   459→   459→                        endPoint: .trailing
+   460→   460→                    ),
+   461→   461→                    lineWidth: isCTACollapsed ? 0 : 1.5
+   462→   462→                )
+   463→   463→        )
+   464→   464→        .shadow(color: .ravePrimary.opacity(0.4), radius: 16, y: 6)
+   465→   465→    }
+   466→   466→
+   467→   467→    // MARK: - CTA Collapse Timer (сборос на скролл/тап)
+   468→   468→
+   469→   469→    private func startCTACollapseTimer() {
+   470→   470→        ctaCollapseTimer?.invalidate()
+   471→   471→        ctaCollapseTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { _ in
+   472→   472→            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+   473→   473→                isCTACollapsed = true
+   474→   474→            }
+   475→   475→        }
+   476→   476→    }
+   477→   477→
+   478→   478→    private func resetCTACollapseTimer() {
+   479→   479→        ctaCollapseTimer?.invalidate()
+   480→   480→        // Если была свёрнута — разворачиваем
+   481→   481→        if isCTACollapsed {
+   482→   482→            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+   483→   483→                isCTACollapsed = false
+   484→   484→            }
+   485→   485→        }
+   486→   486→        startCTACollapseTimer()
+   487→   487→    }
+   488→   488→
+   489→   489→    // MARK: - Data
+   490→   490→
+   491→   491→    /// Live-комнаты: только реальные данные с сервера
+   492→   492→    private var liveRooms: [Room] {
+   493→   493→        viewModel.filteredRooms.filter { $0.isActive }
+   494→   494→            .sorted { $0.participantCount > $1.participantCount }
+   495→   495→    }
+   496→   496→
+   497→   497→    /// Рекомендации: реальные комнаты с сервера
+   498→   498→    private var recommendationRooms: [Room] {
+   499→   499→        viewModel.filteredRooms.sorted { $0.participantCount > $1.participantCount }
+   500→   500→    }
+   501→   501→
+   502→   502→    // MARK: - Join Room Sheet
+   503→   503→
+   504→   504→    private var joinRoomSheet: some View {
+   505→   505→        VStack(spacing: 24) {
+   506→   506→            VStack(spacing: 8) {
+   507→   507→                Image(systemName: "link.badge.plus")
+   508→   508→                    .font(.system(size: 40))
+   509→   509→                    .foregroundStyle(Color.raveGradient)
+   510→   510→                Text(loc.string(.joinTitle))
+   511→   511→                    .font(.title2.bold())
+   512→   512→                    .foregroundColor(.raveTextPrimary)
+   513→   513→                Text(loc.string(.joinSubtitle))
+   514→   514→                    .font(.subheadline)
+   515→   515→                    .foregroundColor(.raveTextSecondary)
+   516→   516→            }
+   517→   517→
+   518→   518→            TextField("ABC123 или https://...", text: $joinInput)
+   519→   519→                .textFieldStyle(RaveTextFieldStyle())
+   520→   520→                .multilineTextAlignment(.center)
+   521→   521→                .font(.title2.monospaced().bold())
+   522→   522→                .padding(.horizontal, 40)
+   523→   523→                .autocapitalization(.allCharacters)
+   524→   524→                .onChange(of: joinInput) { _, newValue in
+   525→   525→                    if !newValue.contains("http") && !newValue.contains(".") {
+   526→   526→                        joinInput = String(newValue.prefix(6)).uppercased()
+   527→   527→                    } else {
+   528→   528→                        joinInput = String(newValue.prefix(500))
+   529→   529→                    }
+   530→   530→                }
+   531→   531→
+   532→   532→            Button(action: {
+   533→   533→                Task {
+   534→   534→                    let code = extractCode(from: joinInput)
+   535→   535→                    guard !code.isEmpty else { return }
+   536→   536→                    do {
+   537→   537→                        let room = try await viewModel.joinRoom(code: code)
+   538→   538→                        showJoinSheet = false
+   539→   539→                        navigateToRoom = room
+   540→   540→                        joinInput = ""
+   541→   541→                    } catch {
+   542→   542→                        viewModel.errorMessage = error.localizedDescription
+   543→   543→                    }
+   544→   544→                }
+   545→   545→            }) {
+   546→   546→                Text(loc.string(.joinEnter))
+   547→   547→                    .frame(maxWidth: .infinity)
+   548→   548→            }
+   549→   549→            .buttonStyle(PremiumButtonStyle())
+   550→   550→            .background(Color.raveGradient)
+   551→   551→            .clipShape(RoundedRectangle(cornerRadius: 16))
+   552→   552→            .disabled(!isValidJoinInput || viewModel.isLoading)
+   553→   553→            .padding(.horizontal, 40)
+   554→   554→
+   555→   555→            if let error = viewModel.errorMessage {
+   556→   556→                Text(error).font(.caption).foregroundColor(.raveDanger)
+   557→   557→            }
+   558→   558→
+   559→   559→            Button(loc.string(.cancel)) {
+   560→   560→                showJoinSheet = false
+   561→   561→                joinInput = ""
+   562→   562→            }
+   563→   563→            .foregroundColor(.raveTextSecondary)
+   564→   564→
+   565→   565→            Spacer()
+   566→   566→        }
+   567→   567→        .padding(.top, 32)
+   568→   568→        .presentationDetents([.medium])
+   569→   569→        .presentationBackground(Color.raveBackground)
+   570→   570→        .preferredColorScheme(.dark)
+   571→   571→    }
+   572→   572→
+   573→   573→    private var isValidJoinInput: Bool {
+   574→   574→        let trimmed = joinInput.trimmingCharacters(in: .whitespaces)
+   575→   575→        return trimmed.count == 6 || trimmed.contains("http") || trimmed.contains("plnk") || trimmed.contains(".")
+   576→   576→    }
+   577→   577→
+   578→   578→    private func extractCode(from input: String) -> String {
+   579→   579→        let trimmed = input.trimmingCharacters(in: .whitespaces)
+   580→   580→        if trimmed.count == 6 && trimmed.allSatisfy({ $0.isLetter || $0.isNumber }) { return trimmed }
+   581→   581→        if let url = URL(string: trimmed) {
+   582→   582→            if let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "code" })?.value { return code }
+   583→   583→            let path = url.lastPathComponent
+   584→   584→            if path.count >= 4 && path.count <= 8 { return path.uppercased() }
+   585→   585→        }
+   586→   586→        return trimmed
+   587→   587→    }
+   588→   588→}
+   589→   589→
+   590→   590→// MARK: - Live Card View (Яндекс Музыка стиль)
+   591→   591→///
+   592→   592→/// Широкая горизонтальная карточка для live-трансляций.
+   593→   593→/// Глубокий чёрный фон, тонкая обводка 0.5pt, glow на постере.
+   594→   594→private struct LiveCardView: View {
+   595→   595→    let room: Room
+   596→   596→    @State private var pulse = false
+   597→   597→    @State private var isHovered = false
+   598→   598→
+   599→   599→    var body: some View {
+   600→   600→        VStack(alignment: .leading, spacing: 0) {
+   601→   601→            // Постер — глубокий чёрный с градиентным переливом
+   602→   602→            ZStack(alignment: .topLeading) {
+   603→   603→                // Глубокий чёрный фон
+   604→   604→                Color(hex: 0x0A0A0A)
+   605→   605→                    .frame(width: 260, height: 150)
+   606→   606→
+   607→   607→                // Градиентный перелив постера (Яндекс Музыка стиль)
+   608→   608→                LinearGradient(
+   609→   609→                    colors: [
+   610→   610→                        Color(hex: 0xFF6B35).opacity(isHovered ? 0.5 : 0.3),
+   611→   611→                        Color(hex: 0xFF3D8B).opacity(isHovered ? 0.4 : 0.2),
+   612→   612→                        Color(hex: 0xE8B339).opacity(isHovered ? 0.35 : 0.15),
+   613→   613→                        .black
+   614→   614→                    ],
+   615→   615→                    startPoint: .topLeading,
+   616→   616→                    endPoint: .bottomTrailing
+   617→   617→                )
+   618→   618→                .frame(width: 260, height: 150)
+   619→   619→
+   620→   620→                // Glow эффект на постере
+   621→   621→                LinearGradient(
+   622→   622→                    colors: [.clear, Color(hex: 0xFF6B35).opacity(0.15)],
+   623→   623→                    startPoint: .top,
+   624→   624→                    endPoint: .center
+   625→   625→                )
+   626→   626→                .frame(width: 260, height: 75)
+   627→   627→
+   628→   628→                // Иконка play по центру
+   629→   629→                Image(systemName: "play.circle.fill")
+   630→   630→                    .font(.system(size: 36))
+   631→   631→                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.6))
+   632→   632→                    .shadow(color: .black.opacity(0.5), radius: 4)
+   633→   633→
+   634→   634→                // LIVE бейдж с пульсацией
+   635→   635→                HStack(spacing: 4) {
+   636→   636→                    Circle()
+   637→   637→                        .fill(Color.raveDanger)
+   638→   638→                        .frame(width: 6, height: 6)
+   639→   639→                        .scaleEffect(pulse ? 1.3 : 1.0)
+   640→   640→                    Text("LIVE")
+   641→   641→                        .font(.system(size: 10, weight: .heavy))
+   642→   642→                        .foregroundColor(.white)
+   643→   643→                }
+   644→   644→                .padding(.horizontal, 8)
+   645→   645→                .padding(.vertical, 5)
+   646→   646→                .background(Color.raveDanger.opacity(0.25))
+   647→   647→                .clipShape(Capsule())
+   648→   648→                .overlay(Capsule().stroke(Color.raveDanger.opacity(0.5), lineWidth: 0.5))
+   649→   649→                .shadow(color: .raveDanger.opacity(0.4), radius: pulse ? 8 : 3)
+   650→   650→                .padding(10)
+   651→   651→
+   652→   652→                // Иконка сервиса
+   653→   653→                if let media = room.mediaItem {
+   654→   654→                    ServiceBadge(service: media.source == .youtube ? .youtube : .vk, size: 22)
+   655→   655→                        .padding(10)
+   656→   656→                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+   657→   657→                }
+   658→   658→            }
+   659→   659→            .frame(width: 260, height: 150)
+   660→   660→            .clipShape(RoundedRectangle(cornerRadius: 16))
+   661→   661→            .overlay(
+   662→   662→                RoundedRectangle(cornerRadius: 16)
+   663→   663→                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+   664→   664→            )
+   665→   665→
+   666→   666→            // Информация под постером
+   667→   667→            VStack(alignment: .leading, spacing: 4) {
+   668→   668→                Text(room.name)
+   669→   669→                    .font(.system(size: 15, weight: .bold))
+   670→   670→                    .foregroundColor(.raveTextPrimary)
+   671→   671→                    .lineLimit(1)
+   672→   672→
+   673→   673→                HStack(spacing: 4) {
+   674→   674→                    Image(systemName: "person.2.fill")
+   675→   675→                        .font(.system(size: 11))
+   676→   676→                    Text("\(room.participantCount) смотрят")
+   677→   677→                        .font(.system(size: 12))
+   678→   678→                }
+   679→   679→                .foregroundColor(.raveTextSecondary)
+   680→   680→            }
+   681→   681→            .padding(.horizontal, 4)
+   682→   682→            .padding(.top, 8)
+   683→   683→        }
+   684→   684→        .frame(width: 260)
+   685→   685→        .onAppear {
+   686→   686→            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+   687→   687→                pulse = true
+   688→   688→            }
+   689→   689→        }
+   690→   690→    }
+   691→   691→}
+   692→   692→
+   693→   693→// MARK: - Recommendation Card View (Яндекс Музыка стиль)
+   694→   694→///
+   695→   695→/// Вертикальный постер фильма/видео для секции рекомендаций.
+   696→   696→/// Глубокий чёрный фон, тонкая обводка 0.5pt, лёгкое свечение.
+   697→   697→private struct RecommendationCardView: View {
+   698→   698→    let room: Room
+   699→   699→    @State private var isHovered = false
+   700→   700→
+   701→   701→    var body: some View {
+   702→   702→        VStack(alignment: .leading, spacing: 8) {
+   703→   703→            // Постер — глубокий чёрный с градиентным переливом
+   704→   704→            ZStack {
+   705→   705→                // Глубокий чёрный фон
+   706→   706→                Color(hex: 0x0A0A0A)
+   707→   707→
+   708→   708→                // Градиентный перелив (тёплые тона для активных комнат)
+   709→   709→                LinearGradient(
+   710→   710→                    colors: [
+   711→   711→                        gradientColors[0],
+   712→   712→                        gradientColors[1],
+   713→   713→                        .black
+   714→   714→                    ],
+   715→   715→                    startPoint: .top,
+   716→   716→                    endPoint: .bottom
+   717→   717→                )
+   718→   718→
+   719→   719→                // Лёгкое свечение сверху
+   720→   720→                LinearGradient(
+   721→   721→                    colors: [.clear, gradientColors[0].opacity(isHovered ? 0.2 : 0.1)],
+   722→   722→                    startPoint: .top,
+   723→   723→                    endPoint: .center
+   724→   724→                )
+   725→   725→
+   726→   726→                // Иконка сервиса
+   727→   727→                Image(systemName: "play.circle.fill")
+   728→   728→                    .font(.system(size: 36))
+   729→   729→                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.6))
+   730→   730→                    .shadow(color: .black.opacity(0.5), radius: 4)
+   731→   731→            }
+   732→   732→            .frame(width: 150, height: 210)
+   733→   733→            .clipShape(RoundedRectangle(cornerRadius: 14))
+   734→   734→            .overlay(
+   735→   735→                RoundedRectangle(cornerRadius: 14)
+   736→   736→                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+   737→   737→            )
+   738→   738→
+   739→   739→            // Название
+   740→   740→            Text(room.name)
+   741→   741→                .font(.system(size: 13, weight: .semibold))
+   742→   742→                .foregroundColor(.raveTextPrimary)
+   743→   743→                .lineLimit(2)
+   744→   744→                .frame(width: 150, alignment: .leading)
+   745→   745→
+   746→   746→            // Хост
+   747→   747→            Text(room.hostName)
+   748→   748→                .font(.system(size: 11))
+   749→   749→                .foregroundColor(.raveTextSecondary)
+   750→   750→                .lineLimit(1)
+   751→   751→        }
+   752→   752→        .frame(width: 150)
+   753→   753→    }
+   754→   754→
+   755→   755→    private var gradientColors: [Color] {
+   756→   756→        // Тёплые тона: оранжевый, розовый, золотой (Яндекс Музыка стиль)
+   757→   757→        let palettes: [[Color]] = [
+   758→   758→            [Color(hex: 0xFF6B35).opacity(0.4), Color(hex: 0xFF3D8B).opacity(0.2), .black],
+   759→   759→            [Color(hex: 0xE8B339).opacity(0.35), Color(hex: 0xFF6B35).opacity(0.2), .black],
+   760→   760→            [Color(hex: 0xFF3D8B).opacity(0.3), Color(hex: 0x6EC1E4).opacity(0.2), .black],
+   761→   761→            [Color(hex: 0x6EC1E4).opacity(0.3), Color(hex: 0x22D3EE).opacity(0.15), .black],
+   762→   762→        ]
+   763→   763→        let index = abs(room.id.hashValue) % palettes.count
+   764→   764→        return palettes[index]
+   765→   765→    }
+   766→   766→}
+   767→   767→
+   768→   768→// MARK: - Service Badge (маленькая иконка сервиса)
+   769→   769→private struct ServiceBadge: View {
+   770→   770→    let service: VideoService
+   771→   771→    let size: CGFloat
+   772→   772→
+   773→   773→    var body: some View {
+   774→   774→        ServiceLogoIcon(service: service, size: size)
+   775→   775→    }
+   776→   776→}
+   777→   777→
+   778→   778→// MARK: - CTA Press Style (пружинящая анимация нажатия)
+   779→   779→struct CTAPressStyle: ButtonStyle {
+   780→   780→    func makeBody(configuration: Configuration) -> some View {
+   781→   781→        configuration.label
+   782→   782→            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+   783→   783→            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+   784→   784→    }
+   785→   785→}
+   786→   786→

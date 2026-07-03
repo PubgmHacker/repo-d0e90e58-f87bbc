@@ -87,3 +87,74 @@ These are all Low severity — they don't block functionality, just polish:
 8. **App Store Connect**: set up merchant ID `merchant.com.syncwatch.raveclone` for IAP
 9. **App Store Connect**: set up `applinks:raveclone.app` associated domain
 10. **Optional**: fix the 13 remaining Low-severity bugs (all cosmetic)
+
+---
+
+## Session 2 — Settings Redesign + Real AI Integration
+
+### Settings Redesign (commit `366e705`)
+
+User requested: "Уведомления" and "Конфиденциальность" should open as separate full-screen windows (not slide-out / overlay), with premium toggle design, no gaps between rows.
+
+**New file: `Plink/Views/Components/PlinkToggle.swift`**
+- Custom pill-shaped toggle (51×31pt) with white knob + shadow
+- Cyan→emerald gradient when ON (Bioluminescent palette)
+- Haptic feedback on toggle
+- Spring animation
+- `PlinkToggleRow`: icon + title + subtitle + toggle (iOS Settings style)
+- `PlinkSettingsCard`: grouped container without internal dividers (no more "просветы")
+- `PlinkSectionHeader`: small uppercase label
+
+**Redesigned `NotificationsView`:**
+- Full-screen NavigationStack (was: bottom sheet)
+- 8 toggles in 3 sections (Общие, Друзья и соцсети, Комнаты)
+- "Не беспокоить" master switch disables all others
+- All toggles persist to @AppStorage
+- DND banner at top when active
+
+**Redesigned `PrivacySettingsView`:**
+- Full-screen NavigationStack
+- 3 sections (Видимость, Сообщения и приглашения, Данные)
+- Toggles: profile visibility, online status, search, read receipts
+- Menu pickers: "Кто может писать ЛС" / "Кто может звать в комнаты" (everyone/friends/nobody)
+- Clear cache button actually clears URLCache + temp directory
+
+**Updated `SettingsView`:**
+- Privacy/Notifications/Language now open via NavigationLink push (was: .sheet overlay)
+- Added `SettingsDestination` enum for type-safe navigation
+- Removed 3 .sheet modifiers
+
+### Real AI Integration (commit `8f2eba2`)
+
+User requested: подключить реальную ИИ в ИИ-помощника (таб в таббаре) и в окно "поиск рекомендаций от ИИ" над главной. API: OpenRouter.
+
+**New file: `Plink/Services/AIService.swift`**
+- Singleton `AIService.shared` wrapping OpenRouter API
+- `chat(messages:model:temperature:)` — single request, full response
+- `chatStream(messages:model:temperature:)` — SSE streaming tokens via AsyncThrowingStream
+- `recommend(query:availableRooms:)` — quick single-shot for Home search
+- Default model: `anthropic/claude-3.5-sonnet`
+- Light model: `google/gemini-flash-1.5`
+- API key from Info.plist (PLINK_AI_API_KEY), no hardcoded secrets
+
+**Redesigned `AIAssistantView` (ИИ-помощник tab):**
+- Real streaming chat — tokens appear live like ChatGPT
+- Pulsing cyan cursor at end of text while streaming
+- "печатает…" label next to AI name
+- Auto-scroll on each new token
+- System prompt defines Plink co-watch assistant persona
+- Last 10 messages as conversation context
+- Error handling: friendly Russian error in bubble if API fails
+- Removed MockAIResponses (~80 lines dead code) + AITypingIndicator (~30 lines)
+
+**Redesigned HomeView AI search:**
+- `searchAI()` calls `AIService.shared.recommend()` instead of local filter
+- AI sees query + available room names for context
+- AI response in featured glass card above matching rooms
+- Falls back to local filter if AI fails
+
+**Configuration:**
+- New `Secrets.xcconfig.template` (committed) — copy to `Secrets.xcconfig` and fill in real keys
+- `Secrets.xcconfig` added to `.gitignore` (never commit real API keys)
+- Info.plist updated with `PLINK_AI_API_KEY` = `$(PLINK_AI_API_KEY)`
+- GitHub secret scanning blocked initial push — key removed from source, now loaded at runtime

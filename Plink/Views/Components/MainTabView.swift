@@ -480,14 +480,9 @@ struct RoomsTabContent: View {
                     .foregroundColor(.raveTextPrimary)
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 10))
-                        Text("\(room.participantCount)")
-                            .font(.system(size: 12, weight: .medium).monospacedDigit())
-                    }
-                    .foregroundColor(.raveTextSecondary)
+                HStack(spacing: 6) {
+                    // 🔧 Participant badge (glass)
+                    ParticipantBadge(count: room.participantCount)
 
                     Text("· \(room.hostName)")
                         .font(.system(size: 12))

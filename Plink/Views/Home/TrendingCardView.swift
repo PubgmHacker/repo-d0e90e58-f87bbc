@@ -76,14 +76,8 @@ struct TrendingCardView: View {
 
                 Spacer()
 
-                HStack(spacing: 3) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 9))
-                        .foregroundColor(.raveGreen)
-                    Text("\(room.participantCount)")
-                        .font(.caption2.bold().monospacedDigit())
-                        .foregroundColor(.raveGreen)
-                }
+                // 🔧 Participant badge (glass)
+                ParticipantBadge(count: room.participantCount)
             }
         }
         .frame(width: 160)

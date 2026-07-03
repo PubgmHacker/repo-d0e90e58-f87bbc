@@ -680,20 +680,9 @@ private struct LiveCardView: View {
                 }
 
                 // 🔧 Participant count badge (bottom-right, glass capsule)
-                HStack(spacing: 3) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 9))
-                    Text("\(room.participantCount)")
-                        .font(.system(size: 11, weight: .heavy).monospacedDigit())
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.5))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(10)
+                ParticipantBadge(count: room.participantCount)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(8)
             }
             .frame(width: 280, height: 158)
             .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -773,20 +762,10 @@ private struct RecommendationCardView: View {
                     .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.5))
                     .shadow(color: .black.opacity(0.5), radius: 4)
 
-                // 🔧 Participant count at bottom
-                if room.isActive {
-                    HStack(spacing: 3) {
-                        Circle().fill(Color.bioEmerald).frame(width: 5, height: 5)
-                        Text("\(room.participantCount) смотрят")
-                            .font(.system(size: 9, weight: .bold))
-                    }
-                    .foregroundColor(.bioEmerald)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Capsule())
+                // 🔧 Participant count badge (bottom-right, glass)
+                ParticipantBadge(count: room.participantCount)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(8)
-                }
             }
             .frame(width: 150, height: 210)
             .clipShape(RoundedRectangle(cornerRadius: 14))

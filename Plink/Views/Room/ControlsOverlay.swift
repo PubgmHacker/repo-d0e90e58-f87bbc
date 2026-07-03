@@ -69,7 +69,11 @@ struct ControlsOverlay: View {
 
             Spacer()
 
-            ParticipantAvatars(count: participantCount, onTap: onShowParticipants)
+            // 🔧 Participant count badge + avatars
+            HStack(spacing: 6) {
+                ParticipantBadge(count: participantCount)
+                ParticipantAvatars(count: participantCount, onTap: onShowParticipants)
+            }
         }
     }
 

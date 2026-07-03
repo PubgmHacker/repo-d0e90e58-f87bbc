@@ -81,8 +81,8 @@ struct RoomCardView: View {
 
             Spacer(minLength: 4)
 
-            // ── Счётчик участников «👥 1.4k» + пульсирующая точка ─────
-            participantCounter
+            // ── Счётчик участников (glass badge) ──────────────────────
+            ParticipantBadge(count: room.participantCount)
         }
         .padding(14)
         // ── Bioluminescent Glass: матовое стекло с неоновой подсветкой ──

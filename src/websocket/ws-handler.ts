@@ -1,133 +1,145 @@
-/**
- * Plink Backend — WebSocket Handler (обновлённый)
- * Этап 1: Интеграция security middleware в WS handler.
- * 
- * Копировать в backend: src/websocket/ws-handler.ts
- * 
- * Ключевые изменения (помечены 🔧):
- * 1. senderID/senderName берутся из socket.user (JWT), НЕ из payload
- * 2. play/pause/seek проверяются через isRoomHost()
- * 3. Rate limiting на sync команды
- * 4. Chat текст санитизируется
- */
-
+import type { WebSocket } from 'ws';
 import { isRoomHost, sanitizeChatMessage, checkRateLimit } from '../middleware/security.js';
 
+interface PlinkSocket extends WebSocket {
+  userId?: string;
+  username?: string;
+  activeRoomId?: string;
+}
+
+const rooms = new Map<string, Set<PlinkSocket>>();
+
 export function setupWebSocketHandler(io, prisma, fastify) {
+  io.on('connection', async (socket: PlinkSocket, req: any) => {
+    try {
+      // ── Аутентификация по query-параметру token ──
+      const url = new URL(req.url, 'http://localhost');
+      const token = url.searchParams.get('token');
 
-    // ── Аутентификация при подключении ──
-    io.use(async (socket, next) => {
+      if (!token) {
+        socket.close(4001, 'No token');
+        return;
+      }
+
+      let payload: any;
+      try {
+        payload = fastify.jwt.verify(token);
+      } catch {
+        socket.close(4001, 'Invalid token');
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: payload.id },
+        select: { id: true, username: true, role: true, bannedUntil: true },
+      });
+
+      if (!user) {
+        socket.close(4001, 'User not found');
+        return;
+      }
+      if (user.bannedUntil && user.bannedUntil > new Date()) {
+        socket.close(4003, 'User banned');
+        return;
+      }
+
+      socket.userId = user.id;
+      socket.username = user.username;
+
+      console.log(`[WS] ${user.username} connected`);
+
+      socket.on('message', async (raw: Buffer) => {
+        let msg: any;
         try {
-            const token = socket.handshake.auth?.token 
-                       || socket.handshake.query?.token;
-            if (!token) return next(new Error('No token'));
-
-            const payload = fastify.jwt.verify(token);
-            const user = await prisma.user.findUnique({
-                where: { id: payload.id },
-                select: { id: true, username: true, role: true, bannedUntil: true }
-            });
-
-            if (!user) return next(new Error('User not found'));
-            if (user.bannedUntil && user.bannedUntil > new Date()) {
-                return next(new Error('User banned'));
-            }
-
-            socket.user = user; // ← прикрепляем к socket
-            next();
-        } catch (err) {
-            next(new Error('Auth failed'));
+          msg = JSON.parse(raw.toString());
+        } catch {
+          socket.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
+          return;
         }
-    });
 
-    io.on('connection', (socket) => {
-        console.log(`[WS] ${socket.user.username} connected`);
+        const { type, data } = msg;
 
-        // ── Присоединение к комнате ──
-        socket.on('join', async (data) => {
-            const { roomId } = data;
-            socket.join(roomId);
+        switch (type) {
+          case 'join': {
+            const roomId = data.roomId;
             socket.activeRoomId = roomId;
 
-            // Уведомить других участников
-            socket.to(roomId).emit('participant_update', {
-                action: 'joined',
-                userID: socket.user.id,       // ← из JWT
-                username: socket.user.username, // ← из DB
-            });
-        });
+            if (!rooms.has(roomId)) rooms.set(roomId, new Set());
+            rooms.get(roomId)!.add(socket);
 
-        // ── Sync команды (play/pause/seek) ──
-        socket.on('sync', async (msg) => {
-            // 🔧 Rate limit
-            if (!checkRateLimit(socket.user.id)) {
-                socket.emit('error', { message: 'Rate limit exceeded' });
+            broadcast(roomId, {
+              type: 'participant_update',
+              data: { action: 'joined', userID: user.id, username: user.username },
+            }, socket);
+            break;
+          }
+
+          case 'sync': {
+            if (!checkRateLimit(user.id)) {
+              socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
+              return;
+            }
+            if (['play', 'pause', 'seek'].includes(data.command)) {
+              const isHost = await isRoomHost(prisma, data.roomID, user.id);
+              if (!isHost) {
+                socket.send(JSON.stringify({
+                  type: 'error',
+                  message: 'Only the host can control playback',
+                }));
                 return;
+              }
             }
+            data.senderID = user.id;
+            broadcast(data.roomID, { type: 'sync', data }, socket);
+            break;
+          }
 
-            // 🔧 FIX 3.1: Only host can send play/pause/seek
-            if (['play', 'pause', 'seek'].includes(msg.command)) {
-                const hostCheck = await isRoomHost(prisma, msg.roomID, socket.user.id);
-                if (!hostCheck) {
-                    socket.emit('error', { 
-                        message: 'Only the host can control playback' 
-                    });
-                    return;
-                }
+          case 'chat': {
+            if (!checkRateLimit(user.id)) {
+              socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
+              return;
             }
-
-            // 🔧 Перезаписываем senderID из JWT (не доверяем клиенту)
-            msg.senderID = socket.user.id;
-
-            // Broadcast другим участникам
-            socket.to(msg.roomID).emit('sync', msg);
-        });
-
-        // ── Chat сообщения ──
-        socket.on('chat', async (msg) => {
-            // 🔧 Rate limit
-            if (!checkRateLimit(socket.user.id)) {
-                socket.emit('error', { message: 'Rate limit exceeded' });
-                return;
-            }
-
-            // 🔧 FIX 3.3: Server-side identity enforcement
-            const safeMsg = await sanitizeChatMessage(msg, socket.user);
-
-            // Сохраняем в БД
+            const safeMsg = await sanitizeChatMessage(data, user);
             await prisma.chatMessage.create({
-                data: {
-                    roomID: safeMsg.roomID,
-                    senderID: safeMsg.senderID,   // ← из JWT
-                    text: safeMsg.text,           // ← sanitized
-                }
+              data: { roomID: safeMsg.roomID, senderID: safeMsg.senderID, text: safeMsg.text },
             });
+            broadcast(safeMsg.roomID, { type: 'chat', data: safeMsg });
+            break;
+          }
 
-            // Broadcast
-            io.to(safeMsg.roomID).emit('chat', safeMsg);
-        });
+          case 'reaction': {
+            if (!checkRateLimit(user.id)) return;
+            broadcast(data.roomID, {
+              type: 'reaction',
+              data: { ...data, senderID: user.id, senderName: user.username },
+            }, socket);
+            break;
+          }
+        }
+      });
 
-        // ── Реакции ──
-        socket.on('reaction', (msg) => {
-            if (!checkRateLimit(socket.user.id)) return;
+      socket.on('close', () => {
+        if (socket.activeRoomId && rooms.has(socket.activeRoomId)) {
+          rooms.get(socket.activeRoomId)!.delete(socket);
+          broadcast(socket.activeRoomId, {
+            type: 'participant_update',
+            data: { action: 'left', userID: user.id, username: user.username },
+          });
+        }
+      });
+    } catch (err) {
+      console.error('[WS] setup error', err);
+      socket.close(1011, 'Server error');
+    }
+  });
+}
 
-            // 🔧 Перезаписываем identity
-            socket.to(msg.roomID).emit('reaction', {
-                ...msg,
-                senderID: socket.user.id,
-                senderName: socket.user.username,
-            });
-        });
-
-        // ── Отключение ──
-        socket.on('disconnect', () => {
-            if (socket.activeRoomId) {
-                socket.to(socket.activeRoomId).emit('participant_update', {
-                    action: 'left',
-                    userID: socket.user.id,
-                    username: socket.user.username,
-                });
-            }
-        });
-    });
+function broadcast(roomId: string, payload: any, exclude?: PlinkSocket) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  const msg = JSON.stringify(payload);
+  for (const s of room) {
+    if (s === exclude) continue;
+    if (s.readyState === s.OPEN) s.send(msg);
+  }
 }

@@ -12,7 +12,7 @@ struct MainTabView: View {
     let authService: AuthService
 
     enum Tab: Hashable {
-        case home, rooms, ai, friends, settings
+        case home, rooms, join, ai, friends, settings
     }
 
     init(authService: AuthService) {
@@ -39,6 +39,16 @@ struct MainTabView: View {
                         Label("Комнаты", systemImage: "rectangle.stack.fill")
                     }
                     .tag(Tab.rooms)
+
+                // 🔧 NEW: Join Room tab — full-screen join with code + password
+                JoinRoomView { room in
+                    // Navigate to room after joining
+                    withAnimation { selectedTab = .home }
+                }
+                .tabItem {
+                    Label("Войти", systemImage: "arrow.right.circle.fill")
+                }
+                .tag(Tab.join)
 
                 AIAssistantView()
                     .tabItem {

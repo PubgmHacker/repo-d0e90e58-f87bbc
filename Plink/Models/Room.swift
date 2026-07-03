@@ -15,6 +15,10 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     let createdAt: Date
     /// 🔧 NEW: Privacy level — public (visible to all), friends (friends only), private (link only)
     var privacy: RoomPrivacy
+    /// 🔧 NEW: Optional password for locked rooms. nil = no password needed.
+    var password: String?
+    /// 🔧 NEW: True if room has a password set
+    var isLocked: Bool { password != nil && !(password?.isEmpty ?? true) }
 
     var participantCount: Int {
         participants.count
@@ -39,7 +43,8 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     init(id: String, name: String, hostID: String, hostName: String, code: String,
          participants: [UserPreview], mediaItem: MediaItem?, isActive: Bool,
          maxParticipants: Int, hostIsPremium: Bool, createdAt: Date,
-         privacy: RoomPrivacy = .publicRoom) {
+         privacy: RoomPrivacy = .publicRoom,
+         password: String? = nil) {
         self.id = id
         self.name = name
         self.hostID = hostID
@@ -52,6 +57,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         self.hostIsPremium = hostIsPremium
         self.createdAt = createdAt
         self.privacy = privacy
+        self.password = password
     }
 
     init(from decoder: Decoder) throws {
@@ -68,6 +74,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         hostIsPremium = try c.decodeIfPresent(Bool.self, forKey: .hostIsPremium) ?? false
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         privacy = try c.decodeIfPresent(RoomPrivacy.self, forKey: .privacy) ?? .publicRoom
+        password = try c.decodeIfPresent(String.self, forKey: .password)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -84,6 +91,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         try c.encode(hostIsPremium, forKey: .hostIsPremium)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(privacy, forKey: .privacy)
+        try c.encodeIfPresent(password, forKey: .password)
     }
 
     static var preview: Room {
@@ -132,7 +140,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, name, hostID, hostName, code
         case participants, mediaItem, isActive
-        case maxParticipants, hostIsPremium, createdAt, privacy
+        case maxParticipants, hostIsPremium, createdAt, privacy, password
     }
 }
 
@@ -141,13 +149,16 @@ struct CreateRoomRequest: Codable, Sendable {
     let name: String
     let maxParticipants: Int
     let mediaItem: MediaItem?
-    /// 🔧 NEW: Privacy level for the room
     let privacy: RoomPrivacy
+    /// 🔧 NEW: Optional password for locked rooms
+    let password: String?
 }
 
 // MARK: - Join Room Request
 struct JoinRoomRequest: Codable, Sendable {
     let code: String
+    /// 🔧 NEW: Optional password for locked rooms
+    let password: String?
 }
 
 // MARK: - Room Privacy Level (Блок 4 — Studio)

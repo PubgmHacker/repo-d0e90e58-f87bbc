@@ -102,8 +102,8 @@ final class HomeViewModel {
         return room
     }
 
-    func joinRoom(code: String) async throws -> Room {
-        let room = try await roomService.joinRoom(code: code)
+    func joinRoom(code: String, password: String? = nil) async throws -> Room {
+        let room = try await roomService.joinRoom(code: code, password: password)
         rooms.insert(room, at: 0)
         return room
     }

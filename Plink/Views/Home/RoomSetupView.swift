@@ -26,6 +26,8 @@ struct RoomSetupView: View {
     @State private var privacy: RoomPrivacy = .publicRoom
     @State private var maxParticipants = 10
     @State private var selectedTheme: RoomTheme = .default
+    /// 🔧 NEW: Password for locked rooms (shown when privacy = .privateRoom)
+    @State private var roomPassword = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
 
@@ -73,6 +75,36 @@ struct RoomSetupView: View {
                                             .background(Color.white.opacity(0.06))
                                             .padding(.leading, 56)
                                     }
+                                }
+                            }
+
+                            // 🔧 NEW: Password field — shown when privacy = .privateRoom
+                            if privacy == .privateRoom {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Пароль комнаты")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(.raveTextSecondary)
+                                        .tracking(0.5)
+                                        .padding(.horizontal, 2)
+
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.bioTeal)
+                                        SecureField("Введите пароль (необязательно)", text: $roomPassword)
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.raveTextPrimary)
+                                            .autocapitalization(.none)
+                                            .disableAutocorrection(true)
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                                    )
                                 }
                             }
                         }
@@ -376,7 +408,8 @@ struct RoomSetupView: View {
                     name: name,
                     maxParticipants: maxParticipants,
                     mediaItem: mediaItem,
-                    privacy: privacy
+                    privacy: privacy,
+                    password: privacy == .privateRoom && !roomPassword.isEmpty ? roomPassword : nil
                 )
                 let room = try await roomService.createRoom(request)
                 await MainActor.run {

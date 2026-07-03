@@ -18,8 +18,8 @@ final class RoomService: RoomServiceProtocol {
 
     // MARK: - Join Room
 
-    func joinRoom(code: String) async throws -> Room {
-        let request = JoinRoomRequest(code: code)
+    func joinRoom(code: String, password: String? = nil) async throws -> Room {
+        let request = JoinRoomRequest(code: code, password: password)
         return try await api.request("rooms/join", method: .post, body: request)
     }
 

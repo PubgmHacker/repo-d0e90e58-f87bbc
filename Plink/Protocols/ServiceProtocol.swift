@@ -16,7 +16,7 @@ protocol AuthServiceProtocol: AnyObject, Sendable {
 // MARK: - Room Service Protocol
 protocol RoomServiceProtocol: Sendable {
     func createRoom(_ request: CreateRoomRequest) async throws -> Room
-    func joinRoom(code: String) async throws -> Room
+    func joinRoom(code: String, password: String?) async throws -> Room
     func leaveRoom(roomID: String) async throws
     func fetchActiveRooms() async throws -> [Room]
     func fetchRoom(id: String) async throws -> Room

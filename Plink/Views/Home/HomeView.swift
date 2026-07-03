@@ -627,9 +627,9 @@ private struct LiveCardView: View {
                 // Градиентный перелив постера (Яндекс Музыка стиль)
                 LinearGradient(
                     colors: [
-                        Color(hex: 0xFF6B35).opacity(isHovered ? 0.5 : 0.3),
-                        Color(hex: 0xFF3D8B).opacity(isHovered ? 0.4 : 0.2),
-                        Color(hex: 0xE8B339).opacity(isHovered ? 0.35 : 0.15),
+                        Color.raveAccent.opacity(isHovered ? 0.5 : 0.3),
+                        Color.raveAccent.opacity(isHovered ? 0.4 : 0.2),
+                        Color.raveWarning.opacity(isHovered ? 0.35 : 0.15),
                         .black
                     ],
                     startPoint: .topLeading,
@@ -639,7 +639,7 @@ private struct LiveCardView: View {
 
                 // Glow эффект на постере
                 LinearGradient(
-                    colors: [.clear, Color(hex: 0xFF6B35).opacity(0.15)],
+                    colors: [.clear, Color.raveAccent.opacity(0.15)],
                     startPoint: .top,
                     endPoint: .center
                 )
@@ -775,10 +775,10 @@ private struct RecommendationCardView: View {
     private var gradientColors: [Color] {
         // Тёплые тона: оранжевый, розовый, золотой (Яндекс Музыка стиль)
         let palettes: [[Color]] = [
-            [Color(hex: 0xFF6B35).opacity(0.4), Color(hex: 0xFF3D8B).opacity(0.2), .black],
-            [Color(hex: 0xE8B339).opacity(0.35), Color(hex: 0xFF6B35).opacity(0.2), .black],
-            [Color(hex: 0xFF3D8B).opacity(0.3), Color(hex: 0x6EC1E4).opacity(0.2), .black],
-            [Color(hex: 0x6EC1E4).opacity(0.3), Color(hex: 0x22D3EE).opacity(0.15), .black],
+            [Color.raveAccent.opacity(0.4), Color.raveAccent.opacity(0.2), .black],
+            [Color.raveWarning.opacity(0.35), Color.raveAccent.opacity(0.2), .black],
+            [Color.raveAccent.opacity(0.3), Color.bioCyan.opacity(0.2), .black],
+            [Color.bioCyan.opacity(0.3), Color(hex: 0x22D3EE).opacity(0.15), .black],
         ]
         let index = abs(room.id.hashValue) % palettes.count
         return palettes[index]

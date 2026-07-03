@@ -15,7 +15,7 @@ struct AIAssistantView: View {
         NavigationStack {
             ZStack {
                 // Живой фон ЗА карточками
-                AnimatedGradientBackground(orbColors: [Color(hex: 0x7B2CBF), Color(hex: 0x6EC1E4), Color(hex: 0xFF3D8B)])
+                AnimatedGradientBackground(orbColors: [Color(hex: 0x7B2CBF), Color.bioCyan, Color.raveAccent])
 
                 // Лёгкое затемнение для читаемости сообщений
                 Color.black.opacity(0.3).ignoresSafeArea()
@@ -80,7 +80,7 @@ struct AIAssistantView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color(hex: 0x6EC1E4), Color(hex: 0xFF3D8B)],
+                            colors: [Color.bioCyan, Color.raveAccent],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )

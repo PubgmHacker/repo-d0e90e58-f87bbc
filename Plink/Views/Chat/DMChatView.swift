@@ -222,9 +222,9 @@ private struct DMBubble: View {
             // Анимированный градиент для премиум-сообщений
             LinearGradient(
                 colors: [
-                    Color(hex: 0x6EC1E4),
-                    Color(hex: 0x9B59B6),
-                    Color(hex: 0x6EC1E4),
+                    Color.bioCyan,
+                    Color.ravePrimary,
+                    Color.bioCyan,
                 ],
                 startPoint: UnitPoint(x: shimmer, y: 0),
                 endPoint: UnitPoint(x: shimmer + 1, y: 1)

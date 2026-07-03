@@ -38,7 +38,7 @@ struct AdminPanelView: View {
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground(orbColors: [Color(hex: 0xFF3D8B), Color(hex: 0x6EC1E4), Color(hex: 0xE8B339)])
+            AnimatedGradientBackground(orbColors: [Color.raveAccent, Color.bioCyan, Color.raveWarning])
 
             VStack(spacing: 0) {
                 // Header

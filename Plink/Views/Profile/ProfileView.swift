@@ -418,11 +418,11 @@ struct PremiumAvatarStroke: ShapeStyle {
     func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
         AngularGradient(
             colors: [
-                Color(hex: 0x6EC1E4),
-                Color(hex: 0xFF3D8B),
+                Color.bioCyan,
+                Color.raveAccent,
                 Color(hex: 0x22D3EE),
-                Color(hex: 0xFF3D8B),
-                Color(hex: 0x6EC1E4),
+                Color.raveAccent,
+                Color.bioCyan,
             ],
             center: .center
         )
@@ -441,10 +441,10 @@ struct PremiumAvatarModifier: ViewModifier {
                     .stroke(
                         AngularGradient(
                             colors: [
-                                Color(hex: 0x6EC1E4),
-                                Color(hex: 0xFF3D8B),
+                                Color.bioCyan,
+                                Color.raveAccent,
                                 Color(hex: 0x22D3EE),
-                                Color(hex: 0x6EC1E4),
+                                Color.bioCyan,
                             ],
                             center: .center
                         ),
@@ -477,14 +477,14 @@ struct PremiumGlowCard: ViewModifier {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .stroke(
                         LinearGradient(
-                            colors: [Color(hex: 0x6EC1E4).opacity(0.3), Color(hex: 0xFF3D8B).opacity(0.15)],
+                            colors: [Color.bioCyan.opacity(0.3), Color.raveAccent.opacity(0.15)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 0.5
                     )
             )
-            .shadow(color: Color(hex: 0x6EC1E4).opacity(0.15), radius: 12, y: 4)
+            .shadow(color: Color.bioCyan.opacity(0.15), radius: 12, y: 4)
     }
 }
 

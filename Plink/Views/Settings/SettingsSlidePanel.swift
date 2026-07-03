@@ -332,7 +332,7 @@ struct PremiumManagementView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground(orbColors: [Color(hex: 0x9B59B6), Color(hex: 0xF1C40F), Color(hex: 0x6EC1E4)])
+                AnimatedGradientBackground(orbColors: [Color.ravePrimary, Color.raveWarning, Color.bioCyan])
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -341,7 +341,7 @@ struct PremiumManagementView: View {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 48))
                                 .foregroundStyle(
-                                    LinearGradient(colors: [Color(hex: 0x6EC1E4), Color(hex: 0x9B59B6), Color(hex: 0xF1C40F)],
+                                    LinearGradient(colors: [Color.bioCyan, Color.ravePrimary, Color.raveWarning],
                                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                                 )
 

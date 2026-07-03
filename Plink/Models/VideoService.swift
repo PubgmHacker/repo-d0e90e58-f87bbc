@@ -160,7 +160,7 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable {
         case .netflix: return Color(hex: 0xE50914)
         case .disney: return Color(hex: 0x113CCF)
         case .browser: return Color(hex: 0x0077FF)
-        case .customURL: return Color(hex: 0x6EC1E4)
+        case .customURL: return Color.bioCyan
         case .kinopoisk: return Color(hex: 0xFF6600)
         case .ivi: return Color(hex: 0xE40000)
         case .okko: return Color(hex: 0xFF0033)

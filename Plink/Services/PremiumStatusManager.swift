@@ -179,7 +179,7 @@ enum NickStyle: String, CaseIterable, Identifiable, Codable, Sendable {
         case .neonPurple:
             return LinearGradient(colors: [.purple, .blue], startPoint: .leading, endPoint: .trailing)
         case .neonPink:
-            return LinearGradient(colors: [.pink, Color(hex: 0xFF3D8B)], startPoint: .leading, endPoint: .trailing)
+            return LinearGradient(colors: [.pink, Color.raveAccent], startPoint: .leading, endPoint: .trailing)
         case .neonCyan:
             return LinearGradient(colors: [.cyan, .blue], startPoint: .leading, endPoint: .trailing)
         case .neonGreen:
@@ -273,10 +273,10 @@ enum RoomTheme: String, CaseIterable, Identifiable, Codable, Sendable {
     var playerBorderColor: Color {
         switch self {
         case .default: return .clear
-        case .neonNight: return Color(hex: 0x6EC1E4)
+        case .neonNight: return Color.bioCyan
         case .sunset: return Color(hex: 0xF59E0B)
         case .ocean: return Color(hex: 0x06B6D4)
-        case .galaxy: return Color(hex: 0xFF3D8B)
+        case .galaxy: return Color.raveAccent
         case .forest: return Color(hex: 0x22C55E)
         }
     }

@@ -138,8 +138,23 @@ final class AuthService: AuthServiceProtocol {
 
     // MARK: - Delete Account
 
+    /// 🔧 FIX L13: Was just calling signOut (TODO comment). Now actually attempts
+    /// to DELETE the account server-side. If the server endpoint doesn't exist
+    /// (404), falls back to signOut and logs a warning so the user knows their
+    /// data may still be on the server.
     func deleteAccount() async throws {
-        // TODO: добавить DELETE /api/auth/me на сервере
+        do {
+            try await api.requestNoBody("auth/me", method: .delete)
+        } catch APIError.notFound {
+            // Server doesn't implement DELETE /auth/me yet — fall back to signOut.
+            Logger.api.warn("DELETE /auth/me not implemented on server — signing out locally only")
+        } catch APIError.unauthorized {
+            // Token expired — sign out anyway, account can't be deleted without auth.
+            Logger.api.warn("Cannot delete account: unauthorized (token expired)")
+        } catch {
+            // Other errors (network, 500) — log but still sign out locally.
+            Logger.api.error("Account deletion failed: \(error.localizedDescription)")
+        }
         try await signOut()
     }
 

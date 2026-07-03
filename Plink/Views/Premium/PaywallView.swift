@@ -23,7 +23,7 @@ struct PaywallView: View {
         ZStack {
             // Чёрный фон + сине-голубые blur-пятна
             AnimatedGradientBackground(
-                orbColors: [Color(hex: 0x3D8DE0), Color(hex: 0x6EC1E4), Color(hex: 0x113CCF)]
+                orbColors: [Color(hex: 0x3D8DE0), Color.bioCyan, Color(hex: 0x113CCF)]
             )
 
             ScrollView {
@@ -77,10 +77,10 @@ struct PaywallView: View {
                     .fill(
                         AngularGradient(
                             colors: [
-                                Color(hex: 0x6EC1E4),
+                                Color.bioCyan,
                                 Color(hex: 0x3D8DE0),
                                 Color(hex: 0x22D3EE),
-                                Color(hex: 0x6EC1E4),
+                                Color.bioCyan,
                             ],
                             center: .center
                         )

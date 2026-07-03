@@ -100,49 +100,28 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         )
     }
 
-    // MARK: - Mock Rooms (fallback когда сервер 401 или пустой)
-
-    /// Мок-комнаты для отображения трендов и лайв-сессий, когда сервер
-    /// недоступен или требует авторизацию. Контент всегда виден.
-    static var mockRooms: [Room] {
+    // MARK: - Mock Rooms
+    // 🔧 FIX L2: mockRooms removed from production. Was misleading — if the server
+    // returned empty/401, users saw fake "active" rooms with fake participant counts.
+    // Now the UI must handle the empty state explicitly (HomeView shows a friendly
+    // empty state instead of fake content).
+    #if DEBUG
+    /// Mock rooms for SwiftUI previews and unit tests only.
+    static var previewMockRooms: [Room] {
         let mkItem: (String, MediaItem.MediaType) -> MediaItem = { title, type in
             MediaItem(id: UUID().uuidString, title: title, artist: nil,
                       thumbnailURL: nil, streamURL: "", duration: 5400,
                       mediaType: type, source: .url)
         }
-
         return [
-            Room(id: "m1", name: "Дюна 2 🎬", hostID: "h1", hostName: "Alex",
-                 code: "DUNE24", participants: (0..<12).map { UserPreview(id: "p1_\($0)", username: "User\($0)", avatarURL: nil, isOnline: true) },
-                 mediaItem: mkItem("Дюна: Часть вторая", .movie), isActive: true,
-                 maxParticipants: 20, hostIsPremium: true, createdAt: .now.addingTimeInterval(-1800)),
-
-            Room(id: "m2", name: "Lo-Fi Chill 🎵", hostID: "h2", hostName: "Jordan",
-                 code: "LOFI25", participants: (0..<8).map { UserPreview(id: "p2_\($0)", username: "User\($0)", avatarURL: nil, isOnline: true) },
-                 mediaItem: mkItem("Lo-Fi Beats to Relax", .music), isActive: true,
-                 maxParticipants: 15, hostIsPremium: false, createdAt: .now.addingTimeInterval(-7200)),
-
-            Room(id: "m3", name: "Witcher Marathon 🗡️", hostID: "h3", hostName: "Sam",
-                 code: "WITCH3", participants: (0..<6).map { UserPreview(id: "p3_\($0)", username: "User\($0)", avatarURL: nil, isOnline: true) },
-                 mediaItem: mkItem("The Witcher S1", .series), isActive: true,
-                 maxParticipants: 10, hostIsPremium: true, createdAt: .now.addingTimeInterval(-3600)),
-
-            Room(id: "m4", name: "Stand Up Comedy 😂", hostID: "h4", hostName: "Taylor",
-                 code: "COMED1", participants: (0..<15).map { UserPreview(id: "p4_\($0)", username: "User\($0)", avatarURL: nil, isOnline: true) },
-                 mediaItem: mkItem("Best Stand Up 2024", .video), isActive: true,
-                 maxParticipants: 25, hostIsPremium: false, createdAt: .now.addingTimeInterval(-900)),
-
-            Room(id: "m5", name: "Утреннее радио ☀️", hostID: "h5", hostName: "Casey",
-                 code: "MORNIN", participants: (0..<4).map { UserPreview(id: "p5_\($0)", username: "User\($0)", avatarURL: nil, isOnline: true) },
-                 mediaItem: mkItem("Morning Hits", .music), isActive: true,
-                 maxParticipants: 10, hostIsPremium: false, createdAt: .now.addingTimeInterval(-14400)),
-
-            Room(id: "m6", name: "Игровой стрим 🎮", hostID: "h6", hostName: "Morgan",
-                 code: "GAMER6", participants: (0..<20).map { UserPreview(id: "p6_\($0)", username: "User\($0)", avatarURL: nil, isOnline: true) },
-                 mediaItem: mkItem("Cyberpunk 2077", .livestream), isActive: true,
-                 maxParticipants: 30, hostIsPremium: true, createdAt: .now.addingTimeInterval(-5400)),
+            Room(id: "preview1", name: "Preview Room", hostID: "preview_host",
+                 hostName: "Preview", code: "PREV01",
+                 participants: [], mediaItem: mkItem("Preview", .video),
+                 isActive: true, maxParticipants: 10, hostIsPremium: false,
+                 createdAt: .now),
         ]
     }
+    #endif
 
     enum CodingKeys: String, CodingKey {
         case id, name, hostID, hostName, code

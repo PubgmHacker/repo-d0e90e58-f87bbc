@@ -148,12 +148,33 @@ struct PlinkApp: App {
             }
 
         case .friendInvite(let userId):
-            // Показываем красивый алерт с предложением добавить в друзья.
-            friendInviteAlert = FriendInviteAlert(userId: userId, username: "Пользователь")
-            deepLinkRouter.clear()
+            // 🔧 FIX L10: Fetch real username from server (was: hardcoded "Пользователь").
+            Task {
+                let username = await fetchUsername(userId: userId)
+                await MainActor.run {
+                    friendInviteAlert = FriendInviteAlert(userId: userId, username: username)
+                    deepLinkRouter.clear()
+                }
+            }
 
         case .none:
             break
+        }
+    }
+
+    /// 🔧 FIX L10: Fetch user display name from server for friend-invite alerts.
+    private func fetchUsername(userId: String) async -> String {
+        // Try to fetch the user's profile from /api/users/:id
+        // Falls back to a generic localized string if the request fails.
+        struct UserDTO: Decodable {
+            let username: String?
+        }
+        do {
+            let user: UserDTO = try await apiClient.request("users/\(userId)")
+            return user.username ?? "Пользователь"
+        } catch {
+            Logger.api.warn("Failed to fetch username for friend invite: \(error.localizedDescription)")
+            return "Пользователь"
         }
     }
 

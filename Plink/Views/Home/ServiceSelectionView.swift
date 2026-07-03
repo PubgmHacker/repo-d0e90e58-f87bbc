@@ -250,7 +250,7 @@ struct BrowserInputScreen: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground(orbColors: [Color(hex: 0x22D3EE), Color(hex: 0x6EC1E4), Color(hex: 0x1A2A6C)])
+                AnimatedGradientBackground(orbColors: [Color(hex: 0x22D3EE), Color.bioCyan, Color(hex: 0x1A2A6C)])
 
                 VStack(spacing: 28) {
                     Spacer()

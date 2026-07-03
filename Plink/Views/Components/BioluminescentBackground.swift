@@ -139,33 +139,6 @@ enum BioPalette {
     }
 }
 
-// MARK: - Energy Observer (скролл/голос → всплеск свечения)
-final class BioEnergy: ObservableObject {
-    @Published var energy: Double = 0.5
-    @Published var voicePulse: Double = 0
-
-    private var decayTask: Task<Void, Never>?
-
-    func pulse(_ amount: Double = 0.8) {
-        energy = min(1.0, energy + amount)
-        decayTask?.cancel()
-        decayTask = Task { [weak self] in
-            while let self, self.energy > 0.5 {
-                try? await Task.sleep(nanoseconds: 16_000_000)
-                if Task.isCancelled { break }
-                await MainActor.run {
-                    self.energy = max(0.5, self.energy - 0.015)
-                }
-            }
-        }
-    }
-
-    func setVoiceLevel(_ level: Double) {
-        voicePulse = level
-        energy = min(1.0, 0.5 + level * 0.5)
-    }
-}
-
 // MARK: - PremiumGlassCard
 //
 // Единая стеклянная карточка для комнат, панелей, сообщений.

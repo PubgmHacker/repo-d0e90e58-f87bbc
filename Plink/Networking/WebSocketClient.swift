@@ -303,25 +303,43 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
         switch result {
         case .success(let message):
             // 🔧 FIX C1: First successful receive = socket is open.
-            // URLSessionWebSocketTask has no "did open" callback, so we infer open state
-            // from the first successful receive cycle. This unblocks the entire send path.
             notifyConnectedIfNeeded()
 
-            switch message {
-            case .string(let text):
-                handleMessage(text)
+            // 🔧 FIX 4.1: Parse JSON + handle ping/pong on background thread.
+            // Only hop to MainActor for delegate dispatch (UI update).
+            // This prevents main thread blocking during message floods
+            // (100+ reactions/chat messages per second).
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else { return }
 
-            case .data(let data):
-                if let text = String(data: data, encoding: .utf8) {
-                    handleMessage(text)
+                let text: String
+                switch message {
+                case .string(let s): text = s
+                case .data(let d): text = String(data: d, encoding: .utf8) ?? ""
+                @unknown default: return
                 }
 
-            @unknown default:
-                    break
-            }
+                // Update heartbeat timestamp (thread-safe — it's a simple TimeInterval)
+                self.lastPongReceived = Date().timeIntervalSince1970
 
-            // Continue listening
-            receiveMessage()
+                // Try ping/pong first — handle entirely on background thread
+                if let data = text.data(using: .utf8) {
+                    if let pingPong = try? JSONDecoder().decode(WSPingPong.self, from: data) {
+                        await self.handlePingPongAsync(pingPong)
+                        // Re-arm receive on background
+                        await self.receiveMessageAsync()
+                        return
+                    }
+                }
+
+                // Non-ping message → dispatch to delegate on MainActor
+                await MainActor.run {
+                    self.delegate?.webSocket(self, didReceiveMessage: text)
+                }
+
+                // Re-arm receive on background
+                await self.receiveMessageAsync()
+            }
 
         case .failure(let error):
             Logger.ws.error("Receive error: \(error.localizedDescription)")
@@ -329,23 +347,48 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
         }
     }
 
-    // MARK: - Message Handling
+    // MARK: - Message Handling (legacy — kept for backwards compat, not called by new path)
 
     private func handleMessage(_ text: String) {
-        // Update last activity for heartbeat accounting
         lastPongReceived = Date().timeIntervalSince1970
 
-        // Intercept ping/pong for RTT measurement + server-time sync
         if let data = text.data(using: .utf8) {
-            // Try ping/pong envelope first (before delegating to UI layer)
             if let pingPong = try? JSONDecoder().decode(WSPingPong.self, from: data) {
                 handlePingPong(pingPong)
                 return
             }
         }
 
-        // Forward all other messages to delegate (SyncEngine / RoomViewModel)
         delegate?.webSocket(self, didReceiveMessage: text)
+    }
+
+    // 🔧 FIX 4.1: Async ping/pong handler — runs on background, only RTT/clock
+    // update hops to MainActor (since those are @MainActor properties).
+    private func handlePingPongAsync(_ msg: WSPingPong) async {
+        if msg.command == "pong", let sentAt = pendingPingTimestamp, let serverTime = msg.serverTimestamp {
+            let now = Date().timeIntervalSince1970
+            let rtt = now - sentAt
+            let smoothedRTT = (estimatedRTT * 0.7) + (rtt * 0.3)
+            let syncedServerTime = serverTime + (rtt / 2)
+
+            await MainActor.run {
+                self.estimatedRTT = smoothedRTT
+                self.synchronizedServerTime = syncedServerTime
+                self.pendingPingTimestamp = nil
+            }
+
+            Logger.ws.info("RTT: \(String(format: "%.0f", smoothedRTT * 1000))ms | drift: \(String(format: "%.0f", (now - syncedServerTime) * 1000))ms")
+        }
+    }
+
+    // 🔧 FIX 4.1: Async receive re-arm — doesn't block MainActor.
+    private func receiveMessageAsync() async {
+        socket?.receive { [weak self] result in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                self?.handleReceiveResult(result)
+            }
+        }
     }
 
     // MARK: - Heartbeat + Server Time Sync

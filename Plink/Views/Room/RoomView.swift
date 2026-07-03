@@ -216,7 +216,13 @@ struct RoomView: View {
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { handleDoubleTap() }
         )
-        .gesture(
+        // 🔧 FIX CHAT SWIPE: Use simultaneousGesture so the drag doesn't block
+        // the ScrollView inside the chat panel. The chat panel itself has its
+        // own drag gesture for closing (see RoomChatView.landscapeLayout).
+        // This gesture handles the open-direction (right-to-left swipe) when
+        // the panel is closed, and also closes on left-to-right swipe on the
+        // video area when the panel is open.
+        .simultaneousGesture(
             DragGesture(minimumDistance: 25)
                 .onEnded { value in
                     let horizontal = value.translation.width
@@ -227,7 +233,7 @@ struct RoomView: View {
                             showChatPanel = true
                         }
                     }
-                    // Свайп слева-направо (→) — закрыть чат
+                    // Свайп слева-направо (→) — закрыть чат (when swiping on video area)
                     else if showChatPanel && horizontal > 25 {
                         HapticManager.impact(.light)
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {

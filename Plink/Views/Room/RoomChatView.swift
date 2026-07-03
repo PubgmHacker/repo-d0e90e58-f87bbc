@@ -141,6 +141,22 @@ struct RoomChatView: View {
                 )
                 .offset(x: isPanelOpen ? 0 : panelWidth + 16)
                 .shadow(color: .black.opacity(0.3), radius: 8, x: -3)
+                // 🔧 FIX CHAT SWIPE: Add drag gesture directly on the panel so it
+                // can be swiped closed (rightward) even when it overlaps the video area.
+                // The RoomView-level drag gesture doesn't fire here because the panel
+                // intercepts touch events.
+                .gesture(
+                    DragGesture(minimumDistance: 25)
+                        .onEnded { value in
+                            // Only close on rightward swipe (push panel back to the right)
+                            if isPanelOpen && value.translation.width > 25 {
+                                HapticManager.impact(.light)
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isPanelOpen = false
+                                }
+                            }
+                        }
+                )
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isPanelOpen)

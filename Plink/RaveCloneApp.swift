@@ -100,7 +100,7 @@ struct PlinkApp: App {
 
     @ViewBuilder
     private var authenticatedContent: some View {
-        MainTabView()
+        MainTabView(authService: authService)
             .environmentObject(deepLinkRouter)
             .environmentObject(friendManager)
             // 🔧 FIX C4+C6: Inject shared services for DM and Admin panels

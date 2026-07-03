@@ -2,19 +2,27 @@ import SwiftUI
 
 // MARK: - Main Tab Bar (5 вкладок) — ИИ-помощник по центру
 /// Нижняя навигация: Главная, Комнаты, ИИ ✨, Друзья, Настройки.
-/// «Настройки» открывает slide-out панель слева (не переключает вкладку).
+/// «Настройки» открывает полноэкранный SettingsView (как Apple ID Settings).
 struct MainTabView: View {
     @State private var selectedTab: Tab = .home
-    @State private var showPanel = false
+    @State private var showSettings = false
+    // 🔧 FIX: Receive shared services from RaveCloneApp via EnvironmentObject.
+    @EnvironmentObject private var apiClient: APIClient
+    /// AuthService is not ObservableObject — passed via init from RaveCloneApp.
+    let authService: AuthService
 
     enum Tab: Hashable {
         case home, rooms, ai, friends, settings
     }
 
+    init(authService: AuthService) {
+        self.authService = authService
+    }
+
     var body: some View {
         ZStack {
             TabView(selection: tabSelection) {
-                HomeTabContent(onProfileTap: { showPanel = true })
+                HomeTabContent(onProfileTap: { showSettings = true })
                     .tabItem {
                         Label("Главная", systemImage: "house.fill")
                     }
@@ -39,7 +47,7 @@ struct MainTabView: View {
                     .tag(Tab.friends)
 
                 // Заглушка — контент этой вкладки не показывается,
-                // тап по ней открывает slide-out панель через tabSelection.
+                // тап по ней открывает полноэкранные настройки через tabSelection.
                 Color.clear
                     .tabItem {
                         Label("Настройки", systemImage: "gearshape.fill")
@@ -51,23 +59,26 @@ struct MainTabView: View {
             .toolbarBackground(.hidden, for: .tabBar)
             .toolbarBackground(.hidden, for: .navigationBar)
 
-            // Slide-out панель настроек (чистая шторка снизу)
-            if showPanel {
-                SettingsSlidePanel(isPresented: $showPanel)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            // 🔧 REPLACED slide-out panel with full-screen SettingsView.
+            // Uses .fullScreenCover so settings open as a proper full-screen
+            // modal (like iOS Settings → Apple Account), not a bottom sheet.
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPanel)
+        // 🔧 FIX: fullScreenCover for the new Apple ID-style SettingsView
+        .fullScreenCover(isPresented: $showSettings) {
+            SettingsView(isPresented: $showSettings, authService: authService)
+                .environmentObject(apiClient)
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSettings)
     }
 
-    /// Кастомный binding: тап по «Настройки» открывает панель, не меняя вкладку.
+    /// Кастомный binding: тап по «Настройки» открывает полноэкранный SettingsView, не меняя вкладку.
     private var tabSelection: Binding<Tab> {
         Binding(
             get: { selectedTab },
             set: { newTab in
                 if newTab == .settings {
                     HapticManager.impact(.light)
-                    showPanel = true
+                    showSettings = true
                 } else {
                     selectedTab = newTab
                 }

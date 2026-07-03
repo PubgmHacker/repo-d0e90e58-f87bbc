@@ -1,9 +1,11 @@
 import type { WebSocket } from 'ws';
-import { isRoomHost, sanitizeChatMessage, checkRateLimit } from '../middleware/security.js';
+import { isRoomHost, checkRateLimit } from '../middleware/security.js';
+import { sanitizeChatMessage } from '../middleware/security.js';
 
 interface PlinkSocket extends WebSocket {
   userId?: string;
   username?: string;
+  role?: string;
   activeRoomId?: string;
 }
 
@@ -12,9 +14,17 @@ const rooms = new Map<string, Set<PlinkSocket>>();
 export function setupWebSocketHandler(io, prisma, fastify) {
   io.on('connection', async (socket: PlinkSocket, req: any) => {
     try {
-      // ── Аутентификация по query-параметру token ──
       const url = new URL(req.url, 'http://localhost');
       const token = url.searchParams.get('token');
+      const roomIdFromQuery = url.searchParams.get('roomId');
+
+      // Также пытаемся достать roomId из пути /ws/room/:id
+      const pathParts = url.pathname.split('/');
+      const roomIdFromPath = pathParts.length >= 4 && pathParts[2] === 'room'
+        ? pathParts[3]
+        : null;
+
+      const roomId = roomIdFromPath || roomIdFromQuery;
 
       if (!token) {
         socket.close(4001, 'No token');
@@ -45,8 +55,23 @@ export function setupWebSocketHandler(io, prisma, fastify) {
 
       socket.userId = user.id;
       socket.username = user.username;
+      socket.role = user.role;
 
       console.log(`[WS] ${user.username} connected`);
+
+      // Авто-присоединение к комнате если roomId указан в URL
+      if (roomId) {
+        socket.activeRoomId = roomId;
+        if (!rooms.has(roomId)) rooms.set(roomId, new Set());
+        rooms.get(roomId)!.add(socket);
+        broadcast(roomId, {
+          type: 'participant_update',
+          action: 'joined',
+          userId: user.id,
+          username: user.username,
+          roomId,
+        }, socket);
+      }
 
       socket.on('message', async (raw: Buffer) => {
         let msg: any;
@@ -57,64 +82,80 @@ export function setupWebSocketHandler(io, prisma, fastify) {
           return;
         }
 
-        const { type, data } = msg;
+        // ─── 1. Heartbeat ping/pong ───
+        if (msg.command === 'ping') {
+          socket.send(JSON.stringify({
+            command: 'pong',
+            timestamp: msg.timestamp,
+            serverTimestamp: Date.now() / 1000,
+          }));
+          return;
+        }
 
-        switch (type) {
-          case 'join': {
-            const roomId = data.roomId;
-            socket.activeRoomId = roomId;
+        // ─── 2. Signaling (WebRTC) — просто пробрасываем в комнату ───
+        if (msg.kind && msg.roomId) {
+          broadcast(msg.roomId, msg, socket);
+          return;
+        }
 
-            if (!rooms.has(roomId)) rooms.set(roomId, new Set());
-            rooms.get(roomId)!.add(socket);
-
-            broadcast(roomId, {
-              type: 'participant_update',
-              data: { action: 'joined', userID: user.id, username: user.username },
-            }, socket);
-            break;
+        // ─── 3. Chat ───
+        if (msg.type === 'chat') {
+          if (!checkRateLimit(user.id)) {
+            socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
+            return;
           }
-
-          case 'sync': {
-            if (!checkRateLimit(user.id)) {
-              socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
-              return;
-            }
-            if (['play', 'pause', 'seek'].includes(data.command)) {
-              const isHost = await isRoomHost(prisma, data.roomID, user.id);
-              if (!isHost) {
-                socket.send(JSON.stringify({
-                  type: 'error',
-                  message: 'Only the host can control playback',
-                }));
-                return;
-              }
-            }
-            data.senderID = user.id;
-            broadcast(data.roomID, { type: 'sync', data }, socket);
-            break;
-          }
-
-          case 'chat': {
-            if (!checkRateLimit(user.id)) {
-              socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
-              return;
-            }
-            const safeMsg = await sanitizeChatMessage(data, user);
+          const safeMsg = await sanitizeChatMessage(msg, user);
+          try {
             await prisma.chatMessage.create({
               data: { roomID: safeMsg.roomID, senderID: safeMsg.senderID, text: safeMsg.text },
             });
-            broadcast(safeMsg.roomID, { type: 'chat', data: safeMsg });
-            break;
+          } catch (e) {
+            console.error('[WS] chat save error', e);
           }
+          broadcast(safeMsg.roomID, safeMsg);
+          return;
+        }
 
-          case 'reaction': {
-            if (!checkRateLimit(user.id)) return;
-            broadcast(data.roomID, {
-              type: 'reaction',
-              data: { ...data, senderID: user.id, senderName: user.username },
-            }, socket);
-            break;
+        // ─── 4. Reaction ───
+        if (msg.action === 'send_reaction') {
+          if (!checkRateLimit(user.id)) return;
+          broadcast(msg.roomId, {
+            action: 'reaction',
+            emoji: msg.emoji,
+            roomId: msg.roomId,
+            senderId: user.id,
+            senderName: user.username,
+          }, socket);
+          return;
+        }
+
+        // ─── 5. Sync (play/pause/seek/changeMedia/stateRequest/stateResponse/correction) ───
+        if (msg.command && msg.roomID) {
+          if (!checkRateLimit(user.id)) {
+            socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
+            return;
           }
+          // Только хост может слать play/pause/seek/changeMedia
+          if (['play', 'pause', 'seek', 'changeMedia', 'correction'].includes(msg.command)) {
+            const isHost = await isRoomHost(prisma, msg.roomID, user.id);
+            if (!isHost) {
+              socket.send(JSON.stringify({
+                type: 'error',
+                message: 'Only the host can control playback',
+              }));
+              return;
+            }
+          }
+          // Перезаписываем senderID из JWT
+          msg.senderID = user.id;
+          broadcast(msg.roomID, msg, socket);
+          return;
+        }
+
+        // ─── 6. Ad command ───
+        if (msg.command && msg.roomID && msg.command?.type) {
+          broadcast(msg.roomID, msg, socket);
+          return;
         }
       });
 
@@ -123,7 +164,10 @@ export function setupWebSocketHandler(io, prisma, fastify) {
           rooms.get(socket.activeRoomId)!.delete(socket);
           broadcast(socket.activeRoomId, {
             type: 'participant_update',
-            data: { action: 'left', userID: user.id, username: user.username },
+            action: 'left',
+            userId: user.id,
+            username: user.username,
+            roomId: socket.activeRoomId,
           });
         }
       });

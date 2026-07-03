@@ -25,6 +25,7 @@ struct RoomSetupView: View {
     @State private var roomName = ""
     @State private var privacy: RoomPrivacy = .publicRoom
     @State private var maxParticipants = 10
+    @State private var selectedTheme: RoomTheme = .default
     @State private var isCreating = false
     @State private var errorMessage: String?
 
@@ -114,6 +115,61 @@ struct RoomSetupView: View {
                                 .font(.system(size: 13))
                                 .foregroundColor(.raveDanger)
                                 .padding(.horizontal, 16)
+                        }
+
+                        // ── Room Theme Section (Premium only) ──
+                        VStack(alignment: .leading, spacing: 6) {
+                            PlinkSectionHeader(text: "Оформление комнаты")
+
+                            if isPremium {
+                                PlinkSettingsCard {
+                                    ForEach(Array(RoomTheme.allCases.enumerated()), id: \.element) { index, theme in
+                                        themeRow(theme)
+                                        if index < RoomTheme.allCases.count - 1 {
+                                            Divider()
+                                                .background(Color.white.opacity(0.06))
+                                                .padding(.leading, 56)
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 🔧 Free users see a locked teaser
+                                HStack(spacing: 12) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.raveTextTertiary)
+                                        .frame(width: 28, height: 28)
+                                        .background(Color.white.opacity(0.04))
+                                        .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Кастомные темы комнаты")
+                                            .font(.system(size: 15, weight: .medium))
+                                            .foregroundColor(.raveTextPrimary)
+                                        Text("Живой фон чата, оформление плеера, рамки — только с подпиской Плинк+")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.raveTextSecondary)
+                                    }
+
+                                    Spacer()
+
+                                    Text("Плинк+")
+                                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                        .foregroundColor(.bioEmerald)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.bioEmerald.opacity(0.15))
+                                        .clipShape(Capsule())
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                                )
+                            }
                         }
 
                         Spacer(minLength: 32)
@@ -319,7 +375,8 @@ struct RoomSetupView: View {
                 let request = CreateRoomRequest(
                     name: name,
                     maxParticipants: maxParticipants,
-                    mediaItem: mediaItem
+                    mediaItem: mediaItem,
+                    privacy: privacy
                 )
                 let room = try await roomService.createRoom(request)
                 await MainActor.run {
@@ -340,5 +397,53 @@ struct RoomSetupView: View {
     private func generateRoomCode() -> String {
         let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         return String((0..<6).map { _ in chars.randomElement()! })
+    }
+
+    // MARK: - Theme Row
+
+    @ViewBuilder
+    private func themeRow(_ theme: RoomTheme) -> some View {
+        Button {
+            HapticManager.impact(.light)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedTheme = theme
+            }
+        } label: {
+            HStack(spacing: 12) {
+                // Theme preview swatch
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(theme.chatBackground)
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(theme.playerBorderColor.opacity(0.5), lineWidth: 1)
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(theme.displayName)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.raveTextPrimary)
+                    if theme.hasPlayerBorder {
+                        Text("С рамкой плеера + живой фон чата")
+                            .font(.system(size: 12))
+                            .foregroundColor(.raveTextSecondary)
+                    } else {
+                        Text("Стандартное оформление")
+                            .font(.system(size: 12))
+                            .foregroundColor(.raveTextSecondary)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: selectedTheme == theme ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18))
+                    .foregroundColor(selectedTheme == theme ? .bioCyan : .raveTextTertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

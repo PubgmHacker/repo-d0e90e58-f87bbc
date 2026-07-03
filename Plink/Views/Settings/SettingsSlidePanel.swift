@@ -291,9 +291,10 @@ struct PremiumAnimatedStroke: ShapeStyle {
     }
 }
 
-// MARK: - Premium Username Text (переливающийся пурпурно-чёрный градиент)
-/// Градиентный текст без короны. Анимация shimmer — перелив 3.5 сек.
-/// Добавляет приписку [Premium] после ника.
+// MARK: - Premium Username Text (переливающийся градиент)
+/// 🔧 REDESIGNED: Removed [Premium] suffix — just the shimmering nickname.
+/// Premium = shimmering animated gradient text.
+/// Free = plain white-gray static text.
 struct PremiumUsernameText: View {
     let text: String
     let isPremium: Bool
@@ -301,14 +302,9 @@ struct PremiumUsernameText: View {
 
     var body: some View {
         if isPremium {
-            HStack(spacing: 4) {
-                Text(text)
-                    .font(font)
-                    .shimmerGradientText(colors: premiumColors)
-                Text("[Premium]")
-                    .font(font)
-                    .shimmerGradientText(colors: premiumColors)
-            }
+            Text(text)
+                .font(font)
+                .shimmerGradientText(colors: premiumColors)
         } else {
             Text(text)
                 .font(font)
@@ -346,14 +342,14 @@ struct PremiumManagementView: View {
                                 )
 
                             if isPremium {
-                                Text("Premium активна")
+                                Text("Плинк+ активна")
                                     .font(.title2.bold())
                                     .foregroundColor(.raveTextPrimary)
-                                Text("Действует до 2 августа 2026")
+                                if let expiry = PremiumStatusManager.shared.subscriptionExpiry { let f = DateFormatter(); f.dateStyle = .long; f.locale = Locale(identifier: "ru_RU"); Text("Действует до \(f.string(from: expiry))") } else { Text("Активна") }
                                     .font(.subheadline)
                                     .foregroundColor(.raveTextSecondary)
                             } else {
-                                Text("Premium не активна")
+                                Text("Плинк+ не активна")
                                     .font(.title2.bold())
                                     .foregroundColor(.raveTextPrimary)
                                 Text("Оформите подписку для расширенных возможностей")

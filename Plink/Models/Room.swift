@@ -13,6 +13,8 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     let maxParticipants: Int
     let hostIsPremium: Bool
     let createdAt: Date
+    /// 🔧 NEW: Privacy level — public (visible to all), friends (friends only), private (link only)
+    var privacy: RoomPrivacy
 
     var participantCount: Int {
         participants.count
@@ -36,7 +38,8 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     /// Кастомный init для backwards compatibility (hostIsPremium может отсутствовать в JSON).
     init(id: String, name: String, hostID: String, hostName: String, code: String,
          participants: [UserPreview], mediaItem: MediaItem?, isActive: Bool,
-         maxParticipants: Int, hostIsPremium: Bool, createdAt: Date) {
+         maxParticipants: Int, hostIsPremium: Bool, createdAt: Date,
+         privacy: RoomPrivacy = .publicRoom) {
         self.id = id
         self.name = name
         self.hostID = hostID
@@ -48,6 +51,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         self.maxParticipants = maxParticipants
         self.hostIsPremium = hostIsPremium
         self.createdAt = createdAt
+        self.privacy = privacy
     }
 
     init(from decoder: Decoder) throws {
@@ -63,6 +67,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         maxParticipants = try c.decodeIfPresent(Int.self, forKey: .maxParticipants) ?? 10
         hostIsPremium = try c.decodeIfPresent(Bool.self, forKey: .hostIsPremium) ?? false
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        privacy = try c.decodeIfPresent(RoomPrivacy.self, forKey: .privacy) ?? .publicRoom
     }
 
     func encode(to encoder: Encoder) throws {
@@ -78,6 +83,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         try c.encode(maxParticipants, forKey: .maxParticipants)
         try c.encode(hostIsPremium, forKey: .hostIsPremium)
         try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(privacy, forKey: .privacy)
     }
 
     static var preview: Room {
@@ -126,7 +132,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, name, hostID, hostName, code
         case participants, mediaItem, isActive
-        case maxParticipants, hostIsPremium, createdAt
+        case maxParticipants, hostIsPremium, createdAt, privacy
     }
 }
 
@@ -135,6 +141,8 @@ struct CreateRoomRequest: Codable, Sendable {
     let name: String
     let maxParticipants: Int
     let mediaItem: MediaItem?
+    /// 🔧 NEW: Privacy level for the room
+    let privacy: RoomPrivacy
 }
 
 // MARK: - Join Room Request

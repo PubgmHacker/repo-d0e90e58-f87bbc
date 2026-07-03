@@ -64,7 +64,7 @@ struct SettingsView: View {
                             settingsRow(
                                 icon: "sparkles",
                                 title: "Плинк+",
-                                subtitle: isPremium ? "Активна" : "Не активна",
+                                subtitle: premiumSubtitle,
                                 color: .bioEmerald
                             ) {
                                 showPremium = true
@@ -96,10 +96,11 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.plain)
 
+                            // 🔧 NEW: Language switching
                             NavigationLink(value: SettingsDestination.language) {
                                 rowContent(
                                     icon: "globe",
-                                    title: "Язык",
+                                    title: "Язык приложения",
                                     subtitle: LocalizationManager.shared.currentLanguageName,
                                     color: .bioCyan,
                                     showChevron: true
@@ -228,6 +229,20 @@ struct SettingsView: View {
         .sheet(isPresented: $showAdminPanel) {
             AdminPanelView()
         }
+    }
+
+    /// 🔧 NEW: Shows premium subscription status with expiry date
+    private var premiumSubtitle: String? {
+        if isPremium {
+            if let expiry = PremiumStatusManager.shared.subscriptionExpiry {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                formatter.locale = Locale(identifier: "ru_RU")
+                return "Активен до \(formatter.string(from: expiry))"
+            }
+            return "Активна"
+        }
+        return "Не активна"
     }
 
     // MARK: - Profile Card (Apple ID style)

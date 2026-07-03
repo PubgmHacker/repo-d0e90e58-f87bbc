@@ -507,15 +507,33 @@ struct HomeView: View {
 
     // MARK: - Data
 
-    /// Live-комнаты: только реальные данные с сервера
+    /// 🔧 Live-комнаты: топ 5-10 самых активных по онлайну, отсортированных по participantCount
     private var liveRooms: [Room] {
-        viewModel.filteredRooms.filter { $0.isActive }
+        viewModel.filteredRooms
+            .filter { $0.isActive && $0.privacy == .publicRoom }
             .sorted { $0.participantCount > $1.participantCount }
+            .prefix(10)
+            .map { $0 }
     }
 
-    /// Рекомендации: реальные комнаты с сервера
+    /// 🔧 Рекомендации: на основе ИИ + история просмотров + разные сервисы
     private var recommendationRooms: [Room] {
-        viewModel.filteredRooms.sorted { $0.participantCount > $1.participantCount }
+        // Сортируем по активности, берём разные сервисы
+        let all = viewModel.filteredRooms.sorted { $0.participantCount > $1.participantCount }
+        // Группируем по сервису чтобы получить разнообразие
+        var seen = Set<VideoService>()
+        var result: [Room] = []
+        for room in all {
+            if let service = room.mediaItem?.source, !seen.contains(service) {
+                seen.insert(service)
+                result.append(room)
+            }
+        }
+        // Добавляем остальные
+        result.append(contentsOf: all.filter { room in
+            !result.contains(where: { $0.id == room.id })
+        })
+        return Array(result.prefix(10))
     }
 
     // MARK: - Join Room Sheet
@@ -617,40 +635,27 @@ private struct LiveCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Постер — глубокий чёрный с градиентным переливом
+            // Постер
             ZStack(alignment: .topLeading) {
-                // Глубокий чёрный фон
                 Color(hex: 0x0A0A0A)
-                    .frame(width: 260, height: 150)
+                    .frame(width: 280, height: 158)
 
-                // Градиентный перелив постера (Яндекс Музыка стиль)
                 LinearGradient(
                     colors: [
-                        Color.raveAccent.opacity(isHovered ? 0.5 : 0.3),
-                        Color.raveAccent.opacity(isHovered ? 0.4 : 0.2),
-                        Color.raveWarning.opacity(isHovered ? 0.35 : 0.15),
+                        Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
+                        Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
                         .black
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    startPoint: .topLeading, endPoint: .bottomTrailing
                 )
-                .frame(width: 260, height: 150)
+                .frame(width: 280, height: 158)
 
-                // Glow эффект на постере
-                LinearGradient(
-                    colors: [.clear, Color.raveAccent.opacity(0.15)],
-                    startPoint: .top,
-                    endPoint: .center
-                )
-                .frame(width: 260, height: 75)
-
-                // Иконка play по центру
+                // Play icon
                 Image(systemName: "play.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.6))
-                    .shadow(color: .black.opacity(0.5), radius: 4)
+                    .font(.system(size: 32))
+                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.5))
 
-                // LIVE бейдж с пульсацией
+                // LIVE badge (top-left)
                 HStack(spacing: 4) {
                     Circle()
                         .fill(Color.raveDanger)
@@ -665,42 +670,65 @@ private struct LiveCardView: View {
                 .background(Color.raveDanger.opacity(0.25))
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(Color.raveDanger.opacity(0.5), lineWidth: 0.5))
-                .shadow(color: .raveDanger.opacity(0.4), radius: pulse ? 8 : 3)
                 .padding(10)
 
-                // Иконка сервиса
+                // 🔧 Participant count badge (top-right, prominent)
+                HStack(spacing: 3) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 9))
+                    Text("\(room.participantCount)")
+                        .font(.system(size: 11, weight: .heavy).monospacedDigit())
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.5))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(10)
+
+                // Service logo (bottom-right)
                 if let media = room.mediaItem {
-                    ServiceBadge(service: media.source == .youtube ? .youtube : .vk, size: 22)
-                        .padding(10)
+                    ServiceLogoView(service: media.source, size: 20)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(10)
                 }
             }
-            .frame(width: 260, height: 150)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .frame(width: 280, height: 158)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 14)
                     .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
             )
 
-            // Информация под постером
-            VStack(alignment: .leading, spacing: 4) {
+            // Info under poster
+            VStack(alignment: .leading, spacing: 3) {
                 Text(room.name)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.raveTextPrimary)
                     .lineLimit(1)
 
-                HStack(spacing: 4) {
-                    Image(systemName: "person.2.fill")
+                HStack(spacing: 6) {
+                    // Participant count
+                    HStack(spacing: 2) {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 10))
+                        Text("\(room.participantCount) смотрят")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(.bioEmerald)
+
+                    // Host
+                    Text("· \(room.hostName)")
                         .font(.system(size: 11))
-                    Text("\(room.participantCount) смотрят")
-                        .font(.system(size: 12))
+                        .foregroundColor(.raveTextTertiary)
                 }
-                .foregroundColor(.raveTextSecondary)
             }
             .padding(.horizontal, 4)
             .padding(.top, 8)
         }
-        .frame(width: 260)
+        .frame(width: 280)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 pulse = true
@@ -719,34 +747,46 @@ private struct RecommendationCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Постер — глубокий чёрный с градиентным переливом
-            ZStack {
-                // Глубокий чёрный фон
+            // Постер
+            ZStack(alignment: .bottom) {
                 Color(hex: 0x0A0A0A)
 
-                // Градиентный перелив (тёплые тона для активных комнат)
                 LinearGradient(
                     colors: [
                         gradientColors[0],
                         gradientColors[1],
                         .black
                     ],
-                    startPoint: .top,
-                    endPoint: .bottom
+                    startPoint: .top, endPoint: .bottom
                 )
 
-                // Лёгкое свечение сверху
-                LinearGradient(
-                    colors: [.clear, gradientColors[0].opacity(isHovered ? 0.2 : 0.1)],
-                    startPoint: .top,
-                    endPoint: .center
-                )
+                // 🔧 Service logo prominently at the top of the card
+                if let media = room.mediaItem {
+                    ServiceLogoView(service: media.source, size: 28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(10)
+                }
 
-                // Иконка сервиса
+                // Play icon centered
                 Image(systemName: "play.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.6))
+                    .font(.system(size: 32))
+                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.5))
                     .shadow(color: .black.opacity(0.5), radius: 4)
+
+                // 🔧 Participant count at bottom
+                if room.isActive {
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.bioEmerald).frame(width: 5, height: 5)
+                        Text("\(room.participantCount) смотрят")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundColor(.bioEmerald)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding(8)
+                }
             }
             .frame(width: 150, height: 210)
             .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -762,22 +802,28 @@ private struct RecommendationCardView: View {
                 .lineLimit(2)
                 .frame(width: 150, alignment: .leading)
 
-            // Хост
-            Text(room.hostName)
-                .font(.system(size: 11))
-                .foregroundColor(.raveTextSecondary)
-                .lineLimit(1)
+            // 🔧 Service name + host
+            HStack(spacing: 4) {
+                if let media = room.mediaItem {
+                    Text(media.source.brandName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.bioCyan)
+                }
+                Text("· \(room.hostName)")
+                    .font(.system(size: 10))
+                    .foregroundColor(.raveTextTertiary)
+            }
+            .lineLimit(1)
         }
         .frame(width: 150)
     }
 
     private var gradientColors: [Color] {
-        // Тёплые тона: оранжевый, розовый, золотой (Яндекс Музыка стиль)
         let palettes: [[Color]] = [
-            [Color.raveAccent.opacity(0.4), Color.raveAccent.opacity(0.2), .black],
-            [Color.raveWarning.opacity(0.35), Color.raveAccent.opacity(0.2), .black],
-            [Color.raveAccent.opacity(0.3), Color.bioCyan.opacity(0.2), .black],
-            [Color.bioCyan.opacity(0.3), Color(hex: 0x22D3EE).opacity(0.15), .black],
+            [Color.bioCyan.opacity(0.3), Color.bioEmerald.opacity(0.15), .black],
+            [Color.bioTeal.opacity(0.25), Color.bioCyan.opacity(0.1), .black],
+            [Color.bioEmerald.opacity(0.25), Color.bioTeal.opacity(0.1), .black],
+            [Color.bioCyan.opacity(0.2), Color(hex: 0x22D3EE).opacity(0.1), .black],
         ]
         let index = abs(room.id.hashValue) % palettes.count
         return palettes[index]

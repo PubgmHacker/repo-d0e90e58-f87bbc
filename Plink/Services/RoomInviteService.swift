@@ -79,6 +79,10 @@ struct RoomInvite: Codable, Identifiable, Sendable {
     let fromUsername: String
     let fromAvatarURL: String?
     let timestamp: Date
+    /// 🔧 NEW: What they're watching (media title)
+    let mediaTitle: String?
+    /// 🔧 NEW: Which service the content is from
+    let service: VideoService?
 
     init(id: String = UUID().uuidString,
          roomID: String,
@@ -87,7 +91,9 @@ struct RoomInvite: Codable, Identifiable, Sendable {
          fromUserID: String,
          fromUsername: String,
          fromAvatarURL: String? = nil,
-         timestamp: Date = Date()) {
+         timestamp: Date = Date(),
+         mediaTitle: String? = nil,
+         service: VideoService? = nil) {
         self.id = id
         self.roomID = roomID
         self.roomCode = roomCode
@@ -96,5 +102,40 @@ struct RoomInvite: Codable, Identifiable, Sendable {
         self.fromUsername = fromUsername
         self.fromAvatarURL = fromAvatarURL
         self.timestamp = timestamp
+        self.mediaTitle = mediaTitle
+        self.service = service
+    }
+
+    // 🔧 Custom Codable to handle VideoService enum (rawValue string)
+    enum CodingKeys: String, CodingKey {
+        case id, roomID, roomCode, roomName, fromUserID, fromUsername, fromAvatarURL, timestamp, mediaTitle, service
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        roomID = try c.decode(String.self, forKey: .roomID)
+        roomCode = try c.decode(String.self, forKey: .roomCode)
+        roomName = try c.decode(String.self, forKey: .roomName)
+        fromUserID = try c.decode(String.self, forKey: .fromUserID)
+        fromUsername = try c.decode(String.self, forKey: .fromUsername)
+        fromAvatarURL = try c.decodeIfPresent(String.self, forKey: .fromAvatarURL)
+        timestamp = try c.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+        mediaTitle = try c.decodeIfPresent(String.self, forKey: .mediaTitle)
+        service = try c.decodeIfPresent(VideoService.self, forKey: .service)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(roomID, forKey: .roomID)
+        try c.encode(roomCode, forKey: .roomCode)
+        try c.encode(roomName, forKey: .roomName)
+        try c.encode(fromUserID, forKey: .fromUserID)
+        try c.encode(fromUsername, forKey: .fromUsername)
+        try c.encodeIfPresent(fromAvatarURL, forKey: .fromAvatarURL)
+        try c.encode(timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(mediaTitle, forKey: .mediaTitle)
+        try c.encodeIfPresent(service, forKey: .service)
     }
 }

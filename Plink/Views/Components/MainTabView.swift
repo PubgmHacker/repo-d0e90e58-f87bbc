@@ -114,9 +114,9 @@ struct RoomsTabContent: View {
         var icon: String {
             switch self {
             case .discover: return "globe"
-            case .mine: return "clock.arrow.circlepath"
-            case .join: return "arrow.right.circle"
-            case .requests: return "envelope.badge"
+            case .mine: return "rectangle.stack.fill"
+            case .join: return "door.right.hand.open"
+            case .requests: return "bell.badge.fill"
             }
         }
     }
@@ -304,33 +304,118 @@ struct RoomsTabContent: View {
 
     @ViewBuilder
     private func inviteCard(_ invite: RoomInvite) -> some View {
-        HStack(spacing: 14) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(Color.bioCyan.opacity(0.15))
-                    .frame(width: 44, height: 44)
-                Text(invite.fromUsername.prefix(1).uppercased())
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.bioCyan)
-            }
+        VStack(spacing: 0) {
+            // ── Top: Inviter info ──
+            HStack(spacing: 12) {
+                // Inviter avatar
+                ZStack {
+                    Circle()
+                        .fill(Color.bioCyan.opacity(0.15))
+                        .frame(width: 40, height: 40)
+                    Text(invite.fromUsername.prefix(1).uppercased())
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.bioCyan)
+                }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(invite.fromUsername)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
-                Text("приглашает в «\(invite.roomName)»")
-                    .font(.system(size: 13))
-                    .foregroundColor(.raveTextSecondary)
-                    .lineLimit(1)
-                Text("Код: \(invite.roomCode)")
-                    .font(.system(size: 11, design: .monospaced))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(invite.fromUsername)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.raveTextPrimary)
+                    Text("приглашает вас в комнату")
+                        .font(.system(size: 11))
+                        .foregroundColor(.raveTextSecondary)
+                }
+
+                Spacer()
+
+                // Time
+                Text(invite.timestamp, style: .relative)
+                    .font(.system(size: 10))
                     .foregroundColor(.raveTextTertiary)
             }
 
-            Spacer()
+            Divider()
+                .background(Color.white.opacity(0.06))
+                .padding(.vertical, 10)
 
-            VStack(spacing: 8) {
+            // ── Middle: Room info with service logo + media title ──
+            HStack(spacing: 12) {
+                // Service logo
+                if let service = invite.service {
+                    ServiceLogoView(service: service, size: 36)
+                        .frame(width: 44, height: 44)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.bioCyan.opacity(0.1))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.bioCyan)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    // Room name
+                    Text(invite.roomName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.raveTextPrimary)
+                        .lineLimit(2)
+
+                    // Media title (what they're watching)
+                    if let mediaTitle = invite.mediaTitle, !mediaTitle.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "film")
+                                .font(.system(size: 9))
+                            Text(mediaTitle)
+                                .font(.system(size: 11))
+                                .foregroundColor(.raveTextSecondary)
+                        }
+                        .lineLimit(1)
+                    }
+
+                    // Service name + code
+                    HStack(spacing: 6) {
+                        if let service = invite.service {
+                            Text(service.brandName)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.bioCyan)
+                        }
+                        Text("· Код: \(invite.roomCode)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.raveTextTertiary)
+                    }
+                }
+
+                Spacer()
+            }
+
+            // ── Bottom: Accept / Decline buttons ──
+            HStack(spacing: 12) {
+                Button {
+                    HapticManager.impact(.light)
+                    inviteService.declineInvite(invite)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Отклонить")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.raveDanger)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.raveDanger.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.raveDanger.opacity(0.2), lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
+
                 Button {
                     HapticManager.impact(.medium)
                     Task {
@@ -339,27 +424,34 @@ struct RoomsTabContent: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.bioEmerald)
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Принять")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.raveGradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-
-                Button {
-                    HapticManager.impact(.light)
-                    inviteService.declineInvite(invite)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.raveDanger)
-                }
+                .buttonStyle(.plain)
             }
+            .padding(.top, 10)
         }
         .padding(14)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.bioCyan.opacity(0.15), Color.white.opacity(0.04)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
         )
     }
 

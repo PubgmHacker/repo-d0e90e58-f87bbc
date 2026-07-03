@@ -51,6 +51,27 @@ final class APIClient: ObservableObject, @unchecked Sendable {
 
     // MARK: - Generic Request
 
+    /// 🔧 FIX AUTH BUG: Public auth endpoints must NOT send a stale Authorization header.
+    /// Some servers (and reverse proxies) reject requests carrying an expired token even
+    /// on public routes like /auth/signin, returning 401 with "session expired" — which
+    /// blocks the login flow entirely.
+    ///
+    /// Returns true for paths that should never carry the Authorization header.
+    private static func isPublicAuthEndpoint(_ path: String) -> Bool {
+        let publicPaths = [
+            "auth/signin",
+            "auth/signup",
+            "auth/refresh",
+            "auth/fcm-token",   // FCM registration happens after signin but token may be in-flight
+            "auth/guest",
+            "auth/google",
+            "auth/apple",
+            "auth/vk",
+            "auth/yandex",
+        ]
+        return publicPaths.contains(where: { path.hasPrefix($0) })
+    }
+
     func request<T: Decodable>(
         _ path: String,
         method: HTTPMethod = .get,
@@ -70,7 +91,8 @@ final class APIClient: ObservableObject, @unchecked Sendable {
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if let token = authToken {
+        // 🔧 FIX AUTH BUG: Don't attach stale token to public auth endpoints
+        if let token = authToken, !Self.isPublicAuthEndpoint(path) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -142,7 +164,8 @@ final class APIClient: ObservableObject, @unchecked Sendable {
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if let token = authToken {
+        // 🔧 FIX AUTH BUG: Don't attach stale token to public auth endpoints
+        if let token = authToken, !Self.isPublicAuthEndpoint(path) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 

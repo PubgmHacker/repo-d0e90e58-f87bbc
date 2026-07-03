@@ -136,18 +136,33 @@ final class AuthService: AuthServiceProtocol {
 
     /// 🔧 FIX C3: Actually refreshes the JWT via /auth/refresh when within 5 min of expiry.
     /// Falls back to the existing token if no refresh token is available.
+    ///
+    /// 🔧 FIX AUTH BUG: If refresh fails (e.g. /auth/refresh endpoint not implemented
+    /// on server yet, returns 404), we NO LONGER force signOut. Instead we return the
+    /// existing token and let the next API call decide. This prevents the cold-launch
+    /// signOut cascade that locked users out of the app.
     func getFreshToken() async -> String? {
         guard let token = authToken else { return nil }
         let now = Date().timeIntervalSince1970
 
         // Refresh if within 5 min of expiry (or past it)
         if now >= tokenExpiry - 300 {
-            return await refreshJWT() ?? token
+            // Try refresh, but fall back to existing token if it fails.
+            // Only signOut if we get an explicit 401 from the refresh endpoint
+            // (which means the refresh token itself is invalid).
+            if let refreshed = await refreshJWT() {
+                return refreshed
+            }
+            // Return existing token — the next request will 401 if truly expired,
+            // and the caller can handle that case explicitly.
+            return token
         }
         return token
     }
 
     /// 🔧 FIX C3: Real refresh — POST /auth/refresh with the refresh token.
+    /// 🔧 FIX AUTH BUG: Only signs out on explicit 401 (refresh token invalid).
+    /// Other errors (404 endpoint missing, network error) just return nil.
     private func refreshJWT() async -> String? {
         guard let refreshToken else { return nil }
 
@@ -161,10 +176,15 @@ final class AuthService: AuthServiceProtocol {
             let expiry = Date().addingTimeInterval(86400).timeIntervalSince1970
             await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken ?? refreshToken)
             return response.token
-        } catch {
-            Logger.api.error("Token refresh failed: \(error.localizedDescription)")
-            // If refresh fails (refresh token expired), force sign-out
+        } catch APIError.unauthorized {
+            // Refresh token itself is invalid/expired — sign out.
+            Logger.api.error("Refresh token invalid — signing out")
             try? await signOut()
+            return nil
+        } catch {
+            // Network error, 404 (endpoint not implemented), etc.
+            // Don't signOut — just return nil and let caller use existing token.
+            Logger.api.error("Token refresh failed (non-auth): \(error.localizedDescription)")
             return nil
         }
     }

@@ -15,6 +15,8 @@ import profileRoutes from './routes/profile.js';
 
 const fastify = Fastify({ logger: { transport: { target: 'pino-pretty' } } });
 
+fastify.decorate('prisma', prisma);
+
 // ── Plugins ──
 await fastify.register(cors, { origin: config.CORS_ORIGIN, credentials: true });
 await fastify.register(jwt, { secret: config.JWT_SECRET });

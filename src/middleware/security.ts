@@ -1,5 +1,5 @@
 // src/middleware/security.ts — Pack 4: helmet-style security headers + 2FA
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../config/db.js';
 
 // ═══════════════════════════════════════════════════════════════════════

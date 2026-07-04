@@ -3,7 +3,7 @@
 import { prisma } from '../config/db.js';
 import { revokeAllUserTokens } from '../utils/tokens.js';
 import { logAudit } from '../utils/audit.js';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 export default async function gdprRoutes(fastify) {
   

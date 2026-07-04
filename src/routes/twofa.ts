@@ -9,7 +9,7 @@ import {
 } from '../middleware/security.js';
 import { logAudit } from '../utils/audit.js';
 import { issueTokenPair } from '../utils/tokens.js';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 export default async function twofaRoutes(fastify) {
   

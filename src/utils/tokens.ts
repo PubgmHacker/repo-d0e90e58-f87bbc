@@ -1,5 +1,5 @@
 // src/utils/tokens.ts — Pack 1.1: настраиваемый TTL через env
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../config/db.js';
 import { config } from '../config/index.js';

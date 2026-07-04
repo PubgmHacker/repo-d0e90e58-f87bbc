@@ -1,5 +1,5 @@
 // src/routes/auth.ts — Pack 1.1: правильные rate limits
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../config/db.js';
 import { issueTokenPair, verifyRefreshToken, revokeAllUserTokens } from '../utils/tokens.js';
 import { logAudit, AuditActions } from '../utils/audit.js';

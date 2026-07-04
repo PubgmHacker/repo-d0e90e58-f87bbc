@@ -1,30 +1,20 @@
-/**
- * Plink Backend — Room Routes (обновлённые)
- * Этап 1: Интеграция хеширования паролей (3.5)
- * 
- * Копировать в backend: src/routes/rooms.ts
- * 
- * Ключевые изменения (помечены 🔧):
- * 1. Пароль хешируется через bcrypt при создании комнаты
- * 2. Пароль проверяется через bcrypt.compare при входе
- * 3. Пароль НЕ возвращается в ответе API (никогда)
- */
-
+// src/routes/rooms.ts — с Redis кэшем
 import { hashRoomPassword, verifyRoomPassword, requireHost } from '../middleware/security.js';
+import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
+import { logAudit, AuditActions } from '../utils/audit.js';
+
+const ROOMS_CACHE_KEY = 'rooms:public:50';
+const ROOMS_CACHE_TTL = 30; // 30 sec
 
 export default async function roomRoutes(fastify, _options) {
     const { prisma } = fastify;
 
-    // ═══════════════════════════════════════════════════════════════════
     // POST /api/rooms — Создание комнаты
-    // ═══════════════════════════════════════════════════════════════════
-
     fastify.post('/rooms', {
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
         const { name, maxParticipants, mediaItem, privacy, password } = request.body;
 
-        // 🔧 FIX 3.5: Hash password if provided
         const hashedPassword = password 
             ? await hashRoomPassword(password) 
             : null;
@@ -38,22 +28,27 @@ export default async function roomRoutes(fastify, _options) {
                 maxParticipants: maxParticipants || 10,
                 mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
                 privacy: privacy || 'public',
-                // 🔧 Hashed password stored, plaintext NEVER
                 password: hashedPassword,
                 hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
                 isActive: true,
             }
         });
 
-        // 🔧 Never return password (even hashed) in API response
+        // Invalidate cache
+        await cacheDel(ROOMS_CACHE_KEY);
+
+        await logAudit({
+            userId: request.user.id,
+            action: AuditActions.ROOM_CREATE,
+            ip: request.ip,
+            metadata: { roomId: room.id, roomCode: room.code },
+        });
+
         const { password: _, ...roomWithoutPassword } = room;
         reply.send(roomWithoutPassword);
     });
 
-    // ═══════════════════════════════════════════════════════════════════
-    // POST /api/rooms/join — Вход в комнату (с проверкой пароля)
-    // ═══════════════════════════════════════════════════════════════════
-
+    // POST /api/rooms/join — Вход в комнату
     fastify.post('/rooms/join', {
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
@@ -63,23 +58,14 @@ export default async function roomRoutes(fastify, _options) {
             where: { code: code.toUpperCase(), isActive: true }
         });
 
-        if (!room) {
-            return reply.status(404).send({ error: 'Комната не найдена' });
-        }
+        if (!room) return reply.status(404).send({ error: 'Комната не найдена' });
 
-        // 🔧 FIX 3.5: Verify password if room has one
         if (room.password) {
-            if (!password) {
-                return reply.status(401).send({ error: 'Требуется пароль' });
-            }
-            
+            if (!password) return reply.status(401).send({ error: 'Требуется пароль' });
             const isValid = await verifyRoomPassword(password, room.password);
-            if (!isValid) {
-                return reply.status(401).send({ error: 'Неверный пароль' });
-            }
+            if (!isValid) return reply.status(401).send({ error: 'Неверный пароль' });
         }
 
-        // Check if full
         const participantCount = await prisma.roomParticipant.count({
             where: { roomID: room.id }
         });
@@ -87,25 +73,24 @@ export default async function roomRoutes(fastify, _options) {
             return reply.status(409).send({ error: 'Комната заполнена' });
         }
 
-        // Add participant
         await prisma.roomParticipant.create({
-            data: {
-                roomID: room.id,
-                userID: request.user.id,
-            }
+            data: { roomID: room.id, userID: request.user.id }
         });
 
-        // 🔧 Never return password
+        await logAudit({
+            userId: request.user.id,
+            action: AuditActions.ROOM_JOIN,
+            ip: request.ip,
+            metadata: { roomId: room.id, roomCode: room.code },
+        });
+
         const { password: _, ...roomWithoutPassword } = room;
         reply.send(roomWithoutPassword);
     });
 
-    // ═══════════════════════════════════════════════════════════════════
-    // POST /api/rooms/:id/playback — Обновление состояния плеера (ТОЛЬКО ХОСТ)
-    // ═══════════════════════════════════════════════════════════════════
-
+    // POST /api/rooms/:id/playback
     fastify.post('/rooms/:id/playback', {
-        preHandler: [fastify.authenticate, requireHost(prisma)]  // 🔧 FIX 3.1
+        preHandler: [fastify.authenticate, requireHost(prisma)]
     }, async (request, reply) => {
         const { id } = request.params;
         const { time, isPlaying } = request.body;
@@ -116,42 +101,42 @@ export default async function roomRoutes(fastify, _options) {
             create: { roomID: id, currentTime: time, isPlaying },
         });
 
+        await logAudit({
+            userId: request.user.id,
+            action: AuditActions.PLAYBACK_CONTROL,
+            ip: request.ip,
+            metadata: { roomId: id, isPlaying, time },
+        });
+
         reply.send({ success: true });
     });
 
-    // ═══════════════════════════════════════════════════════════════════
-    // GET /api/rooms — Список публичных комнат (без приватных!)
-    // ═══════════════════════════════════════════════════════════════════
-
+    // GET /api/rooms — Список публичных комнат (С КЭШЕМ)
     fastify.get('/rooms', {
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
-        // 🔧 Only return public rooms — never private/link-only
+        // Try cache first
+        const cached = await cacheGet<any[]>(ROOMS_CACHE_KEY);
+        if (cached) {
+            return reply.send(cached);
+        }
+
         const rooms = await prisma.room.findMany({
-            where: {
-                isActive: true,
-                privacy: 'public',  // ← ONLY public rooms in discovery
-            },
-            include: {
-                _count: {
-                    select: { participants: true }
-                }
-            },
-            orderBy: {
-                createdAt: 'desc'
-            },
+            where: { isActive: true, privacy: 'public' },
+            include: { _count: { select: { participants: true } } },
+            orderBy: { createdAt: 'desc' },
             take: 50,
         });
 
-        // 🔧 Strip passwords from all responses
         const safeRooms = rooms.map(({ password, ...r }) => r);
+        
+        // Save to cache
+        await cacheSet(ROOMS_CACHE_KEY, safeRooms, ROOMS_CACHE_TTL);
+        
         reply.send(safeRooms);
     });
 
-    // ═══════════════════════════════════════════════════════════════════
     // GET /api/rooms/mine — Мои комнаты
-    // ═══════════════════════════════════════════════════════════════════
-
     fastify.get('/rooms/mine', {
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
@@ -162,19 +147,14 @@ export default async function roomRoutes(fastify, _options) {
                     { participants: { some: { userID: request.user.id } } }
                 ]
             },
-            include: {
-                _count: { select: { participants: true } }
-            },
+            include: { _count: { select: { participants: true } } },
             orderBy: { createdAt: 'desc' },
         });
 
-        // 🔧 Strip passwords
         const safeRooms = rooms.map(({ password, ...r }) => r);
         reply.send(safeRooms);
     });
 }
-
-// ── Helpers ──
 
 function generateRoomCode(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

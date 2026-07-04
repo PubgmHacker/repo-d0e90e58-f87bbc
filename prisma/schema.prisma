@@ -1,3 +1,6 @@
+// prisma/schema.prisma — ОБНОВЛЁННАЯ СХЕМА
+// Добавлены модели RefreshToken и AuditLog
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -44,6 +47,8 @@ model User {
   blockedUsers     UserBlock[]       @relation("Blocker")
   blockedBy        UserBlock[]       @relation("Blocked")
   reports          Report[]          @relation("Reporter")
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
 }
 
 model Room {
@@ -177,4 +182,35 @@ model Report {
   reportedRoom Room? @relation("ReportedRoom", fields: [roomID], references: [id])
   reason      String
   createdAt   DateTime @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// НОВЫЕ МОДЕЛИ — Pack 1: Security
+// ═══════════════════════════════════════════════════════════════════════
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  ip        String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }

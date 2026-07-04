@@ -11,7 +11,7 @@ final class YouTubeSearchService {
     private let session: URLSession
     private let decoder: JSONDecoder
 
-    init(apiBaseURL: String = "https://raveclone.app/api") {
+    init(apiBaseURL: String = "https://plink-backend-production-ef31.up.railway.app/api") {
         self.apiBaseURL = URL(string: apiBaseURL)!
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 25

@@ -1,6 +1,4 @@
-// prisma/schema.prisma — ОБНОВЛЁННАЯ СХЕМА
-// Добавлены модели RefreshToken и AuditLog
-
+// prisma/schema.prisma — Pack 4: с 2FA полями
 generator client {
   provider = "prisma-client-js"
 }
@@ -31,6 +29,11 @@ model User {
   fcmToken     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Pack 4: 2FA
+  twofaSecret      String?
+  twofaEnabled     Boolean  @default(false)
+  twofaBackupCodes String?
 
   hostedRooms      Room[]            @relation("HostRooms")
   participations   RoomParticipant[]
@@ -183,10 +186,6 @@ model Report {
   reason      String
   createdAt   DateTime @default(now())
 }
-
-// ═══════════════════════════════════════════════════════════════════════
-// НОВЫЕ МОДЕЛИ — Pack 1: Security
-// ═══════════════════════════════════════════════════════════════════════
 
 model RefreshToken {
   id        String   @id @default(uuid())

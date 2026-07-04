@@ -118,10 +118,10 @@ async function checkDatabase(): Promise<boolean> {
   }
 }
 
-fastify.setErrorHandler((error, request, reply) => {
+fastify.setErrorHandler((error: any, request: any, reply: any) => {
   if (error.statusCode >= 500) {
     Sentry.captureException(error);
-    alertCritical('Server error', error);
+    alertCritical('Server error', error as Error);
   }
   reply.status(error.statusCode || 500).send({
     error: error.message || 'Internal Server Error',

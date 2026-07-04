@@ -1,13 +1,26 @@
 // src/services/telemetry.ts — Pack 5: OpenTelemetry tracing
 import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
-import { registerOTel } from '@opentelemetry/auto-instrumentations-node';
+// registerOTel available in @opentelemetry/auto-instrumentations-node >=0.40
+// Use dynamic import to avoid hard dependency at type-check time.
+type RegisterOTelFn = (serviceName: string) => void;
+let _registerOTel: RegisterOTelFn | null = null;
+async function loadRegisterOTel(): Promise<RegisterOTelFn | null> {
+  if (_registerOTel) return _registerOTel;
+  try {
+    const mod: any = await import('@opentelemetry/auto-instrumentations-node');
+    _registerOTel = (typeof mod.registerOTel === 'function') ? mod.registerOTel : null;
+  } catch {
+    _registerOTel = null;
+  }
+  return _registerOTel;
+}
 
 const SERVICE_NAME = 'plink-backend';
 const SERVICE_VERSION = '1.5.0';
 
 let isInitialized = false;
 
-export function initTelemetry(endpoint?: string) {
+export async function initTelemetry(endpoint?: string) {
   if (isInitialized) return;
   if (!endpoint) {
     console.log('[Telemetry] No OTEL endpoint — skipping init');
@@ -15,11 +28,15 @@ export function initTelemetry(endpoint?: string) {
   }
   
   try {
-    registerOTel({
-      serviceName: SERVICE_NAME,
-      serviceVersion: SERVICE_VERSION,
-      otelExporterOtlpEndpoint: endpoint,
-    });
+    const registerOTel = await loadRegisterOTel();
+    if (registerOTel) {
+      // registerOTel expects the instrumentation config object
+      (registerOTel as any)({
+        serviceName: SERVICE_NAME,
+        serviceVersion: SERVICE_VERSION,
+        otelExporterOtlpEndpoint: endpoint,
+      });
+    }
     isInitialized = true;
     console.log('✅ OpenTelemetry initialized');
   } catch (e: any) {

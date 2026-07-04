@@ -12,9 +12,11 @@ import roomRoutes from './routes/rooms.js';
 import friendRoutes from './routes/friends.js';
 import messageRoutes from './routes/messages.js';
 import profileRoutes from './routes/profile.js';
+import mediaRoutes from './routes/media.js';
 
 const fastify = Fastify({ logger: { transport: { target: 'pino-pretty' } } });
 
+// ── Decorate prisma ──
 fastify.decorate('prisma', prisma);
 
 // ── Plugins ──
@@ -32,6 +34,7 @@ await fastify.register(roomRoutes, { prefix: '/api' });
 await fastify.register(friendRoutes, { prefix: '/api' });
 await fastify.register(messageRoutes, { prefix: '/api' });
 await fastify.register(profileRoutes, { prefix: '/api' });
+await fastify.register(mediaRoutes, { prefix: '/api' });
 
 // ── WebSocket ──
 setupWebSocketHandler(fastify.websocketServer, prisma, fastify);

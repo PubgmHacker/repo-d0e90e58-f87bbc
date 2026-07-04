@@ -1,4 +1,4 @@
-// src/index.ts — Pack 4: финальная версия с 2FA, presence, metrics, OpenAPI
+// src/index.ts — Pack 5: финальная версия со всеми routes
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -12,6 +12,7 @@ import { authenticate } from './middleware/auth.js';
 import { securityHeaders } from './middleware/security.js';
 import { setupWebSocketHandler } from './websocket/ws-handler.js';
 import { register } from './services/metrics.js';
+import { initTelemetry } from './services/telemetry.js';
 import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
 import friendRoutes from './routes/friends.js';
@@ -19,8 +20,14 @@ import messageRoutes from './routes/messages.js';
 import profileRoutes from './routes/profile.js';
 import mediaRoutes from './routes/media.js';
 import billingRoutes from './routes/billing.js';
-import twofaRoutes from './routes/twofa.js';  // ← Pack 4
+import twofaRoutes from './routes/twofa.js';
+import referralRoutes from './routes/referral.js';        // ← Pack 5
+import gdprRoutes from './routes/gdpr.js';                // ← Pack 5
+import featureFlagRoutes from './routes/featureFlags.js'; // ← Pack 5
 import { alertCritical } from './utils/alerting.js';
+
+// Init telemetry (if OTEL_ENDPOINT set)
+initTelemetry(process.env.OTEL_ENDPOINT);
 
 if (config.SENTRY_DSN) {
   Sentry.init({
@@ -41,7 +48,6 @@ const fastify = Fastify({
 
 fastify.decorate('prisma', prisma);
 
-// ── Plugins ──
 await fastify.register(cors, { 
   origin: config.CORS_ORIGIN, 
   credentials: true,
@@ -50,11 +56,7 @@ await fastify.register(cors, {
 });
 await fastify.register(jwt, { 
   secret: config.JWT_SECRET,
-  sign: { 
-    algorithm: 'HS256',
-    iss: 'plink',
-    aud: 'plink-ios',
-  },
+  sign: { algorithm: 'HS256', iss: 'plink', aud: 'plink-ios' },
 });
 await fastify.register(rateLimit, {
   global: false,
@@ -66,11 +68,8 @@ await fastify.register(rateLimit, {
 await fastify.register(websocket, { options: { maxPayload: 1048576 } });
 
 fastify.decorate('authenticate', authenticate);
-
-// ── Security headers (helmet-style) ──
 fastify.addHook('onRequest', securityHeaders);
 
-// ── Routes ──
 await fastify.register(authRoutes, { prefix: '/api' });
 await fastify.register(roomRoutes, { prefix: '/api' });
 await fastify.register(friendRoutes, { prefix: '/api' });
@@ -78,11 +77,13 @@ await fastify.register(messageRoutes, { prefix: '/api' });
 await fastify.register(profileRoutes, { prefix: '/api' });
 await fastify.register(mediaRoutes, { prefix: '/api' });
 await fastify.register(billingRoutes, { prefix: '/api' });
-await fastify.register(twofaRoutes, { prefix: '/api' });  // ← Pack 4
+await fastify.register(twofaRoutes, { prefix: '/api' });
+await fastify.register(referralRoutes, { prefix: '/api' });         // ← Pack 5
+await fastify.register(gdprRoutes, { prefix: '/api' });             // ← Pack 5
+await fastify.register(featureFlagRoutes, { prefix: '/api' });      // ← Pack 5
 
 setupWebSocketHandler(fastify.websocketServer, prisma, fastify);
 
-// ── Health check ──
 fastify.get('/health', async () => {
   const db = await checkDatabase();
   const redis = await checkRedis();
@@ -90,19 +91,19 @@ fastify.get('/health', async () => {
     status: db ? 'ok' : 'degraded',
     timestamp: Date.now(),
     uptime: process.uptime(),
-    version: '1.4.0',
+    version: '1.5.0',
     environment: config.NODE_ENV,
     services: {
       database: db ? 'up' : 'down',
       redis: redis ? 'up' : (config.REDIS_URL ? 'down' : 'not_configured'),
       yt_dlp: 'available',
       sentry: config.SENTRY_DSN ? 'configured' : 'not_configured',
+      telemetry: process.env.OTEL_ENDPOINT ? 'configured' : 'not_configured',
     },
     memory: process.memoryUsage(),
   };
 });
 
-// ── Metrics (Prometheus) ──
 fastify.get('/metrics', async (req, reply) => {
   reply.type('text/plain').send(await register.metrics());
 });
@@ -116,7 +117,6 @@ async function checkDatabase(): Promise<boolean> {
   }
 }
 
-// ── Error handler ──
 fastify.setErrorHandler((error, request, reply) => {
   if (error.statusCode >= 500) {
     Sentry.captureException(error);
@@ -129,13 +129,15 @@ fastify.setErrorHandler((error, request, reply) => {
   });
 });
 
-// ── Start ──
 const start = async () => {
   try {
     await fastify.listen({ port: config.PORT, host: '0.0.0.0' });
-    console.log(`🚀 Plink backend v1.4.0 on port ${config.PORT} [${config.NODE_ENV}]`);
+    console.log(`🚀 Plink backend v1.5.0 on port ${config.PORT} [${config.NODE_ENV}]`);
     console.log(`📊 Metrics: /metrics`);
     console.log(`📖 OpenAPI: src/docs/openapi.yaml`);
+    console.log(`🎯 Feature flags: /api/feature-flags`);
+    console.log(`👤 GDPR: /api/gdpr/export | /api/gdpr/summary | DELETE /api/gdpr/account`);
+    console.log(`🎁 Referral: /api/referral/code | /api/referral/apply | /api/referral/stats`);
   } catch (err) {
     Sentry.captureException(err);
     await alertCritical('Backend failed to start', err as Error);

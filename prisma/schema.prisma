@@ -1,4 +1,4 @@
-// prisma/schema.prisma — Pack 4: с 2FA полями
+// prisma/schema.prisma — Pack 5: с Referral, FeatureFlag, AdBreak моделями
 generator client {
   provider = "prisma-client-js"
 }
@@ -30,10 +30,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Pack 4: 2FA
   twofaSecret      String?
   twofaEnabled     Boolean  @default(false)
   twofaBackupCodes String?
+
+  referralCode String?
 
   hostedRooms      Room[]            @relation("HostRooms")
   participations   RoomParticipant[]
@@ -52,6 +53,8 @@ model User {
   reports          Report[]          @relation("Reporter")
   refreshTokens    RefreshToken[]
   auditLogs        AuditLog[]
+  referralsMade    Referral[] @relation("Referrer")
+  referralReceived Referral?  @relation("Referred")
 }
 
 model Room {
@@ -74,6 +77,7 @@ model Room {
   playbackStates PlaybackState[]
   watchHistory   WatchHistory[]
   reports        Report[]          @relation("ReportedRoom")
+  adBreaks       AdBreak[]
 }
 
 model RoomParticipant {
@@ -212,4 +216,38 @@ model AuditLog {
 
   @@index([userId, createdAt])
   @@index([action, createdAt])
+}
+
+// Pack 5: НОВЫЕ МОДЕЛИ
+
+model Referral {
+  id          String   @id @default(uuid())
+  referrerId  String
+  referrer    User     @relation("Referrer", fields: [referrerId], references: [id])
+  referredId  String   @unique
+  referred    User     @relation("Referred", fields: [referredId], references: [id])
+  status      String   @default("completed")
+  rewardDays  Int      @default(7)
+  createdAt   DateTime @default(now())
+
+  @@index([referrerId])
+}
+
+model FeatureFlag {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model AdBreak {
+  id          String   @id @default(uuid())
+  roomID      String
+  room        Room     @relation(fields: [roomID], references: [id], onDelete: Cascade)
+  startTime   Float
+  endTime     Float
+  adType      String   @default("preroll")
+  createdAt   DateTime @default(now())
+
+  @@index([roomID])
 }

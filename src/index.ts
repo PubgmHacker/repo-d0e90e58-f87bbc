@@ -1,4 +1,4 @@
-// src/index.ts — Pack 5: финальная версия со всеми routes
+// src/index.ts — Pack 6: добавлена регистрация AI routes
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -21,12 +21,12 @@ import profileRoutes from './routes/profile.js';
 import mediaRoutes from './routes/media.js';
 import billingRoutes from './routes/billing.js';
 import twofaRoutes from './routes/twofa.js';
-import referralRoutes from './routes/referral.js';        // ← Pack 5
-import gdprRoutes from './routes/gdpr.js';                // ← Pack 5
-import featureFlagRoutes from './routes/featureFlags.js'; // ← Pack 5
+import referralRoutes from './routes/referral.js';
+import gdprRoutes from './routes/gdpr.js';
+import featureFlagRoutes from './routes/featureFlags.js';
+import aiRoutes from './routes/ai.js';  // ← Pack 6
 import { alertCritical } from './utils/alerting.js';
 
-// Init telemetry (if OTEL_ENDPOINT set)
 initTelemetry(process.env.OTEL_ENDPOINT);
 
 if (config.SENTRY_DSN) {
@@ -78,9 +78,10 @@ await fastify.register(profileRoutes, { prefix: '/api' });
 await fastify.register(mediaRoutes, { prefix: '/api' });
 await fastify.register(billingRoutes, { prefix: '/api' });
 await fastify.register(twofaRoutes, { prefix: '/api' });
-await fastify.register(referralRoutes, { prefix: '/api' });         // ← Pack 5
-await fastify.register(gdprRoutes, { prefix: '/api' });             // ← Pack 5
-await fastify.register(featureFlagRoutes, { prefix: '/api' });      // ← Pack 5
+await fastify.register(referralRoutes, { prefix: '/api' });
+await fastify.register(gdprRoutes, { prefix: '/api' });
+await fastify.register(featureFlagRoutes, { prefix: '/api' });
+await fastify.register(aiRoutes, { prefix: '/api' });  // ← Pack 6
 
 setupWebSocketHandler(fastify.websocketServer, prisma, fastify);
 
@@ -91,14 +92,14 @@ fastify.get('/health', async () => {
     status: db ? 'ok' : 'degraded',
     timestamp: Date.now(),
     uptime: process.uptime(),
-    version: '1.5.0',
+    version: '1.6.0',
     environment: config.NODE_ENV,
     services: {
       database: db ? 'up' : 'down',
       redis: redis ? 'up' : (config.REDIS_URL ? 'down' : 'not_configured'),
       yt_dlp: 'available',
       sentry: config.SENTRY_DSN ? 'configured' : 'not_configured',
-      telemetry: process.env.OTEL_ENDPOINT ? 'configured' : 'not_configured',
+      ai: process.env.OPENROUTER_API_KEY ? 'configured' : 'not_configured',
     },
     memory: process.memoryUsage(),
   };
@@ -132,12 +133,8 @@ fastify.setErrorHandler((error, request, reply) => {
 const start = async () => {
   try {
     await fastify.listen({ port: config.PORT, host: '0.0.0.0' });
-    console.log(`🚀 Plink backend v1.5.0 on port ${config.PORT} [${config.NODE_ENV}]`);
-    console.log(`📊 Metrics: /metrics`);
-    console.log(`📖 OpenAPI: src/docs/openapi.yaml`);
-    console.log(`🎯 Feature flags: /api/feature-flags`);
-    console.log(`👤 GDPR: /api/gdpr/export | /api/gdpr/summary | DELETE /api/gdpr/account`);
-    console.log(`🎁 Referral: /api/referral/code | /api/referral/apply | /api/referral/stats`);
+    console.log(`🚀 Plink backend v1.6.0 on port ${config.PORT} [${config.NODE_ENV}]`);
+    console.log(`🤖 AI: /api/ai/chat | /api/ai/recommend`);
   } catch (err) {
     Sentry.captureException(err);
     await alertCritical('Backend failed to start', err as Error);

@@ -331,6 +331,44 @@ struct WebVideoView: UIViewRepresentable {
         // 🔧 Register webView so SyncEngine can send play/pause/seek via JS.
         WebViewControl.shared.register(webView)
 
+        // 🔧 v9.3 (July 2026): inject CSS that forces Rutube/VK embed players
+        // to fill the entire WebView in landscape mode. Without this, the
+        // embed page renders at 16:9 aspect ratio centered in a larger
+        // container, leaving black bars in landscape fullscreen.
+        //
+        // User reported: 'rutube смог запустить но через их контроллеры, в
+        // горизонтальное положение экран не переводит - не поворачивается'
+        //
+        // The device DOES rotate (OrientationManager.lockToLandscape works),
+        // but Rutube's embed page itself doesn't expand the video to fill
+        // the landscape viewport. This CSS injection makes:
+        //   - body, html, iframe: 100% width + height, no margins
+        //   - common player container IDs/classes: also 100%
+        //   - object-fit: contain so video keeps aspect ratio
+        let fullscreenCssScript = WKUserScript(
+            source: """
+            (function() {
+                var style = document.createElement('style');
+                style.innerHTML = `
+                    html, body { width: 100% !important; height: 100% !important;
+                                 margin: 0 !important; padding: 0 !important;
+                                 background: #000 !important; overflow: hidden !important; }
+                    iframe, video, #player, #app, .video-frame, .player-container,
+                    .video-player, [class*="player"] {
+                        width: 100% !important; height: 100% !important;
+                        max-width: 100% !important; max-height: 100% !important;
+                        margin: 0 !important; padding: 0 !important;
+                        object-fit: contain !important;
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+            })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(fullscreenCssScript)
+
         // 🔧 FIX v6 (July 2026): YouTube error 153 — custom HTML + IFrame API
         // + real iOS Safari UA. The ONLY combination that solves BOTH 153 and
         // bot check.

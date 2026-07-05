@@ -409,32 +409,29 @@ struct ServiceWebView: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
 
-        // 🔧 v9 (July 2026): for YouTube, set desktop Mac Safari UA so YouTube
-        // serves the modern desktop UI (2026 redesign) instead of the old
-        // mobile m.youtube.com layout.
+        // 🔧 v9.2 (July 2026): YouTube UA changed from Mac Safari to iPad Safari.
         //
-        // WKWebView's default UA contains 'Mobile/15E148' without 'Safari/' —
-        // YouTube's server detects this and serves the OLD mobile site
-        // (m.youtube.com layout from ~2018). User reported:
-        //   'почему веб браузер использует старую версию ютуб а не версию
-        //    приложения ютуба 2026'
+        // v9.1 used Mac Safari UA to get the desktop UI. Problem: YouTube's
+        // consent interstitial appeared in WKWebView (no Google cookies →
+        // 'before you continue to YouTube' consent page). User reported:
+        //   'ютуб не открывает = перебрасывает на какое то принятие куки данных'
         //
-        // Setting customUserAgent to a desktop Mac Safari UA makes YouTube's
-        // server serve the modern desktop UI: bigger thumbnails, grid layout,
-        // hover previews, sort/filter chips — same as youtube.com in Safari on Mac.
+        // Root cause: Mac UA on a non-Mac IP (TLS reveals mobile carrier IP)
+        // triggers Google's EU consent flow. WKWebView has no Google session
+        // cookies, so the consent can't be auto-accepted.
         //
-        // SAFE to do here (in ServiceBrowserView) because:
-        //   - This WebView is for BROWSING / SEARCHING YouTube, not for playing
-        //     videos. No /embed/ requests → no error 153.
-        //   - We're not on a separate /embed/ page, just on /feed/trending or
-        //     /results — these don't trigger YouTube's anti-bot check the way
-        //     /embed/ does.
-        //   - User can still tap any video → ServiceBrowserView's video
-        //     detection kicks in → backend yt-dlp extracts the stream → AVPlayer
-        //     plays it (NOT this WebView).
+        // v9.2 fix: use iPad Safari UA instead. YouTube redirects to
+        // m.youtube.com which:
+        //   1. Has a modern 2026 redesign (large thumbnails, grid, filter chips)
+        //   2. Does NOT trigger consent interstitial for mobile/touch UA
+        //   3. Already fits iPhone screen — no viewport injection needed
+        //
+        // We keep the viewport-fit script as a no-op safety net (it removes
+        // existing viewport metas and adds overflow-x:hidden, which is also
+        // useful on m.youtube.com to prevent minor horizontal scroll).
         if initialURL.host?.contains("youtube.com") == true ||
            initialURL.host?.contains("youtu.be") == true {
-            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         }
 
         webView.load(URLRequest(url: initialURL))

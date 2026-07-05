@@ -144,7 +144,7 @@ struct RoomView: View {
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $shareSheetPresented) {
-            if let url = URL(string: "https://raveclone.com/join/\(room.code)") {
+            if let url = URL(string: "https://plink.app/join/\(room.code)") {
                 ShareSheet(items: [url])
             }
         }

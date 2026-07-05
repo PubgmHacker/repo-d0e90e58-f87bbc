@@ -128,14 +128,14 @@ struct SettingsView: View {
 
                         // ── Developer Section ──
                         settingsSection("Разработчик") {
-                            Link(destination: URL(string: "https://t.me/raveclone")!) {
+                            Link(destination: URL(string: "https://t.me/plinkapp")!) {
                                 settingsRowLink(
                                     icon: "paperplane.fill",
                                     title: "Telegram",
                                     color: .bioCyan
                                 )
                             }
-                            Link(destination: URL(string: "https://raveclone.com")!) {
+                            Link(destination: URL(string: "https://plink.app")!) {
                                 settingsRowLink(
                                     icon: "globe",
                                     title: "Сайт",
@@ -205,15 +205,7 @@ struct SettingsView: View {
             .navigationTitle("Настройки")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        closeSettings()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.raveTextSecondary)
-                    }
-                }
+                // 🔧 Pack v3: убрана кнопка закрытия — Settings теперь вкладка, не модалка
             }
             .toolbarBackground(.hidden, for: .navigationBar)
             // 🔧 FIX: Full-screen push navigation for sub-screens (was: .sheet overlay)
@@ -251,7 +243,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showFullProfile) {
             if let profileVM {
                 NavigationStack {
-                    ProfileView(viewModel: profileVM, onSignOut: { closeSettings() })
+                    ProfileView(viewModel: profileVM, onSignOut: {
+                        Task { try? await authService.signOut() }
+                    })
                 }
             }
         }

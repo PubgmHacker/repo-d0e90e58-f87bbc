@@ -12,7 +12,7 @@ final class ShareManager {
 
     /// Базовый домен приложения (deep-link base).
     /// В продакшене — реальный домен App Store / Universal Links.
-    static let shareBaseURL = "https://raveclone.app"
+    static let shareBaseURL = "https://plink.app"
 
     /// Генерирует share-link для комнаты.
     static func shareURL(for roomID: String, code: String? = nil) -> URL {

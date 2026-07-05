@@ -23,7 +23,7 @@ final class DeepLinkRouter: ObservableObject {
 
     // MARK: - Config
 
-    static let domain = "raveclone.app"
+    static let domain = "plink.app"
     static let customScheme = "raveclone"
 
     // MARK: - Parsing
@@ -32,7 +32,7 @@ final class DeepLinkRouter: ObservableObject {
     func parse(_ url: URL) -> DeepLinkType {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
 
-        // Universal Link: https://raveclone.app/r/<code>  или  /u/<userId>
+        // Universal Link: https://plink.app/r/<code>  или  /u/<userId>
         if url.host == Self.domain || url.host == "www.\(Self.domain)" {
             return parsePath(url.path, queryItems: components?.queryItems)
         }

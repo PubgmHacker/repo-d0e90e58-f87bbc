@@ -41,7 +41,7 @@ final class YandexAuthService: NSObject, ObservableObject {
     init(
         clientID: String? = nil,
         redirectScheme: String = "syncwatch",
-        backendURL: URL = URL(string: "https://raveclone.app/api")!
+        backendURL: URL = URL(string: "https://plink-backend-production-ef31.up.railway.app/api")!
     ) {
         // Resolve Yandex client ID: explicit param → Info.plist → fail-safe empty
         let resolvedClientID: String = clientID

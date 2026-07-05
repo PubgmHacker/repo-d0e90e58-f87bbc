@@ -27,6 +27,7 @@ struct MainTabView: View {
                 },
                 onSwitchToJoinTab: {
                     HapticManager.impact(.light)
+                    UserDefaults.standard.set(true, forKey: "plink_switch_to_join")
                     selectedTab = .rooms
                 }
             )
@@ -139,8 +140,18 @@ struct RoomsTabContent: View {
                     await viewModel?.loadRooms()
                     await viewModel?.loadMyRooms()
                 }
-            } else {
-                Task { await viewModel?.loadMyRooms() }
+            }
+            // 🔧 Pack v3: Если нажали "Присоединиться" на главной — переключить на "Войти"
+            if UserDefaults.standard.bool(forKey: "plink_switch_to_join") {
+                UserDefaults.standard.set(false, forKey: "plink_switch_to_join")
+                withAnimation { selectedSubTab = .join }
+            }
+        }
+        .onChange(of: selectedTab) { _, _ in
+            // Также проверяем при переключении на вкладку Комнаты
+            if UserDefaults.standard.bool(forKey: "plink_switch_to_join") {
+                UserDefaults.standard.set(false, forKey: "plink_switch_to_join")
+                withAnimation { selectedSubTab = .join }
             }
         }
     }

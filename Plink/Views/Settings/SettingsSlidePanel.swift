@@ -296,6 +296,12 @@ struct PremiumAnimatedStroke: ShapeStyle {
 /// 🔧 REDESIGNED: Removed [Premium] suffix — just the shimmering nickname.
 /// Premium = shimmering animated gradient text.
 /// Free = plain white-gray static text.
+///
+/// 🔧 RESTORED: admin username uses `adminShimmerText` (was removed in previous
+/// commit — user wants it back, just smoother). The shimmer modifier itself
+/// has been fixed to be smoother (easeInOut instead of linear, duplicated color
+/// stops for seamless wrap-around). No visual conflict with avatar ring — they
+/// use different reds and the avatar ring rotates slowly.
 struct PremiumUsernameText: View {
     let text: String
     let isPremium: Bool
@@ -304,7 +310,7 @@ struct PremiumUsernameText: View {
 
     var body: some View {
         if isAdmin {
-            // 🔧 Pack v3: Админ — переливающийся красный
+            // 🔧 RESTORED: Админ — переливающийся красный (теперь плавный)
             Text(text)
                 .font(font)
                 .adminShimmerText()

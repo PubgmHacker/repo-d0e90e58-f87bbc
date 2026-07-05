@@ -6,6 +6,19 @@ import { logAudit, AuditActions } from '../utils/audit.js';
 const ROOMS_CACHE_KEY = 'rooms:public:50';
 const ROOMS_CACHE_TTL = 30; // 30 sec
 
+// 🔧 FIX: mediaItem хранится в БД как JSON-строка (Prisma `String?` колонка).
+// iOS ожидает structured object, не строку — иначе decoding падает с typeMismatch
+// и весь Room decode ломается. Эта функция парсит строку обратно в объект.
+// Применяется во всех endpoints которые возвращают room: create, join, list, get.
+function serializeRoom(room) {
+    if (!room) return null;
+    const { password, ...rest } = room;
+    return {
+        ...rest,
+        mediaItem: rest.mediaItem ? JSON.parse(rest.mediaItem) : null,
+    };
+}
+
 export default async function roomRoutes(fastify, _options) {
     const { prisma } = fastify;
 
@@ -56,7 +69,8 @@ export default async function roomRoutes(fastify, _options) {
         });
 
         const { password: _, ...roomWithoutPassword } = room;
-        reply.send(roomWithoutPassword);
+        // 🔧 FIX: parse mediaItem JSON string back to object for iOS
+        reply.send(serializeRoom(roomWithoutPassword));
     });
 
     // POST /api/rooms/join — Вход в комнату
@@ -96,7 +110,8 @@ export default async function roomRoutes(fastify, _options) {
         });
 
         const { password: _, ...roomWithoutPassword } = room;
-        reply.send(roomWithoutPassword);
+        // 🔧 FIX: parse mediaItem JSON string back to object for iOS
+        reply.send(serializeRoom(roomWithoutPassword));
     });
 
     // POST /api/rooms/:id/playback
@@ -139,7 +154,7 @@ export default async function roomRoutes(fastify, _options) {
             take: 50,
         });
 
-        const safeRooms = rooms.map(({ password, ...r }) => r);
+        const safeRooms = rooms.map(r => serializeRoom(r));
         
         // Save to cache
         await cacheSet(ROOMS_CACHE_KEY, safeRooms, ROOMS_CACHE_TTL);
@@ -162,7 +177,7 @@ export default async function roomRoutes(fastify, _options) {
             orderBy: { createdAt: 'desc' },
         });
 
-        const safeRooms = rooms.map(({ password, ...r }) => r);
+        const safeRooms = rooms.map(r => serializeRoom(r));
         reply.send(safeRooms);
     });
 }

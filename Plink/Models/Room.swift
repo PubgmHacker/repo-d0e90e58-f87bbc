@@ -160,6 +160,10 @@ struct CreateRoomRequest: Codable, Sendable {
     let privacy: RoomPrivacy
     /// 🔧 NEW: Optional password for locked rooms
     let password: String?
+    /// 🔧 Pack v2: hostName отправляем с клиента (бэкенд берёт из JWT,
+    /// но если JWT не содержит username — fallback на это поле).
+    /// Бэкенд rooms.ts: `hostName: request.user.username || body.hostName`
+    let hostName: String?
 }
 
 // MARK: - Join Room Request

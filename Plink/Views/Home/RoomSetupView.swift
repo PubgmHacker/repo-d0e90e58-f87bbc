@@ -24,7 +24,7 @@ struct RoomSetupView: View {
 
     @State private var roomName = ""
     @State private var privacy: RoomPrivacy = .publicRoom
-    @State private var maxParticipants = 10
+    @State private var maxParticipants = 4
     @State private var selectedTheme: RoomTheme = .default
     /// 🔧 NEW: Password for locked rooms (shown when privacy = .privateRoom)
     @State private var roomPassword = ""
@@ -409,7 +409,8 @@ struct RoomSetupView: View {
                     maxParticipants: maxParticipants,
                     mediaItem: mediaItem,
                     privacy: privacy,
-                    password: privacy == .privateRoom && !roomPassword.isEmpty ? roomPassword : nil
+                    password: privacy == .privateRoom && !roomPassword.isEmpty ? roomPassword : nil,
+                    hostName: AuthService(api: apiClient).currentUser?.username
                 )
                 let room = try await roomService.createRoom(request)
                 await MainActor.run {

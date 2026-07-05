@@ -41,12 +41,33 @@ final class APIClient: ObservableObject, @unchecked Sendable {
         }
     }
 
-    init(baseURL: String = "https://xpkcakpkfewp-ofewk-pkv-production.up.railway.app/api") {
+    init(baseURL: String = "https://plink-backend-production-ef31.up.railway.app/api") {
         self.baseURL = URL(string: baseURL)!
         _encoder.keyEncodingStrategy = .convertToSnakeCase
         _encoder.dateEncodingStrategy = .iso8601
         _decoder.keyDecodingStrategy = .convertFromSnakeCase
-        _decoder.dateDecodingStrategy = .iso8601
+        // 🔧 Pack v2: ISO8601 с поддержкой миллисекунд.
+        // Бэкенд Prisma возвращает даты как "2026-07-03T16:53:52.778Z"
+        // (с миллисекундами). Стандартный .iso8601 Swift НЕ парсит миллисекунды
+        // → decoding падает с ошибкой → iOS показывает "Ресурс не найден"
+        // хотя сервер вернул 200 OK. Используем custom formatter.
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        _decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            // Сначала пробуем с миллисекундами
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+            // Fallback: без миллисекунд
+            let fallback = ISO8601DateFormatter()
+            if let date = fallback.date(from: dateString) {
+                return date
+            }
+            // Last resort: текущая дата (не падать)
+            return Date()
+        }
     }
 
     // MARK: - Generic Request

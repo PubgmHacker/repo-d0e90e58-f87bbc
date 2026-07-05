@@ -324,6 +324,7 @@ struct PremiumUsernameText: View {
 struct PremiumManagementView: View {
     @Binding var isPremium: Bool
     @Environment(\.dismiss) private var dismiss
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
@@ -405,13 +406,7 @@ struct PremiumManagementView: View {
                             .buttonStyle(.plain)
                         } else {
                             Button {
-                                // 🔧 FIX C9: Route through StoreManager.purchase() instead of setPremium(true)
-                                Task {
-                                    await StoreManager.shared.purchase()
-                                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                                        isPremium = PremiumStatusManager.shared.isPremium
-                                    }
-                                }
+                                showPaywall = true
                             } label: {
                                 HStack {
                                     Spacer()
@@ -446,5 +441,24 @@ struct PremiumManagementView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(
+                onPurchase: {
+                    Task {
+                        await StoreManager.shared.purchase()
+                        isPremium = PremiumStatusManager.shared.isPremium
+                        showPaywall = false
+                    }
+                },
+                onRestore: {
+                    Task {
+                        await StoreManager.shared.restorePurchases()
+                        isPremium = PremiumStatusManager.shared.isPremium
+                        showPaywall = false
+                    }
+                },
+                onDismiss: { showPaywall = false }
+            )
+        }
     }
 }

@@ -31,10 +31,26 @@ extension Color {
     /// Изумрудный — мягкий glow (live-статус, успех)
     static let bioEmerald = Color(hex: 0x26D9A4)
 
+    // ════════════════════════════════════════════════════════════════
+    // MARK: - Тёплые акценты (для разнообразия и warmth)
+    // Используются точечно: реакции, друзья, premium-бейджи.
+    // Основной UI остаётся в cyan/teal/emerald спектре.
+    // ════════════════════════════════════════════════════════════════
+
+    /// Коралл — для reactions и social warmth (#FF6B6B)
+    static let bioCoral = Color(hex: 0xFF6B6B)
+    /// Янтарь — для premium-бейджей и achievements (#FFB454)
+    static let bioAmber = Color(hex: 0xFFB454)
+    /// Розовый кварц — для profile и romance (#FF8FAB)
+    static let bioRose = Color(hex: 0xFF8FAB)
+
     // ── Псевдонимы (алиасы для читаемости) ───────────────────────────
     static let ravePrimary = bioCyan
     static let raveCyan = bioCyan
     static let raveGreen = bioEmerald
+    static let raveCoral = bioCoral
+    static let raveAmber = bioAmber
+    static let raveRose = bioRose
 
     // ════════════════════════════════════════════════════════════════
     // MARK: - Семантические цвета (ЗАМУНЛЕНЫ на единый спектр)
@@ -118,6 +134,45 @@ extension Color {
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
+    )
+
+    // ════════════════════════════════════════════════════════════════
+    // MARK: - Тёплые градиенты (для reactions, friends, premium)
+    // ════════════════════════════════════════════════════════════════
+
+    /// Реакции: coral → amber (тёплая эмоция)
+    static let raveReactionGradient = LinearGradient(
+        colors: [Color(hex: 0xFF6B6B), Color(hex: 0xFFB454)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Друзья: rose → coral (social warmth)
+    static let raveFriendsGradient = LinearGradient(
+        colors: [Color(hex: 0xFF8FAB), Color(hex: 0xFF6B6B)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Premium: amber → cyan (дорогой, но в палитре)
+    static let ravePremiumAccent = LinearGradient(
+        colors: [Color(hex: 0xFFB454), Color(hex: 0x2DE2E6)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Закат: coral → emerald (контраст тёплого и холодного)
+    static let raveSunsetGradient = LinearGradient(
+        colors: [Color(hex: 0xFF6B6B), Color(hex: 0x26D9A4)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    /// Глубоководный: cyan → rose (биолюминесценция + теплый акцент)
+    static let raveAbyssGradient = LinearGradient(
+        colors: [Color(hex: 0x2DE2E6), Color(hex: 0xFF8FAB)],
+        startPoint: .leading,
+        endPoint: .trailing
     )
 
     // ── Устаревшие bio-токены (для обратной совместимости) ──────────

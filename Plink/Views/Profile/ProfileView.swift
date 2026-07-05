@@ -320,7 +320,7 @@ struct ProfileView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Plink Premium активен")
+                    Text("Плинк+ активен")
                         .font(.subheadline.bold())
                         .foregroundColor(.white)
                     Text("Действует до \(formatter.string(from: expiryDate))")

@@ -46,6 +46,11 @@ struct ReactionEvent: Identifiable, Sendable {
 // MARK: - Room Event Envelope (входящий WS-пакет)
 /// Универсальный конверт для разбора входящих событий комнаты.
 /// Не конфликтует с SyncMessage — это вспомогательная структура только для парсинга.
+///
+/// 🔧 v11 (July 2026): added senderAvatarURL, senderRole, senderDisplayName,
+/// bubbleStyle fields. Backend's sanitizeChatMessage broadcasts these in the
+/// chat event payload — without them in the envelope, all chat messages
+/// showed default style, no avatar, no admin role, no display name.
 struct RoomEventEnvelope: Codable, Sendable {
     let type: String
     let roomId: String?
@@ -59,4 +64,10 @@ struct RoomEventEnvelope: Codable, Sendable {
     let senderId: String?
     let senderName: String?
     let text: String?
+    /// 🔧 v11: chat message metadata from backend sanitizeChatMessage
+    let senderAvatarURL: String?
+    let senderRole: String?
+    let senderDisplayName: String?
+    /// 🔧 v10/v11: server-confirmed bubble style (default/cute_duck/neon_cyber/admin_bubble)
+    let bubbleStyle: String?
 }

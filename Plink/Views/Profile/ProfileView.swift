@@ -733,56 +733,24 @@ struct EditProfileSheet: View {
                         .offset(y: -45)
                         .padding(.bottom, -35)
 
-                        // ─── USERNAME FIELD ───
+                        // ─── DISPLAY NAME (v11) — FIRST field ───
+                        // 🔧 v11 (July 2026): Telegram-style display name shown FIRST.
+                        // The human-readable nick shown in chat/profile, separate from
+                        // the unique @username tag. Empty = fall back to @username.
+                        // Can contain spaces, emoji, any unicode.
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 6) {
-                                Image(systemName: "person.crop.circle.badge.checkmark")
+                                Image(systemName: "textformat")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.bioCyan)
-                                Text("Имя пользователя")
+                                    .foregroundColor(.bioAmber)
+                                Text("Имя (ник)")
                                     .font(.subheadline.bold())
                                     .foregroundColor(.raveTextPrimary)
                                 if viewModel.user?.isAdmin == true {
                                     AdminBadgeChip(compact: true)
                                 }
                             }
-                            // 🔧 NEW: show current username
-                            Text("Текущий: @\(viewModel.username)")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.raveTextTertiary)
-                            TextField("Введите новый @username", text: $newUsername)
-                                .textFieldStyle(RaveTextFieldStyle())
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(
-                                            LinearGradient(
-                                                colors: [
-                                                    Color.bioCyan.opacity(0.35),
-                                                    Color.bioEmerald.opacity(0.15)
-                                                ],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            lineWidth: 0.5
-                                        )
-                                )
-                        }
-                        .padding(.horizontal, 4)
-
-                        // ─── DISPLAY NAME (v11) ───
-                        // 🔧 v11 (July 2026): Telegram-style display name — the
-                        // human-readable nick shown in chat/profile, separate from
-                        // the unique @username tag. Empty = fall back to @username.
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "textformat")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.bioAmber)
-                                Text("Отображаемое имя (ник)")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.raveTextPrimary)
-                            }
-                            Text("Показывается в чате вместо @username. Можно использовать пробелы и эмодзи. Пусто — использовать @username.")
+                            Text("Показывается в чате и профиле. Можно использовать пробелы и эмодзи. Пусто — использовать @username.")
                                 .font(.system(size: 11))
                                 .foregroundColor(.raveTextTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -795,6 +763,60 @@ struct EditProfileSheet: View {
                                                 colors: [
                                                     Color.bioAmber.opacity(0.35),
                                                     Color.bioCoral.opacity(0.15)
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 0.5
+                                        )
+                                )
+                        }
+                        .padding(.horizontal, 4)
+
+                        // ─── USERNAME FIELD — SECOND field ───
+                        // 🔧 v11 (July 2026): @username is now the SECOND field.
+                        // Unique tag (like Telegram @username) — latin letters, digits,
+                        // underscore, dot only. Max 15 chars. Used for search/deeplinks.
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "at")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.bioCyan)
+                                Text("@username (тег)")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.raveTextPrimary)
+                            }
+                            Text("Уникальный тег для поиска. Только латиница, цифры, _ и точка. Длина 2–15 символов.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.raveTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            // 🔧 v11: show current @username
+                            Text("Текущий: @\(viewModel.username)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.raveTextTertiary)
+                            TextField("например: alex_films", text: $newUsername)
+                                .textFieldStyle(RaveTextFieldStyle())
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled(true)
+                                .onChange(of: newUsername) { _, newValue in
+                                    // 🔧 v11: enforce latin-only + allowed chars + max 15 chars.
+                                    // Allowed: a-z, 0-9, _, . (no spaces, no cyrillic, no symbols).
+                                    let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_.")
+                                    let cleaned = newValue.lowercased()
+                                        .unicodeScalars
+                                        .filter { allowed.contains($0) }
+                                        .map { String($0) }
+                                        .joined()
+                                        .prefix(15)  // max 15 chars
+                                    newUsername = String(cleaned)
+                                }
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            LinearGradient(
+                                                colors: [
+                                                    Color.bioCyan.opacity(0.35),
+                                                    Color.bioEmerald.opacity(0.15)
                                                 ],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing

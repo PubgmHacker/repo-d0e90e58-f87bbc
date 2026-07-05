@@ -311,6 +311,15 @@ final class RoomSyncManager: ObservableObject {
                   let text = envelope.text else { return }
             // Фильтруем сообщения от заблокированных юзеров — не сохраняем вообще.
             if blockManager.isBlocked(senderId) { return }
+            // 🔧 v11 (July 2026): pass through ALL metadata from the server-
+            // broadcast chat event: senderAvatarURL, senderRole,
+            // senderDisplayName, bubbleStyle. Without these, chat messages
+            // showed no avatar, no admin badge, default bubble style, and
+            // fell back to @username instead of display name.
+            //
+            // The server runs sanitizeChatMessage() which fetches avatarURL +
+            // displayName + role from DB and runs processMessageStyle() to
+            // confirm the bubbleStyle. We trust these server-confirmed values.
             let message = ChatMessage(
                 id: UUID().uuidString,
                 roomID: roomId,
@@ -319,7 +328,10 @@ final class RoomSyncManager: ObservableObject {
                 text: text,
                 timestamp: Date(),
                 isRead: false,
-                senderAvatarURL: nil
+                senderAvatarURL: envelope.senderAvatarURL,
+                senderRole: envelope.senderRole,
+                senderDisplayName: envelope.senderDisplayName,
+                bubbleStyle: envelope.bubbleStyle ?? "default"
             )
             appendChatMessage(message)
 

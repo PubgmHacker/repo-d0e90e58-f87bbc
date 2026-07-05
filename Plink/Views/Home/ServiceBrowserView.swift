@@ -425,11 +425,18 @@ struct ServiceWebView: UIViewRepresentable {
                     lastDetectedURL = urlString
                     let service = Self.serviceFromURL(url)
                     if let service, let detected = VideoService.detectVideoURL(url, for: service, title: nil) {
+                        // 🔧 FIX: CANCEL navigation — don't load the YouTube watch page.
+                        // Was: .allow → YouTube watch page loaded → video auto-played for
+                        // a second before room creation took over.
+                        // Now: .cancel → YouTube watch page never loads, no video playback.
+                        // We just extract the video ID from the URL and create the room.
                         DispatchQueue.main.async {
                             self.parent.currentURL = url
                             self.parent.pageTitle = webView.title ?? ""
                             self.parent.onVideoDetected?(detected)
                         }
+                        decisionHandler(.cancel)
+                        return
                     }
                 }
             }

@@ -10,6 +10,9 @@ import Foundation
 /// via @EnvironmentObject into AdminPanelView (was: each view created its own
 /// unauthenticated APIClient()).
 final class APIClient: ObservableObject, @unchecked Sendable {
+    /// 🔧 Pack v3: Singleton — для использования в views без EnvironmentObject
+    static let shared = APIClient()
+
     private let baseURL: URL
 
     // 🔧 FIX H10: Lock-protected encoder/decoder (not thread-safe by Apple docs)

@@ -35,7 +35,7 @@ final class MediaService {
     // Simple in-memory cache to avoid re-extracting the same video
     private var cache: [String: ExtractedMedia] = [:]
 
-    init(apiBaseURL: String = "https://raveclone.app/api") {
+    init(apiBaseURL: String = "https://plink-backend-production-ef31.up.railway.app/api") {
         self.apiBaseURL = URL(string: apiBaseURL)!
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 45   // yt-dlp can take a while

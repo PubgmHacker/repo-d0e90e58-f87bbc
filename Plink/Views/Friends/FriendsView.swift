@@ -5,7 +5,7 @@ import SwiftUI
 /// поиск пользователей для добавления.
 struct FriendsView: View {
     @ObservedObject private var loc = LocalizationManager.shared
-    @State private var friendManager = FriendManager(api: APIClient())
+    @State private var friendManager = FriendManager(api: APIClient.shared)
     @State private var selectedTab: FriendsTab = .friends
     @State private var searchText = ""
     @State private var showShareSheet = false

@@ -48,14 +48,7 @@ struct ProfileView: View {
                     .font(.headline)
                     .foregroundColor(.white)
             }
-            // Только шестерёнка — настройки (убран карандаш сверху слева)
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showSettings = true } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.ravePrimary)
-                }
-            }
+            // 🔧 Pack v3: убрана шестерёнка — настройки в таббаре
         }
         .preferredColorScheme(.dark)
         .task {

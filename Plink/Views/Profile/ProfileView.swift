@@ -6,6 +6,7 @@ import PhotosUI
 /// Настройки — через шестерёнку.
 struct ProfileView: View {
     @State private var viewModel: ProfileViewModel
+    @EnvironmentObject private var apiClient: APIClient
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var loc = LocalizationManager.shared
     var onSignOut: () -> Void

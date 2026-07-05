@@ -314,6 +314,15 @@ struct RoomsTabContent: View {
             .padding(.top, 8)
             .padding(.bottom, 40)
         }
+        // 🔧 FIX: Refresh my-rooms every time this subtab appears. Was only loaded
+        // ONCE on first Rooms tab open (gated by `if viewModel == nil`). After the
+        // user created a new room on Home and switched to Mine, they saw stale data.
+        // Now: every appearance of Mine subtab triggers loadMyRooms. Cheap network
+        // call, ensures orphan rooms (hostID=user.id, no RoomParticipant row) always
+        // appear so the user can delete them.
+        .task {
+            await viewModel?.loadMyRooms()
+        }
     }
 
     // MARK: - Join Content (embedded JoinRoomView)

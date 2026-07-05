@@ -415,9 +415,25 @@ struct WebVideoView: UIViewRepresentable {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v10.1: YouTube — completely clean. No UA, no CSS, no scripts.
-            // Default WKWebView UA + plain URL load. Zero modifications.
-            print("📺 YouTube v10.1: completely clean WKWebView (no scripts, no handlers, no UA)")
+            // 🔧 v10.3: YouTube — clean WKWebView + iOS Safari UA.
+            //
+            // DISCOVERY: YouTube's SERVER-SIDE detection classifies the request
+            // based on User-Agent:
+            //   WKWebView default UA (no "Safari/") → cbr=Webview → error 153
+            //   iOS Safari UA (with "Safari/604.1") → cbr=Safari+Mobile → works
+            //
+            // Previous v10/v10.1/v10.2 used default WKWebView UA → YouTube saw
+            // cbr=Webview → 153. The fix is to set customUserAgent to real iOS
+            // Safari UA so YouTube classifies as cbr=Safari+Mobile.
+            //
+            // This was tried before (v5, v8) but ALWAYS with scripts/handlers/CSS
+            // injection — which YouTube's JS also detected. v10.3 combines:
+            //   - iOS Safari UA (cbr=Safari+Mobile, not cbr=Webview)
+            //   - NO scripts, NO handlers, NO CSS (v10.1 clean)
+            //   - nonPersistent data store (v10.2, clean cookies)
+            // This combination has NEVER been tried before.
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+            print("📺 YouTube v10.3: clean WKWebView + iOS Safari UA (cbr=Safari+Mobile)")
             webView.load(URLRequest(url: url))
         } else {
             webView.load(URLRequest(url: url))

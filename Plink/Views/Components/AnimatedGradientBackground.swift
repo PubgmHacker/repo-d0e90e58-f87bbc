@@ -19,8 +19,10 @@ struct AnimatedGradientBackground: View {
     var body: some View {
         // Forward to BioluminescentBackground — ignores legacy orbColors param.
         // hasActiveRooms modulates energy: active rooms = brighter, empty = dimmer.
+        // 🔧 PACK v4: energy bumped from 0.6/0.4 → 0.8/0.55 for better visibility
+        // through .ultraThinMaterial cards (user complained bg animation was too subtle).
         BioluminescentBackground(
-            energy: hasActiveRooms ? 0.6 : 0.4,
+            energy: hasActiveRooms ? 0.8 : 0.55,
             dimming: 0
         )
     }

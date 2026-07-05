@@ -281,7 +281,6 @@ struct RoomChatBubble: View {
             if isMyMessage {
                 Spacer(minLength: 50)
                 VStack(alignment: .trailing, spacing: 4) {
-                    // 🔧 FIX: show nick + admin badge on own messages too
                     HStack(spacing: 4) {
                         if message.isSenderAdmin {
                             AdminBadgeChip(compact: true)
@@ -292,13 +291,11 @@ struct RoomChatBubble: View {
                             Text(message.senderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .foregroundColor(.bioCyan)
-                                .textStroke(opacity: 0.4)
                         }
                     }
                     Text(message.text)
-                        .font(.system(size: textSize))
+                        .font(.system(size: textSize, weight: .medium))
                         .foregroundColor(.white)
-                        .chatTextShadow()
                 }
                 myAvatar
             } else {
@@ -314,26 +311,24 @@ struct RoomChatBubble: View {
                             Text(message.senderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .foregroundColor(.bioCyan)
-                                .textStroke(opacity: 0.4)
                         }
                     }
                     Text(message.text)
-                        .font(.system(size: textSize))
+                        .font(.system(size: textSize, weight: .medium))
                         .foregroundColor(.white)
-                        .chatTextShadow()
                 }
                 Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, compact ? 10 : 14)
         .padding(.vertical, compact ? 6 : 10)
-        // 🔧 FIX: admin messages get red border, my messages get cyan, others get black
-        .telegramGlass(
-            cornerRadius: compact ? 12 : 16,
-            borderColor: message.isSenderAdmin
-                ? Color.raveDanger.opacity(0.4)
-                : (isMyMessage ? Color.bioCyan.opacity(0.25) : .black.opacity(0.4))
+        // 🔧 FIX: simple background — no telegramGlass, no colored borders
+        .background(
+            isMyMessage
+                ? Color.bioCyan.opacity(0.12)
+                : Color.white.opacity(0.06)
         )
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 16))
     }
 
     // MARK: - Avatars

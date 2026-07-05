@@ -249,25 +249,24 @@ struct RoomView: View {
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { handleDoubleTap() }
         )
-        // 🔧 FIX CHAT SWIPE: Use simultaneousGesture so the drag doesn't block
-        // the ScrollView inside the chat panel. The chat panel itself has its
-        // own drag gesture for closing (see RoomChatView.landscapeLayout).
-        // This gesture handles the open-direction (right-to-left swipe) when
-        // the panel is closed, and also closes on left-to-right swipe on the
-        // video area when the panel is open.
+        // 🔧 FIX CHAT SWIPE: higher minimumDistance (80) to avoid conflicts with
+        // iOS edge swipe gestures (which trigger tabbar). Only horizontal swipes.
         .simultaneousGesture(
-            DragGesture(minimumDistance: 25)
+            DragGesture(minimumDistance: 80)
                 .onEnded { value in
                     let horizontal = value.translation.width
+                    let vertical = value.translation.height
+                    // Only handle clearly horizontal swipes (|h| > |v| * 2)
+                    guard abs(horizontal) > abs(vertical) * 2 else { return }
                     // Свайп справа-налево (←) — открыть чат
-                    if !showChatPanel && horizontal < -25 {
+                    if !showChatPanel && horizontal < -80 {
                         HapticManager.impact(.light)
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                             showChatPanel = true
                         }
                     }
-                    // Свайп слева-направо (→) — закрыть чат (when swiping on video area)
-                    else if showChatPanel && horizontal > 25 {
+                    // Свайп слева-направо (→) — закрыть чат
+                    else if showChatPanel && horizontal > 80 {
                         HapticManager.impact(.light)
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                             showChatPanel = false

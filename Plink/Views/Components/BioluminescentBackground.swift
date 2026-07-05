@@ -71,49 +71,40 @@ struct BioluminescentBackground: View {
         )
     }
 
-    /// 🔧 PACK v5: 9 биолюминесцентных облаков — равномерно по всему экрану
-    /// (3 верх / 3 центр / 3 низ). Увеличены центральные и нижние орбы (380-500px)
-    /// чтобы пробиваться сквозь `.ultraThinMaterial` карточки и tab bar.
+    /// 🔧 PACK v6: УМЕНЬШЕНО до 5 орбов (было 9 — пользователь сказал «перегруз,
+    /// слишком много налегающих друг на друга»). Замедлены все анимации.
     ///
-    /// 🔧 DIVERSITY: добавлены warm accent цвета (amber/coral) для разнообразия —
-    /// был только cyan/emerald спектр, теперь более живая палитра.
+    /// 🔧 SLOWER: speed уменьшен в ~2 раза, amplitude движения уменьшена
+    /// (было 140×100 — слишком быстро «плыли», стало 80×60 — спокойно дрейфуют).
     ///
-    /// 🔧 FIX: пользователь жаловался «в центре и снизу орбов нет». Причина:
-    /// центральные/нижние орбы были 280-380px при opacity cap 0.95×energy —
-    /// недостаточно, чтобы пробиться через `.ultraThinMaterial` карточек
-    /// и opaque tab bar. Теперь: 380-500px, opacity cap 1.1 (с лёгким overflow).
+    /// 🔧 LAYOUT: 2 верх / 1 центр / 2 низ — равномерно, без перекрытий.
+    /// Каждый орб имеет свой цвет (cyan/emerald/amber/teal/coral) — diversity.
     private func drawClouds(context: GraphicsContext, size: CGSize, time: Double) {
         let clouds: [(cx: Double, cy: Double, r: Double, speed: Double, phase: Double, colorIdx: Int)] = [
-            // ─── Верхняя треть (3 облака) ───
-            (0.15, 0.10, 360, 0.16, 0.0, 0),    // верх-лево — cyan
-            (0.55, 0.06, 320, 0.20, 1.2, 2),    // верх-центр — amber (warm)
-            (0.88, 0.16, 340, 0.24, 2.4, 1),    // верх-право — emerald
-            // ─── Центральная треть (3 облака, КРУПНЕЕ) ───
-            (0.20, 0.45, 480, 0.14, 3.6, 3),    // центр-лево — coral (warm accent)
-            (0.55, 0.50, 460, 0.18, 4.8, 0),    // центр-центр — крупный cyan
-            (0.82, 0.48, 440, 0.22, 6.0, 1),    // центр-право — emerald
-            // ─── Нижняя треть (3 облака, КРУПНЕЕ + выше opacity) ───
-            (0.15, 0.85, 460, 0.20, 7.2, 4),    // низ-лево — teal
-            (0.50, 0.95, 500, 0.12, 8.4, 2),    // низ-центр — крупный amber (warm)
-            (0.85, 0.82, 440, 0.26, 9.6, 0),    // низ-право — cyan
+            // ─── Верх (2 облака) ───
+            (0.20, 0.12, 380, 0.08, 0.0, 0),    // верх-лево — cyan
+            (0.80, 0.10, 360, 0.10, 1.5, 2),    // верх-право — amber (warm)
+            // ─── Центр (1 крупное облако) ───
+            (0.50, 0.50, 520, 0.06, 3.0, 1),    // центр — крупный emerald
+            // ─── Низ (2 облака) ───
+            (0.22, 0.88, 400, 0.09, 4.5, 3),    // низ-лево — coral (warm)
+            (0.78, 0.85, 380, 0.11, 6.0, 4),    // низ-право — teal
         ]
 
         for (_, cloud) in clouds.enumerated() {
-            // 🔧 PACK v5: увеличенная амплитуда движения
-            let dx = sin(time * cloud.speed + cloud.phase) * 140
-            let dy = cos(time * cloud.speed * 0.7 + cloud.phase) * 100
+            // 🔧 SLOWER: уменьшенная амплитуда — спокойный дрейф
+            let dx = sin(time * cloud.speed + cloud.phase) * 80
+            let dy = cos(time * cloud.speed * 0.7 + cloud.phase) * 60
             let cx = cloud.cx * size.width + dx
             let cy = cloud.cy * size.height + dy
-            // 🔧 PACK v5: большая дельта радиуса
-            let radius = cloud.r * (0.82 + 0.38 * sin(time * 0.5 + cloud.phase))
+            // 🔧 SLOWER: меньшая дельта радиуса — «дыхание» спокойнее
+            let radius = cloud.r * (0.92 + 0.16 * sin(time * 0.25 + cloud.phase))
 
             let color = palette.color(for: cloud.colorIdx)
-            // 🔧 PACK v5: более высокий pulse-диапазон
-            let pulse = 0.65 + 0.40 * sin(time * 0.6 + cloud.phase)
-            // 🔧 PACK v5: opacity cap поднят до 1.1 (с лёгким overflow для яркости)
-            // Центральные и нижние орбы — ещё ярче (компенсация перекрытий)
+            // 🔧 SLOWER: pulse тоже замедлен (0.3 вместо 0.6)
+            let pulse = 0.7 + 0.25 * sin(time * 0.3 + cloud.phase)
             let locationBoost = cloud.cy > 0.4 ? 1.15 : 1.0
-            let opacity = min(pulse * energy * 1.1 * locationBoost, 1.0)
+            let opacity = min(pulse * energy * 1.05 * locationBoost, 1.0)
 
             let rect = CGRect(
                 x: cx - radius,

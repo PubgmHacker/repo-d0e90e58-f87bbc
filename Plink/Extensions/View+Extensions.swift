@@ -153,6 +153,15 @@ extension View {
 
 // MARK: - Animated Stroke Modifier (пульсирующая обводка)
 /// Вращает AngularGradient вокруг центра контента — обводка пульсирует.
+//
+// 🔧 VISIBLE ROTATION: пользователь жаловался «не заметно что анимированная и
+// вращается». Причины:
+// 1. Все цвета в градиенте были слишком похожи (все красные) — вращение
+//    AngularGradient не давало видимого контраста.
+// 2. linear(duration: 4) — слишком медленно для rotation, глаз не замечает.
+// 3. Не было glow — обводка сливалась с фоном.
+// Fix: добавлен bright accent (0xFF4D4D light red) как явная «отметка» в
+// градиенте, rotation ускорен до 3с, добавлен shadow glow.
 struct AnimatedStrokeModifier: ViewModifier {
     let colors: [Color]
     let lineWidth: CGFloat
@@ -170,10 +179,13 @@ struct AnimatedStrokeModifier: ViewModifier {
                         lineWidth: lineWidth
                     )
                     .rotationEffect(.degrees(rotation))
+                    // 🔧 GLOW: делает обводку видимой на тёмном фоне
+                    .shadow(color: colors.first?.opacity(0.6) ?? .clear, radius: 4)
             )
             .onAppear {
                 withAnimation(
-                    .linear(duration: 4)
+                    // 🔧 VISIBLE: 3с rotation — заметно, но не нервно (было 4с)
+                    .linear(duration: 3)
                     .repeatForever(autoreverses: false)
                 ) {
                     rotation = 360
@@ -198,16 +210,18 @@ extension View {
     }
 
     /// 🔧 Admin обводка аватарки — база алый, переливание тёмными оттенками.
-    /// 🔧 5 стопов: scarlet → red → dark crimson → red → scarlet.
-    /// Синхронизирована с ником — та же палитра, та же логика «тёмная волна
-    /// по яркому алому».
-    func adminStroke(lineWidth: CGFloat = 2.5) -> some View {
+    /// 🔧 VISIBLE: добавлен bright accent (0xFF4D4D) как явная «отметка» в
+    /// градиенте, чтобы было видно вращение. lineWidth 3 (было 2.5) — заметнее.
+    /// Синхронизирована с ником — та же палитра, та же логика.
+    func adminStroke(lineWidth: CGFloat = 3) -> some View {
         modifier(AnimatedStrokeModifier(
             colors: [
                 Color(hex: 0xFF1538),   // scarlet — база
                 Color(hex: 0xCC0000),   // crimson — затемнение
+                Color(hex: 0xFF4D4D),   // 🔧 BRIGHT ACCENT — явная «отметка» для видимости вращения
                 Color(hex: 0xB00000),   // dark crimson — пик тёмной волны
-                Color(hex: 0xCC0000),   // crimson — подъём
+                Color(hex: 0xFF4D4D),   // bright accent (другая сторона)
+                Color(hex: 0xCC0000),   // crimson
                 Color(hex: 0xFF1538),   // scarlet — обратно в базу (loop)
             ],
             lineWidth: lineWidth
@@ -217,28 +231,33 @@ extension View {
 
 // MARK: - Admin Shimmer Text Modifier (переливающийся КРАСНЫЙ для админов)
 //
-// 🔧 USER REQUEST v2: «сначала алый красный, переливается более тёмными
-// оттенками но не слишком».
+// 🔧 USER REQUEST v3: «переливание медленнее + многослойное, сейчас из алого
+// сразу в тёмный».
 //
-// 🔧 PALETTE: база — ярко-алый, переливание — тёмная волна проходит по тексту.
-// 7 стопов: scarlet → red → crimson → dark-crimson → crimson → red → scarlet
-// Базовый цвет всегда яркий, тёмные оттенки создают видимую волну контраста.
+// 🔧 MULTILAYERED: 11 стопов вместо 7 — больше промежуточных оттенков между
+// алым и тёмно-красным. Создаёт плавную волну без резких скачков.
 //
-// 🔧 FIX: was using `.overlay(LinearGradient.mask(content))` which layered
-/// the gradient ON TOP of the white text. Now: `.foregroundStyle` REPLACES
-/// text color with gradient — clean red, no white underlayer.
+// 🔧 SLOWER: 4с вместо 2.8с — заметное, но спокойное переливание.
+//
+// 🔧 PALETTE: база алый, тёмная волна проходит плавно через 11 оттенков:
+// scarlet → red → crimson → dark-red → crimson → red → scarlet → red →
+// crimson → dark-red → scarlet (двойная волна за один цикл — больше «слоёв»)
 struct AdminShimmerTextModifier: ViewModifier {
     let colors: [Color]
     @State private var phase: CGFloat = -1
 
     init(colors: [Color] = [
-        Color(hex: 0xFF1538),   // scarlet — база (ярко-алый, максимум яркости)
-        Color(hex: 0xE60012),   // pure red — лёгкое затемнение
-        Color(hex: 0xCC0000),   // crimson — средне-тёмный
-        Color(hex: 0xB00000),   // dark crimson — пик тёмной волны (но не слишком)
-        Color(hex: 0xCC0000),   // crimson — подъём обратно
-        Color(hex: 0xE60012),   // pure red — почти яркий
-        Color(hex: 0xFF1538),   // scarlet — обратно в базу (бесшовный loop)
+        Color(hex: 0xFF1538),   // 1. scarlet — база
+        Color(hex: 0xF01020),   // 2. bright scarlet (чуть темнее)
+        Color(hex: 0xE60012),   // 3. pure red
+        Color(hex: 0xD80010),   // 4. deep red
+        Color(hex: 0xCC0000),   // 5. crimson
+        Color(hex: 0xD80010),   // 6. deep red (подъём)
+        Color(hex: 0xE60012),   // 7. pure red
+        Color(hex: 0xF01020),   // 8. bright scarlet
+        Color(hex: 0xCC0000),   // 9. crimson (вторая волна — многослойность)
+        Color(hex: 0xD80010),   // 10. deep red
+        Color(hex: 0xFF1538),   // 11. scarlet — обратно в базу (бесшовный loop)
     ]) {
         self.colors = colors
     }
@@ -257,8 +276,8 @@ struct AdminShimmerTextModifier: ViewModifier {
             .shadow(color: Color(hex: 0xFF4D4D).opacity(0.4), radius: 8)
             .onAppear {
                 withAnimation(
-                    // 🔧 2.8s — заметное переливание, не нервное
-                    .easeInOut(duration: 2.8)
+                    // 🔧 SLOWER: 4с — заметное, но спокойное переливание
+                    .easeInOut(duration: 4.0)
                     .repeatForever(autoreverses: false)
                 ) {
                     phase = 2

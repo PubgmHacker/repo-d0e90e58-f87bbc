@@ -290,16 +290,25 @@ struct BioluminescentButton: View {
 }
 
 // MARK: - Glow Pulse Modifier (для реакций чата / голоса)
+//
+// 🔧 IMPROVED: теперь пульсирует не только radius, но и opacity тени —
+// иначе свечение выглядело статичным. Добавлены minOpacity/maxOpacity
+// для тонкой настройки интенсивности (по умолчанию 0.15↔0.45 — сдержанно).
 struct GlowPulseModifier: ViewModifier {
     var color: Color = .bioCyan
     var minRadius: CGFloat = 4
     var maxRadius: CGFloat = 14
+    var minOpacity: Double = 0.15
+    var maxOpacity: Double = 0.45
     var period: Double = 2.0
     @State private var pulse = false
 
     func body(content: Content) -> some View {
         content
-            .shadow(color: color.opacity(0.5), radius: pulse ? maxRadius : minRadius)
+            .shadow(
+                color: color.opacity(pulse ? maxOpacity : minOpacity),
+                radius: pulse ? maxRadius : minRadius
+            )
             .onAppear {
                 withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
                     pulse = true
@@ -308,14 +317,123 @@ struct GlowPulseModifier: ViewModifier {
     }
 }
 
+// MARK: - Breathing Scale Modifier
+//
+// 🔧 NEW: Тонкое «дыхание» — пульсирующее масштабирование элемента.
+// Используется для логотипов, аватаров, точек онлайна — где свечение тени
+// неуместно, но хочется лёгкого ощущения «живости». По умолчанию 1.00↔1.04
+// с периодом 2.6с — спокойно и ненавязчиво.
+struct BreathingScaleModifier: ViewModifier {
+    var minScale: CGFloat = 1.0
+    var maxScale: CGFloat = 1.04
+    var period: Double = 2.6
+    @State private var breathe = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(breathe ? maxScale : minScale)
+            .onAppear {
+                withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
+                    breathe = true
+                }
+            }
+    }
+}
+
+// 🔧 NEW: Условное дыхание — анимация запускается только если isActive == true.
+// Используется для online-точек друзей (только онлайн-друзья пульсируют),
+// индикаторов LIVE и т.п. — чтобы не анимировать статичные/офлайн элементы.
+struct ConditionalBreathing: ViewModifier {
+    var isActive: Bool
+    var minScale: CGFloat = 1.0
+    var maxScale: CGFloat = 1.25
+    var minOpacity: Double = 0.55
+    var maxOpacity: Double = 1.0
+    var period: Double = 2.0
+    @State private var breathe = false
+
+    func body(content: Content) -> some View {
+        if isActive {
+            content
+                .scaleEffect(breathe ? maxScale : minScale)
+                .opacity(breathe ? maxOpacity : minOpacity)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
+                        breathe = true
+                    }
+                }
+        } else {
+            content
+        }
+    }
+}
+
+// 🔧 NEW: Условное свечение тени — пульсирует только если isActive == true.
+// Используется для CTA-кнопок: glow появляется когда форма валидна (canProceed),
+// и пропадает когда кнопка disabled. В отличие от простого glowPulse, даёт
+// функциональный feedback вместо декоративного.
+struct ConditionalGlow: ViewModifier {
+    var isActive: Bool
+    var color: Color = .bioCyan
+    var minRadius: CGFloat = 6
+    var maxRadius: CGFloat = 14
+    var minOpacity: Double = 0.15
+    var maxOpacity: Double = 0.35
+    var period: Double = 2.0
+    @State private var pulse = false
+
+    func body(content: Content) -> some View {
+        if isActive {
+            content
+                .shadow(
+                    color: color.opacity(pulse ? maxOpacity : minOpacity),
+                    radius: pulse ? maxRadius : minRadius
+                )
+                .onAppear {
+                    withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
+                        pulse = true
+                    }
+                }
+        } else {
+            content
+        }
+    }
+}
+
 extension View {
     func glowPulse(
         color: Color = .bioCyan,
         minRadius: CGFloat = 4,
         maxRadius: CGFloat = 14,
+        minOpacity: Double = 0.15,
+        maxOpacity: Double = 0.45,
         period: Double = 2.0
     ) -> some View {
-        modifier(GlowPulseModifier(color: color, minRadius: minRadius, maxRadius: maxRadius, period: period))
+        modifier(
+            GlowPulseModifier(
+                color: color,
+                minRadius: minRadius,
+                maxRadius: maxRadius,
+                minOpacity: minOpacity,
+                maxOpacity: maxOpacity,
+                period: period
+            )
+        )
+    }
+
+    /// 🔧 NEW: Тонкое масштабирование-дыхание для логотипов/аватаров/точек.
+    func breathingScale(
+        minScale: CGFloat = 1.0,
+        maxScale: CGFloat = 1.04,
+        period: Double = 2.6
+    ) -> some View {
+        modifier(
+            BreathingScaleModifier(
+                minScale: minScale,
+                maxScale: maxScale,
+                period: period
+            )
+        )
     }
 
     func neonText(color: Color = .bioCyan, radius: CGFloat = 8) -> some View {

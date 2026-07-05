@@ -164,6 +164,8 @@ struct ProfileView: View {
                 .shadow(color: .ravePrimary.opacity(0.3), radius: 10, y: 4)
             }
             .padding(.horizontal, 20)
+            // 🔧 SUBTLE: slow breathing glow on the edit button — invites tap without nagging.
+            .glowPulse(color: Color.ravePrimary, minRadius: 8, maxRadius: 16, minOpacity: 0.15, maxOpacity: 0.35, period: 2.8)
         }
         .padding(.top, 20)
     }

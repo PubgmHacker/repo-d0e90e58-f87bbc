@@ -14,7 +14,7 @@ import StoreKit
 @MainActor
 final class StoreManager: ObservableObject {
 
-    /// 🔧 FIX C9: Singleton — ProfileView and SettingsSlidePanel call .purchase()
+    /// 🔧 FIX C9: Singleton — SettingsView and ProfileView call .purchase()
     /// and .restorePurchases() without needing to instantiate.
     static let shared = StoreManager()
 
@@ -32,9 +32,9 @@ final class StoreManager: ObservableObject {
     // MARK: - Config
 
     private let productIDs = [
-        "com.syncwatch.raveclone.premium.monthly",
-        "com.syncwatch.raveclone.premium.quarterly",
-        "com.syncwatch.raveclone.premium.yearly",
+        "com.syncwatch.plink.premium.monthly",
+        "com.syncwatch.plink.premium.quarterly",
+        "com.syncwatch.plink.premium.yearly",
     ]
 
     // MARK: - State
@@ -80,7 +80,7 @@ final class StoreManager: ObservableObject {
     // MARK: - Purchase
 
     /// 🔧 FIX C9: Convenience purchase() — picks the default (monthly) product.
-    /// Used by ProfileView and SettingsSlidePanel when no specific product is selected.
+    /// Used by ProfileView and SettingsView when no specific product is selected.
     func purchase() async {
         // Load products if not already loaded
         if products.isEmpty {

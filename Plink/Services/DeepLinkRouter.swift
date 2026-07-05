@@ -24,7 +24,7 @@ final class DeepLinkRouter: ObservableObject {
     // MARK: - Config
 
     static let domain = "plink.app"
-    static let customScheme = "raveclone"
+    static let customScheme = "plink"
 
     // MARK: - Parsing
 

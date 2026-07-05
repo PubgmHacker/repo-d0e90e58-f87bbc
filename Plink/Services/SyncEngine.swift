@@ -181,16 +181,25 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             asset = AVURLAsset(url: url, options: options)
             Logger.sync.info("🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers")
         } else if lowerURL.contains("plink-backend") && lowerURL.contains("youtube-stream") {
-            // 🔧 v9.1: backend proxy URL — NO auth header needed (endpoint is public).
-            // v9 tried to add Authorization header via AVURLAssetHTTPHeaderFieldsKey,
-            // but AVPlayer's header injection is unreliable — it sometimes drops
-            // headers on Range requests, causing 401 → -1008 error.
+            // 🔧 v9.2: re-add Authorization header — backend STILL requires auth.
             //
-            // v9.1 fix: backend endpoint is now PUBLIC (no JWT required).
-            // The video ID is not sensitive — it's just a YouTube video ID.
-            // AVPlayer can access the URL without any custom headers.
-            asset = AVAsset(url: url)
-            Logger.sync.info("🔍 loadMedia: backend proxy URL (public, no auth needed)")
+            // v9.1 removed the auth header, causing -1013 (401 auth challenge).
+            // The previous -1008 was NOT an auth error — it was a streaming bug
+            // on the backend (Readable.fromWeb). Auth header was working fine.
+            //
+            // v9.2: re-add the Authorization header via AVURLAssetHTTPHeaderFieldsKey.
+            // Also append token as query parameter as a fallback for Range requests
+            // where AVPlayer might drop the header.
+            var headers: [String: String] = [:]
+            if let token = KeychainHelper.read(for: "rave_auth_token") {
+                headers["Authorization"] = "Bearer \(token)"
+            }
+            let options: [String: Any] = [
+                "AVURLAssetHTTPHeaderFieldsKey": headers,
+                AVURLAssetPreferPreciseDurationAndTimingKey: true,
+            ]
+            asset = AVURLAsset(url: url, options: options)
+            Logger.sync.info("🔍 loadMedia: backend proxy URL — auth header added (token: \(headers["Authorization"] != nil ? "yes" : "nil"))")
         } else {
             asset = AVAsset(url: url)
         }

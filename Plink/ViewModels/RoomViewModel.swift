@@ -172,8 +172,9 @@ final class RoomViewModel: WebSocketClientDelegate {
         }
 
         // 🔧 FIX: show real user info (nick, avatar, admin role) on own messages.
-        // Was: senderName: "You", senderAvatarURL: nil → no nick/avatar/badge shown.
+        // Use ProfileViewModel.sharedAvatar for local avatar image (works offline).
         let user = authService.currentUserValue
+        let localAvatar = ProfileViewModel.sharedAvatar
         messages.append(ChatMessage(
             id: UUID().uuidString,
             roomID: room.id,
@@ -182,7 +183,7 @@ final class RoomViewModel: WebSocketClientDelegate {
             text: trimmed,
             timestamp: Date(),
             isRead: false,
-            senderAvatarURL: user?.avatarURL,
+            senderAvatarURL: localAvatar == nil ? user?.avatarURL : nil,
             senderRole: user?.role
         ))
         chatText = ""

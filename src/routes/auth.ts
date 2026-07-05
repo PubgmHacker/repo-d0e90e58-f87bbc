@@ -92,6 +92,54 @@ export default async function authRoutes(fastify) {
     });
   });
 
+  // POST /api/auth/admin-verify — проверка админ-кода для конкретного email
+  // 🔧 Pack v3: Специальный код ADM873IN7 для koslakandrej@gmail.com
+  fastify.post('/auth/admin-verify', {
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
+  }, async (request, reply) => {
+    const { email, code } = request.body;
+    if (!email || !code) {
+      return reply.status(400).send({ error: 'Email and code required' });
+    }
+
+    // Проверка кода
+    const ADMIN_EMAIL = 'koslakandrej@gmail.com';
+    const ADMIN_CODE = 'ADM873IN7';
+
+    if (email.toLowerCase() !== ADMIN_EMAIL) {
+      return reply.status(403).send({ error: 'Not eligible for admin verification' });
+    }
+    if (code !== ADMIN_CODE) {
+      return reply.status(401).send({ error: 'Invalid admin code' });
+    }
+
+    // Назначить роль ADMIN
+    const user = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { role: 'ADMIN', isPremium: true }
+    });
+
+    await logAudit({
+      userId: user.id,
+      action: 'admin.verified',
+      ip: request.ip,
+    });
+
+    // Выдать новые токены с admin ролью
+    const tokens = await issueTokenPair(fastify, user.id, user.username);
+
+    const { password: _, ...userWithoutPassword } = user;
+    reply.send({
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      accessExpiresAt: tokens.accessExpiresAt,
+      user: { ...userWithoutPassword, role: 'ADMIN', isPremium: true },
+    });
+  });
+
   // POST /api/auth/refresh — 60 в минуту (часто, т.к. каждый запуск приложения)
   fastify.post('/auth/refresh', {
     config: {

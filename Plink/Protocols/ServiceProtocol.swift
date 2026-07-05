@@ -19,6 +19,8 @@ protocol AuthServiceProtocol: AnyObject, Sendable {
     func updateProfile(username: String?, avatarURL: String?) async throws -> User
     /// 🔧 Pack v3: Update local cached user (after server update)
     func updateCachedUser(_ user: User)
+    /// 🔧 Pack v3: Verify admin code (POST /auth/admin-verify)
+    func verifyAdminCode(email: String, code: String) async throws -> User
 }
 
 // MARK: - Room Service Protocol

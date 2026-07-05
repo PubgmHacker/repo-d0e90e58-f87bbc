@@ -20,8 +20,6 @@ import messageRoutes from './routes/messages.js';
 import profileRoutes from './routes/profile.js';
 import mediaRoutes from './routes/media.js';
 import billingRoutes from './routes/billing.js';
-import twofaRoutes from './routes/twofa.js';
-import referralRoutes from './routes/referral.js';
 import gdprRoutes from './routes/gdpr.js';
 import featureFlagRoutes from './routes/featureFlags.js';
 import aiRoutes from './routes/ai.js';  // ← Pack 6
@@ -77,8 +75,6 @@ await fastify.register(messageRoutes, { prefix: '/api' });
 await fastify.register(profileRoutes, { prefix: '/api' });
 await fastify.register(mediaRoutes, { prefix: '/api' });
 await fastify.register(billingRoutes, { prefix: '/api' });
-await fastify.register(twofaRoutes, { prefix: '/api' });
-await fastify.register(referralRoutes, { prefix: '/api' });
 await fastify.register(gdprRoutes, { prefix: '/api' });
 await fastify.register(featureFlagRoutes, { prefix: '/api' });
 await fastify.register(aiRoutes, { prefix: '/api' });  // ← Pack 6

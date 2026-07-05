@@ -31,7 +31,7 @@ export default async function authRoutes(fastify) {
       data: { email, username, password: hashedPassword, isOnline: true }
     });
 
-    const tokens = await issueTokenPair(fastify, user.id);
+    const tokens = await issueTokenPair(fastify, user.id, user.username);
     
     await logAudit({
       userId: user.id,
@@ -74,7 +74,7 @@ export default async function authRoutes(fastify) {
 
     await prisma.user.update({ where: { id: user.id }, data: { isOnline: true } });
 
-    const tokens = await issueTokenPair(fastify, user.id);
+    const tokens = await issueTokenPair(fastify, user.id, user.username);
     
     await logAudit({
       userId: user.id,
@@ -118,7 +118,7 @@ export default async function authRoutes(fastify) {
       return reply.status(403).send({ error: 'Account banned' });
     }
 
-    const tokens = await issueTokenPair(fastify, user.id);
+    const tokens = await issueTokenPair(fastify, user.id, user.username);
     
     await logAudit({
       userId: user.id,

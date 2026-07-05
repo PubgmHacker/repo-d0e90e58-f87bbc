@@ -13,7 +13,18 @@ export default async function roomRoutes(fastify, _options) {
     fastify.post('/rooms', {
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
-        const { name, maxParticipants, mediaItem, privacy, password } = request.body;
+        const { name, maxParticipants, mediaItem, privacy, password, hostName } = request.body;
+
+        // 🔧 Pack v3 FIX: JWT содержит только {id}, без username.
+        // Берём username из БД, fallback на body.hostName, потом 'Unknown'.
+        let resolvedHostName = hostName || 'Unknown';
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id: request.user.id },
+                select: { username: true }
+            });
+            if (user?.username) resolvedHostName = user.username;
+        } catch {}
 
         const hashedPassword = password 
             ? await hashRoomPassword(password) 
@@ -23,7 +34,7 @@ export default async function roomRoutes(fastify, _options) {
             data: {
                 name,
                 hostID: request.user.id,
-                hostName: request.user.username,
+                hostName: resolvedHostName,
                 code: generateRoomCode(),
                 maxParticipants: maxParticipants || 10,
                 mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,

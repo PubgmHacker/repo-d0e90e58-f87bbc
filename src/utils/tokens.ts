@@ -11,10 +11,13 @@ export interface TokenPair {
   refreshExpiresAt: number;
 }
 
-export async function issueTokenPair(fastify: any, userId: string): Promise<TokenPair> {
+export async function issueTokenPair(fastify: any, userId: string, username?: string): Promise<TokenPair> {
   // Access token (по умолчанию 7 дней — не выкидывает из фильма)
+  // 🔧 Pack v3: добавлен username в JWT — rooms.ts использует request.user.username
+  const payload: any = { id: userId };
+  if (username) payload.username = username;
   const accessToken = fastify.jwt.sign(
-    { id: userId },
+    payload,
     { expiresIn: config.ACCESS_TOKEN_TTL as any }
   );
   

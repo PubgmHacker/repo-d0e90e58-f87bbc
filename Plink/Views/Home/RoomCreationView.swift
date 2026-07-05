@@ -25,6 +25,8 @@ struct RoomCreationView: View {
     @State private var showPaywallForLimit = false
 
     // 🔧 NEW: RoomSetupView state (for the new flow: Service → Browser → Setup → Room)
+    // Используем Optional struct + .fullScreenCover(item:) чтобы передать
+    // contentURL напрямую в closure (без race condition с @State).
     @State private var showRoomSetup = false
     @State private var setupService: VideoService = .youtube
     @State private var setupContentURL: String = ""
@@ -53,12 +55,21 @@ struct RoomCreationView: View {
                         }
                     },
                     onContentSelected: { service, contentURL, contentTitle in
-                        // 🔧 NEW: User browsed content in ServiceBrowserView.
-                        // Skip details step — go straight to RoomSetupView.
-                        showRoomSetup = true
+                        // 🔧 FIX: Устанавливаем @State ДО открытия cover.
+                        // Раньше showRoomSetup = true срабатывал сразу, и
+                        // fullScreenCover closure захватывала пустые значения
+                        // (setupContentURL ещё не успел обновиться).
+                        // Теперь: сначала обновляем state, потом в следующем
+                        // runloop открываем cover.
                         setupService = service
                         setupContentURL = contentURL
                         setupContentTitle = contentTitle
+                        print("🔍 RoomCreationView.onContentSelected: setupContentURL='\(setupContentURL)'")
+                        // 🔧 Dispatch в следующий runloop чтобы @State успел
+                        // обновиться до того как fullScreenCover создаст RoomSetupView
+                        DispatchQueue.main.async {
+                            showRoomSetup = true
+                        }
                     }
                 )
 

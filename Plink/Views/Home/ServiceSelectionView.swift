@@ -122,7 +122,9 @@ struct ServiceSelectionView: View {
                 // потом с задержкой вызываем onContentSelected чтобы
                 // RoomSetupView открылся поверх без конфликта sheet'ов.
                 browseService = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // 🔧 DEBUG: log what we're about to pass
+                print("🔍 ServiceSelectionView: closing browser, will call onContentSelected with contentURL='\(contentURL)'")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     onContentSelected(service, contentURL, contentTitle)
                 }
             }

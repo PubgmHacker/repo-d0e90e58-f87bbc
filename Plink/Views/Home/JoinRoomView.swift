@@ -247,10 +247,6 @@ struct JoinRoomView: View {
 
         Task {
             do {
-                let request = JoinRoomRequest(
-                    code: roomCode,
-                    password: selectedTab == .locked ? roomPassword : nil
-                )
                 let room = try await roomService.joinRoom(code: roomCode, password: selectedTab == .locked ? roomPassword : nil)
                 await MainActor.run {
                     isJoining = false

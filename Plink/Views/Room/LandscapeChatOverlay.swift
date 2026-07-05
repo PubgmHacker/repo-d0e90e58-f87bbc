@@ -210,6 +210,5 @@ private struct LandscapeChatBubble: View {
         onSend: {},
         isCollapsed: .constant(false)
     )
-    .previewInterfaceOrientation(.landscapeRight)
     .background(Color.black)
 }

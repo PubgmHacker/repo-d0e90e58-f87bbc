@@ -21,7 +21,15 @@ protocol AuthServiceProtocol: AnyObject, Sendable {
     /// 🔧 Pack v3: Fetch fresh user data from server (GET /users/me)
     func fetchCurrentUser() async throws -> User
     /// 🔧 Pack v3: Update profile on server (PATCH /users/me)
-    func updateProfile(username: String?, avatarURL: String?) async throws -> User
+    /// 🔧 v11 (July 2026): added displayName + coverURL params (Telegram-style
+    /// naming split + profile cover photo). All params optional — pass nil
+    /// to skip a field server-side.
+    func updateProfile(
+        username: String?,
+        avatarURL: String?,
+        displayName: String?,
+        coverURL: String?
+    ) async throws -> User
     /// 🔧 Pack v3: Update local cached user (after server update)
     func updateCachedUser(_ user: User)
     /// 🔧 Pack v3: Verify admin code (POST /auth/admin-verify)

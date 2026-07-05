@@ -140,6 +140,7 @@ struct ProfileView: View {
                 PremiumUsernameText(
                     text: viewModel.displayName,
                     isPremium: isPremium,
+                    isAdmin: viewModel.user?.isAdmin ?? false,
                     font: .title2.bold()
                 )
 

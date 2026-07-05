@@ -305,6 +305,7 @@ struct SettingsView: View {
                 // 🔧 Pack v2: переиспользуемый AvatarView с Premium/Admin кольцами
                 // Синхронизация с профилем — тот же компонент
                 AvatarView(
+                    image: profileVM?.avatarImage,
                     imageURL: profileVM?.user?.avatarURL,
                     username: profileVM?.displayName ?? "?",
                     size: 64,
@@ -317,6 +318,7 @@ struct SettingsView: View {
                     PremiumUsernameText(
                         text: profileVM?.displayName ?? "Гость",
                         isPremium: isPremium,
+                        isAdmin: profileVM?.user?.isAdmin ?? false,
                         font: .system(size: 19, weight: .bold)
                     )
                     Text("Аккаунт Плинк")

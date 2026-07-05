@@ -21,6 +21,14 @@ struct ServiceSelectionView: View {
     @State private var selectedCategory: ServiceCategory?
     /// 🔧 NEW: When set, opens ServiceBrowserView for the selected service.
     @State private var browseService: VideoService?
+    /// 🔧 v28 (July 2026): When set, opens YouTubeSearchView (native API
+    /// search) instead of ServiceBrowserView (WKWebView). YouTube's anti-bot
+    /// detects WKWebView and shows "Sign in to confirm you're not a bot" —
+    /// there is NO way around this in WKWebView. The native search bypasses
+    /// the bot check entirely because the search request goes through our
+    /// backend (YouTube Data API v3) — the iPhone never touches youtube.com
+    /// directly for search.
+    @State private var showYouTubeSearch = false
 
     enum ServiceCategory: String, Identifiable {
         case video, cinema, browser
@@ -92,8 +100,17 @@ struct ServiceSelectionView: View {
                     services: videoServices,
                     onSelect: { service in
                         selectedCategory = nil
-                        // 🔧 NEW: Open ServiceBrowserView to browse content
-                        browseService = service
+                        // 🔧 v28 (July 2026): YouTube uses native API search
+                        // (YouTubeSearchView) instead of WKWebView browsing.
+                        // YouTube's anti-bot blocks WKWebView with "Sign in
+                        // to confirm you're not a bot" — there is no bypass.
+                        // Native search goes through our backend (YouTube Data
+                        // API v3) — the iPhone never touches youtube.com.
+                        if service == .youtube {
+                            showYouTubeSearch = true
+                        } else {
+                            browseService = service
+                        }
                     }
                 )
             case .cinema:
@@ -102,7 +119,8 @@ struct ServiceSelectionView: View {
                     services: cinemaServices,
                     onSelect: { service in
                         selectedCategory = nil
-                        // 🔧 NEW: Open ServiceBrowserView to browse content
+                        // Cinema services still use WebView — they require
+                        // user login via their own auth, no API alternative.
                         browseService = service
                     }
                 )
@@ -110,6 +128,16 @@ struct ServiceSelectionView: View {
                 BrowserInputScreen { service in
                     selectedCategory = nil
                     onSelect(service)
+                }
+            }
+        }
+        // 🔧 v28: YouTube opens YouTubeSearchView (native API search).
+        // Bypasses YouTube's WKWebView bot check entirely.
+        .sheet(isPresented: $showYouTubeSearch) {
+            YouTubeSearchView { contentURL, contentTitle in
+                showYouTubeSearch = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    onContentSelected(.youtube, contentURL, contentTitle)
                 }
             }
         }

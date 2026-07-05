@@ -62,10 +62,11 @@ struct MainTabView: View {
                 }
                 .tag(Tab.settings)
         }
-        // 🔧 TELEGRAM-STYLE TABBAR: убран .tint(.ravePrimary) — он красил активную
-        // вкладку в cyan (голубой). Теперь активная вкладка = нейтральный белый
-        // (как в Telegram). TabBar полностью прозрачный metallic glass.
-        .tint(.white)
+        // 🔧 FIX: .tint(.white) делал ВСЕ вкладки белыми (активные и неактивные).
+        // .tint применяется только к ВЫБРАННОЙ вкладке по умолчанию в iOS 17+,
+        // но .white слишком яркий — неактивные тоже кажутся белыми из-за .fill иконок.
+        // Используем bioCyan — только активная вкладка подсвечивается, неактивные серые.
+        .tint(.bioCyan)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)

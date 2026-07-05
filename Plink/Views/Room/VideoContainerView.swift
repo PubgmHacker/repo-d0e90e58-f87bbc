@@ -328,6 +328,11 @@ struct WebVideoView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        // 🔧 FIX: disable user interaction on WKWebView — it captures ALL touch events
+        // even when our SwiftUI ControlsOverlay is on top. This prevents YouTube's
+        // buttons/banners from being tappable and lets our controls receive all touches.
+        // Video still renders — only touch is disabled. All playback control via JS bridge.
+        webView.isUserInteractionEnabled = false
         // 🔧 Register webView so SyncEngine can send play/pause/seek via JS
         WebViewControl.shared.register(webView)
 

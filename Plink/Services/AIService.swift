@@ -28,9 +28,16 @@ final class AIService: ObservableObject {
     /// Default model — Claude 3.5 Sonnet (good balance of quality + speed).
     /// Other options: "openai/gpt-4o", "google/gemini-flash-1.5",
     /// "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat"
-    // 🔧 FIX: use free model that supports streaming on OpenRouter.
-    // llama-3.2-3b may fail streaming. Try gemma-2-9b-it:free which is more reliable.
-    private let defaultModel = "google/gemma-2-9b-it:free"
+    // 🔧 FIX: try multiple free models in order. Some free models may be temporarily
+    // unavailable on OpenRouter. We try them in order until one works.
+    private let freeModels = [
+        "google/gemma-2-9b-it:free",
+        "mistralai/mistral-7b-instruct:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "qwen/qwen-2-7b-instruct:free",
+    ]
+    private var currentModelIndex = 0
+    private var defaultModel: String { freeModels[currentModelIndex] }
 
     /// Lighter model for quick recommendations (faster + cheaper).
     private let lightModel = "google/gemini-flash-1.5"
@@ -72,7 +79,7 @@ final class AIService: ObservableObject {
     }
 
     /// Send a chat completion request and return the full response.
-    /// Used for AI Assistant tab when streaming isn't needed.
+    /// 🔧 FIX: tries multiple free models if one fails.
     func chat(
         messages: [ChatMessage],
         model: String? = nil,
@@ -82,16 +89,31 @@ final class AIService: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
-        let body: [String: Any] = [
-            "model": model ?? defaultModel,
-            "messages": messages.map { ["role": $0.role, "content": $0.content] },
-            "temperature": temperature,
-            "max_tokens": 1024,
-        ]
+        var lastError: Error?
+        for i in 0..<freeModels.count {
+            currentModelIndex = i
+            let body: [String: Any] = [
+                "model": model ?? defaultModel,
+                "messages": messages.map { ["role": $0.role, "content": $0.content] },
+                "temperature": temperature,
+                "max_tokens": 1024,
+            ]
 
-        let data = try await sendRequest(body: body)
-        let response = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
-        return response.choices.first?.message.content ?? ""
+            do {
+                print("🤖 AI: trying model \(defaultModel)...")
+                let data = try await sendRequest(body: body)
+                let response = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
+                let result = response.choices.first?.message.content ?? ""
+                if !result.isEmpty {
+                    print("🤖 AI: success with \(defaultModel)")
+                    return result
+                }
+            } catch {
+                print("🤖 AI: \(defaultModel) failed: \(error.localizedDescription)")
+                lastError = error
+            }
+        }
+        throw lastError ?? APIError.serverError(status: 0, message: "All free models failed")
     }
 
     // MARK: - Streaming Chat (SSE)

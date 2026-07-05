@@ -503,7 +503,7 @@ struct AIHistorySheet: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        withAnimation(.easeOut(duration: 0.25)) {
+                                        _ = withAnimation(.easeOut(duration: 0.25)) {
                                             queries.remove(at: index)
                                         }
                                         saveQueries()

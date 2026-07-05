@@ -181,19 +181,16 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             asset = AVURLAsset(url: url, options: options)
             Logger.sync.info("🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers")
         } else if lowerURL.contains("plink-backend") && lowerURL.contains("youtube-stream") {
-            // 🔧 v9: backend proxy URL — add Authorization header with JWT.
-            // Backend's /api/media/youtube-stream requires JWT auth.
-            // Token is stored in Keychain under "rave_auth_token" (see AuthService).
-            var headers: [String: String] = [:]
-            if let token = KeychainHelper.read(for: "rave_auth_token") {
-                headers["Authorization"] = "Bearer \(token)"
-            }
-            let options: [String: Any] = [
-                "AVURLAssetHTTPHeaderFieldsKey": headers,
-                AVURLAssetPreferPreciseDurationAndTimingKey: true,
-            ]
-            asset = AVURLAsset(url: url, options: options)
-            Logger.sync.info("🔍 loadMedia: backend proxy URL — added Authorization header")
+            // 🔧 v9.1: backend proxy URL — NO auth header needed (endpoint is public).
+            // v9 tried to add Authorization header via AVURLAssetHTTPHeaderFieldsKey,
+            // but AVPlayer's header injection is unreliable — it sometimes drops
+            // headers on Range requests, causing 401 → -1008 error.
+            //
+            // v9.1 fix: backend endpoint is now PUBLIC (no JWT required).
+            // The video ID is not sensitive — it's just a YouTube video ID.
+            // AVPlayer can access the URL without any custom headers.
+            asset = AVAsset(url: url)
+            Logger.sync.info("🔍 loadMedia: backend proxy URL (public, no auth needed)")
         } else {
             asset = AVAsset(url: url)
         }

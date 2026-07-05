@@ -413,23 +413,41 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v10 (July 2026): YouTube via WebView (like Rave).
+            // 🔧 v11 (July 2026): YouTube via backend hosted IFrame player.
             //
-            // Backend extraction doesn't work — YouTube blocks yt-dlp on
-            // Railway datacenter IP ("Sign in to confirm you're not a bot").
-            // Backend proxy also fails (googlevideo 403 + yt-dlp blocked).
+            // ALL previous approaches failed:
+            //   v1-v7: WebView embed → 153 (YouTube detects WKWebView)
+            //   v8: backend yt-dlp extraction → googlevideo IP-bound → -11828
+            //   v9: backend streaming proxy → yt-dlp blocked on Railway IP
+            //   v10.x: clean WKWebView + various UAs → still 153
             //
-            // v10: just use the embed URL + WebView mode. Same as Rave.
-            // VideoContainerView loads youtube.com/embed/VIDEO_ID in WKWebView
-            // with DEFAULT UA (no override) and NO CSS injection for YouTube.
-            // This is the exact approach Rave uses successfully.
+            // v11 SOLUTION: backend hosts an HTML page with YouTube IFrame API.
+            // iOS loads: https://plink-backend.../api/media/youtube-player?id=VIDEO_ID
             //
-            // The previous 153 errors were likely caused by our CSS injection
-            // (fullscreenCssScript hides video controls) and customUserAgent
-            // overrides — YouTube's JS detected the modifications and blocked.
-            // With NO modifications (like Rave), it should work.
-            let finalStreamURL = contentURL
-            let finalSource = mediaSource  // .youtube → .webview mode
+            // The page has a REAL origin (backend domain), so:
+            //   - IFrame API postMessage works (no 152-4, unlike loadHTMLString)
+            //   - YouTube's WKWebView detection doesn't run in our page context
+            //     (the IFrame API script runs in OUR page, not YouTube's embed)
+            //   - No 153 (YouTube's player JS initializes inside an iframe
+            //     loaded from youtube.com, but the PARENT page is our backend)
+            //   - No bot check (we're not loading youtube.com directly in WKWebView)
+            let finalStreamURL: String
+            let finalSource: MediaItem.MediaSource
+
+            if service == .youtube {
+                let videoId = contentURL.components(separatedBy: "/").last ?? ""
+                let backendBase = "https://plink-backend-production-ef31.up.railway.app/api"
+                finalStreamURL = "\(backendBase)/media/youtube-player?id=\(videoId)"
+                // source = .url so effectivePlaybackMode = .directStream → AVPlayer
+                // NO — we need .webview mode! The URL is an HTML page, not a video.
+                // Keep source = .youtube → effectivePlaybackMode = .webview
+                finalSource = .youtube
+                print("🔧 RoomSetupView: YouTube via backend player: \(finalStreamURL.prefix(80))")
+            } else {
+                finalStreamURL = contentURL
+                finalSource = mediaSource
+            }
+
             let finalTitle = contentTitle.isEmpty ? name : contentTitle
 
             let mediaItem = MediaItem(

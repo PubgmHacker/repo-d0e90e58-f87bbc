@@ -9,6 +9,7 @@ struct AIAssistantView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
+    @State private var showHistory = false  // 🔧 NEW: AI history sheet
 
     /// 🔧 CHAR LIMIT: 150 chars max per message — prevents spam + API abuse
     private let charLimit = 150
@@ -16,6 +17,8 @@ struct AIAssistantView: View {
     @State private var lastSendTime: Date = .distantPast
 
     private let storageKey = "ai_chat_history"
+    /// 🔧 NEW: separate key for ALL past sessions (history of queries)
+    private let allHistoryKey = "ai_all_queries_history"
 
     var body: some View {
         NavigationStack {
@@ -76,22 +79,37 @@ struct AIAssistantView: View {
             .toolbarBackground(Color.clear, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                // 🔧 NEW: left — history of all AI queries
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showHistory = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.raveTextSecondary)
+                    }
+                }
+                // 🔧 NEW: right — new chat (clears current, starts fresh)
                 ToolbarItem(placement: .topBarTrailing) {
-                    // 🔧 PREMIUM: clear chat history button (was missing)
                     Button {
                         HapticManager.impact(.medium)
+                        // Save current queries to all-history before clearing
+                        saveToAllHistory()
                         withAnimation {
                             messages.removeAll()
                             UserDefaults.standard.removeObject(forKey: storageKey)
                         }
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: "plus.bubble")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.raveDanger)
+                            .foregroundColor(.bioAmber)
                     }
                     .disabled(messages.isEmpty)
                     .opacity(messages.isEmpty ? 0.4 : 1)
                 }
+            }
+            .sheet(isPresented: $showHistory) {
+                AIHistorySheet(allHistoryKey: allHistoryKey)
             }
         }
         .preferredColorScheme(.dark)
@@ -354,6 +372,113 @@ struct AIAssistantView: View {
                   let role = AIMessage.Role(rawValue: roleStr) else { return nil }
             return AIMessage(id: id, role: role, text: text, timestamp: Date())
         }
+    }
+
+    /// 🔧 NEW: Save all user queries to persistent all-history.
+    /// Called when starting a new chat — preserves past queries for history view.
+    private func saveToAllHistory() {
+        let userQueries = messages.filter { $0.role == .user }.map { $0.text }
+        var existing = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: String]] ?? []
+        let now = ISO8601DateFormatter().string(from: Date())
+        for query in userQueries {
+            existing.append(["query": query, "date": now])
+        }
+        // Keep last 100 queries
+        if existing.count > 100 {
+            existing = Array(existing.suffix(100))
+        }
+        UserDefaults.standard.set(existing, forKey: allHistoryKey)
+    }
+}
+
+// MARK: - AI History Sheet
+/// 🔧 NEW: Shows all past AI queries in a list.
+struct AIHistorySheet: View {
+    let allHistoryKey: String
+    @Environment(\.dismiss) private var dismiss
+
+    private var queries: [(query: String, date: String)] {
+        let data = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: String]] ?? []
+        return data.reversed().compactMap { dict in
+            guard let q = dict["query"] else { return nil }
+            let d = dict["date"] ?? ""
+            return (query: q, date: d)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.bioObsidian.ignoresSafeArea()
+
+                if queries.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 36))
+                            .foregroundColor(.raveTextTertiary)
+                        Text("История запросов пуста")
+                            .font(.subheadline)
+                            .foregroundColor(.raveTextSecondary)
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(Array(queries.enumerated()), id: \.offset) { _, item in
+                                HStack(spacing: 10) {
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.bioAmber)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.query)
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.raveTextPrimary)
+                                            .lineLimit(2)
+                                        if !item.date.isEmpty {
+                                            Text(formatDate(item.date))
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.raveTextTertiary)
+                                        }
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    }
+                }
+            }
+            .navigationTitle("История")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Готово") { dismiss() }
+                        .foregroundColor(.bioAmber)
+                }
+                if !queries.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            UserDefaults.standard.removeObject(forKey: allHistoryKey)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 14))
+                                .foregroundColor(.raveDanger)
+                        }
+                    }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func formatDate(_ iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: iso) else { return "" }
+        return date.formatted(.relative(presentation: .named))
     }
 }
 

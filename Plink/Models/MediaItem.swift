@@ -70,9 +70,17 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
             return .directStream
         }
 
-        // 🔧 v8: also recognize r---sn-*.googlevideo.com (sometimes appears as
-        // plain googlevideo.com without /videoplayback path)
-        if lower.contains(".googlevideo.com/") && lower.contains("videoplayback") {
+        // 🔧 v9 (July 2026): backend streaming proxy URL.
+        // Format: https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
+        // This is our own backend endpoint that proxies the googlevideo stream.
+        // AVPlayer should treat it as a direct stream (NOT webview) so it uses
+        // AVPlayer with the Authorization header (set in SyncEngine.loadMedia).
+        if lower.contains("plink-backend") && lower.contains("youtube-stream") {
+            return .directStream
+        }
+
+        // 🔧 v9: any backend proxy URL (future-proof for other streaming endpoints)
+        if lower.contains("/api/media/") && lower.contains("-stream") {
             return .directStream
         }
 

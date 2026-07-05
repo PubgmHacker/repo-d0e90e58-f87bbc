@@ -262,7 +262,31 @@ final class AuthService: AuthServiceProtocol {
         if let data = try? JSONEncoder().encode(user) {
             defaults.set(data, forKey: Keys.savedUser)
         }
-        self.currentUser = user
+        currentUser = user
+    }
+
+    // 🔧 Pack v3: Fetch fresh user from server
+    func fetchCurrentUser() async throws -> User {
+        let user: User = try await api.request("users/me", method: .get)
+        cacheUser(user)
+        return user
+    }
+
+    // 🔧 Pack v3: Update profile on server
+    func updateProfile(username: String?, avatarURL: String?) async throws -> User {
+        struct UpdateBody: Encodable {
+            let username: String?
+            let avatarURL: String?
+        }
+        let body = UpdateBody(username: username, avatarURL: avatarURL)
+        let user: User = try await api.request("users/me", method: .patch, body: body)
+        cacheUser(user)
+        return user
+    }
+
+    // 🔧 Pack v3: Update local cached user
+    func updateCachedUser(_ user: User) {
+        cacheUser(user)
     }
 }
 

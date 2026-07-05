@@ -78,7 +78,16 @@ final class ProfileViewModel {
 
     func loadUser() async {
         isLoading = true
-        user = await authService.currentUser()
+        // 🔧 Pack v3: Загружаем с сервера (GET /users/me), не из локального кэша
+        do {
+            let fresh: User = try await authService.fetchCurrentUser()
+            user = fresh
+            // Обновляем локальный кэш в AuthService
+            authService.updateCachedUser(fresh)
+        } catch {
+            // Fallback на локальный кэш
+            user = await authService.currentUser()
+        }
         loadAvatarFromDisk()
         isLoading = false
     }
@@ -131,9 +140,18 @@ final class ProfileViewModel {
 
     func updateUsername(_ newName: String) async {
         guard let current = user else { return }
-        user = User(id: current.id, username: newName, email: current.email,
-                    avatarURL: current.avatarURL, isOnline: current.isOnline,
-                    isPremium: current.isPremium, role: current.role, createdAt: current.createdAt)
+        // 🔧 Pack v3: Отправляем на сервер (PATCH /users/me)
+        do {
+            let updated: User = try await authService.updateProfile(username: newName, avatarURL: current.avatarURL)
+            user = updated
+            authService.updateCachedUser(updated)
+        } catch {
+            // Fallback: локальное обновление
+            user = User(id: current.id, username: newName, email: current.email,
+                        avatarURL: current.avatarURL, isOnline: current.isOnline,
+                        isPremium: current.isPremium, role: current.role, createdAt: current.createdAt)
+            errorMessage = "Не удалось сохранить на сервере: \(error.localizedDescription)"
+        }
     }
 
     func deleteAccount() async {

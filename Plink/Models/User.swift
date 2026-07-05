@@ -142,6 +142,20 @@ struct UserPreview: Codable, Identifiable, Sendable, Hashable {
         displayName?.isEmpty == false ? displayName! : username
     }
 
+    /// 🔧 v11: explicit init with displayName defaulting to nil.
+    /// Without this, Swift synthesizes a memberwise init where displayName
+    /// is required (even though it's Optional) — breaking all existing
+    /// callers that don't pass displayName. The default nil preserves
+    /// backward compatibility.
+    init(id: String, username: String, avatarURL: String?,
+         displayName: String? = nil, isOnline: Bool) {
+        self.id = id
+        self.username = username
+        self.avatarURL = avatarURL
+        self.displayName = displayName
+        self.isOnline = isOnline
+    }
+
     static var preview: UserPreview {
         UserPreview(id: "user_002", username: "jordan", avatarURL: nil, displayName: nil, isOnline: true)
     }

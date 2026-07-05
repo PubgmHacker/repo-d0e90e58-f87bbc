@@ -183,7 +183,7 @@ final class RoomViewModel: WebSocketClientDelegate {
             timestamp: Date(),
             isRead: false,
             senderAvatarURL: user?.avatarURL,
-            senderRole: user?.role.rawValue
+            senderRole: user?.role
         ))
         chatText = ""
     }

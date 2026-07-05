@@ -21,10 +21,21 @@ final class ProfileViewModel {
     /// обновляют свой instance avatarImage.
     var avatarImage: UIImage?
 
+    /// 🔧 NEW: Cover photo (обложка профиля как ВКонтакте) — фоновое фото
+    /// над аватаром. Хранится локально в Documents/cover.jpg, синхронизируется
+    /// между инстансами через NotificationCenter (как avatarImage).
+    var coverImage: UIImage?
+
     /// Общий аватар для всех ProfileViewModel-инстансов (профиль + шторка настроек).
     /// При изменении постит notification — все инстансы подтягивают новое значение.
     static var sharedAvatar: UIImage? {
         didSet { Self.notifyAvatarChange() }
+    }
+
+    /// 🔧 NEW: Общая обложка профиля (как ВКонтакте) — статическая, синхронизируется
+    /// между инстансами через NotificationCenter (как sharedAvatar).
+    static var sharedCover: UIImage? {
+        didSet { Self.notifyCoverChange() }
     }
 
     /// Уведомляет все инстансы об изменении аватара.
@@ -32,6 +43,12 @@ final class ProfileViewModel {
         NotificationCenter.default.post(name: Self.avatarChangedNotification, object: nil)
     }
     static let avatarChangedNotification = Notification.Name("plink_avatar_changed")
+
+    /// 🔧 NEW: Уведомляет все инстансы об изменении обложки.
+    private static func notifyCoverChange() {
+        NotificationCenter.default.post(name: Self.coverChangedNotification, object: nil)
+    }
+    static let coverChangedNotification = Notification.Name("plink_cover_changed")
 
     /// 🔧 FIX: Подписка на смену аватара другим инстансом (например, когда юзер
     /// меняет фото в ProfileView — SettingsView тоже должен обновиться немедленно).
@@ -49,6 +66,13 @@ final class ProfileViewModel {
     nonisolated private var avatarObserver: NSObjectProtocol? {
         get { avatarObserverBox.value }
         set { avatarObserverBox.value = newValue }
+    }
+
+    /// 🔧 NEW: MutexBox wrapper for coverObserver (same pattern as avatarObserver)
+    private let coverObserverBox = MutexBox<NSObjectProtocol?>(nil)
+    nonisolated private var coverObserver: NSObjectProtocol? {
+        get { coverObserverBox.value }
+        set { coverObserverBox.value = newValue }
     }
 
     // История просмотров (Блок 2)
@@ -111,6 +135,19 @@ final class ProfileViewModel {
                 }
             }
         }
+        // 🔧 NEW: Subscribe to cover-changed notifications (same pattern as avatar)
+        coverObserver = NotificationCenter.default.addObserver(
+            forName: Self.coverChangedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.coverImage !== Self.sharedCover {
+                    self.coverImage = Self.sharedCover
+                }
+            }
+        }
     }
 
     nonisolated deinit {
@@ -118,6 +155,10 @@ final class ProfileViewModel {
         // nonisolated to match RoomViewModel pattern — safe for Swift 6 strict concurrency.
         if let avatarObserver {
             NotificationCenter.default.removeObserver(avatarObserver)
+        }
+        // 🔧 NEW: also remove cover observer
+        if let coverObserver {
+            NotificationCenter.default.removeObserver(coverObserver)
         }
     }
 
@@ -161,20 +202,66 @@ final class ProfileViewModel {
         // Сначала синхронизируемся со shared-кэшем (мог быть загружен другим инстансом)
         if let shared = Self.sharedAvatar, avatarImage == nil {
             avatarImage = shared
+        }
+        guard avatarImage == nil, Self.sharedAvatar == nil else {
+            loadCoverFromDisk()
             return
         }
-        guard avatarImage == nil, Self.sharedAvatar == nil else { return }
         let url = avatarFileURL
-        guard FileManager.default.fileExists(atPath: url.path),
-              let data = try? Data(contentsOf: url),
-              let img = UIImage(data: data) else { return }
-        Self.sharedAvatar = img    // posts notification (но текущий инстанс уже обновится ниже)
-        avatarImage = img
+        if FileManager.default.fileExists(atPath: url.path),
+           let data = try? Data(contentsOf: url),
+           let img = UIImage(data: data) {
+            Self.sharedAvatar = img    // posts notification (но текущий инстанс уже обновится ниже)
+            avatarImage = img
+        }
+        loadCoverFromDisk()
+    }
+
+    // MARK: - Cover Photo (обложка профиля как ВКонтакте)
+
+    /// 🔧 NEW: Сохраняет выбранное фото как обложку профиля.
+    /// Синхронизируется между инстансами через NotificationCenter (как avatar).
+    func saveCover(_ image: UIImage) {
+        Self.sharedCover = image          // posts notification via didSet
+        coverImage = image                 // immediate instance-level update
+        if let data = image.jpegData(compressionQuality: 0.8) {
+            let url = coverFileURL
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    /// 🔧 NEW: Загружает обложку с диска.
+    func loadCoverFromDisk() {
+        if let shared = Self.sharedCover, coverImage == nil {
+            coverImage = shared
+            return
+        }
+        guard coverImage == nil, Self.sharedCover == nil else { return }
+        let url = coverFileURL
+        if FileManager.default.fileExists(atPath: url.path),
+           let data = try? Data(contentsOf: url),
+           let img = UIImage(data: data) {
+            Self.sharedCover = img
+            coverImage = img
+        }
+    }
+
+    /// 🔧 NEW: Удаляет обложку (return к default gradient).
+    func removeCover() {
+        Self.sharedCover = nil
+        coverImage = nil
+        try? FileManager.default.removeItem(at: coverFileURL)
     }
 
     private var avatarFileURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         return docs.appendingPathComponent("avatar.jpg")
+    }
+
+    /// 🔧 NEW: Cover photo file URL
+    private var coverFileURL: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return docs.appendingPathComponent("cover.jpg")
     }
 
     // MARK: - History Actions (Блок 2)

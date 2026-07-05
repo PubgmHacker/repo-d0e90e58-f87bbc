@@ -13,6 +13,56 @@ struct ChatMessage: Codable, Identifiable, Sendable {
     /// 🔧 Pack v3: Role of sender (USER/MODERATOR/ADMIN/FOUNDER) — для подсветки админов
     var senderRole: String?
 
+    /// 🔧 FIX: Custom CodingKeys — backend sends camelCase, but some fields
+    /// might come as snake_case from older code. Also handle missing isRead
+    /// (backend doesn't send it — default to false).
+    enum CodingKeys: String, CodingKey {
+        case id, roomID, senderID, senderName, text, timestamp
+        case isRead = "is_read"  // backend doesn't send this — decodeIfPresent
+        case senderAvatarURL, senderRole
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        roomID = try c.decode(String.self, forKey: .roomID)
+        senderID = try c.decode(String.self, forKey: .senderID)
+        senderName = try c.decode(String.self, forKey: .senderName)
+        text = try c.decode(String.self, forKey: .text)
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
+        isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
+        senderAvatarURL = try c.decodeIfPresent(String.self, forKey: .senderAvatarURL)
+        senderRole = try c.decodeIfPresent(String.self, forKey: .senderRole)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(roomID, forKey: .roomID)
+        try c.encode(senderID, forKey: .senderID)
+        try c.encode(senderName, forKey: .senderName)
+        try c.encode(text, forKey: .text)
+        try c.encode(timestamp, forKey: .timestamp)
+        try c.encode(isRead, forKey: .isRead)
+        try c.encodeIfPresent(senderAvatarURL, forKey: .senderAvatarURL)
+        try c.encodeIfPresent(senderRole, forKey: .senderRole)
+    }
+
+    // 🔧 Direct init for local messages
+    init(id: String, roomID: String, senderID: String, senderName: String,
+         text: String, timestamp: Date, isRead: Bool,
+         senderAvatarURL: String?, senderRole: String? = nil) {
+        self.id = id
+        self.roomID = roomID
+        self.senderID = senderID
+        self.senderName = senderName
+        self.text = text
+        self.timestamp = timestamp
+        self.isRead = isRead
+        self.senderAvatarURL = senderAvatarURL
+        self.senderRole = senderRole
+    }
+
     /// 🔧 Pack v3: True если отправитель — админ
     var isSenderAdmin: Bool {
         (senderRole ?? "").uppercased() == "ADMIN" || (senderRole ?? "").uppercased() == "FOUNDER"

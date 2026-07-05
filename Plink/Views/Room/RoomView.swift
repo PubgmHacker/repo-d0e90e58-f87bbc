@@ -83,7 +83,9 @@ struct RoomView: View {
                     .allowsHitTesting(false)
             }
         }
-        .toolbar(.hidden, for: .tabBar)  // Полностью скрываем TabBar в комнате
+        // 🔧 Pack v3: Убран .toolbar(.hidden, for: .tabBar) — вызывал задержку
+        // при возврате из комнаты. NavigationStack автоматически скрывает tabBar
+        // при push.
         .task {
             guard let viewModel else { return }
             await viewModel.joinRoomFlow()
@@ -126,21 +128,8 @@ struct RoomView: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            // 🔧 Enable swipe-back gesture even with hidden back button
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    Task {
-                        await voiceChat?.endCall()
-                        await viewModel?.cleanupFlow()
-                    }
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.bioCyan)
-                }
-                .opacity(0)  // hidden but enables swipe-back gesture
-            }
+            // 🔧 Pack v3: Убран скрытый chevron.left (сдвигал плеер вниз)
+            // Swipe-back работает через NavigationStack автоматически
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $shareSheetPresented) {
@@ -172,7 +161,6 @@ struct RoomView: View {
             )
 
             // Чат — оставшееся пространство
-            // 🔧 Pack v3: Свайп вниз по чату = скрыть чат (как Telegram)
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -183,19 +171,9 @@ struct RoomView: View {
             .frame(height: max(chatHeight, 100))
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
-            // Свайп вниз с любой точки чата — скрыть (не закрывать комнату, просто свернуть чат)
-            .gesture(
-                DragGesture(minimumDistance: 40)
-                    .onEnded { value in
-                        // Только вертикальный свайп вниз (с середины тоже работает)
-                        if value.translation.height > 40 && abs(value.translation.width) < 60 {
-                            HapticManager.impact(.light)
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                showChatPanel = false
-                            }
-                        }
-                    }
-            )
+            // 🔧 Pack v3: Убран DragGesture — конфиликтовал с клавиатурой и скроллом.
+            // Клавиатура убирается свайпом вниз через .scrollDismissesKeyboard(.interactively)
+            // внутри RoomChatView.
         }
         .contentShape(Rectangle())
         // Single tap = toggle controls (только в области видео)

@@ -198,8 +198,19 @@ final class RoomViewModel: WebSocketClientDelegate {
         self.errorMessage = nil
         Logger.ws.info("Connected → room \(self.room.id)")
 
+        // 🔧 DEBUG: log mediaItem state to diagnose why video doesn't load
+        let mediaItemExists = self.room.mediaItem != nil
+        let streamURL = self.room.mediaItem?.streamURL ?? "nil"
+        let source = self.room.mediaItem?.source.rawValue ?? "nil"
+        Logger.ws.info("🔍 room.mediaItem exists: \(mediaItemExists), streamURL: \(streamURL), source: \(source)")
+        Logger.ws.info("🔍 syncEngine.currentMediaItem == nil: \(self.syncEngine.currentMediaItem == nil)")
+
         if let mediaItem = self.room.mediaItem, self.syncEngine.currentMediaItem == nil {
+            Logger.ws.info("🔍 Calling syncEngine.loadMedia...")
             self.syncEngine.loadMedia(mediaItem)
+            Logger.ws.info("🔍 After loadMedia, currentMediaItem == nil: \(self.syncEngine.currentMediaItem == nil)")
+        } else {
+            Logger.ws.warn("🔍 SKIP loadMedia: mediaItem=\(mediaItemExists), currentMediaItem nil=\(self.syncEngine.currentMediaItem == nil)")
         }
         if self.isHost {
             self.syncEngine.startStateBroadcast()

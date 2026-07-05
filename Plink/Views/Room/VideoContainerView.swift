@@ -319,12 +319,10 @@ struct WebVideoView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
 
-        // 🔧 v19: shared process pool — playback WebView shares process with
-        // ServiceBrowserView (browsing phase). YouTube cookies from browsing
-        // are available to the playback iframe → no bot check.
-        config.processPool = PlinkWebViewProcessPool.shared
-
         // 🔧 v19: persistent cookies for ALL WebViews (YouTube needs CONSENT cookie)
+        // On iOS 15+, all WKWebViews using WKWebsiteDataStore.default() automatically
+        // share the same process pool and cookies — no explicit WKProcessPool needed
+        // (deprecated since iOS 15).
         config.websiteDataStore = WKWebsiteDataStore.default()
 
         let isYouTubeLike = isYouTube || isBackendPlayer
@@ -570,9 +568,4 @@ struct VideoPlaceholder: View {
             }
         }
     }
-}
-
-// MARK: - Shared Process Pool (v19)
-final class PlinkWebViewProcessPool {
-    static let shared = WKProcessPool()
 }

@@ -75,6 +75,7 @@ struct RoomChatView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) { _, _ in
                     if let lastID = messages.last?.id {
                         withAnimation(.easeOut(duration: 0.2)) {

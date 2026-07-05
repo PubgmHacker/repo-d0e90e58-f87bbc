@@ -431,7 +431,7 @@ struct WebVideoView: UIViewRepresentable {
             <body>
                 <iframe
                     id="plink-yt-player"
-                    src="https://youtube-nocookie.com/embed/\(videoId)?enablejsapi=1&playsinline=1&controls=0&rel=0&origin=https://plink.app&widget_referrer=https://plink.app"
+                    src="https://www.youtube-nocookie.com/embed/\(videoId)?enablejsapi=1&playsinline=1&controls=0&rel=0&origin=https://plink.app&widget_referrer=https://plink.app"
                     allow="autoplay; encrypted-media"
                     referrerpolicy="strict-origin-when-cross-origin"
                     allowfullscreen>

@@ -81,6 +81,9 @@ struct PlinkApp: App {
     // MARK: - Init
 
     init() {
+        // 🔧 v23: start local HTTP server for YouTube player (localhost)
+        PlinkLocalServer.shared.start()
+
         let api = APIClient()
         apiClient = api
         authService = AuthService(api: api)

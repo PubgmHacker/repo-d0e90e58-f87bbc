@@ -514,16 +514,16 @@ struct WebVideoView: UIViewRepresentable {
         /// Load YouTube video exactly once. Blocks duplicate calls from SwiftUI state changes.
         func loadVideoOnce(id: String, webView: WKWebView) {
             guard !id.isEmpty else { return }
-            // Hard guard: if this video is already loaded, block the load
             guard id != loadedVideoId else { return }
             self.loadedVideoId = id
 
-            // Backend player URL — real HTTPS origin
-            let playerURLString = "https://plink-backend-production-ef31.up.railway.app/api/media/youtube-player?id=\(id)"
+            // 🔧 v23: load from local HTTP server (localhost) — no ATS, no sandbox issues
+            let localPort = PlinkLocalServer.shared.port
+            let playerURLString = "http://localhost:\(localPort)/?v=\(id)"
             guard let url = URL(string: playerURLString) else { return }
 
-            print("📺 YouTube v22: single load for video \(id) (Coordinator guard)")
-            let request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15.0)
+            print("📺 YouTube v23: loading via localhost:\(localPort) (no sandbox, no ATS)")
+            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10.0)
             DispatchQueue.main.async {
                 webView.load(request)
             }

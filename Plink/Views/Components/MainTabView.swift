@@ -142,7 +142,7 @@ struct RoomsTabContent: View {
                 }
             }
             .navigationTitle("Комнаты")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $navigateToRoom) { room in
                 RoomView(room: room)
                     .toolbar(.hidden, for: .tabBar)
@@ -181,6 +181,17 @@ struct RoomsTabContent: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .background(
+            Color.bioObsidian.opacity(0.85)
+                .background(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .horizontal)
+        )
+        .overlay(
+            Rectangle()
+                .fill(Color.bioCyan.opacity(0.08))
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
     }
 
     @ViewBuilder

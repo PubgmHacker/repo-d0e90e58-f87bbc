@@ -187,6 +187,7 @@ struct SettingsSlidePanel: View {
                     PremiumUsernameText(
                         text: profileVM?.displayName ?? "Гость",
                         isPremium: isPremium,
+                        isAdmin: profileVM?.user?.isAdmin ?? false,
                         font: .system(size: 15, weight: .bold)
                     )
                     Text("@\((profileVM?.username ?? "guest").lowercased())")
@@ -298,10 +299,16 @@ struct PremiumAnimatedStroke: ShapeStyle {
 struct PremiumUsernameText: View {
     let text: String
     let isPremium: Bool
+    var isAdmin: Bool = false
     var font: Font = .system(size: 18, weight: .bold)
 
     var body: some View {
-        if isPremium {
+        if isAdmin {
+            // 🔧 Pack v3: Админ — переливающийся красный
+            Text(text)
+                .font(font)
+                .adminShimmerText()
+        } else if isPremium {
             Text(text)
                 .font(font)
                 .shimmerGradientText(colors: premiumColors)

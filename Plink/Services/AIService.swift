@@ -43,13 +43,15 @@ final class AIService: ObservableObject {
     // MARK: - Init
 
     private init() {
-        // 🔧 Read API key from Info.plist (PLINK_AI_API_KEY), set via xcconfig.
-        // The key must NOT be hardcoded in source — GitHub secret scanning
-        // will reject pushes that contain API keys.
-        // To configure: add PLINK_AI_API_KEY = sk-or-v1-... to your .xcconfig file
-        // and reference it in Info.plist as $(PLINK_AI_API_KEY).
+        // 🔧 Pack v3: Read from Info.plist (PLINK_AI_API_KEY), set via xcconfig.
+        // Если xcconfig не настроен — ИИ не работает (показываем ошибку).
         let key = (Bundle.main.object(forInfoDictionaryKey: "PLINK_AI_API_KEY") as? String) ?? ""
-        self.apiKey = key
+        if key.isEmpty || key == "$(PLINK_AI_API_KEY)" || key.contains("YOUR_") {
+            // xcconfig не подставился — ИИ отключён
+            self.apiKey = ""
+        } else {
+            self.apiKey = key
+        }
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 60

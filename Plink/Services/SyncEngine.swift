@@ -128,6 +128,8 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         if item.effectivePlaybackMode == .webview {
             currentMediaItem = item
             isLoadingMedia = false
+            errorMessage = nil  // 🔧 FIX: explicitly clear any stale error from previous AVPlayer
+            Logger.sync.info("🔍 loadMedia: webview mode, skipping AVPlayer. errorMessage cleared.")
             // Host still broadcasts the new media to participants
             if isHost {
                 let msg = SyncMessage(
@@ -678,9 +680,21 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
                     self?.isLoadingMedia = false
                     self?.errorMessage = nil
                 case .failed:
-                    self?.errorMessage = item.error?.localizedDescription ?? "Failed to load media"
+                    let errDesc = item.error?.localizedDescription ?? "Failed to load media"
+                    let errCode = (item.error as NSError?)?.code ?? -1
+                    Logger.sync.error("🔍 observeStatus .failed: code=\(errCode), desc=\(errDesc)")
+                    Logger.sync.error("🔍 observeStatus: currentMediaItem.streamURL=\(self?.currentMediaItem?.streamURL ?? "nil")")
+                    Logger.sync.error("🔍 observeStatus: effectivePlaybackMode=\(self?.currentMediaItem?.effectivePlaybackMode.rawValue ?? "nil")")
+                    // 🔧 FIX: don't set errorMessage if we're in webview mode —
+                    // AVPlayer failure is expected (YouTube URL can't play in AVPlayer).
+                    // The WebView handles playback, not AVPlayer.
+                    if self?.currentMediaItem?.effectivePlaybackMode == .webview {
+                        Logger.sync.info("🔍 observeStatus: ignoring AVPlayer failure (webview mode)")
+                        self?.isLoadingMedia = false
+                        return
+                    }
+                    self?.errorMessage = errDesc
                     self?.isLoadingMedia = false
-                    Logger.sync.error("AVPlayerItem failed: \(self?.errorMessage ?? "unknown")")
                 default:
                     break
                 }

@@ -231,7 +231,7 @@ struct BubbleStylePickerSheet: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(
                             LinearGradient(
-                                colors: [Color.cyan, Color.magenta],
+                                colors: [Color.cyan, Color.pink],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),

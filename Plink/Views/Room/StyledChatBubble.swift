@@ -207,7 +207,7 @@ private struct NeonCyberBubble<Content: View>: View {
                             LinearGradient(
                                 colors: [
                                     Color.cyan.opacity(0.8 + pulsePhase * 0.2),
-                                    Color.magenta.opacity(0.6 + pulsePhase * 0.3),
+                                    Color.pink.opacity(0.6 + pulsePhase * 0.3),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing

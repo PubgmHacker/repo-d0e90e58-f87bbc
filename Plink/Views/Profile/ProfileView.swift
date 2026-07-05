@@ -14,7 +14,9 @@ struct ProfileView: View {
     @State private var showEditProfile = false
     @State private var showPaywall = false
     @State private var showPhotoPicker = false
+    @State private var showCoverPicker = false  // 🔧 NEW: cover photo picker
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedCoverItem: PhotosPickerItem?  // 🔧 NEW: cover photo selection
     @State private var friendManager: FriendManager? = nil
     @State private var isPremium = false
 
@@ -106,37 +108,129 @@ struct ProfileView: View {
             }
             selectedPhotoItem = nil
         }
+        // 🔧 NEW: Cover photo picker (separate from avatar)
+        .photosPicker(isPresented: $showCoverPicker, selection: $selectedCoverItem, matching: .images)
+        .onChange(of: selectedCoverItem) { _, newItem in
+            guard let newItem else { return }
+            newItem.loadTransferable(type: Data.self) { result in
+                DispatchQueue.main.async {
+                    if case .success(let data?) = result, let img = UIImage(data: data) {
+                        viewModel.saveCover(img)
+                    }
+                }
+            }
+            selectedCoverItem = nil
+        }
     }
 
     // MARK: - Profile Header
 
     private var profileHeader: some View {
-        VStack(spacing: 14) {
-            Button { showPhotoPicker = true } label: {
-                ZStack(alignment: .bottomTrailing) {
-                    // 🔧 Pack v2: переиспользуемый AvatarView с Premium/Admin кольцами
-                    AvatarView(
-                        image: viewModel.avatarImage,
-                        imageURL: viewModel.avatarURL,
-                        username: viewModel.displayName,
-                        size: 120,
-                        isPremium: isPremium,
-                        isAdmin: viewModel.user?.isAdmin ?? false
+        VStack(spacing: 0) {
+            // ─── COVER (VK-style) ───
+            ZStack(alignment: .bottomTrailing) {
+                // Cover image or default gradient
+                if let coverImage = viewModel.coverImage {
+                    Image(uiImage: coverImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 180)
+                        .clipped()
+                } else {
+                    // Default gradient cover (cyan→emerald→teal)
+                    LinearGradient(
+                        colors: [
+                            Color.bioCyan.opacity(0.6),
+                            Color.bioEmerald.opacity(0.5),
+                            Color.bioTeal.opacity(0.7)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-
-                    // Кнопка камеры для смены аватара
-                    Image(systemName: "camera.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(.white)
-                        .background(Circle().fill(Color.ravePrimary))
-                        .clipShape(Circle())
-                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                    .frame(height: 180)
+                    .overlay(
+                        RadialGradient(
+                            colors: [Color.white.opacity(0.15), .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 200
+                        )
+                    )
                 }
-            }
-            .buttonStyle(.plain)
 
+                // Bottom gradient fade into background
+                LinearGradient(
+                    colors: [.clear, Color.bioObsidian.opacity(0.9)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 60)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+
+                // Camera button for cover (bottom-right)
+                Button {
+                    showCoverPicker = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 36, height: 36)
+                        Circle()
+                            .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(12)
+            }
+            .frame(height: 180)
+            .clipped()
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+
+            // ─── AVATAR (overlapping cover, VK-style) ───
+            ZStack {
+                // White ring background to separate avatar from cover
+                Circle()
+                    .fill(Color.bioObsidian)
+                    .frame(width: 132, height: 132)  // 120 avatar + 6px ring each side
+                Circle()
+                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                    .frame(width: 132, height: 132)
+
+                Button { showPhotoPicker = true } label: {
+                    ZStack(alignment: .bottomTrailing) {
+                        AvatarView(
+                            image: viewModel.avatarImage,
+                            imageURL: viewModel.avatarURL,
+                            username: viewModel.displayName,
+                            size: 120,
+                            isPremium: isPremium,
+                            isAdmin: viewModel.user?.isAdmin ?? false
+                        )
+
+                        // Camera button for avatar
+                        Image(systemName: "camera.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white)
+                            .background(Circle().fill(Color.ravePrimary))
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .offset(y: -60)  // 🔧 VK-style: avatar overlaps cover
+            .padding(.bottom, -50)  // compensate offset
+
+            // ─── NAME + EMAIL ───
             VStack(spacing: 4) {
-                // Переливающийся никнейм + админ-бейдж (если админ)
                 HStack(spacing: 6) {
                     PremiumUsernameText(
                         text: viewModel.displayName,
@@ -144,7 +238,6 @@ struct ProfileView: View {
                         isAdmin: viewModel.user?.isAdmin ?? false,
                         font: .title2.bold()
                     )
-                    // 🔧 NEW: видимый админ-бейдж рядом с именем (не только шиммер-текст)
                     if viewModel.user?.isAdmin == true {
                         AdminBadgeChip()
                     }
@@ -154,8 +247,9 @@ struct ProfileView: View {
                     .font(.caption)
                     .foregroundColor(.raveTextSecondary)
             }
+            .padding(.top, 8)
 
-            // Кнопка редактировать — премиум градиент (остаётся под аватаркой)
+            // ─── EDIT BUTTON ───
             Button { showEditProfile = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "pencil")
@@ -170,10 +264,9 @@ struct ProfileView: View {
                 .shadow(color: .ravePrimary.opacity(0.3), radius: 10, y: 4)
             }
             .padding(.horizontal, 20)
-            // 🔧 SUBTLE: slow breathing glow on the edit button — invites tap without nagging.
+            .padding(.top, 16)
             .glowPulse(color: Color.ravePrimary, minRadius: 8, maxRadius: 16, minOpacity: 0.15, maxOpacity: 0.35, period: 2.8)
         }
-        .padding(.top, 20)
     }
 
     @ViewBuilder

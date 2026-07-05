@@ -104,6 +104,18 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(item: $navigateToRoom) { room in
+                // 🔧 FIX v2 (July 2026): placeholder — actual RoomView presentation
+                // is via .fullScreenCover below. Without this placeholder, SwiftUI
+                // would warn about an unhandled navigation item, but the EmptyView
+                // ensures no actual NavigationStack push happens.
+                EmptyView()
+            }
+            // 🔧 FIX v2: present RoomView modally via fullScreenCover. The old
+            // `navigationDestination(item:)` here caused the same swipe-left escape
+            // bug as MainTabView — RoomView was pushed onto HomeView's
+            // NavigationStack, where iOS edge-swipe could pop it. See commit
+            // 1b8ccb7 for the full rationale.
+            .fullScreenCover(item: $navigateToRoom) { room in
                 RoomView(room: room)
             }
             .sheet(isPresented: $showCreateRoom) {

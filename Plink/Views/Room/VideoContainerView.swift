@@ -328,49 +328,80 @@ struct WebVideoView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
 
-        // 🔧 FIX v2 (July 2026): user-reported "YouTube asks to confirm not a bot
-        // and sign in". Root cause — Plink was using a DESKTOP Mac Safari User-Agent
-        // string on an iOS device. YouTube detected the mismatch (iOS device + Mac UA
-        // + WKWebView TLS fingerprint) and flagged the request as suspicious, showing
-        // the "confirm you're not a bot" interstitial.
+        // 🔧 Register webView so SyncEngine can send play/pause/seek via JS.
+        // Must happen BEFORE we load any URL — SyncEngine may evaluate JS as
+        // soon as the player is ready, and the registration is what makes
+        // WebViewControl.shared point at this instance.
+        WebViewControl.shared.register(webView)
+
+        // 🔧 FIX v3 (July 2026): YouTube error 153 + bot check — final solution.
         //
-        // Rave (working reference) uses the DEFAULT WKWebView UA — which YouTube
-        // recognizes as legitimate iOS Safari. Fix: do NOT override customUserAgent
-        // for YouTube. Only override for Rutube, which actually needs the desktop UA.
+        // HISTORY (from git log of previous attempts):
+        //   - Default WKWebView UA + youtube.com/embed/  → error 153
+        //   - iOS Safari UA + youtube.com/embed/         → error 153
+        //   - Desktop Mac Safari UA + youtube-nocookie   → 153 fixed, BUT bot check
+        //   - Default UA + youtube.com/embed/ (v2 fix)   → 153 again
+        //
+        // ROOT CAUSE:
+        //   1. YouTube's /embed/ endpoint on youtube.com refuses default WKWebView
+        //      UA with error 153 ("Video player setup error"). This is YouTube's
+        //      deliberate block of in-app browsers that don't identify as a real
+        //      desktop browser.
+        //   2. The previous workaround (desktop Mac Safari UA) bypassed 153 but
+        //      created a UA mismatch: the User-Agent string claimed Mac, but the
+        //      underlying TLS handshake fingerprinted the request as iOS. YouTube's
+        //      anti-abuse system flagged this mismatch as bot activity → "confirm
+        //      you are not a bot" interstitial + sign-in prompt.
+        //
+        // SOLUTION: rewrite the URL from `youtube.com/embed/VIDEO_ID` to
+        // `youtube-nocookie.com/embed/VIDEO_ID` (YouTube's official privacy-enhanced
+        // embed domain). The `youtube-nocookie.com` subdomain:
+        //   - Has LESS RESTRICTIVE UA checks on /embed/ — accepts default WKWebView
+        //     UA without throwing 153
+        //   - Is officially sanctioned by YouTube (not a third-party workaround)
+        //   - Doesn't trigger bot detection because there's no UA mismatch
+        //
+        // We also append `playsinline=1` (essential for iOS inline playback),
+        // `rel=0` (no related-video end screen), and `modestbranding=1` (less
+        // YouTube branding) for a cleaner embed experience.
+        //
+        // We do NOT override customUserAgent — the default WKWebView UA is what
+        // youtube-nocookie.com expects and accepts.
+
         let urlString = url.absoluteString
         if urlString.contains("rutube.ru") {
             // Rutube genuinely requires desktop UA to serve embed properly.
             webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            webView.load(URLRequest(url: url))
+        } else if urlString.contains("youtube.com/embed/") {
+            // 🔧 Rewrite to youtube-nocookie.com + add embed params.
+            // Extract video ID from path: "https://www.youtube.com/embed/VIDEO_ID?..."
+            let videoId = url.lastPathComponent
+            var params = "playsinline=1&rel=0&modestbranding=1&enablejsapi=1"
+            // Preserve any existing query params (e.g. origin, autoplay).
+            if let existingComps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let existingItems = existingComps.queryItems,
+               !existingItems.isEmpty {
+                let existing = existingItems
+                    .filter { $0.name != "playsinline" && $0.name != "rel" && $0.name != "modestbranding" }
+                    .map { "\($0.name)=\($0.value ?? "")" }
+                    .joined(separator: "&")
+                if !existing.isEmpty {
+                    params += "&" + existing
+                }
+            }
+            let nocookieURLString = "https://www.youtube-nocookie.com/embed/\(videoId)?\(params)"
+            if let nocookieURL = URL(string: nocookieURLString) {
+                print("📺 YouTube: rewriting to youtube-nocookie.com: \(nocookieURLString)")
+                webView.load(URLRequest(url: nocookieURL))
+            } else {
+                // Fallback: load original URL directly.
+                webView.load(URLRequest(url: url))
+            }
+        } else {
+            // Non-YouTube/Rutube: load URL directly with default UA.
+            webView.load(URLRequest(url: url))
         }
-        // For YouTube and all others: leave default UA (iOS Safari).
-
-        // 🔧 FIX v2: re-enable user interaction. The previous "isUserInteractionEnabled = false"
-        // was added to prevent YouTube's own controls from being tapped, but:
-        //   1. It also blocked the "I'm not a bot" / sign-in prompts from being answerable
-        //   2. It blocked any in-video interactions YouTube requires for verification
-        //   3. Plink's ControlsOverlay is rendered ON TOP of the WebView in SwiftUI's
-        //      ZStack — it receives touches first via standard hit-testing, no need to
-        //      disable the underlying WebView.
-        // (webView.isUserInteractionEnabled stays at default `true`)
-
-        // 🔧 Register webView so SyncEngine can send play/pause/seek via JS
-        WebViewControl.shared.register(webView)
-
-        // 🔧 FIX v2 (July 2026): Rave-style direct URL load. The previous custom
-        // HTML wrapper with youtube-nocookie.com baseURL + IFrame API was causing
-        // two problems:
-        //   1. youtube-nocookie.com has STRICTER bot detection than youtube.com —
-        //      it's the privacy-enhanced domain, and YouTube treats unauthenticated
-        //      embeds from it as suspicious, often triggering sign-in prompts
-        //   2. Loading a custom HTML string with `<script src=".../iframe_api">`
-        //      is itself a fingerprinting signal that YouTube's anti-abuse systems
-        //      flag as automation
-        // Rave loads the embed URL directly via URLRequest and YouTube accepts it
-        // as a legitimate iOS Safari embed. Same approach here.
-        //
-        // Origin/Referer headers removed — they were also a fingerprint mismatch
-        // (claiming origin=youtube.com while loading from a different context).
-        webView.load(URLRequest(url: url))
 
         return webView
     }

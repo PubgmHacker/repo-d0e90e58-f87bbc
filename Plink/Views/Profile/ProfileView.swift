@@ -14,7 +14,8 @@ struct ProfileView: View {
     @State private var showEditProfile = false
     @State private var showPaywall = false
     @State private var showPhotoPicker = false
-    @State private var showCoverPicker = false  // 🔧 NEW: cover photo picker
+    @State private var showCoverPicker = false
+    @State private var showFriendsSheet = false  // 🔧 NEW: friends list sheet
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedCoverItem: PhotosPickerItem?  // 🔧 NEW: cover photo selection
     @State private var friendManager: FriendManager? = nil
@@ -95,6 +96,11 @@ struct ProfileView: View {
         .task {
             await viewModel.loadUser()
             isPremium = PremiumStatusManager.shared.isPremium
+            // 🔧 FIX: initialize friendManager so friendsCount works
+            if friendManager == nil {
+                friendManager = FriendManager(api: apiClient)
+                await friendManager?.loadFriends()
+            }
         }
         // 🔧 Pack v3: Перезагружаем после EditProfileSheet (ник + аватар)
         .onChange(of: showEditProfile) { _, isShown in
@@ -111,6 +117,21 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showEditProfile) {
             EditProfileSheet(viewModel: viewModel)
+        }
+        // 🔧 NEW: friends list sheet — shows when tapping friends count
+        .sheet(isPresented: $showFriendsSheet) {
+            NavigationStack {
+                FriendsView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .principal) {
+                            Text("Друзья")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+                    }
+            }
+            .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showPaywall) {
             PaywallView(
@@ -408,41 +429,49 @@ struct ProfileView: View {
     // MARK: - Activity Block
 
     private var activityBlock: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 14))
-                    .foregroundColor(.bioCyan)
-                Text("Активность")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
-                    
-            }
+        // 🔧 FIX: only show if there's actual activity (history exists)
+        Group {
+            if !viewModel.history.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 14))
+                            .foregroundColor(.bioCyan)
+                        Text("Активность")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(.raveTextPrimary)
+                    }
 
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(Color.bioEmerald.opacity(0.15))
-                        .frame(width: 40, height: 40)
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.bioEmerald)
-                }
+                    // Show last watched item
+                    if let lastItem = viewModel.history.first {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.bioEmerald.opacity(0.15))
+                                    .frame(width: 40, height: 40)
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.bioEmerald)
+                            }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Сейчас в комнате")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.raveTextPrimary)
-                    Text("Смотрит с друзьями")
-                        .font(.system(size: 13))
-                        .foregroundColor(.raveTextSecondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(lastItem.title)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.raveTextPrimary)
+                                    .lineLimit(1)
+                                Text("Просмотрено \(lastItem.formattedDate)")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.raveTextSecondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
                 }
-                Spacer()
-                PulsingDot(color: .bioEmerald).frame(width: 8, height: 8)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .telegramGlass(cornerRadius: 14)
         }
     }
 
@@ -454,7 +483,13 @@ struct ProfileView: View {
             Divider().frame(height: 40).background(Color.white.opacity(0.06))
             statBox(value: "\(viewModel.hoursWatched)", label: loc.string(.profileStatsHours))
             Divider().frame(height: 40).background(Color.white.opacity(0.06))
-            statBox(value: "\(friendManager?.friends.count ?? 0)", label: loc.string(.profileStatsFriends))
+            // 🔧 FIX: clickable friends count → navigate to friends
+            Button {
+                showFriendsSheet = true
+            } label: {
+                statBox(value: "\(friendManager?.friends.count ?? 0)", label: loc.string(.profileStatsFriends))
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 16)
         .telegramGlass(cornerRadius: 18)

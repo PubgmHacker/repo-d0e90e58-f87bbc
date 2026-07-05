@@ -121,6 +121,12 @@ final class RoomViewModel: WebSocketClientDelegate {
         guard !didCleanup else { return }
         didCleanup = true
 
+        // 🔧 NEW: Record watch history before leaving
+        if let mediaItem = syncEngine.currentMediaItem {
+            let watchedDuration = syncEngine.currentTime
+            WatchHistoryManager().recordWatch(mediaItem: mediaItem, watchedDuration: watchedDuration)
+        }
+
         syncEngine.cleanup()
         await voiceChat.endCall()
         wsClient.setActiveRoom(nil)

@@ -42,11 +42,38 @@ struct ProfileView: View {
             .ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     profileHeader
+
+                    // 🔧 NEW: "Подписки:" label before premium banner
+                    HStack {
+                        Text("Подписки")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.raveTextPrimary)
+                        Spacer()
+                    }
+
                     premiumBanner
-                    activityBlock
+
+                    // 🔧 NEW: "Статистика:" label
+                    HStack {
+                        Text("Статистика")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.raveTextPrimary)
+                        Spacer()
+                    }
+
                     statsRow
+                    activityBlock
+
+                    // 🔧 NEW: "История:" label
+                    HStack {
+                        Text("История просмотров")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.raveTextPrimary)
+                        Spacer()
+                    }
+
                     watchHistorySection
                 }
                 .padding(.horizontal, 20)
@@ -711,16 +738,15 @@ struct EditProfileSheet: View {
                                 Text("Имя пользователя")
                                     .font(.subheadline.bold())
                                     .foregroundColor(.raveTextPrimary)
-                                    // 🔧 TEXT STROKE: subtle black outline for readability
-                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: 0.4, y: 0)
-                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: -0.4, y: 0)
-                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: 0, y: 0.4)
-                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: 0, y: -0.4)
                                 if viewModel.user?.isAdmin == true {
                                     AdminBadgeChip(compact: true)
                                 }
                             }
-                            TextField("Введите имя", text: $newUsername)
+                            // 🔧 NEW: show current username
+                            Text("Текущий: @\(viewModel.username)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.raveTextTertiary)
+                            TextField("Введите новое имя", text: $newUsername)
                                 .textFieldStyle(RaveTextFieldStyle())
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)

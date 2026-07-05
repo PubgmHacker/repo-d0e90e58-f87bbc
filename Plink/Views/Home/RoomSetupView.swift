@@ -413,41 +413,23 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v9 (July 2026): YouTube playback via backend streaming proxy.
+            // 🔧 v10 (July 2026): YouTube via WebView (like Rave).
             //
-            // PROBLEM HISTORY (all approaches tried):
-            //   v1-v7: WebView embed → 153, 152-4, bot check (all failed)
-            //   v8: backend yt-dlp extraction + AVPlayer → googlevideo URL is
-            //       IP-bound to Railway → AVPlayer -11828 (IP mismatch)
+            // Backend extraction doesn't work — YouTube blocks yt-dlp on
+            // Railway datacenter IP ("Sign in to confirm you're not a bot").
+            // Backend proxy also fails (googlevideo 403 + yt-dlp blocked).
             //
-            // v9 SOLUTION: backend streaming proxy.
-            //   - Instead of giving AVPlayer the googlevideo URL (IP-bound),
-            //     we give it OUR backend URL: /api/media/youtube-stream?id=VIDEO_ID
-            //   - Backend extracts googlevideo URL (IP-bound to Railway = matches),
-            //     fetches the video, and streams it back to iPhone.
-            //   - AVPlayer sees a Railway URL — no IP binding, no 153, no bot check.
-            //   - Range requests pass through for seeking support.
+            // v10: just use the embed URL + WebView mode. Same as Rave.
+            // VideoContainerView loads youtube.com/embed/VIDEO_ID in WKWebView
+            // with DEFAULT UA (no override) and NO CSS injection for YouTube.
+            // This is the exact approach Rave uses successfully.
             //
-            // The video ID is extracted from the embed URL (youtube.com/embed/VIDEO_ID).
-            // The proxy URL is: https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
-            // source = .url so effectivePlaybackMode = .directStream → AVPlayer.
-            let finalStreamURL: String
-            let finalSource: MediaItem.MediaSource
-
-            if service == .youtube {
-                // Extract video ID from embed URL
-                let videoId = contentURL.components(separatedBy: "/").last ?? ""
-                let backendBase = "https://plink-backend-production-ef31.up.railway.app/api"
-                finalStreamURL = "\(backendBase)/media/youtube-stream?id=\(videoId)"
-                // 🔧 source = .url → effectivePlaybackMode = .directStream → AVPlayer
-                // (NOT .youtube → .webview, because we want AVPlayer on the proxy URL)
-                finalSource = .url
-                print("🔧 RoomSetupView: YouTube via backend proxy: \(finalStreamURL.prefix(80))")
-            } else {
-                finalStreamURL = contentURL
-                finalSource = mediaSource
-            }
-
+            // The previous 153 errors were likely caused by our CSS injection
+            // (fullscreenCssScript hides video controls) and customUserAgent
+            // overrides — YouTube's JS detected the modifications and blocked.
+            // With NO modifications (like Rave), it should work.
+            let finalStreamURL = contentURL
+            let finalSource = mediaSource  // .youtube → .webview mode
             let finalTitle = contentTitle.isEmpty ? name : contentTitle
 
             let mediaItem = MediaItem(

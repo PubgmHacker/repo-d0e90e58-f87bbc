@@ -188,7 +188,13 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         player?.play()
         isPlaying = true
 
-        // Stamp the command with current server time so receivers can compensate
+        // 🔧 WEBVIEW: for YouTube/cinema, send JS command to the WebView player.
+        // AVPlayer is nil in webview mode, so player?.play() is a no-op.
+        // WebViewControl.shared sends playVideo()/pauseVideo() to the WKWebView.
+        if player == nil {
+            WebViewControl.shared.play()
+        }
+
         let msg = SyncMessage(
             command: .play,
             roomID: roomID,
@@ -206,6 +212,11 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         lastCommandTime = now
         player?.pause()
         isPlaying = false
+
+        // 🔧 WEBVIEW: pause the YouTube/cinema player via JS
+        if player == nil {
+            WebViewControl.shared.pause()
+        }
 
         let msg = SyncMessage(
             command: .pause,

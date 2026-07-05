@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "npx prisma generate && npx prisma db push --accept-data-loss && echo 'PRISMA_DB_PUSH_DONE' && npx tsx src/index.ts",
+    "start": "npx prisma generate && npx prisma db push && echo 'PRISMA_DB_PUSH_DONE' && npx tsx src/index.ts",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate",

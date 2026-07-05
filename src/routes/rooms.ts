@@ -58,44 +58,22 @@ export default async function roomRoutes(fastify, _options) {
             ? await hashRoomPassword(password) 
             : null;
 
-        // 🔧 SAFETY: try with endedAt first (new schema), fallback to without
-        // (old DB without migration). Prevents 500 error if Railway didn't
-        // run prisma db push yet.
-        let room;
-        try {
-            room = await prisma.room.create({
-                data: {
-                    name,
-                    hostID: request.user.id,
-                    hostName: resolvedHostName,
-                    code: generateRoomCode(),
-                    maxParticipants: maxParticipants || 10,
-                    mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
-                    privacy: privacy || 'public',
-                    password: hashedPassword,
-                    hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
-                    isActive: true,
-                    endedAt: null,
-                }
-            });
-        } catch (createErr) {
-            // Fallback: endedAt column doesn't exist — create without it
-            console.warn('[rooms] create with endedAt failed, retrying without:', createErr.message);
-            room = await prisma.room.create({
-                data: {
-                    name,
-                    hostID: request.user.id,
-                    hostName: resolvedHostName,
-                    code: generateRoomCode(),
-                    maxParticipants: maxParticipants || 10,
-                    mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
-                    privacy: privacy || 'public',
-                    password: hashedPassword,
-                    hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
-                    isActive: true,
-                }
-            });
-        }
+        // 🔧 SAFETY: simple create — no endedAt column (uses isActive: false
+        // to mark ended rooms instead, history preserved in /rooms/mine query).
+        const room = await prisma.room.create({
+            data: {
+                name,
+                hostID: request.user.id,
+                hostName: resolvedHostName,
+                code: generateRoomCode(),
+                maxParticipants: maxParticipants || 10,
+                mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
+                privacy: privacy || 'public',
+                password: hashedPassword,
+                hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
+                isActive: true,
+            }
+        });
 
         // Invalidate cache
         await cacheDel(ROOMS_CACHE_KEY);
@@ -246,7 +224,7 @@ export default async function roomRoutes(fastify, _options) {
     // 🔧 NEW: Was missing — iOS RoomService.leaveRoom called /rooms/:id/leave
     // but endpoint didn't exist (silent 404). Now: removes the RoomParticipant
     // row, and if no participants remain AND host has also left → auto-mark
-    // the room as ended (isActive=false, endedAt=now). The room is NOT deleted
+    // the room as ended (isActive=false). The room is NOT deleted
     // from DB — it stays as "history" so the host can see it in Mine → История.
     fastify.post('/rooms/:id/leave', {
         preHandler: [fastify.authenticate]
@@ -275,7 +253,7 @@ export default async function roomRoutes(fastify, _options) {
         if (remainingCount === 0 && isHostLeaving && room.isActive) {
             await prisma.room.update({
                 where: { id },
-                data: { isActive: false, endedAt: new Date() }
+                data: { isActive: false }
             });
             await cacheDel(ROOMS_CACHE_KEY);
             return reply.send({ success: true, roomEnded: true });
@@ -305,7 +283,7 @@ export default async function roomRoutes(fastify, _options) {
 
     // 🔧 AUTO-CLEANUP CRON: every 5 minutes, find rooms where isActive=true
     // but have 0 participants AND host is not in participants (orphan rooms).
-    // Mark them as ended (isActive=false, endedAt=now) so they disappear from
+    // Mark them as ended (isActive=false) so they disappear from
     // the public list but stay in the host's history.
     //
     // This handles edge cases:
@@ -322,7 +300,7 @@ export default async function roomRoutes(fastify, _options) {
             if (toEnd.length === 0) return;
             await prisma.room.updateMany({
                 where: { id: { in: toEnd.map(r => r.id) } },
-                data: { isActive: false, endedAt: new Date() },
+                data: { isActive: false },
             });
             await cacheDel(ROOMS_CACHE_KEY);
             console.log(`[cleanup] Auto-ended ${toEnd.length} orphan room(s)`);

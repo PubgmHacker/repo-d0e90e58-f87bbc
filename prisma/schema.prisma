@@ -69,10 +69,6 @@ model Room {
   maxParticipants Int     @default(10)
   hostIsPremium  Boolean  @default(false)
   createdAt      DateTime @default(now())
-  /// 🔧 NEW: timestamp when room ended (auto-cleanup when 0 participants, or
-  /// host explicitly ended). Null = still active. Used for "Мои → История"
-  /// to display past rooms separately from active ones.
-  endedAt        DateTime?
   privacy        String   @default("public")
   password       String?
 

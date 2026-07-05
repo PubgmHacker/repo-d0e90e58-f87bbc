@@ -275,9 +275,28 @@ struct RoomChatBubble: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(message.senderName)
-                    .font(.system(size: compact ? 12 : 13, weight: .bold))
-                    .foregroundColor(.ravePrimary)
+                // 🔧 Pack v3: Ник админа — переливающийся красный + [A] префикс + бейдж
+                HStack(spacing: 4) {
+                    if message.isSenderAdmin {
+                        // [A] префикс
+                        Text("[A]")
+                            .font(.system(size: compact ? 10 : 11, weight: .heavy))
+                            .foregroundColor(.raveDanger)
+                        // Ник с переливающимся красным
+                        Text(message.senderName)
+                            .font(.system(size: compact ? 12 : 13, weight: .bold))
+                            .adminShimmerText()
+                        // Бейдж админа (мини иконка)
+                        Image("AdminBadge")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
+                    } else {
+                        Text(message.senderName)
+                            .font(.system(size: compact ? 12 : 13, weight: .bold))
+                            .foregroundColor(.ravePrimary)
+                    }
+                }
                 Text(message.text)
                     .font(.system(size: compact ? 14 : 16))
                     .foregroundColor(.white)

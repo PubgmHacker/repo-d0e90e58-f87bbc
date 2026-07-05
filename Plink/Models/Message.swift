@@ -10,6 +10,13 @@ struct ChatMessage: Codable, Identifiable, Sendable {
     let timestamp: Date
     var isRead: Bool
     var senderAvatarURL: String?
+    /// 🔧 Pack v3: Role of sender (USER/MODERATOR/ADMIN/FOUNDER) — для подсветки админов
+    var senderRole: String?
+
+    /// 🔧 Pack v3: True если отправитель — админ
+    var isSenderAdmin: Bool {
+        (senderRole ?? "").uppercased() == "ADMIN" || (senderRole ?? "").uppercased() == "FOUNDER"
+    }
 
     var timeString: String {
         timestamp.formatted(.dateTime.hour().minute())

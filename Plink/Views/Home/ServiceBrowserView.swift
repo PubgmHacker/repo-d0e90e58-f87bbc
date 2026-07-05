@@ -360,6 +360,48 @@ struct ServiceWebView: UIViewRepresentable {
         // 🔧 Pack v3: Register message handler for SPA URL changes
         let contentController = WKUserContentController()
         contentController.add(context.coordinator, name: "plinkURLChange")
+
+        // 🔧 v9.1 (July 2026): inject viewport-fit script for YouTube so the
+        // desktop UI (served because of the Mac UA below) fits the iPhone screen.
+        // YouTube desktop pages assume a 1280px+ viewport and don't include a
+        // mobile-friendly <meta name="viewport"> tag. Without intervention the
+        // page renders at desktop width → user sees only the top-left corner,
+        // has to pinch-zoom manually to see anything.
+        //
+        // This script runs at .atDocumentEnd (after DOM is parsed but before
+        // sub-resources finish loading). It:
+        //   1. Forces viewport meta: width=device-width, initial-scale=0.32
+        //      This scales the 1280px desktop layout down to ~410px iPhone width.
+        //   2. Allows user-scalable=yes so user can pinch-zoom in/out freely.
+        //   3. Injects a small CSS rule to prevent horizontal overflow.
+        //
+        // The scale=0.32 is calibrated for iPhone (390-430pt screens).
+        // On iPad the desktop layout already fits reasonably, so we don't inject.
+        if initialURL.host?.contains("youtube.com") == true ||
+           initialURL.host?.contains("youtu.be") == true {
+            let viewportScript = WKUserScript(
+                source: """
+                (function() {
+                    // Remove any existing viewport meta tags YouTube sets
+                    var existing = document.querySelectorAll('meta[name="viewport"]');
+                    existing.forEach(function(m) { m.remove(); });
+                    // Inject our own — scales desktop 1280px layout to fit iPhone
+                    var meta = document.createElement('meta');
+                    meta.name = 'viewport';
+                    meta.content = 'width=1280, initial-scale=0.32, minimum-scale=0.25, maximum-scale=2.0, user-scalable=yes';
+                    document.head.appendChild(meta);
+                    // Prevent horizontal scroll caused by minor overflow
+                    var style = document.createElement('style');
+                    style.innerHTML = 'html, body { overflow-x: hidden !important; max-width: 100% !important; } #content, ytd-app { max-width: 100% !important; }';
+                    document.head.appendChild(style);
+                })();
+                """,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: true
+            )
+            contentController.addUserScript(viewportScript)
+        }
+
         config.userContentController = contentController
 
         let webView = WKWebView(frame: .zero, configuration: config)

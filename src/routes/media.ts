@@ -11,9 +11,16 @@ export default async function mediaRoutes(fastify, _options) {
 
   // ═══════════════════════════════════════════════════════════════════
   // GET /api/media/search?q=запрос&limit=12 — YouTube поиск
+  // 🔧 v28 (July 2026): removed `preHandler: [fastify.authenticate]` —
+  // search is now PUBLIC. Rationale:
+  //   1. YouTubeSearchView creates its own YouTubeSearchService instance
+  //      without DI of the auth token, so authenticated search would 401.
+  //   2. Search is a read-only proxy to YouTube Data API v3 — no user-
+  //      specific data is exposed.
+  //   3. Rate limiting (30 req/min) still protects against quota abuse.
+  //   4. YOUTUBE_API_KEY is server-side only — never exposed to clients.
   // ═══════════════════════════════════════════════════════════════════
   fastify.get('/media/search', {
-    preHandler: [fastify.authenticate],
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
     const { q, limit = '12' } = request.query as any;
@@ -46,14 +53,21 @@ export default async function mediaRoutes(fastify, _options) {
 
       const results = (data.items || [])
         .filter((item: any) => item.id?.videoId)
-        .map((item: any) => ({
-          id: item.id.videoId,
-          title: item.snippet?.title || '',
-          channel: item.snippet?.channelTitle || '',
-          thumbnailURL: item.snippet?.thumbnails?.medium?.url ||
-                        item.snippet?.thumbnails?.default?.url || null,
-          duration: null,
-        }));
+        .map((item: any) => {
+          const videoId = item.id.videoId;
+          return {
+            id: videoId,
+            title: item.snippet?.title || '',
+            channel: item.snippet?.channelTitle || '',
+            thumbnailURL: item.snippet?.thumbnails?.medium?.url ||
+                          item.snippet?.thumbnails?.default?.url || null,
+            duration: null,
+            // 🔧 FIX: iOS YouTubeSearchResult requires `url` field — without it,
+            // Decodable fails silently and the user sees empty search results.
+            // Return watch URL so iOS can pass it directly to RoomSetupView.
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+          };
+        });
 
       await cacheSet(cacheKey, results, 600); // 10 min
       reply.send({ results });

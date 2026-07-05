@@ -392,14 +392,16 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v21: PlinkPlayerManager singleton + removeFromSuperview.
-            // Pull WebView from old container → re-attach to current SwiftUI context.
-            // Prevents iOS IdleExit (GPU process sleep) → black screen.
+            // 🔧 v22: Coordinator-based guard — standard SwiftUI lifecycle, no singleton.
+            // WebView created normally inside makeUIView → iOS grants sandbox.
+            // Coordinator blocks duplicate loads from WebSocket state changes.
             let videoId = url.lastPathComponent
-            let managerWebView = PlinkPlayerManager.shared.webView
-            managerWebView.removeFromSuperview()
-            PlinkPlayerManager.shared.loadYouTubeVideo(id: videoId)
-            print("📺 YouTube v21: PlinkPlayerManager + removeFromSuperview (prevent IdleExit)")
+            context.coordinator.loadedVideoId = videoId
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = webView
+            }
+            print("📺 YouTube v22: standard WKWebView + Coordinator guard (no singleton)")
+            context.coordinator.loadVideoOnce(id: videoId, webView: webView)
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
@@ -477,22 +479,19 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        // 🔧 v20: for YouTube, PlinkPlayerManager handles loading (singleton guard).
-        // For non-YouTube, only reload if URL genuinely changed.
+        // 🔧 v22: delegate to Coordinator — it blocks duplicate loads
         let urlString = url.absoluteString
         let isYouTube = urlString.contains("youtube.com/embed/") ||
                          urlString.contains("youtube-nocookie.com/embed/") ||
                          urlString.contains("youtu.be/")
 
         if isYouTube {
-            // PlinkPlayerManager.loadYouTubeVideo has its own guard —
-            // if videoId matches currentVideoId, it skips the load.
             let videoId = url.lastPathComponent
-            PlinkPlayerManager.shared.loadYouTubeVideo(id: videoId)
+            context.coordinator.loadVideoOnce(id: videoId, webView: uiView)
             return
         }
 
-        // Non-YouTube: check if URL changed before reloading
+        // Non-YouTube: only reload if URL genuinely changed
         let videoId = url.lastPathComponent
         if let currentURL = uiView.url?.absoluteString, currentURL.contains(videoId) {
             return
@@ -508,6 +507,27 @@ struct WebVideoView: UIViewRepresentable {
 
     final class Coordinator {
         var bridge: VideoTimeBridge?
+        // 🔧 v22: YouTube guard — stores loaded videoId to prevent reload loops
+        var loadedVideoId: String? = nil
+        weak var webView: WKWebView?
+
+        /// Load YouTube video exactly once. Blocks duplicate calls from SwiftUI state changes.
+        func loadVideoOnce(id: String, webView: WKWebView) {
+            guard !id.isEmpty else { return }
+            // Hard guard: if this video is already loaded, block the load
+            guard id != loadedVideoId else { return }
+            self.loadedVideoId = id
+
+            // Backend player URL — real HTTPS origin
+            let playerURLString = "https://plink-backend-production-ef31.up.railway.app/api/media/youtube-player?id=\(id)"
+            guard let url = URL(string: playerURLString) else { return }
+
+            print("📺 YouTube v22: single load for video \(id) (Coordinator guard)")
+            let request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15.0)
+            DispatchQueue.main.async {
+                webView.load(request)
+            }
+        }
     }
 
     static let syncScript: String = """

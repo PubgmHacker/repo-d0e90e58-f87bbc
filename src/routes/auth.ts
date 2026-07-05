@@ -8,88 +8,115 @@ import { alertWarning } from '../utils/alerting.js';
 export default async function authRoutes(fastify) {
 
   // POST /api/auth/signup — 5 регистраций за 20 минут
+  // 🔧 FIX: wrapped in try/catch — same 500-protection as signin.
   fastify.post('/auth/signup', {
     config: {
       rateLimit: { max: 5, timeWindow: '20 minutes' }
     }
   }, async (request, reply) => {
-    const { email, password, username } = request.body;
-    if (!email || !password || !username) {
-      return reply.status(400).send({ error: 'Missing fields' });
+    try {
+      const { email, password, username } = request.body;
+      if (!email || !password || !username) {
+        return reply.status(400).send({ error: 'Missing fields' });
+      }
+      if (password.length < 6) {
+        return reply.status(400).send({ error: 'Password must be at least 6 characters' });
+      }
+
+      const existing = await prisma.user.findFirst({
+        where: { OR: [{ email }, { username }] }
+      });
+      if (existing) return reply.status(409).send({ error: 'Email or username taken' });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await prisma.user.create({
+        data: { email, username, password: hashedPassword, isOnline: true }
+      });
+
+      const tokens = await issueTokenPair(fastify, user.id, user.username);
+
+      await logAudit({
+        userId: user.id,
+        action: AuditActions.SIGNUP,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+      reply.send({
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        accessExpiresAt: tokens.accessExpiresAt,
+        user: userWithoutPassword,
+      });
+    } catch (err: any) {
+      console.error('[auth/signup] FATAL:', err?.message || err);
+      console.error('[auth/signup] Stack:', err?.stack);
+      return reply.status(500).send({
+        error: 'Server error during sign up',
+        hint: 'Database schema may be out of sync. Check server logs.',
+        requestId: request.id,
+      });
     }
-    if (password.length < 6) {
-      return reply.status(400).send({ error: 'Password must be at least 6 characters' });
-    }
-
-    const existing = await prisma.user.findFirst({
-      where: { OR: [{ email }, { username }] }
-    });
-    if (existing) return reply.status(409).send({ error: 'Email or username taken' });
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: { email, username, password: hashedPassword, isOnline: true }
-    });
-
-    const tokens = await issueTokenPair(fastify, user.id, user.username);
-    
-    await logAudit({
-      userId: user.id,
-      action: AuditActions.SIGNUP,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
-
-    const { password: _, ...userWithoutPassword } = user;
-    reply.send({
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessExpiresAt: tokens.accessExpiresAt,
-      user: userWithoutPassword,
-    });
   });
 
   // POST /api/auth/signin — 10 попыток входа за 5 минут
+  // 🔧 FIX 500-on-signin: wrapped in try/catch with detailed error log.
+  // Previously, when the DB schema was out of sync (e.g. displayName column
+  // missing), prisma.user.findUnique threw "column does not exist" and the
+  // generic error handler returned 500 with no useful context. Now we log
+  // the actual prisma error message so future schema drift is debuggable.
   fastify.post('/auth/signin', {
     config: {
       rateLimit: { max: 10, timeWindow: '5 minutes' }
     }
   }, async (request, reply) => {
-    const { email, password } = request.body;
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      await logAudit({ action: AuditActions.LOGIN_FAILED, ip: request.ip, metadata: { email } });
-      return reply.status(401).send({ error: 'Invalid credentials' });
+    try {
+      const { email, password } = request.body;
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        await logAudit({ action: AuditActions.LOGIN_FAILED, ip: request.ip, metadata: { email } });
+        return reply.status(401).send({ error: 'Invalid credentials' });
+      }
+
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) {
+        await logAudit({ userId: user.id, action: AuditActions.LOGIN_FAILED, ip: request.ip });
+        return reply.status(401).send({ error: 'Invalid credentials' });
+      }
+
+      if (user.bannedUntil && user.bannedUntil > new Date()) {
+        return reply.status(403).send({ error: 'Account banned' });
+      }
+
+      await prisma.user.update({ where: { id: user.id }, data: { isOnline: true } });
+
+      const tokens = await issueTokenPair(fastify, user.id, user.username);
+
+      await logAudit({
+        userId: user.id,
+        action: AuditActions.LOGIN,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+      reply.send({
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        accessExpiresAt: tokens.accessExpiresAt,
+        user: userWithoutPassword,
+      });
+    } catch (err: any) {
+      console.error('[auth/signin] FATAL:', err?.message || err);
+      console.error('[auth/signin] Stack:', err?.stack);
+      // Don't leak internal details to client — just say server error.
+      return reply.status(500).send({
+        error: 'Server error during sign in',
+        hint: 'Database schema may be out of sync. Check server logs for prisma error.',
+        requestId: request.id,
+      });
     }
-
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      await logAudit({ userId: user.id, action: AuditActions.LOGIN_FAILED, ip: request.ip });
-      return reply.status(401).send({ error: 'Invalid credentials' });
-    }
-
-    if (user.bannedUntil && user.bannedUntil > new Date()) {
-      return reply.status(403).send({ error: 'Account banned' });
-    }
-
-    await prisma.user.update({ where: { id: user.id }, data: { isOnline: true } });
-
-    const tokens = await issueTokenPair(fastify, user.id, user.username);
-    
-    await logAudit({
-      userId: user.id,
-      action: AuditActions.LOGIN,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
-
-    const { password: _, ...userWithoutPassword } = user;
-    reply.send({
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessExpiresAt: tokens.accessExpiresAt,
-      user: userWithoutPassword,
-    });
   });
 
   // POST /api/auth/admin-verify — проверка админ-кода для конкретного email

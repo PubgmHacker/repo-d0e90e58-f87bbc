@@ -14,4 +14,8 @@ RUN npm ci --omit=dev || npm install --omit=dev
 COPY . .
 RUN npx prisma generate
 EXPOSE 8080
-CMD ["npx", "tsx", "src/index.ts"]
+# 🔧 FIX 500-on-signin: run prisma db push at container start so DB schema
+# stays in sync with schema.prisma. Without this, adding new fields (e.g.
+# displayName, coverURL) breaks every default-select query because the
+# Prisma client knows about columns the database doesn't have.
+CMD ["sh", "-c", "npx prisma generate && npx prisma db push --accept-data-loss && exec npx tsx src/index.ts"]

@@ -226,23 +226,39 @@ export default async function mediaRoutes(fastify, _options) {
       }
 
       // ── 3. Stream upstream response back to client ─────────────────
-      // Pass through Content-Type, Content-Length, Content-Range, Accept-Ranges.
-      reply.code(upstreamRes.status);
-      reply.header('Content-Type', upstreamRes.headers.get('content-type') || 'video/mp4');
-      reply.header('Accept-Ranges', 'bytes');
-      if (upstreamRes.headers.get('content-length')) {
-        reply.header('Content-Length', upstreamRes.headers.get('content-length')!);
-      }
-      if (upstreamRes.headers.get('content-range')) {
-        reply.header('Content-Range', upstreamRes.headers.get('content-range')!);
-      }
-      // Allow AVPlayer to cache the stream
-      reply.header('Cache-Control', 'public, max-age=3600');
-
-      // Pipe the readable stream to Fastify reply
+      // 🔧 v9.2: replaced Readable.fromWeb with manual pump.
+      // Readable.fromWeb doesn't work reliably on Railway's Node.js,
+      // causing -1008 'Ресурс недоступен' on AVPlayer.
+      // Manual pump using reader.read() + raw.write() works everywhere.
       if (upstreamRes.body) {
-        const nodeStream = Readable.fromWeb(upstreamRes.body);
-        return reply.send(nodeStream);
+        const reader = upstreamRes.body.getReader();
+        const raw = reply.raw;
+        const respHeaders: Record<string, string> = {
+          'Content-Type': upstreamRes.headers.get('content-type') || 'video/mp4',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+        };
+        const cl = upstreamRes.headers.get('content-length');
+        if (cl) respHeaders['Content-Length'] = cl;
+        const cr = upstreamRes.headers.get('content-range');
+        if (cr) respHeaders['Content-Range'] = cr;
+        raw.writeHead(upstreamRes.status, respHeaders);
+
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (!raw.destroyed) raw.write(Buffer.from(value));
+            }
+            raw.end();
+          } catch (err: any) {
+            console.error('[youtube-stream] pump error', err.message);
+            if (!raw.destroyed) raw.end();
+          }
+        };
+        pump();
+        return reply;
       } else {
         return reply.send(Buffer.alloc(0));
       }

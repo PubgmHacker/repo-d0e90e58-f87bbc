@@ -83,8 +83,21 @@ final class ProfileViewModel {
     /// Выбранный медиа-итем для пересоздания комнаты («Посмотреть снова»).
     var rewatchMedia: MediaItem?
 
+    /// 🔧 v11 (July 2026): Telegram-style display name.
+    /// Priority: user.displayName (if non-empty) → user.username → "Гость".
+    /// Previously fell back to "Гость" whenever displayName was nil, which
+    /// meant every user without an explicit display name showed as "Гость"
+    /// — even though they had a perfectly good @username. Now we fall back
+    /// to @username first, "Гость" only if even username is missing (e.g.
+    /// not signed in).
     var displayName: String {
-        user?.displayName ?? "Гость"
+        if let dn = user?.displayName, !dn.isEmpty {
+            return dn
+        }
+        if let un = user?.username, !un.isEmpty {
+            return un
+        }
+        return "Гость"
     }
 
     var email: String {

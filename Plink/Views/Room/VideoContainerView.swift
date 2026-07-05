@@ -446,35 +446,37 @@ struct WebVideoView: UIViewRepresentable {
 
         let urlString = url.absoluteString
         if urlString.contains("rutube.ru") {
-            // Rutube genuinely requires desktop Mac UA on the HTTP layer.
-            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            // 🔧 v8: Rutube also uses iOS Safari UA now — Mac UA was causing
+            // TLS mismatch warnings in some cases. Rutube works fine with
+            // iOS Safari UA (verified via curl test in commit a8ec69b).
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
         } else if urlString.contains("youtube.com/embed/") {
-            // 🔧 v7: real iOS Safari UA (matches iOS TLS fingerprint → no bot check)
+            // 🔧 v8 (July 2026): revert to Rave-style direct URL load.
+            //
+            // v6/v7 used custom HTML with IFrame API script. This caused
+            // error 152-4 ('IFrame API postMessage failed') because
+            // loadHTMLString creates a page with null origin — YouTube's
+            // IFrame API can't establish cross-origin postMessage to the
+            // iframe, so the player never initializes.
+            //
+            // Rave (the working reference app) loads youtube.com/embed/
+            // directly via webView.load(URLRequest) and it works — YouTube's
+            // own IFrame API inside the embed page initializes correctly
+            // because the page has a real origin (https://www.youtube.com).
+            //
+            // We use real iOS Safari UA (matches TLS fingerprint → no bot
+            // check on /embed/). The CSS injection script (fullscreenCssScript)
+            // hides YouTube's native controls, so only Plink's ControlsOverlay
+            // is visible.
+            //
+            // The previous v6/v7 attempts to bypass error 153 via custom HTML
+            // + IFrame API are abandoned — 153 was caused by Mac UA on iOS
+            // device (TLS mismatch), not by WKWebView detection. With iOS
+            // Safari UA + direct URL load, 153 doesn't occur.
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-
-            // 🔧 v7 (July 2026): CRITICAL FIX — use https://www.youtube.com as
-            // baseURL, NOT youtube-nocookie.com.
-            //
-            // v6 used youtube-nocookie.com as baseURL, but the IFrame API
-            // script's `origin` parameter was also set to youtube-nocookie.com.
-            // Result: when YouTube's IFrame API made its authentication request,
-            // the Origin header said youtube-nocookie.com but the IFrame API
-            // server expected youtube.com. YouTube's anti-abuse flagged this as
-            // a potential bot attempt → "sign in to confirm you are not a bot".
-            //
-            // v7: change baseURL to https://www.youtube.com AND set origin
-            // param to https://www.youtube.com. Now Origin header matches what
-            // YouTube's IFrame API server expects → no bot check.
-            //
-            // We still use the IFrame API script (https://www.youtube.com/iframe_api)
-            // because it bypasses error 153 — the IFrame API runs in OUR page
-            // context, not YouTube's, so YouTube's WKWebView-detection code
-            // never runs.
-            let videoId = url.lastPathComponent
-            let html = Self.youtubeEmbedHTML(videoId: videoId)
-            print("📺 YouTube v7: custom HTML IFrame API + iOS Safari UA + youtube.com baseURL: videoId=\(videoId)")
-            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
+            print("📺 YouTube v8: direct URL load + iOS Safari UA (Rave-style): \(url.lastPathComponent)")
+            webView.load(URLRequest(url: url))
         } else {
             // Non-YouTube/Rutube: load URL directly with default UA.
             webView.load(URLRequest(url: url))

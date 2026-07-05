@@ -15,11 +15,20 @@ final class OrientationManager {
         // macOS Catalyst / симулятор: через requestGeometryUpdate
         if #available(iOS 16.0, *) {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            // 🔧 iOS 16+: заменённый API вместо устаревшего attemptRotationToDeviceOrientation().
+            // Просит UIKit пересчитать поддерживаемые ориентации для всех VC в сцене.
+            for vc in scene.windows.compactMap({ $0.rootViewController }) {
+                vc.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
         }
 
         // Fallback: старый API (для старых iOS)
         UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
+        if #available(iOS 16.0, *) {
+            // уже вызвали setNeedsUpdateOfSupportedInterfaceOrientations выше
+        } else {
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
     }
 
     /// Принудительно повернуть в портрет.
@@ -28,10 +37,18 @@ final class OrientationManager {
 
         if #available(iOS 16.0, *) {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            // 🔧 iOS 16+: заменённый API вместо устаревшего attemptRotationToDeviceOrientation().
+            for vc in scene.windows.compactMap({ $0.rootViewController }) {
+                vc.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
         }
 
         UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
+        if #available(iOS 16.0, *) {
+            // уже вызвали setNeedsUpdateOfSupportedInterfaceOrientations выше
+        } else {
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
     }
 
     /// Текущая ориентация портретная?

@@ -19,7 +19,10 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
     // MARK: - Public State
 
     weak var delegate: WebSocketClientDelegate?
-    nonisolated(unsafe) private(set) var isConnected: Bool = false
+    /// 🔧 SWIFT 6: Bool is Sendable, so `nonisolated` (not `nonisolated(unsafe)`)
+    /// is sufficient. Accessed from cancelSocketForDeinit (nonisolated) and from
+    /// MainActor methods.
+    nonisolated private(set) var isConnected: Bool = false
 
     /// Synchronous, thread-safe disconnect для вызова из `deinit`.
     /// Не трогает @MainActor state — только underlying socket.
@@ -51,9 +54,14 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
     /// 🔧 FIX H12: Socket access synchronized via NSLock to prevent data races
     /// between connectInternal (@MainActor), disconnect (@MainActor),
     /// cancelSocketForDeinit (nonisolated), and sendRaw (background queue).
+    ///
+    /// 🔧 SWIFT 6: `nonisolated` (not `nonisolated(unsafe)`) — URLSessionWebSocketTask
+    /// is already Sendable, so nonisolated is sufficient. Access is guarded by
+    /// socketLock anyway. `nonisolated(unsafe)` would trigger Swift 6 warning
+    /// "has no effect, consider using nonisolated".
     private let socketLock = NSLock()
-    nonisolated(unsafe) private var _socket: URLSessionWebSocketTask?
-    nonisolated(unsafe) private var socket: URLSessionWebSocketTask? {
+    nonisolated private var _socket: URLSessionWebSocketTask?
+    nonisolated private var socket: URLSessionWebSocketTask? {
         get {
             socketLock.lock(); defer { socketLock.unlock() }
             return _socket
@@ -88,7 +96,8 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
 
     private var heartbeatTimer: DispatchSourceTimer?
     private let heartbeatInterval: TimeInterval = 25.0   // < 30s server timeout
-    nonisolated(unsafe) private var lastPongReceived: TimeInterval = 0
+    /// 🔧 SWIFT 6: TimeInterval (Double) is Sendable → `nonisolated` is sufficient.
+    nonisolated private var lastPongReceived: TimeInterval = 0
     private var pendingPingTimestamp: TimeInterval?
 
     // MARK: - Message Queue
@@ -527,9 +536,12 @@ struct WSPingPong: Codable {
 }
 
 // MARK: - Nonisolated Conformance Bridge
-// WebSocketClientProtocol is nonisolated; we provide synchronous bridges that
-// hop to the main actor. This keeps the protocol clean while ensuring all WS
-// state mutations happen on the main actor (matches our @MainActor SyncEngine).
+//
+// 🔧 SWIFT 6: протокол WebSocketClientProtocol теперь @MainActor (раньше был
+// nonisolated). isConnectedBridge оставлен для backward compat с кодом, который
+// может читать состояние подключения из не-MainActor контекста — но теперь это
+// небезопасно, поэтому bridge всегда возвращает false вне main actor (лучше
+// чем data race). Все call sites должны hop на MainActor для достоверного значения.
 extension WebSocketClient {
     /// 🔧 FIX M16: MainActor.assumeIsolated crashes if called off-main.
     /// Use a thread-safe atomic flag instead — set under socketLock, read anywhere.

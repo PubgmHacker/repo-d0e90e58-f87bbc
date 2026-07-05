@@ -403,21 +403,30 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v16 (July 2026): user-provided tested code — load(data:baseURL:plink.app)
+            // 🔧 v17 (July 2026): loadFileURL approach — fixes -1202 SSL error.
             //
-            // Key differences from v15:
-            // 1. Uses webView.load(data:mimeType:characterEncodingName:baseURL:) instead of
-            //    loadHTMLString — may handle origin differently in iOS WKWebView
-            // 2. Mac Safari UA (Version 17.4) — works because Referer/Origin come from
-            //    baseURL (plink.app), not from UA. YouTube checks Referer, not UA match.
-            // 3. controls=0 — hides YouTube's native controls (custom overlay possible)
-            // 4. enablejsapi=1 — allows JS bridge for play/pause/seek sync
-            // 5. scrollView.bounces = false — cleaner playback
+            // v16 used load(data:baseURL:plink.app) → 153 gone but -1202 (SSL)
+            // because iOS ATS blocks cross-origin requests from data-loaded pages.
+            //
+            // v17: write HTML to temp file, load via loadFileURL.
+            // - File URL is a legitimate local source that iOS trusts
+            // - allowFileAccessFromFileURLs + allowUniversalAccessFromFileURLs
+            //   let the local file access YouTube's HTTPS resources
+            // - referrerpolicy + origin + widget_referrer in iframe URL
+            // - Mac Safari UA (avoids mobile captcha)
+            //
+            // Also: videoId extraction. The URL is youtube-nocookie.com/embed/VIDEO_ID?...
+            // We need just VIDEO_ID (strip query params).
+            let videoId = url.lastPathComponent
+
+            // Set Mac Safari UA
             webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
             webView.scrollView.bounces = false
 
-            // Extract video ID from nocookie embed URL
-            let videoId = url.lastPathComponent
+            // 🔧 CRITICAL: allow local file to access YouTube's HTTPS resources
+            config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+            config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
             let htmlString = """
             <!DOCTYPE html>
             <html>
@@ -431,7 +440,7 @@ struct WebVideoView: UIViewRepresentable {
             <body>
                 <iframe
                     id="plink-yt-player"
-                    src="https://www.youtube-nocookie.com/embed/\(videoId)?enablejsapi=1&playsinline=1&controls=0&rel=0&origin=https://plink.app&widget_referrer=https://plink.app"
+                    src="https://www.youtube-nocookie.com/embed/\(videoId)?enablejsapi=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&origin=https://plink.app&widget_referrer=https://plink.app"
                     allow="autoplay; encrypted-media"
                     referrerpolicy="strict-origin-when-cross-origin"
                     allowfullscreen>
@@ -440,14 +449,21 @@ struct WebVideoView: UIViewRepresentable {
             </html>
             """
 
-            // 🔧 CRITICAL: load via Data with baseURL=plink.app (not loadHTMLString)
-            // This gives the page a real origin → YouTube sees valid Referer → no 153
-            if let data = htmlString.data(using: .utf8) {
-                print("📺 YouTube v16: load(data:baseURL:plink.app) + Mac Safari UA + nocookie + controls=0")
-                webView.load(data,
-                             mimeType: "text/html",
-                             characterEncodingName: "utf-8",
-                             baseURL: URL(string: "https://plink.app")!)
+            // Write HTML to temp file and load via loadFileURL
+            let tempDirectory = FileManager.default.temporaryDirectory
+            let htmlFileURL = tempDirectory.appendingPathComponent("yt_player_index.html")
+
+            do {
+                try htmlString.write(to: htmlFileURL, atomically: true, encoding: .utf8)
+                print("📺 YouTube v17: loadFileURL + allowFileAccess + Mac UA + nocookie + origin + referrerpolicy")
+                webView.loadFileURL(htmlFileURL, allowingReadAccessTo: tempDirectory)
+            } catch {
+                print("❌ YouTube v17: failed to write HTML file: \(error)")
+                // Fallback: try loadHTMLString with plink.app baseURL
+                if let data = htmlString.data(using: .utf8) {
+                    webView.load(data, mimeType: "text/html", characterEncodingName: "utf-8",
+                                 baseURL: URL(string: "https://plink.app")!)
+                }
             }
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

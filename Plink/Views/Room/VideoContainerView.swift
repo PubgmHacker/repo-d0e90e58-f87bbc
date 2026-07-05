@@ -299,33 +299,66 @@ struct WebVideoView: UIViewRepresentable {
         // Use DESKTOP Safari UA — YouTube doesn't restrict desktop embeds.
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
-        // 🔧 FIX: add embed parameters for proper playback in WKWebView.
-        // playsinline=1 → inline playback (not fullscreen)
-        // rel=0 → no related videos
-        // enablejsapi=1 → allow JS control
-        // modestbranding=1 → minimal YouTube branding
+        // 🔧 FIX: YouTube blocks /embed/ in WKWebView with error 153.
+        // Solution: use youtube-nocookie.com domain — it's YouTube's privacy-
+        // enhanced embed domain that has fewer restrictions. Also build a custom
+        // HTML page with IFrame API instead of loading the embed URL directly.
+        // This bypasses YouTube's WKWebView detection.
         var loadURL = url
-        if url.absoluteString.contains("youtube.com/embed/") && !url.absoluteString.contains("?") {
-            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            components?.queryItems = [
-                URLQueryItem(name: "playsinline", value: "1"),
-                URLQueryItem(name: "rel", value: "0"),
-                URLQueryItem(name: "enablejsapi", value: "1"),
-                URLQueryItem(name: "modestbranding", value: "1")
-            ]
-            if let modifiedURL = components?.url {
-                loadURL = modifiedURL
+        if url.absoluteString.contains("youtube.com/embed/") {
+            // Extract video ID and use youtube-nocookie.com
+            let videoId = url.lastPathComponent
+            let html = Self.youtubeEmbedHTML(videoId: videoId)
+            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube-nocookie.com"))
+            return webView
+        } else {
+            // Non-YouTube: load URL directly
+            // Add embed parameters for YouTube
+            if url.absoluteString.contains("youtube.com/embed/") && !url.absoluteString.contains("?") {
+                var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                components?.queryItems = [
+                    URLQueryItem(name: "playsinline", value: "1"),
+                    URLQueryItem(name: "rel", value: "0"),
+                    URLQueryItem(name: "enablejsapi", value: "1"),
+                    URLQueryItem(name: "modestbranding", value: "1")
+                ]
+                if let modifiedURL = components?.url {
+                    loadURL = modifiedURL
+                }
             }
+            var request = URLRequest(url: loadURL)
+            request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+            request.setValue("https://www.youtube.com", forHTTPHeaderField: "Referer")
+            webView.load(request)
         }
 
-        // 🔧 FIX: add Origin header for YouTube embed — YouTube checks this
-        // to allow embedding. Without it, some videos show error 153.
-        var request = URLRequest(url: loadURL)
-        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
-        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Referer")
-        webView.load(request)
-
         return webView
+    }
+
+    /// 🔧 FIX: Custom YouTube IFrame embed HTML using youtube-nocookie.com.
+    /// YouTube's /embed/ page detects WKWebView and blocks it (error 153).
+    /// This custom HTML loads the IFrame API from youtube-nocookie.com which
+    /// has fewer restrictions and works in WKWebView with desktop Safari UA.
+    static func youtubeEmbedHTML(videoId: String) -> String {
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+                #player { width: 100%; height: 100%; }
+            </style>
+        </head>
+        <body>
+            <iframe id="player" type="text/html"
+                src="https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&enablejsapi=1&modestbranding=1&origin=https://www.youtube-nocookie.com"
+                frameborder="0" allow="autoplay; encrypted-media; fullscreen"
+                allowfullscreen></iframe>
+        </body>
+        </html>
+        """
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}

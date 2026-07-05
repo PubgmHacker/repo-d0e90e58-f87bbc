@@ -197,57 +197,54 @@ extension View {
         ))
     }
 
-    /// 🔧 NEW: Admin обводка аватарки — vivid scarlet red (was dull rose).
-    /// 🔧 VIVID: user said «тусклая розовая». Replaced pink 0xFF8FA3 with
-    /// bright 0xFFB800 gold accent for visible contrast against scarlet base.
-    /// 4 сек цикл (matches avatar ring rotation period).
+    /// 🔧 Admin обводка аватарки — ТОЛЬКО красные оттенки (per user request).
+    /// 🔧 5 оттенков красного: dark → scarlet → bright → scarlet → dark.
+    /// Создаёт заметную «волну» по кольцу аватара, синхронизированную с ником.
     func adminStroke(lineWidth: CGFloat = 2.5) -> some View {
         modifier(AnimatedStrokeModifier(
             colors: [
-                Color.raveDanger,         // 0xFF1538 vivid scarlet
-                Color(hex: 0xFFB800),     // warm gold (visible contrast point)
-                Color.raveDanger,         // scarlet
-                Color(hex: 0xFFFFFF),     // white highlight (peak brightness)
-                Color.raveDanger,         // scarlet
+                Color(hex: 0x8B0000),   // dark red
+                Color(hex: 0xFF1538),   // vivid scarlet
+                Color(hex: 0xFF4D4D),   // bright red (peak)
+                Color(hex: 0xFF1538),   // scarlet
+                Color(hex: 0x8B0000),   // dark red (loop)
             ],
             lineWidth: lineWidth
         ))
     }
 }
 
-// MARK: - Admin Shimmer Text Modifier (переливающийся красный для админов)
-/// 🔧 Pack v3: Анимированный переливающийся градиент для ников админов в чате.
+// MARK: - Admin Shimmer Text Modifier (переливающийся КРАСНЫЙ для админов)
+//
+// 🔧 USER REQUEST: «только красные оттенки, никакого золота/белого.
+// Переливающийся сочный красный ник, заметный эффект Вау».
+//
+// 🔧 PALETTE: 7 оттенков красного — от тёмного багрового до яркого алого.
+// Переливание создаётся за счёт контраста ТЁМНЫЙ → ЯРКИЙ → ТЁМНЫЙ.
+// Цикл: dark red → scarlet → bright red → scarlet → dark red → scarlet → dark red
+// Это создаёт видимую «волну» яркости, проходящую по тексту.
 ///
 /// 🔧 FIX: was using `.overlay(LinearGradient.mask(content))` which layered
-/// the gradient ON TOP of the white text → visible "double layer" conflict.
-/// Now: `.foregroundStyle(LinearGradient)` replaces text color with gradient.
-///
-/// 🔧 VIVID: пользователь сказал «вяло переливается тускло». Причины были:
-/// 1. Цвета 0xFF4D6D/0xFF8FA3/0xFF6B6B — rose/pink спектр, не сочный красный.
-///    Заменил на 0xFF1538 (vivid scarlet) → 0xFFB800 (warm gold accent) →
-///    0xFF1538 → яркий контраст красного с золотом, очень заметно.
-/// 2. `.easeInOut(duration: 4.5)` — слишком медленно (4.5s).
-///    Ускорил до 2.8s — заметное переливание, но не нервное.
-/// 3. phase travel -1 → 2 (3x ширины) — длинный свип, хорошо видно движение.
+/// the gradient ON TOP of the white text. Now: `.foregroundStyle` REPLACES
+/// text color with gradient — clean red, no white underlayer.
 struct AdminShimmerTextModifier: ViewModifier {
     let colors: [Color]
     @State private var phase: CGFloat = -1
 
     init(colors: [Color] = [
-        Color(hex: 0xFF1538),   // vivid scarlet
-        Color(hex: 0xFFB800),   // warm gold accent (creates visible "shimmer pass")
-        Color(hex: 0xFF1538),   // scarlet again
-        Color(hex: 0xFFFFFF),   // white highlight (peak brightness)
-        Color(hex: 0xFF1538),   // scarlet
-        Color(hex: 0xFFB800),   // gold
-        Color(hex: 0xFF1538),   // scarlet (wraps to start)
+        Color(hex: 0x8B0000),   // dark red (low point — deep blood red)
+        Color(hex: 0xCC0000),   // crimson (rising)
+        Color(hex: 0xFF1538),   // vivid scarlet (raveDanger — peak bright)
+        Color(hex: 0xFF4D4D),   // bright light red (highest peak — "wow" flash)
+        Color(hex: 0xFF1538),   // scarlet (falling)
+        Color(hex: 0xCC0000),   // crimson (lower)
+        Color(hex: 0x8B0000),   // dark red (back to start — seamless loop)
     ]) {
         self.colors = colors
     }
 
     func body(content: Content) -> some View {
         content
-            // 🔧 FIX: foregroundStyle REPLACES the text color with the gradient.
             .foregroundStyle(
                 LinearGradient(
                     colors: colors,
@@ -255,12 +252,13 @@ struct AdminShimmerTextModifier: ViewModifier {
                     endPoint: UnitPoint(x: phase + 1, y: 0.5)
                 )
             )
-            // 🔧 SUBTLE GLOW: makes the shimmer visibly pop against dark background
-            .shadow(color: Color(hex: 0xFF1538).opacity(0.6), radius: 3)
+            // 🔧 GLOW: red shadow makes the shimmer visibly "pop" — creates the wow effect
+            .shadow(color: Color(hex: 0xFF1538).opacity(0.7), radius: 4)
+            .shadow(color: Color(hex: 0xFF4D4D).opacity(0.4), radius: 8)
             .onAppear {
                 withAnimation(
-                    // 🔧 VIVID: faster 2.8s instead of 4.5s — visible shimmer pass
-                    .easeInOut(duration: 2.8)
+                    // 🔧 2.5s — fast enough to be noticeable, slow enough to feel premium
+                    .easeInOut(duration: 2.5)
                     .repeatForever(autoreverses: false)
                 ) {
                     phase = 2

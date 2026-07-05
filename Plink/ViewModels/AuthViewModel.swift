@@ -92,31 +92,7 @@ final class AuthViewModel {
         errorMessage = nil
 
         do {
-            struct AdminVerifyResponse: Decodable {
-                let token: String
-                let refreshToken: String?
-                let accessExpiresAt: TimeInterval
-                let user: AuthUser
-            }
-            struct AdminVerifyBody: Encodable {
-                let email: String
-                let code: String
-            }
-
-            let body = AdminVerifyBody(email: email, code: adminCode)
-            let response: AdminVerifyResponse = try await authService.verifyAdminCode(email: email, code: adminCode)
-
-            // Обновляем пользователя с админской ролью
-            user = User(
-                id: response.user.id,
-                username: response.user.username,
-                email: response.user.email,
-                avatarURL: response.user.avatarURL,
-                isOnline: true,
-                isPremium: response.user.isPremium ?? true,
-                role: response.user.role,
-                createdAt: response.user.createdAt ?? Date()
-            )
+            user = try await authService.verifyAdminCode(email: email, code: adminCode)
             needsAdminCode = false
         } catch {
             errorMessage = "Неверный код подтверждения"

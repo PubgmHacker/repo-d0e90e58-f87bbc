@@ -222,6 +222,16 @@ struct SettingsView: View {
                 isPremium = PremiumStatusManager.shared.isPremium
             }
         }
+        // 🔧 Pack v3: Перезагружаем профиль после закрытия ProfileView/EditProfileSheet.
+        // Раньше: поменял ник/аватар в EditProfileSheet → вернулся в Settings → старые данные.
+        .onChange(of: showFullProfile) { _, isShown in
+            if !isShown {
+                Task {
+                    await profileVM?.loadUser()
+                    user = profileVM?.user
+                }
+            }
+        }
         .sheet(isPresented: $showFullProfile) {
             if let profileVM {
                 NavigationStack {

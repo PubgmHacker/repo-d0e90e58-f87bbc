@@ -62,6 +62,14 @@ struct ProfileView: View {
             await viewModel.loadUser()
             isPremium = PremiumStatusManager.shared.isPremium
         }
+        // 🔧 Pack v3: Перезагружаем после EditProfileSheet (ник + аватар)
+        .onChange(of: showEditProfile) { _, isShown in
+            if !isShown {
+                Task {
+                    await viewModel.loadUser()
+                }
+            }
+        }
         .sheet(isPresented: $showSettings) {
             if let concreteAuth = viewModel.authService as? AuthService {
                 SettingsView(isPresented: $showSettings, authService: concreteAuth)

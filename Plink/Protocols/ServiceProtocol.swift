@@ -13,6 +13,12 @@ protocol AuthServiceProtocol: AnyObject, Sendable {
     func deleteAccount() async throws
     /// 🔧 Pack v3: Synchronous access to current user (for hostName in room creation)
     var currentUserValue: User? { get }
+    /// 🔧 Pack v3: Fetch fresh user data from server (GET /users/me)
+    func fetchCurrentUser() async throws -> User
+    /// 🔧 Pack v3: Update profile on server (PATCH /users/me)
+    func updateProfile(username: String?, avatarURL: String?) async throws -> User
+    /// 🔧 Pack v3: Update local cached user (after server update)
+    func updateCachedUser(_ user: User)
 }
 
 // MARK: - Room Service Protocol

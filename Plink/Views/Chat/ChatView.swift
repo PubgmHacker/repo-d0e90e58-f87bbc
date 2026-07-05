@@ -179,7 +179,8 @@ private struct ChatBubbleShape: Shape {
             ChatMessage(
                 id: "msg_002", roomID: "room_001", senderID: "user_002",
                 senderName: "Jordan", text: "This sync is amazing! 🔥",
-                timestamp: .now.addingTimeInterval(-60), isRead: true
+                timestamp: .now.addingTimeInterval(-60), isRead: true,
+                senderAvatarURL: nil
             ),
         ],
         chatText: .constant(""),

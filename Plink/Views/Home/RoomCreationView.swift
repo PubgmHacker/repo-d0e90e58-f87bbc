@@ -48,9 +48,7 @@ struct RoomCreationView: View {
 
     var body: some View {
         ZStack {
-            // 🔧 FIX: was AnimatedGradientBackground() — heavy 30fps Canvas causes
-            // lag when opening RoomCreation. Use plain dark background for speed.
-            Color.bioObsidian.ignoresSafeArea()
+            AnimatedGradientBackground()
 
             switch currentStep {
             case .service:

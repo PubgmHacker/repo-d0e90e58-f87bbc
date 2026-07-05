@@ -343,22 +343,14 @@ struct WebVideoView: UIViewRepresentable {
             let html = Self.youtubeEmbedHTML(videoId: videoId)
             webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube-nocookie.com"))
             return webView
+        } else if url.absoluteString.contains("rutube.ru/play/embed/") {
+            // 🔧 FIX: Rutube embed — load directly with desktop UA (already set).
+            // Rutube doesn't block WKWebView like YouTube does, just needs proper UA.
+            webView.load(URLRequest(url: url))
+            return webView
         } else {
-            // Non-YouTube: load URL directly
-            // Add embed parameters for YouTube
-            if url.absoluteString.contains("youtube.com/embed/") && !url.absoluteString.contains("?") {
-                var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                components?.queryItems = [
-                    URLQueryItem(name: "playsinline", value: "1"),
-                    URLQueryItem(name: "rel", value: "0"),
-                    URLQueryItem(name: "enablejsapi", value: "1"),
-                    URLQueryItem(name: "modestbranding", value: "1")
-                ]
-                if let modifiedURL = components?.url {
-                    loadURL = modifiedURL
-                }
-            }
-            var request = URLRequest(url: loadURL)
+            // Non-YouTube/Rutube: load URL directly
+            var request = URLRequest(url: url)
             request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
             request.setValue("https://www.youtube.com", forHTTPHeaderField: "Referer")
             webView.load(request)

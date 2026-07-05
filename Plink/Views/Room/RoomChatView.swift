@@ -281,6 +281,20 @@ struct RoomChatBubble: View {
             if isMyMessage {
                 Spacer(minLength: 50)
                 VStack(alignment: .trailing, spacing: 4) {
+                    // 🔧 FIX: show nick + admin badge on own messages too
+                    HStack(spacing: 4) {
+                        if message.isSenderAdmin {
+                            AdminBadgeChip(compact: true)
+                            Text(message.senderName)
+                                .font(.system(size: nameSize, weight: .bold))
+                                .adminShimmerText()
+                        } else {
+                            Text(message.senderName)
+                                .font(.system(size: nameSize, weight: .bold))
+                                .foregroundColor(.bioCyan)
+                                .textStroke(opacity: 0.4)
+                        }
+                    }
                     Text(message.text)
                         .font(.system(size: textSize))
                         .foregroundColor(.white)
@@ -292,7 +306,6 @@ struct RoomChatBubble: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         if message.isSenderAdmin {
-                            // 🔧 FIX: убран [A] текст — оставлен только shimmer ник + AdminBadge
                             Text(message.senderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .adminShimmerText()
@@ -314,10 +327,12 @@ struct RoomChatBubble: View {
         }
         .padding(.horizontal, compact ? 10 : 14)
         .padding(.vertical, compact ? 6 : 10)
-        // 🔧 FIX: telegram-glass для bubble — было плоский ravePrimary/white
+        // 🔧 FIX: admin messages get red border, my messages get cyan, others get black
         .telegramGlass(
             cornerRadius: compact ? 12 : 16,
-            borderColor: isMyMessage ? Color.bioCyan.opacity(0.25) : .black.opacity(0.4)
+            borderColor: message.isSenderAdmin
+                ? Color.raveDanger.opacity(0.4)
+                : (isMyMessage ? Color.bioCyan.opacity(0.25) : .black.opacity(0.4))
         )
     }
 

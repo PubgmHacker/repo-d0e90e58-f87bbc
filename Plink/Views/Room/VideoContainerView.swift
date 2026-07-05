@@ -376,6 +376,15 @@ struct WebVideoView: UIViewRepresentable {
                 html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
                 #player { width: 100%; height: 100%; }
                 iframe { width: 100%; height: 100%; border: none; pointer-events: none; }
+                /* 🔧 FIX: hide YouTube 'Watch on YouTube' banner + logo + branding */
+                .ytp-impression-link, .ytp-watch-later-icon, .ytp-share-button,
+                .ytp-cued-thumbnail-overlay, .ytp-watermark, .ytp-youtube-button,
+                .ytp-youtube-logo, .branding-img, .iv-branding, .ytp-button[aria-label*="YouTube"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
             </style>
         </head>
         <body>

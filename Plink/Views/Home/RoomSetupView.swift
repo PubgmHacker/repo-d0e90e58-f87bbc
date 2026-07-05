@@ -435,13 +435,22 @@ struct RoomSetupView: View {
             let finalSource: MediaItem.MediaSource
 
             if service == .youtube {
-                // 🔧 v13: use embed URL directly (not backend proxy) + Smart TV UA.
-                // Backend proxy didn't help — 153 is caused by WKWebView runtime
-                // detection in YouTube's player JS, not by the page source.
-                // Smart TV UA (Tizen) → YouTube classifies as TV device → no 153.
-                finalStreamURL = contentURL
+                // 🔧 v14 (July 2026): YouTube IFrame embed — proper configuration.
+                //
+                // Based on analysis of how Rave/Discord Activities work:
+                // 1. Use youtube-nocookie.com (weaker bot detection)
+                // 2. Pass origin + widget_referrer params (YouTube requires these)
+                // 3. Requests go from CLIENT (iPhone), not server — no backend proxy
+                // 4. Persistent cookies (don't clear — YouTube needs CONSENT cookie)
+                // 5. Standard mobile Safari UA (cbr=Safari+Mobile, not cbr=Webview)
+                // 6. Clean WKWebView (no scripts/handlers/CSS that trigger detection)
+                //
+                // This exact combination has NEVER been tried before. Previous
+                // attempts always missed at least one of these requirements.
+                let videoId = contentURL.components(separatedBy: "/").last ?? ""
+                finalStreamURL = "https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&origin=https://plink.app&widget_referrer=https://plink.app"
                 finalSource = .youtube
-                print("🔧 RoomSetupView: YouTube direct embed + Smart TV UA (v13)")
+                print("🔧 RoomSetupView: YouTube nocookie embed + origin + widget_referrer (v14)")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

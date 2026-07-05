@@ -150,6 +150,8 @@ struct RoomView: View {
         let videoWidth = screenWidth
         let videoHeight = videoWidth * 9.0 / 16.0
         let chatHeight = geo.size.height - videoHeight - 8
+        // 🔧 PREMIUM THEME: chat background gradient from selected room theme
+        let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
         VStack(spacing: 0) {
             // Видео 16:9 + контролы + marquee
@@ -169,6 +171,8 @@ struct RoomView: View {
                 mode: .portrait
             )
             .frame(height: max(chatHeight, 100))
+            // 🔧 PREMIUM THEME: apply chat background gradient
+            .background(roomTheme.hasPlayerBorder ? roomTheme.chatBackground : Color.clear)
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
             // 🔧 Pack v3: Убран DragGesture — конфиликтовал с клавиатурой и скроллом.

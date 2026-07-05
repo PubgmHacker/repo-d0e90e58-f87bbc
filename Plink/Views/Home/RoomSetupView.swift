@@ -420,6 +420,10 @@ struct RoomSetupView: View {
         // in "Мои комнаты" and guests couldn't join by code.
         Task {
             do {
+                // 🔧 FIX: save selected theme to PremiumStatusManager so RoomView
+                // can apply chatBackground + playerBorder.
+                PremiumStatusManager.shared.setRoomTheme(selectedTheme)
+
                 let request = CreateRoomRequest(
                     name: name,
                     maxParticipants: maxParticipants,

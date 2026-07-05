@@ -197,16 +197,18 @@ extension View {
         ))
     }
 
-    /// 🔧 NEW: Admin обводка аватарки (crimson→red спектр, 4 сек цикл).
-    /// Используется для пользователей с role .admin или .founder.
+    /// 🔧 NEW: Admin обводка аватарки — vivid scarlet red (was dull rose).
+    /// 🔧 VIVID: user said «тусклая розовая». Replaced pink 0xFF8FA3 with
+    /// bright 0xFFB800 gold accent for visible contrast against scarlet base.
+    /// 4 сек цикл (matches avatar ring rotation period).
     func adminStroke(lineWidth: CGFloat = 2.5) -> some View {
         modifier(AnimatedStrokeModifier(
             colors: [
-                Color.raveDanger,
-                Color.bioObsidian,
-                Color(hex: 0xFF8FA3),
-                Color.bioObsidian,
-                Color.raveDanger,
+                Color.raveDanger,         // 0xFF1538 vivid scarlet
+                Color(hex: 0xFFB800),     // warm gold (visible contrast point)
+                Color.raveDanger,         // scarlet
+                Color(hex: 0xFFFFFF),     // white highlight (peak brightness)
+                Color.raveDanger,         // scarlet
             ],
             lineWidth: lineWidth
         ))
@@ -217,29 +219,28 @@ extension View {
 /// 🔧 Pack v3: Анимированный переливающийся градиент для ников админов в чате.
 ///
 /// 🔧 FIX: was using `.overlay(LinearGradient.mask(content))` which layered
-/// the gradient ON TOP of the white text → visible "double layer" conflict
-/// (white nickname + red shimmer on top = muddy pink instead of clean red).
+/// the gradient ON TOP of the white text → visible "double layer" conflict.
+/// Now: `.foregroundStyle(LinearGradient)` replaces text color with gradient.
 ///
-/// Now: uses `.foregroundStyle(LinearGradient)` — same approach as the premium
-/// `ShimmerGradientTextModifier`. The gradient REPLACES the text color (no
-/// underlying white layer), so the nickname is purely red-shimmering.
-///
-/// 🔧 POLISH: smoother animation.
-/// - phase travels -1 → 2 (3× width, longer sweep)
-/// - .easeInOut(duration: 4.5) for smooth accel/decel (matches avatar ring 4s)
-/// - gradient colors duplicated (7 stops) for seamless wrap-around at loop restart
+/// 🔧 VIVID: пользователь сказал «вяло переливается тускло». Причины были:
+/// 1. Цвета 0xFF4D6D/0xFF8FA3/0xFF6B6B — rose/pink спектр, не сочный красный.
+///    Заменил на 0xFF1538 (vivid scarlet) → 0xFFB800 (warm gold accent) →
+///    0xFF1538 → яркий контраст красного с золотом, очень заметно.
+/// 2. `.easeInOut(duration: 4.5)` — слишком медленно (4.5s).
+///    Ускорил до 2.8s — заметное переливание, но не нервное.
+/// 3. phase travel -1 → 2 (3x ширины) — длинный свип, хорошо видно движение.
 struct AdminShimmerTextModifier: ViewModifier {
     let colors: [Color]
     @State private var phase: CGFloat = -1
 
     init(colors: [Color] = [
-        Color(hex: 0xFF4D6D),
-        Color(hex: 0xFF8FA3),
-        Color(hex: 0xFF6B6B),
-        Color(hex: 0xFF4D6D),
-        Color(hex: 0xFF8FA3),
-        Color(hex: 0xFF6B6B),
-        Color(hex: 0xFF4D6D),
+        Color(hex: 0xFF1538),   // vivid scarlet
+        Color(hex: 0xFFB800),   // warm gold accent (creates visible "shimmer pass")
+        Color(hex: 0xFF1538),   // scarlet again
+        Color(hex: 0xFFFFFF),   // white highlight (peak brightness)
+        Color(hex: 0xFF1538),   // scarlet
+        Color(hex: 0xFFB800),   // gold
+        Color(hex: 0xFF1538),   // scarlet (wraps to start)
     ]) {
         self.colors = colors
     }
@@ -247,7 +248,6 @@ struct AdminShimmerTextModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             // 🔧 FIX: foregroundStyle REPLACES the text color with the gradient.
-            // No underlying white layer, no overlay, no mask — clean red shimmer.
             .foregroundStyle(
                 LinearGradient(
                     colors: colors,
@@ -255,9 +255,12 @@ struct AdminShimmerTextModifier: ViewModifier {
                     endPoint: UnitPoint(x: phase + 1, y: 0.5)
                 )
             )
+            // 🔧 SUBTLE GLOW: makes the shimmer visibly pop against dark background
+            .shadow(color: Color(hex: 0xFF1538).opacity(0.6), radius: 3)
             .onAppear {
                 withAnimation(
-                    .easeInOut(duration: 4.5)
+                    // 🔧 VIVID: faster 2.8s instead of 4.5s — visible shimmer pass
+                    .easeInOut(duration: 2.8)
                     .repeatForever(autoreverses: false)
                 ) {
                     phase = 2

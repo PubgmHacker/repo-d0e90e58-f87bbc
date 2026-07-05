@@ -62,8 +62,11 @@ extension Color {
     static let raveSecondary = bioTeal
     static let raveWarning = bioEmerald
     static let ravePurple = bioTeal
-    /// Красный — единственный не-cyan (danger, без этого никак)
-    static let raveDanger = Color(hex: 0xFF4D6D)
+    /// 🔧 VIVID RED — was 0xFF4D6D (rose/pink, looked dull). User asked for
+    /// saturated juicy red. 0xFF1538 = vivid scarlet — strong red with a tiny
+    /// blue tint for screen contrast. Used for admin badges, danger states,
+    /// delete buttons. Pops clearly against the bioObsidian dark background.
+    static let raveDanger = Color(hex: 0xFF1538)
 
     // ════════════════════════════════════════════════════════════════
     // MARK: - Текст (контраст на обсидиане)

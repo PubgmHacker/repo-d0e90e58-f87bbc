@@ -358,13 +358,11 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 FIX: YouTube IFrame with ALL controls hidden — only Plink controls visible.
-    /// Uses YouTube IFrame API for JS control (playVideo/pauseVideo/seekTo).
-    /// controls=0 hides YouTube's play/pause/seek bar
-    /// fs=0 disables fullscreen button
-    /// disablekb=1 disables keyboard shortcuts
-    /// iv_load_policy=3 hides annotations
-    /// pointer-events:none on iframe prevents user tapping YouTube UI
+    /// 🔧 FIX: YouTube IFrame with controls hidden via player params (not CSS).
+    /// CSS can't penetrate cross-origin iframe — only YouTube playerVars work.
+    /// controls=0 hides bottom bar, fs=0 hides fullscreen, modestbranding=1 reduces logo.
+    /// pointer-events REMOVED from iframe — user can tap video to play/pause.
+    /// Our ControlsOverlay sits on top for play/pause/seek via JS bridge.
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -375,21 +373,7 @@ struct WebVideoView: UIViewRepresentable {
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
                 #player { width: 100%; height: 100%; }
-                iframe { width: 100%; height: 100%; border: none; pointer-events: none; }
-                /* 🔧 FIX: hide YouTube 'Watch on YouTube' banner + logo + branding
-                   + central red play button */
-                .ytp-impression-link, .ytp-watch-later-icon, .ytp-share-button,
-                .ytp-cued-thumbnail-overlay, .ytp-watermark, .ytp-youtube-button,
-                .ytp-youtube-logo, .branding-img, .iv-branding, .ytp-button[aria-label*="YouTube"],
-                .ytp-large-play-button, .ytp-cued-thumbnail-overlay-image,
-                .html5-video-player .ytp-large-play-button {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    width: 0 !important;
-                    height: 0 !important;
-                }
+                iframe { width: 100%; height: 100%; border: none; }
             </style>
         </head>
         <body>

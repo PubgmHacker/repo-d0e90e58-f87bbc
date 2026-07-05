@@ -1,6 +1,11 @@
 import Foundation
 
 // MARK: - Auth View Model
+/// 🔧 SWIFT 6: marked @MainActor because it holds AuthServiceProtocol (@MainActor
+/// since the protocol is @MainActor). Without this, the conformance "crosses into
+/// main actor-isolated code" — Swift 6 strict-concurrency error. All UI bindings
+/// already require MainActor, so this matches reality.
+@MainActor
 @Observable
 final class AuthViewModel {
 

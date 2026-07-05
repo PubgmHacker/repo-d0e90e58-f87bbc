@@ -19,10 +19,14 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
     // MARK: - Public State
 
     weak var delegate: WebSocketClientDelegate?
-    /// 🔧 SWIFT 6: Bool is Sendable, so `nonisolated` (not `nonisolated(unsafe)`)
-    /// is sufficient. Accessed from cancelSocketForDeinit (nonisolated) and from
-    /// MainActor methods.
-    nonisolated private(set) var isConnected: Bool = false
+    /// 🔧 SWIFT 6 strict mode: `nonisolated(unsafe)` is the correct annotation for
+    /// mutable stored properties accessed from nonisolated contexts. The Swift 5
+    /// warning "has no effect, consider using nonisolated" was misleading — `nonisolated`
+    /// alone can only be applied to `let` properties or computed properties, NOT to
+    /// mutable `var`. So we keep `nonisolated(unsafe)` here and accept the explicit
+    /// opt-out (we ensure thread safety via NSLock for socket; isConnected is only
+    /// mutated on MainActor and read via the isConnectedBridge from other contexts).
+    nonisolated(unsafe) private(set) var isConnected: Bool = false
 
     /// Synchronous, thread-safe disconnect для вызова из `deinit`.
     /// Не трогает @MainActor state — только underlying socket.
@@ -55,13 +59,14 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
     /// between connectInternal (@MainActor), disconnect (@MainActor),
     /// cancelSocketForDeinit (nonisolated), and sendRaw (background queue).
     ///
-    /// 🔧 SWIFT 6: `nonisolated` (not `nonisolated(unsafe)`) — URLSessionWebSocketTask
-    /// is already Sendable, so nonisolated is sufficient. Access is guarded by
-    /// socketLock anyway. `nonisolated(unsafe)` would trigger Swift 6 warning
-    /// "has no effect, consider using nonisolated".
+    /// 🔧 SWIFT 6 strict mode: `nonisolated(unsafe)` is the only valid annotation
+    /// for mutable `var` accessed from nonisolated contexts. `nonisolated` alone
+    /// is rejected ("cannot be applied to mutable stored properties"). The Swift 5
+    /// warning "has no effect" was misleading. We accept the explicit opt-out
+    /// because access is guarded by socketLock.
     private let socketLock = NSLock()
-    nonisolated private var _socket: URLSessionWebSocketTask?
-    nonisolated private var socket: URLSessionWebSocketTask? {
+    nonisolated(unsafe) private var _socket: URLSessionWebSocketTask?
+    nonisolated(unsafe) private var socket: URLSessionWebSocketTask? {
         get {
             socketLock.lock(); defer { socketLock.unlock() }
             return _socket
@@ -96,8 +101,10 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
 
     private var heartbeatTimer: DispatchSourceTimer?
     private let heartbeatInterval: TimeInterval = 25.0   // < 30s server timeout
-    /// 🔧 SWIFT 6: TimeInterval (Double) is Sendable → `nonisolated` is sufficient.
-    nonisolated private var lastPongReceived: TimeInterval = 0
+    /// 🔧 SWIFT 6 strict mode: `nonisolated(unsafe)` required for mutable var.
+    /// `nonisolated` alone is rejected. Accessed from background Task.detached
+    /// (handlePingPongAsync) and from MainActor (sendHeartbeat, startHeartbeat).
+    nonisolated(unsafe) private var lastPongReceived: TimeInterval = 0
     private var pendingPingTimestamp: TimeInterval?
 
     // MARK: - Message Queue

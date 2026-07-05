@@ -2,6 +2,11 @@ import Foundation
 
 // MARK: - SignalingClient (Stub)
 /// Заглушка без WebRTC. При подключении SDK заменить на полную версию.
+//
+/// 🔧 SWIFT 6: marked @MainActor because it holds a reference to WebSocketClient
+/// (which is @MainActor via the WebSocketClientProtocol). Without this, accessing
+/// ws.send() crosses isolation. All call sites already run on MainActor.
+@MainActor
 final class SignalingClient {
 
     private weak var ws: WebSocketClient?
@@ -28,17 +33,15 @@ final class SignalingClient {
         guard let ws else { return }
         guard let data = try? encoder.encode(message),
               let json = String(data: data, encoding: .utf8) else { return }
-        Task { @MainActor [ws] in
-            ws.send(json)
-        }
+        // 🔧 SWIFT 6: now that SignalingClient is @MainActor, no need for Task hop.
+        ws.send(json)
     }
 
     /// Отправка raw JSON (для Screen Share команд вне SignalingMessage enum).
     func sendRaw(_ jsonString: String) {
         guard let ws else { return }
-        Task { @MainActor [ws] in
-            ws.send(jsonString)
-        }
+        // 🔧 SWIFT 6: now that SignalingClient is @MainActor, no need for Task hop.
+        ws.send(jsonString)
     }
 
     func sendJoinRoom(senderId: String, roomId: String) {

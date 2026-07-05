@@ -336,9 +336,8 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     /// 🔧 FIX: Custom YouTube IFrame embed HTML using youtube-nocookie.com.
-    /// YouTube's /embed/ page detects WKWebView and blocks it (error 153).
-    /// This custom HTML loads the IFrame API from youtube-nocookie.com which
-    /// has fewer restrictions and works in WKWebView with desktop Safari UA.
+    /// fs=0 disables YouTube's fullscreen button (prevents YouTube taking
+    /// control in landscape). controls=1 keeps play/pause/seek bar.
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -349,13 +348,15 @@ struct WebVideoView: UIViewRepresentable {
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
                 #player { width: 100%; height: 100%; }
+                iframe { width: 100%; height: 100%; border: none; }
             </style>
         </head>
         <body>
             <iframe id="player" type="text/html"
-                src="https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&enablejsapi=1&modestbranding=1&origin=https://www.youtube-nocookie.com"
-                frameborder="0" allow="autoplay; encrypted-media; fullscreen"
-                allowfullscreen></iframe>
+                src="https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&enablejsapi=1&modestbranding=1&fs=0&origin=https://www.youtube-nocookie.com"
+                frameborder="0"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                ></iframe>
         </body>
         </html>
         """

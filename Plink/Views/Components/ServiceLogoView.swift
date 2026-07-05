@@ -148,7 +148,7 @@ extension VideoService {
     /// Used by ServiceBrowserView to load the service's catalog page.
     var browseURL: String {
         switch self {
-        case .youtube:      return "https://www.youtube.com/"
+        case .youtube:      return "https://www.youtube.com/results?search_query=music+2025"
         case .vk:           return "https://vk.com/video"
         case .rutube:       return "https://rutube.ru/"
         case .netflix:      return "https://www.netflix.com/browse"

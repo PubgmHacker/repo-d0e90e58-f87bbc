@@ -124,7 +124,7 @@ export function setupWebSocketHandler(io, prisma, fastify) {
             socket.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
             return;
           }
-          const safeMsg = await sanitizeChatMessage(msg, user);
+          const safeMsg = await sanitizeChatMessage(msg, user, prisma);
           try {
             await prisma.chatMessage.create({
               data: { roomID: safeMsg.roomID, senderID: safeMsg.senderID, text: safeMsg.text },

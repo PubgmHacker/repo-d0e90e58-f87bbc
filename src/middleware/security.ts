@@ -186,7 +186,19 @@ export function requireHost(prisma) {
   };
 }
 
-export async function sanitizeChatMessage(clientMsg: any, user: { id: string; username: string; role: string }) {
+export async function sanitizeChatMessage(clientMsg: any, user: { id: string; username: string; role: string }, prisma?: any) {
+  // 🔧 FIX: fetch avatarURL so chat bubbles can show avatars
+  let avatarURL: string | null = null;
+  if (prisma) {
+    try {
+      const userData = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { avatarURL: true }
+      });
+      avatarURL = userData?.avatarURL || null;
+    } catch {}
+  }
+
   return {
     type: 'chat',
     roomID: clientMsg.roomID,
@@ -194,6 +206,7 @@ export async function sanitizeChatMessage(clientMsg: any, user: { id: string; us
     senderID: user.id,
     senderName: user.username,
     senderRole: user.role,
+    senderAvatarURL: avatarURL,
     text: sanitizeText(clientMsg.text),
     timestamp: Date.now(),
   };

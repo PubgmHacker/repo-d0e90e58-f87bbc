@@ -152,17 +152,14 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         // 🔧 FIX v8.1 (July 2026): use AVURLAsset with custom HTTP headers
         // for googlevideo.com URLs (backend yt-dlp extraction results).
         //
-        // Without proper User-Agent header, AVPlayer gets HTTP 403 from
-        // YouTube's googlevideo CDN → AVPlayer fails with code=-11828
-        // "Не удается открыть" (Cannot Open / noSourceTrack).
+        // 🔧 v9 (July 2026): for backend proxy URLs (youtube-stream endpoint),
+        // add Authorization header with JWT token — backend requires auth.
+        // The proxy URL looks like:
+        //   https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
+        // Without the Authorization header, backend returns 401 → AVPlayer fails.
         //
         // AVAsset(url:) doesn't let you set headers, but AVURLAsset does via
-        // the AVURLAssetHTTPHeaderFieldsKey option. We set:
-        //   - User-Agent: real iOS Safari UA (YouTube CDN expects this)
-        //   - Referer: https://www.youtube.com/ (YouTube CDN checks this)
-        //
-        // For non-googlevideo URLs (.mp4 from elsewhere, .m3u8, etc.) we skip
-        // custom headers — they're not needed and could break other CDNs.
+        // the AVURLAssetHTTPHeaderFieldsKey option.
         //
         // 🔧 FIX v8.2: AVURLAssetHTTPHeaderFieldsKey is an Obj-C NSString
         // constant that's not directly importable in Swift. Use the raw
@@ -171,6 +168,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         let asset: AVAsset
         let lowerURL = item.streamURL.lowercased()
         if lowerURL.contains("googlevideo.com") {
+            // Direct googlevideo URL (v8 approach — IP-bound, may fail)
             let headers: [String: String] = [
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
                 "Referer": "https://www.youtube.com/",
@@ -182,6 +180,20 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             ]
             asset = AVURLAsset(url: url, options: options)
             Logger.sync.info("🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers")
+        } else if lowerURL.contains("plink-backend") && lowerURL.contains("youtube-stream") {
+            // 🔧 v9: backend proxy URL — add Authorization header with JWT.
+            // Backend's /api/media/youtube-stream requires JWT auth.
+            // Token is stored in Keychain under "rave_auth_token" (see AuthService).
+            var headers: [String: String] = [:]
+            if let token = KeychainHelper.read(for: "rave_auth_token") {
+                headers["Authorization"] = "Bearer \(token)"
+            }
+            let options: [String: Any] = [
+                "AVURLAssetHTTPHeaderFieldsKey": headers,
+                AVURLAssetPreferPreciseDurationAndTimingKey: true,
+            ]
+            asset = AVURLAsset(url: url, options: options)
+            Logger.sync.info("🔍 loadMedia: backend proxy URL — added Authorization header")
         } else {
             asset = AVAsset(url: url)
         }

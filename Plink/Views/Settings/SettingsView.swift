@@ -232,15 +232,15 @@ struct SettingsView: View {
             }
             .toolbarBackground(.hidden, for: .navigationBar)
             // 🔧 FIX: Full-screen push navigation for sub-screens (was: .sheet overlay)
+            // 🔧 v11 (July 2026): extracted destination view into a separate
+            // @ViewBuilder method to fix 'compiler unable to type-check this
+            // expression in reasonable time' error. SwiftUI's type-checker
+            // struggles with inline switch statements inside
+            // .navigationDestination closures when the body gets long.
+            // Breaking it out into a dedicated method gives the compiler
+            // a single, simple return type to infer.
             .navigationDestination(for: SettingsDestination.self) { destination in
-                switch destination {
-                case .privacy:
-                    PrivacySettingsView()
-                case .notifications:
-                    NotificationsView()
-                case .language:
-                    LanguagePickerView()
-                }
+                settingsDestinationView(destination)
             }
         }
         .preferredColorScheme(.dark)
@@ -338,6 +338,25 @@ struct SettingsView: View {
             return "Активна"
         }
         return "Не активна"
+    }
+
+    // MARK: - Settings Destination View (extracted for type-checker)
+
+    /// 🔧 v11 (July 2026): extracted from the .navigationDestination closure
+    /// to fix 'compiler unable to type-check this expression in reasonable time'.
+    /// SwiftUI's type-checker struggles with inline switch statements inside
+    /// .navigationDestination closures when the body gets long. Breaking it
+    /// out gives the compiler a single, simple return type to infer.
+    @ViewBuilder
+    private func settingsDestinationView(_ destination: SettingsDestination) -> some View {
+        switch destination {
+        case .privacy:
+            PrivacySettingsView()
+        case .notifications:
+            NotificationsView()
+        case .language:
+            LanguagePickerView()
+        }
     }
 
     // MARK: - Profile Card (Apple ID style)

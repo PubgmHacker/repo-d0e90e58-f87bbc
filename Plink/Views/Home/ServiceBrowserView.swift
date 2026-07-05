@@ -386,6 +386,11 @@ struct ServiceWebView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []
         config.websiteDataStore = WKWebsiteDataStore.default()
 
+        // 🔧 Pack v3: Register message handler for SPA URL changes
+        let contentController = WKUserContentController()
+        contentController.add(context.coordinator, name: "plinkURLChange")
+        config.userContentController = contentController
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
@@ -410,11 +415,54 @@ struct ServiceWebView: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let parent: ServiceWebView
+        private var lastDetectedURL: String?
 
         init(parent: ServiceWebView) {
             self.parent = parent
+        }
+
+        // 🔧 Pack v3: Handle SPA URL changes from JavaScript
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "plinkURLChange",
+               let body = message.body as? [String: Any],
+               let urlString = body["url"] as? String,
+               let url = URL(string: urlString) {
+
+                let title = body["title"] as? String
+                let service = Self.serviceFromURL(url)
+                if let service, let detected = VideoService.detectVideoURL(url, for: service, title: title) {
+                    DispatchQueue.main.async {
+                        self.parent.currentURL = url
+                        self.parent.pageTitle = title ?? ""
+                        self.parent.onVideoDetected?(detected)
+                    }
+                }
+            }
+        }
+
+        // 🔧 Pack v3: Перехватываем КАЖДУЮ навигацию (включая SPA YouTube).
+        // Раньше: только didFinish → YouTube SPA не триггерит → видео играло без создания комнаты.
+        // Теперь: decidePolicyFor ловит URLchange → детектим видео → авто-переход.
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            // Сначала проверяем URL на видео
+            if let url = navigationAction.request.url {
+                let urlString = url.absoluteString
+                // Избегаем повторного срабатывания на тот же URL
+                if urlString != lastDetectedURL {
+                    lastDetectedURL = urlString
+                    let service = Self.serviceFromURL(url)
+                    if let service, let detected = VideoService.detectVideoURL(url, for: service, title: nil) {
+                        DispatchQueue.main.async {
+                            self.parent.currentURL = url
+                            self.parent.pageTitle = webView.title ?? ""
+                            self.parent.onVideoDetected?(detected)
+                        }
+                    }
+                }
+            }
+            decisionHandler(.allow)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -425,10 +473,9 @@ struct ServiceWebView: UIViewRepresentable {
                 self.parent.canGoForward = webView.canGoForward
             }
 
-            // 🔧 Detect video page
+            // 🔧 Detect video page on full load too
             if let url = webView.url {
                 let title = webView.title
-                // Determine the service from the URL host
                 let service = Self.serviceFromURL(url)
                 if let service, let detected = VideoService.detectVideoURL(url, for: service, title: title) {
                     DispatchQueue.main.async {
@@ -437,17 +484,41 @@ struct ServiceWebView: UIViewRepresentable {
                 }
             }
 
+            // 🔧 Pack v3: Inject JS to detect SPA URL changes (YouTube React app)
+            // YouTube меняет URL через History API без полной перезагрузки.
+            // Этот скрипт следит за URL и вызывает Swift когда URL меняется.
+            let js = """
+            (function() {
+                if (window._plinkURLObserver) return;
+                window._plinkURLObserver = true;
+                let lastURL = window.location.href;
+                setInterval(function() {
+                    if (window.location.href !== lastURL) {
+                        lastURL = window.location.href;
+                        try {
+                            window.webkit.messageHandlers.plinkURLChange.postMessage({
+                                url: lastURL,
+                                title: document.title
+                            });
+                        } catch(e) {}
+                    }
+                }, 500);
+            })();
+            """
+
             // Inject dark CSS
             let darkCSS = """
             :root { color-scheme: dark; }
             body { background-color: #0A0D14 !important; }
             """
-            let js = """
+            let cssJS = """
             var style = document.createElement('style');
             style.textContent = '\(darkCSS)';
             document.head.appendChild(style);
             """
+
             webView.evaluateJavaScript(js)
+            webView.evaluateJavaScript(cssJS)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

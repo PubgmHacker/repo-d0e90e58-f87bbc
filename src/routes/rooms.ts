@@ -217,6 +217,49 @@ export default async function roomRoutes(fastify, _options) {
         reply.send(safeRooms);
     });
 
+    // POST /api/rooms/:id/leave — Leave a room (decrement participant)
+    //
+    // 🔧 NEW: Was missing — iOS RoomService.leaveRoom called /rooms/:id/leave
+    // but endpoint didn't exist (silent 404). Now: removes the RoomParticipant
+    // row, and if no participants remain AND host has also left → auto-mark
+    // the room as ended (isActive=false, endedAt=now). The room is NOT deleted
+    // from DB — it stays as "history" so the host can see it in Mine → История.
+    fastify.post('/rooms/:id/leave', {
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const { id } = request.params;
+
+        // Remove this user's participation
+        await prisma.roomParticipant.deleteMany({
+            where: { roomID: id, userID: request.user.id }
+        });
+
+        // Count remaining participants
+        const remainingCount = await prisma.roomParticipant.count({
+            where: { roomID: id }
+        });
+
+        const room = await prisma.room.findUnique({ where: { id } });
+        if (!room) {
+            return reply.status(404).send({ error: 'Комната не найдена' });
+        }
+
+        // 🔧 AUTO-END: if 0 participants AND host is the one leaving (or host
+        // already has no participant row, which is the common case after create),
+        // mark the room as ended. Room stays in DB as history.
+        const isHostLeaving = room.hostID === request.user.id;
+        if (remainingCount === 0 && isHostLeaving && room.isActive) {
+            await prisma.room.update({
+                where: { id },
+                data: { isActive: false, endedAt: new Date() }
+            });
+            await cacheDel(ROOMS_CACHE_KEY);
+            return reply.send({ success: true, roomEnded: true });
+        }
+
+        reply.send({ success: true, roomEnded: false });
+    });
+
     // GET /api/rooms/mine — Мои комнаты
     fastify.get('/rooms/mine', {
         preHandler: [fastify.authenticate]
@@ -235,6 +278,34 @@ export default async function roomRoutes(fastify, _options) {
         const safeRooms = rooms.map(r => serializeRoom(r));
         reply.send(safeRooms);
     });
+
+    // 🔧 AUTO-CLEANUP CRON: every 5 minutes, find rooms where isActive=true
+    // but have 0 participants AND host is not in participants (orphan rooms).
+    // Mark them as ended (isActive=false, endedAt=now) so they disappear from
+    // the public list but stay in the host's history.
+    //
+    // This handles edge cases:
+    // - Host created room but never joined (orphan with 0 participants)
+    // - All participants left via WS disconnect without calling /leave
+    // - Server restart left rooms in inconsistent state
+    setInterval(async () => {
+        try {
+            const orphanRooms = await prisma.room.findMany({
+                where: { isActive: true },
+                include: { _count: { select: { participants: true } } },
+            });
+            const toEnd = orphanRooms.filter(r => r._count.participants === 0);
+            if (toEnd.length === 0) return;
+            await prisma.room.updateMany({
+                where: { id: { in: toEnd.map(r => r.id) } },
+                data: { isActive: false, endedAt: new Date() },
+            });
+            await cacheDel(ROOMS_CACHE_KEY);
+            console.log(`[cleanup] Auto-ended ${toEnd.length} orphan room(s)`);
+        } catch (e) {
+            console.error('[cleanup] Error:', e);
+        }
+    }, 5 * 60 * 1000).unref();
 }
 
 function generateRoomCode(): string {

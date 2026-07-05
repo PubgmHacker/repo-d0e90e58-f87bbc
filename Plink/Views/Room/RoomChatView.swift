@@ -10,6 +10,8 @@ struct RoomChatView: View {
     let messages: [ChatMessage]
     @Binding var chatText: String
     var onSend: () -> Void
+    /// 🔧 Pack v3: ID текущего пользователя для определения "моё/чужое" сообщение
+    var currentUserID: String?
 
     /// Layout mode (передаётся из RoomView на основе ориентации)
     let mode: LayoutMode
@@ -66,7 +68,7 @@ struct RoomChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(messages) { msg in
-                            RoomChatBubble(message: msg)
+                            RoomChatBubble(message: msg, currentUserID: currentUserID)
                                 .id(msg.id)
                         }
                     }
@@ -111,7 +113,7 @@ struct RoomChatView: View {
                         ScrollView {
                             LazyVStack(spacing: 6) {
                                 ForEach(messages) { msg in
-                                    RoomChatBubble(message: msg, compact: true)
+                                    RoomChatBubble(message: msg, compact: true, currentUserID: currentUserID)
                                         .id(msg.id)
                                 }
                             }
@@ -252,58 +254,53 @@ struct RoomChatView: View {
 struct RoomChatBubble: View {
     let message: ChatMessage
     var compact: Bool = false
-
-    /// 🔧 Pack v3: ID текущего пользователя — для определения "моё/чужое" сообщение
-    private var currentUserID: String? {
-        // AuthService.shared.currentUserValue?.id — но shared может не быть настроен.
-        // Используем UserDefaults как fallback (id сохраняется при логине).
-        UserDefaults.standard.string(forKey: "plink_current_user_id")
-    }
+    var currentUserID: String?
 
     /// True если сообщение от текущего пользователя
     private var isMyMessage: Bool {
-        message.senderID == currentUserID
+        message.senderID == (currentUserID ?? UserDefaults.standard.string(forKey: "plink_current_user_id"))
     }
 
-    private let avatarSize: CGFloat = 28
+    private var avatarSize: CGFloat { compact ? 24 : 36 }
+    private var textSize: CGFloat { compact ? 13 : 16 }
+    private var nameSize: CGFloat { compact ? 11 : 14 }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
             if isMyMessage {
-                // Моё сообщение — справа, аватар справа
-                Spacer(minLength: 40)
-                VStack(alignment: .trailing, spacing: 2) {
+                // Моё сообщение — справа
+                Spacer(minLength: 50)
+                VStack(alignment: .trailing, spacing: 4) {
                     Text(message.text)
-                        .font(.system(size: compact ? 14 : 16))
+                        .font(.system(size: textSize))
                         .foregroundColor(.white)
                         .chatTextShadow()
                 }
                 myAvatar
             } else {
-                // Чужое сообщение — слева, аватар слева
+                // Чужое сообщение — слева
                 otherAvatar
-                VStack(alignment: .leading, spacing: 2) {
-                    // 🔧 Pack v3: Ник админа — переливающийся красный + [A] префикс + бейдж
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         if message.isSenderAdmin {
                             Text("[A]")
-                                .font(.system(size: compact ? 10 : 11, weight: .heavy))
+                                .font(.system(size: nameSize - 2, weight: .heavy))
                                 .foregroundColor(.raveDanger)
                             Text(message.senderName)
-                                .font(.system(size: compact ? 12 : 13, weight: .bold))
+                                .font(.system(size: nameSize, weight: .bold))
                                 .adminShimmerText()
                             Image("AdminBadge")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
+                                .frame(width: nameSize + 2, height: nameSize + 2)
                         } else {
                             Text(message.senderName)
-                                .font(.system(size: compact ? 12 : 13, weight: .bold))
+                                .font(.system(size: nameSize, weight: .bold))
                                 .foregroundColor(.ravePrimary)
                         }
                     }
                     Text(message.text)
-                        .font(.system(size: compact ? 14 : 16))
+                        .font(.system(size: textSize))
                         .foregroundColor(.white)
                         .chatTextShadow()
                 }
@@ -311,15 +308,15 @@ struct RoomChatBubble: View {
             }
         }
         .padding(.horizontal, compact ? 10 : 14)
-        .padding(.vertical, compact ? 6 : 8)
+        .padding(.vertical, compact ? 6 : 10)
         .background(
             isMyMessage
-                ? Color.ravePrimary.opacity(0.15)  // Мои сообщения — cyan tint
-                : Color.white.opacity(0.06)         // Чужие — neutral
+                ? Color.ravePrimary.opacity(0.15)
+                : Color.white.opacity(0.06)
         )
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 14))
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 16))
         .overlay(
-            RoundedRectangle(cornerRadius: compact ? 12 : 14)
+            RoundedRectangle(cornerRadius: compact ? 12 : 16)
                 .stroke(
                     isMyMessage
                         ? Color.ravePrimary.opacity(0.2)
@@ -332,41 +329,31 @@ struct RoomChatBubble: View {
     // MARK: - Avatars
 
     private var myAvatar: some View {
-        Group {
-            if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        avatarPlaceholder
-                    }
-                }
-            } else {
-                avatarPlaceholder
-            }
-        }
-        .frame(width: compact ? 22 : avatarSize, height: compact ? 22 : avatarSize)
-        .clipShape(Circle())
+        avatarView
+            .frame(width: avatarSize, height: avatarSize)
+            .clipShape(Circle())
     }
 
     private var otherAvatar: some View {
-        Group {
-            if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        avatarPlaceholder
-                    }
+        avatarView
+            .frame(width: avatarSize, height: avatarSize)
+            .clipShape(Circle())
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    avatarPlaceholder
                 }
-            } else {
-                avatarPlaceholder
             }
+        } else {
+            avatarPlaceholder
         }
-        .frame(width: compact ? 22 : avatarSize, height: compact ? 22 : avatarSize)
-        .clipShape(Circle())
     }
 
     /// Fallback-аватарка с инициалами на цветном фоне

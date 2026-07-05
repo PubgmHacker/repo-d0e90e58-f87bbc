@@ -66,8 +66,9 @@ struct MainTabView: View {
         .toolbarBackground(.hidden, for: .tabBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         // 🔧 Pack v3: Свайп влево/вправо для переключения вкладок (как в Telegram)
+        // minimumDistance: 80 — чтобы не конфликтовать с чатом в комнате (40)
         .gesture(
-            DragGesture(minimumDistance: 50)
+            DragGesture(minimumDistance: 80)
                 .onEnded { value in
                     let tabs: [Tab] = [.home, .rooms, .ai, .friends, .settings]
                     guard let currentIndex = tabs.firstIndex(of: selectedTab) else { return }

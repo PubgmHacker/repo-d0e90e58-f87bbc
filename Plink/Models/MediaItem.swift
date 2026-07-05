@@ -40,6 +40,14 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
     /// - Direct stream URLs (.mp4, .m3u8, HLS) can be played by AVPlayer.
     /// - Cinema sites (kinopoisk, ivi, etc.) are HTML pages — WebView.
     /// - Anything that doesn't look like a direct stream → WebView (safe default).
+    ///
+    /// 🔧 v8 (July 2026): added googlevideo.com recognition — backend yt-dlp
+    /// extraction returns URLs like:
+    ///   https://rr3---sn-o097znsz.googlevideo.com/videoplayback?expire=...&mime=video%2Fmp4&...
+    /// These URLs don't end with .mp4 — they use query params (mime=video%2Fmp4)
+    /// to indicate the format. Previously, effectivePlaybackMode returned .webview
+    /// for these URLs → black screen (WKWebView can't render googlevideo directly).
+    /// Now: any URL on googlevideo.com domain is recognized as .directStream.
     var effectivePlaybackMode: PlaybackMode {
         let lower = streamURL.lowercased()
 
@@ -53,7 +61,25 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
             return .directStream
         }
 
+        // 🔧 v8: googlevideo.com direct stream URLs (from backend yt-dlp extraction).
+        // These are the actual YouTube video CDN URLs — direct mp4 streams.
+        // Format: https://rr3---sn-XXX.googlevideo.com/videoplayback?...&mime=video%2Fmp4&...
+        // Don't end with .mp4 — AVPlayer still plays them fine, we just need to
+        // recognize them as directStream (not webview).
+        if lower.contains("googlevideo.com/videoplayback") {
+            return .directStream
+        }
+
+        // 🔧 v8: also recognize r---sn-*.googlevideo.com (sometimes appears as
+        // plain googlevideo.com without /videoplayback path)
+        if lower.contains(".googlevideo.com/") && lower.contains("videoplayback") {
+            return .directStream
+        }
+
         // YouTube source — always WebView (embed URL or watch URL, both HTML)
+        // NOTE: this check is now only hit if extraction FAILED and we fell back
+        // to the embed URL. With successful v8 backend extraction, source is
+        // changed to .url before this check runs.
         if source == .youtube { return .webview }
 
         // YouTube embed URL pattern (even if source wasn't set to .youtube)

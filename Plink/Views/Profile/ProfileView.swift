@@ -136,13 +136,19 @@ struct ProfileView: View {
             .buttonStyle(.plain)
 
             VStack(spacing: 4) {
-                // Переливающийся никнейм для премиум (без короны)
-                PremiumUsernameText(
-                    text: viewModel.displayName,
-                    isPremium: isPremium,
-                    isAdmin: viewModel.user?.isAdmin ?? false,
-                    font: .title2.bold()
-                )
+                // Переливающийся никнейм + админ-бейдж (если админ)
+                HStack(spacing: 6) {
+                    PremiumUsernameText(
+                        text: viewModel.displayName,
+                        isPremium: isPremium,
+                        isAdmin: viewModel.user?.isAdmin ?? false,
+                        font: .title2.bold()
+                    )
+                    // 🔧 NEW: видимый админ-бейдж рядом с именем (не только шиммер-текст)
+                    if viewModel.user?.isAdmin == true {
+                        AdminBadgeChip()
+                    }
+                }
 
                 Text(viewModel.email)
                     .font(.caption)
@@ -516,16 +522,42 @@ struct EditProfileSheet: View {
                     )
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Имя пользователя")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.raveTextPrimary)
+                        // 🔧 DIVERSIFIED: лейбл с тёплым акцентом (amber) вместо обычного white
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.crop.circle.badge.checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.bioAmber)
+                            Text("Имя пользователя")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.raveTextPrimary)
+                            // 🔧 NEW: админ-бейдж рядом с лейблом (если юзер — админ)
+                            if viewModel.user?.isAdmin == true {
+                                AdminBadgeChip(compact: true)
+                            }
+                        }
                         TextField("Введите имя", text: $newUsername)
                             .textFieldStyle(RaveTextFieldStyle())
+                            // 🔧 DIVERSIFIED: тонкая amber-cyan градиентная обводка вместо плоской raveSurface
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.bioAmber.opacity(0.4),
+                                                Color.bioCyan.opacity(0.2)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 0.5
+                                    )
+                            )
                     }
 
                     Spacer()
 
-                    // Кнопка сохранить
+                    // 🔧 DIVERSIFIED: кнопка сохранить — градиент cyan→emerald (раньше плоский cyan)
+                    // + иконка checkmark для визуального якоря
                     Button {
                         Task {
                             isSaving = true
@@ -534,14 +566,48 @@ struct EditProfileSheet: View {
                             dismiss()
                         }
                     } label: {
-                        HStack {
-                            if isSaving { ProgressView().tint(.white) }
-                            Text("Сохранить")
+                        HStack(spacing: 8) {
+                            if isSaving {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
+                            Text(isSaving ? "Сохранение…" : "Сохранить")
+                                .font(.headline.bold())
                         }
+                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [
+                                    Color.bioCyan,
+                                    Color.bioEmerald
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.25),
+                                            Color.bioAmber.opacity(0.15)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 0.5
+                                )
+                        )
+                        .shadow(color: Color.bioCyan.opacity(0.4), radius: 10, y: 4)
                     }
-                    .raveButtonStyle()
                     .disabled(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+                    .opacity(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving ? 0.5 : 1)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 32)
@@ -551,8 +617,9 @@ struct EditProfileSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    // 🔧 DIVERSIFIED: кнопка Отмена — тёплый акцент вместо серого
                     Button("Отмена") { dismiss() }
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(.bioAmber)
                 }
             }
             .task {

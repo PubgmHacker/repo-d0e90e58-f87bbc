@@ -199,3 +199,47 @@ private struct RingModifier: ViewModifier {
     .background(Color.bioObsidian)
 }
 #endif
+
+// MARK: - AdminBadgeChip
+//
+// 🔧 NEW: Маленький чип-бейдж «Админ» для размещения рядом с именем пользователя
+// в Settings, Profile, EditProfile — не только в чате. Использует ту же палитру
+// что и AvatarView badge (raveDanger red + bioObsidian bg) для консистентности.
+//
+// Визуально: capsule с красным свечением, shield.fill иконка + текст «АДМИН».
+struct AdminBadgeChip: View {
+    var compact: Bool = false    // true = только иконка (для tight layouts)
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "shield.fill")
+                .font(.system(size: compact ? 9 : 10, weight: .bold))
+            if !compact {
+                Text("АДМИН")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .tracking(0.5)
+            }
+        }
+        .foregroundColor(Color.raveDanger)
+        .padding(.horizontal, compact ? 6 : 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(Color.raveDanger.opacity(0.15))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color.raveDanger.opacity(0.6), lineWidth: 0.5)
+        )
+        .shadow(color: Color.raveDanger.opacity(0.4), radius: 4, y: 1)
+    }
+}
+
+#Preview("Admin Badge Chip") {
+    VStack(spacing: 12) {
+        AdminBadgeChip()
+        AdminBadgeChip(compact: true)
+    }
+    .padding()
+    .background(Color.bioObsidian)
+}

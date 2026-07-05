@@ -315,12 +315,19 @@ struct SettingsView: View {
 
                 // Имя + подпись
                 VStack(alignment: .leading, spacing: 4) {
-                    PremiumUsernameText(
-                        text: profileVM?.displayName ?? "Гость",
-                        isPremium: isPremium,
-                        isAdmin: profileVM?.user?.isAdmin ?? false,
-                        font: .system(size: 19, weight: .bold)
-                    )
+                    HStack(spacing: 6) {
+                        PremiumUsernameText(
+                            text: profileVM?.displayName ?? "Гость",
+                            isPremium: isPremium,
+                            isAdmin: profileVM?.user?.isAdmin ?? false,
+                            font: .system(size: 19, weight: .bold)
+                        )
+                        // 🔧 NEW: видимый админ-бейдж (раньше был только текст-шиммер,
+                        // теперь и иконка-чип — как в чате, но в едином стиле с приложением).
+                        if profileVM?.user?.isAdmin == true {
+                            AdminBadgeChip()
+                        }
+                    }
                     Text("Аккаунт Плинк")
                         .font(.system(size: 13))
                         .foregroundColor(.raveTextSecondary)

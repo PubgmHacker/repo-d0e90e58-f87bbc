@@ -12,24 +12,30 @@ final class ProfileViewModel {
     var isLoading = false
     var errorMessage: String?
 
-    /// Локально выбранная аватарка из галереи (кэшируется).
-    /// Синхронизируется через shared-синглтон между всеми экранами.
-    var avatarImage: UIImage? {
-        get { Self.sharedAvatar }
-        set { Self.sharedAvatar = newValue }
-    }
+    /// 🔧 FIX: Локально выбранная аватарка из галереи.
+    /// Раньше была computed property от static var — @Observable не отслеживает
+    /// static storage, поэтому SwiftUI не перерисовывал экраны при смене аватара.
+    /// Теперь это stored instance property — @Observable отслеживает её напрямую.
+    /// Синхронизация между инстансами (ProfileView ↔ SettingsView) идёт через
+    /// NotificationCenter: при saveAvatar() все инстансы получают уведомление и
+    /// обновляют свой instance avatarImage.
+    var avatarImage: UIImage?
 
     /// Общий аватар для всех ProfileViewModel-инстансов (профиль + шторка настроек).
+    /// При изменении постит notification — все инстансы подтягивают новое значение.
     static var sharedAvatar: UIImage? {
         didSet { Self.notifyAvatarChange() }
     }
 
     /// Уведомляет все инстансы об изменении аватара.
     private static func notifyAvatarChange() {
-        // Триггерим перерисовку через NotificationCenter
         NotificationCenter.default.post(name: Self.avatarChangedNotification, object: nil)
     }
     static let avatarChangedNotification = Notification.Name("plink_avatar_changed")
+
+    /// 🔧 FIX: Подписка на смену аватара другим инстансом (например, когда юзер
+    /// меняет фото в ProfileView — SettingsView тоже должен обновиться немедленно).
+    private var avatarObserver: NSObjectProtocol?
 
     // История просмотров (Блок 2)
     var history: [WatchHistoryItem] {
@@ -74,6 +80,31 @@ final class ProfileViewModel {
 
     init(authService: AuthServiceProtocol) {
         self.authService = authService
+        // 🔧 FIX: Subscribe to avatar-changed notifications from OTHER instances.
+        // When user changes photo in ProfileView, SettingsView's viewModel receives
+        // this notification and updates its own instance avatarImage → @Observable
+        // triggers re-render → avatar updates IMMEDIATELY, no re-entry needed.
+        avatarObserver = NotificationCenter.default.addObserver(
+            forName: Self.avatarChangedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                // Sync from the shared static into this instance's observable property.
+                if self.avatarImage !== Self.sharedAvatar {
+                    self.avatarImage = Self.sharedAvatar
+                }
+            }
+        }
+    }
+
+    nonisolated deinit {
+        // 🔧 FIX: Remove the notification observer to avoid leaks / zombie callbacks.
+        // nonisolated to match RoomViewModel pattern — safe for Swift 6 strict concurrency.
+        if let avatarObserver {
+            NotificationCenter.default.removeObserver(avatarObserver)
+        }
     }
 
     func loadUser() async {
@@ -97,8 +128,12 @@ final class ProfileViewModel {
     private let avatarCacheKey = "local_avatar_image"
 
     /// Сохраняет выбранное из галереи фото как локальную аватарку.
+    /// 🔧 FIX: Теперь обновляет instance avatarImage немедленно → @Observable
+    /// перерисовывает текущий экран сразу, без перезахода. Другие инстансы
+    /// подтянутся через notification (см. init).
     func saveAvatar(_ image: UIImage) {
-        Self.sharedAvatar = image
+        Self.sharedAvatar = image          // posts notification via didSet
+        avatarImage = image                 // immediate instance-level update
         // Сохраняем в Documents directory
         if let data = image.jpegData(compressionQuality: 0.8) {
             let url = avatarFileURL
@@ -106,14 +141,21 @@ final class ProfileViewModel {
         }
     }
 
-    /// Загружает ранее сохранённую аватарку с диска в shared-кэш.
+    /// Загружает ранее сохранённую аватарку с диска в instance + shared-кэш.
+    /// 🔧 FIX: Теперь пишет и в instance avatarImage, и в static sharedAvatar.
     func loadAvatarFromDisk() {
-        if Self.sharedAvatar != nil { return }  // уже загружено
+        // Сначала синхронизируемся со shared-кэшем (мог быть загружен другим инстансом)
+        if let shared = Self.sharedAvatar, avatarImage == nil {
+            avatarImage = shared
+            return
+        }
+        guard avatarImage == nil, Self.sharedAvatar == nil else { return }
         let url = avatarFileURL
         guard FileManager.default.fileExists(atPath: url.path),
               let data = try? Data(contentsOf: url),
               let img = UIImage(data: data) else { return }
-        Self.sharedAvatar = img
+        Self.sharedAvatar = img    // posts notification (но текущий инстанс уже обновится ниже)
+        avatarImage = img
     }
 
     private var avatarFileURL: URL {

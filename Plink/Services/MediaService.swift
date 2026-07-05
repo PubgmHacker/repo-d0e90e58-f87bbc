@@ -118,7 +118,8 @@ final class MediaService {
         let media = ExtractedMedia(
             id: response.id,
             title: response.title,
-            artist: response.artist,
+            // 🔧 v8: backend StreamInfo uses 'author' (not 'artist'), map it
+            artist: response.author,
             thumbnailURL: response.thumbnailURL.flatMap(URL.init(string:)),
             streamURL: streamURL,
             duration: response.duration,

@@ -24,13 +24,19 @@ struct RoomCreationView: View {
     @State private var isCreating = false
     @State private var showPaywallForLimit = false
 
-    // 🔧 NEW: RoomSetupView state (for the new flow: Service → Browser → Setup → Room)
-    // Используем Optional struct + .fullScreenCover(item:) чтобы передать
-    // contentURL напрямую в closure (без race condition с @State).
-    @State private var showRoomSetup = false
-    @State private var setupService: VideoService = .youtube
-    @State private var setupContentURL: String = ""
-    @State private var setupContentTitle: String = ""
+    // 🔧 NEW: RoomSetupView state — используем optional struct + .fullScreenCover(item:)
+    // чтобы передать contentURL напрямую в closure (SwiftUI bug: .fullScreenCover(isPresented:)
+    // захватывает @State значения при создании closure, а не при срабатывании).
+    @State private var roomSetupConfig: RoomSetupConfig?
+
+    /// 🔧 NEW: Configuration struct for RoomSetupView — передаётся через
+    /// .fullScreenCover(item:) чтобы избежать SwiftUI @State race condition.
+    struct RoomSetupConfig: Identifiable {
+        let id = UUID()
+        let service: VideoService
+        let contentURL: String
+        let contentTitle: String
+    }
 
     // Ошибки валидации
     @State private var nameError: String?
@@ -55,21 +61,16 @@ struct RoomCreationView: View {
                         }
                     },
                     onContentSelected: { service, contentURL, contentTitle in
-                        // 🔧 FIX: Устанавливаем @State ДО открытия cover.
-                        // Раньше showRoomSetup = true срабатывал сразу, и
-                        // fullScreenCover closure захватывала пустые значения
-                        // (setupContentURL ещё не успел обновиться).
-                        // Теперь: сначала обновляем state, потом в следующем
-                        // runloop открываем cover.
-                        setupService = service
-                        setupContentURL = contentURL
-                        setupContentTitle = contentTitle
-                        print("🔍 RoomCreationView.onContentSelected: setupContentURL='\(setupContentURL)'")
-                        // 🔧 Dispatch в следующий runloop чтобы @State успел
-                        // обновиться до того как fullScreenCover создаст RoomSetupView
-                        DispatchQueue.main.async {
-                            showRoomSetup = true
-                        }
+                        // 🔧 FIX: используем .fullScreenCover(item:) с RoomSetupConfig.
+                        // SwiftUI bug: .fullScreenCover(isPresented:) захватывает @State
+                        // значения при создании closure, а не при срабатывании.
+                        // Через item: значения передаются напрямую как параметр closure.
+                        print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)'")
+                        roomSetupConfig = RoomSetupConfig(
+                            service: service,
+                            contentURL: contentURL,
+                            contentTitle: contentTitle
+                        )
                     }
                 )
 
@@ -88,15 +89,15 @@ struct RoomCreationView: View {
                 onDismiss: { showPaywallForLimit = false }
             )
         }
-        // 🔧 FIX: was .sheet — накапливал окна. Now: .fullScreenCover — заменяет.
-        // User: 'вкладки предыдущие должны закрываться иначе создается 10+ окон'.
-        .fullScreenCover(isPresented: $showRoomSetup) {
+        // 🔧 FIX: .fullScreenCover(item:) — передаёт config напрямую в closure
+        // как параметр, избегая SwiftUI @State race condition.
+        .fullScreenCover(item: $roomSetupConfig) { config in
             RoomSetupView(
-                service: setupService,
-                contentURL: setupContentURL,
-                contentTitle: setupContentTitle,
+                service: config.service,
+                contentURL: config.contentURL,
+                contentTitle: config.contentTitle,
                 onRoomCreated: { room in
-                    showRoomSetup = false
+                    roomSetupConfig = nil
                     onRoomCreated(room)
                 }
             )

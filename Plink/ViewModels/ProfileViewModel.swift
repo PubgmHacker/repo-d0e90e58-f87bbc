@@ -182,17 +182,48 @@ final class ProfileViewModel {
 
     private let avatarCacheKey = "local_avatar_image"
 
-    /// Сохраняет выбранное из галереи фото как локальную аватарку.
-    /// 🔧 FIX: Теперь обновляет instance avatarImage немедленно → @Observable
-    /// перерисовывает текущий экран сразу, без перезахода. Другие инстансы
-    /// подтянутся через notification (см. init).
+    /// Сохраняет выбранное из галереи фото как локальную аватарку + загружает на сервер.
+    /// 🔧 SERVER UPLOAD: base64 → POST /users/me/avatar → сервер сохраняет файл +
+    /// обновляет avatarURL в БД → все юзеры видят аватарку в чате.
     func saveAvatar(_ image: UIImage) {
         Self.sharedAvatar = image          // posts notification via didSet
         avatarImage = image                 // immediate instance-level update
         // Сохраняем в Documents directory
-        if let data = image.jpegData(compressionQuality: 0.8) {
+        if let data = image.jpegData(compressionQuality: 0.7) {
             let url = avatarFileURL
             try? data.write(to: url, options: .atomic)
+
+            // 🔧 UPLOAD to server
+            let base64 = data.base64EncodedString()
+            Task { await uploadAvatarToServer(base64: base64) }
+        }
+    }
+
+    /// 🔧 NEW: Upload avatar as base64 to server.
+    @MainActor
+    private func uploadAvatarToServer(base64: String) async {
+        guard let api = authService as? AuthService else { return }
+        guard let token = await api.getFreshToken() else { return }
+
+        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/me/avatar") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let body: [String: String] = ["avatar": "data:image/jpeg;base64,\(base64)"]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200 {
+                print("✅ Avatar uploaded to server")
+            } else {
+                print("⚠️ Avatar upload failed: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+            }
+        } catch {
+            print("⚠️ Avatar upload error: \(error.localizedDescription)")
         }
     }
 

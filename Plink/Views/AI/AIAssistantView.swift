@@ -334,28 +334,52 @@ struct AIAssistantView: View {
 
         do {
             let stream = AIService.shared.chatStream(messages: allMessages)
+            var gotTokens = false
             for try await token in stream {
+                gotTokens = true
                 await MainActor.run {
-                    // Append token to the AI message's text
                     if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
                         self.messages[idx].text += token
                     }
                 }
             }
-            await MainActor.run {
-                self.isLoading = false
-                self.saveHistory()
+            // 🔧 FALLBACK: if streaming returned no tokens, try non-streaming
+            if !gotTokens {
+                let response = try await AIService.shared.chat(messages: allMessages)
+                await MainActor.run {
+                    if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                        self.messages[idx].text = response
+                    }
+                    self.isLoading = false
+                    self.saveHistory()
+                }
+            } else {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.saveHistory()
+                }
             }
         } catch {
-            await MainActor.run {
-                // If we got no tokens at all, show the error in the message bubble
-                if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
-                    if self.messages[idx].text.isEmpty {
-                        self.messages[idx].text = "⚠️ Не удалось получить ответ от ИИ. Проверьте интернет-соединение и попробуйте снова."
+            // 🔧 FALLBACK: streaming failed → try non-streaming
+            do {
+                let response = try await AIService.shared.chat(messages: allMessages)
+                await MainActor.run {
+                    if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                        self.messages[idx].text = response
                     }
+                    self.isLoading = false
+                    self.saveHistory()
                 }
-                self.isLoading = false
-                self.errorMessage = error.localizedDescription
+            } catch {
+                await MainActor.run {
+                    if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                        if self.messages[idx].text.isEmpty {
+                            self.messages[idx].text = "⚠️ Не удалось получить ответ от ИИ. Попробуйте ещё раз."
+                        }
+                    }
+                    self.isLoading = false
+                    self.errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -396,17 +420,18 @@ struct AIAssistantView: View {
 }
 
 // MARK: - AI History Sheet
-/// 🔧 Shows all past AI queries. Tap to reload session, swipe to delete.
+/// 🔧 Shows all past AI queries in glass cards. Tap to reload, swipe to delete.
 struct AIHistorySheet: View {
     let allHistoryKey: String
     @Environment(\.dismiss) private var dismiss
     @State private var queries: [(query: String, date: String)] = []
-    var onSelectQuery: ((String) -> Void)? = nil  // 🔧 tap to load query
+    var onSelectQuery: ((String) -> Void)? = nil
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.bioObsidian.ignoresSafeArea()
+                BioluminescentBackground(energy: 0.4, dimming: 0, palette: .amber)
+                    .ignoresSafeArea()
 
                 if queries.isEmpty {
                     VStack(spacing: 12) {
@@ -418,47 +443,80 @@ struct AIHistorySheet: View {
                             .foregroundColor(.raveTextSecondary)
                     }
                 } else {
-                    List {
-                        ForEach(Array(queries.enumerated()), id: \.offset) { _, item in
-                            Button {
-                                onSelectQuery?(item.query)
-                                dismiss()
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.bioAmber)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.query)
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.raveTextPrimary)
-                                            .lineLimit(2)
-                                        if !item.date.isEmpty {
-                                            Text(formatDate(item.date))
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.raveTextTertiary)
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: 10) {
+                            ForEach(Array(queries.enumerated()), id: \.offset) { index, item in
+                                Button {
+                                    onSelectQuery?(item.query)
+                                    dismiss()
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        // 🔧 Glass circle icon
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.bioAmber.opacity(0.15))
+                                                .frame(width: 36, height: 36)
+                                            Image(systemName: "sparkles")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.bioAmber)
                                         }
+
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(item.query)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(.raveTextPrimary)
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.leading)
+                                            if !item.date.isEmpty {
+                                                Text(formatDate(item.date))
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.raveTextTertiary)
+                                            }
+                                        }
+
+                                        Spacer(minLength: 4)
+
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.raveTextTertiary)
                                     }
-                                    Spacer()
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.raveTextTertiary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    // 🔧 LIQUID GLASS card
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.bioAmber.opacity(0.2),
+                                                        Color.white.opacity(0.04)
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 0.5
+                                            )
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        withAnimation(.easeOut(duration: 0.25)) {
+                                            queries.remove(at: index)
+                                        }
+                                        saveQueries()
+                                    } label: {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
                                 }
                             }
-                            .buttonStyle(.plain)
-                            .listRowBackground(Color.white.opacity(0.04))
-                            .listRowSeparator(.hidden)
                         }
-                        .onDelete { indexSet in
-                            // 🔧 FIX: instant delete with animation
-                            for index in indexSet {
-                                queries.remove(at: index)
-                            }
-                            saveQueries()
-                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 32)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("История")
@@ -471,7 +529,7 @@ struct AIHistorySheet: View {
                 if !queries.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            withAnimation {
+                            withAnimation(.easeOut(duration: 0.3)) {
                                 queries.removeAll()
                             }
                             saveQueries()
@@ -498,7 +556,6 @@ struct AIHistorySheet: View {
     }
 
     private func saveQueries() {
-        // queries is reversed — un-reverse before saving
         let toSave = queries.reversed().map { ["query": $0.query, "date": $0.date] }
         UserDefaults.standard.set(toSave, forKey: allHistoryKey)
     }

@@ -175,6 +175,18 @@ extension Color {
         endPoint: .trailing
     )
 
+    /// 🔧 Pack v3: Admin text gradient — переливающийся красный (для ников админов в чате)
+    static let adminTextGradient = LinearGradient(
+        colors: [
+            Color(hex: 0xFF4D6D),
+            Color(hex: 0xFF8FA3),
+            Color(hex: 0xFF4D6D),
+            Color(hex: 0xFF6B6B),
+        ],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
     // ── Устаревшие bio-токены (для обратной совместимости) ──────────
     static let bioObsidian = Color(hex: 0x0A0D14)
     static let bioMidnight = Color(hex: 0x0C1018)

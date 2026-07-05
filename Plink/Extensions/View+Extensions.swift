@@ -204,6 +204,46 @@ extension View {
     }
 }
 
+// MARK: - Admin Shimmer Text Modifier (переливающийся красный для админов)
+/// 🔧 Pack v3: Анимированный переливающийся градиент для ников админов в чате.
+struct AdminShimmerTextModifier: ViewModifier {
+    @State private var phase: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [
+                            Color(hex: 0xFF4D6D),
+                            Color(hex: 0xFF8FA3),
+                            Color(hex: 0xFF4D6D),
+                            Color(hex: 0xFF6B6B),
+                            Color(hex: 0xFF4D6D),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 2)
+                    .offset(x: -geo.size.width + phase * geo.size.width * 2)
+                    .mask(content)
+                }
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+extension View {
+    /// 🔧 Pack v3: Переливающийся красный текст для админов
+    func adminShimmerText() -> some View {
+        modifier(AdminShimmerTextModifier())
+    }
+}
+
 // MARK: - Dismiss Keyboard On Tap Modifier
 /// Скрывает клавиатуру при тапе по любой пустой области.
 struct DismissKeyboardOnTapModifier: ViewModifier {

@@ -302,27 +302,6 @@ final class PlayerUIView: UIView {
 // rotation but does NOT reload the page. The WebView persists across
 // rotation because SwiftUI keeps the same UIView instance.
 
-// 🔧 v26 (July 2026): DEDICATED process pool for the room player.
-//
-// Without an explicit WKProcessPool, iOS assigns WebViews to a SHARED
-// app-wide pool. That means the room player (which registers the custom
-// plink-media:// scheme handler) and the search browser (which loads
-// https://youtube.com) may end up in the SAME WebContent process.
-// When that happens, iOS's network security stack can get confused between
-// the custom scheme (which bypasses CORS) and real HTTPS — and start
-// failing legitimate youtube.com requests with DownloadFailed BEFORE the
-// first byte is even received.
-//
-// Giving the room player its own WKProcessPool forces it into a separate
-// WebContent process from the search browser. The custom scheme handler
-// then physically CANNOT leak into the search browser's process.
-//
-// Note: WKProcessPool is NOT deprecated. On iOS 15+ each WKWebView always
-// gets its own content process, but the pool still controls which
-// processes are ELIGIBLE to be shared — so distinct pools guarantee
-// distinct processes.
-private let plinkPlayerProcessPool = WKProcessPool()
-
 struct WebVideoView: UIViewRepresentable {
     let url: URL
     var onTimeUpdate: (TimeInterval) -> Void
@@ -340,19 +319,13 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
-        // 🔧 v26: assign the player's DEDICATED process pool BEFORE setting
-        // any other configuration. This must happen before
-        // setURLSchemeHandler so the scheme handler is registered in the
-        // isolated pool's process, not in the shared one.
-        config.processPool = plinkPlayerProcessPool
-
-        // 🔧 v25: ISOLATED non-persistent data store — same rationale as
-        // ServiceBrowserView. The room player must NOT share cookies/cache
-        // with the search browser. Previously this used .default() (the
-        // app-wide shared store), which caused YouTube's anti-bot to flag
-        // both contexts once any 153 / DownloadFailed errors accumulated.
-        // .nonPersistent() gives each room a fresh, isolated store — YouTube
-        // sees a clean session every time the user enters a room.
+        // 🔧 v27 (July 2026): WKProcessPool is DEPRECATED in iOS 15+.
+        // Apple docs: 'Creating and using multiple instances of
+        // WKProcessPool no longer has any effect.' Each WKWebView always
+        // gets its own WebContent process automatically. The v26 attempt
+        // to isolate via process pools was based on outdated info —
+        // removed. v27 keeps the v25 nonPersistent() data store, which
+        // is the REAL isolation mechanism.
         config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
         // 🔧 v24: register custom URL scheme handler — serves YouTube player

@@ -157,12 +157,17 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         // "Не удается открыть" (Cannot Open / noSourceTrack).
         //
         // AVAsset(url:) doesn't let you set headers, but AVURLAsset does via
-        // AVURLAssetHTTPHeaderFieldsKey option. We set:
+        // the AVURLAssetHTTPHeaderFieldsKey option. We set:
         //   - User-Agent: real iOS Safari UA (YouTube CDN expects this)
         //   - Referer: https://www.youtube.com/ (YouTube CDN checks this)
         //
         // For non-googlevideo URLs (.mp4 from elsewhere, .m3u8, etc.) we skip
         // custom headers — they're not needed and could break other CDNs.
+        //
+        // 🔧 FIX v8.2: AVURLAssetHTTPHeaderFieldsKey is an Obj-C NSString
+        // constant that's not directly importable in Swift. Use the raw
+        // string literal "AVURLAssetHTTPHeaderFieldsKey" instead — this is
+        // the underlying value Apple's AVFoundation uses internally.
         let asset: AVAsset
         let lowerURL = item.streamURL.lowercased()
         if lowerURL.contains("googlevideo.com") {
@@ -172,7 +177,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
                 "Origin": "https://www.youtube.com",
             ]
             let options: [String: Any] = [
-                AVURLAssetHTTPHeaderFieldsKey: headers,
+                "AVURLAssetHTTPHeaderFieldsKey": headers,
                 AVURLAssetPreferPreciseDurationAndTimingKey: true,
             ]
             asset = AVURLAsset(url: url, options: options)

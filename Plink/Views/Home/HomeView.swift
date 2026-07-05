@@ -29,13 +29,6 @@ struct HomeView: View {
     // Каскадная анимация появления
     @State private var appeared = false
 
-    // 🔧 Continuous animations across the whole page (not just header)
-    @State private var livePulse = false          // top: pulsing LIVE dot
-    @State private var emptyBreath = false         // center: breathing empty-state icon
-    @State private var aiShimmer = false           // center: shimmer on AI sparkles
-    @State private var recsFloat = false           // bottom: floating recommendations header badge
-    @State private var ctaGlow = false             // bottom: continuous glow on CTA buttons
-
     // Кнопка «Создать комнату» — сворачивается в плюсик через 8 сек
     @State private var isCTACollapsed = false
     @State private var ctaCollapseTimer: Timer?
@@ -188,22 +181,6 @@ struct HomeView: View {
                 appeared = true
             }
             startCTACollapseTimer()
-            // 🔧 Kick off continuous ambient animations spanning top/center/bottom.
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                livePulse = true
-            }
-            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
-                emptyBreath = true
-            }
-            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                aiShimmer = true
-            }
-            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
-                recsFloat = true
-            }
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                ctaGlow = true
-            }
         }
         // 🔧 FIX M15: Invalidate the CTA collapse timer on disappear so it
         // doesn't fire on a stale view (was: stored in @State with no cleanup).
@@ -270,13 +247,6 @@ struct HomeView: View {
     private var emptyLiveSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                // 🔧 Pulsing LIVE dot (continuous, top-center of section)
-                Circle()
-                    .fill(Color.raveDanger)
-                    .frame(width: 8, height: 8)
-                    .scaleEffect(livePulse ? 1.4 : 0.8)
-                    .opacity(livePulse ? 1.0 : 0.5)
-                    .shadow(color: Color.raveDanger.opacity(livePulse ? 0.7 : 0.2), radius: livePulse ? 8 : 3)
                 Text(loc.string(.homeWatchingNow))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
@@ -285,26 +255,9 @@ struct HomeView: View {
             .padding(.horizontal, 20)
 
             VStack(spacing: 12) {
-                // 🔧 Breathing icon (continuous, center of page)
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [Color.bioCyan.opacity(emptyBreath ? 0.25 : 0.08), .clear],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: 60
-                            )
-                        )
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(emptyBreath ? 1.1 : 0.85)
-
-                    Image(systemName: "tv.slash")
-                        .font(.system(size: 36))
-                        .foregroundColor(.bioCyan)
-                        .scaleEffect(emptyBreath ? 1.08 : 0.94)
-                        .shadow(color: Color.bioCyan.opacity(emptyBreath ? 0.55 : 0.15), radius: emptyBreath ? 14 : 6)
-                }
+                Image(systemName: "tv.slash")
+                    .font(.system(size: 36))
+                    .foregroundColor(.raveTextTertiary)
 
                 Text("Пока никто не смотрит")
                     .font(.system(size: 16, weight: .semibold))
@@ -322,17 +275,7 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.bioCyan.opacity(emptyBreath ? 0.35 : 0.08),
-                                Color.bioEmerald.opacity(emptyBreath ? 0.18 : 0.04)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
+                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
             )
             .padding(.horizontal, 20)
         }
@@ -342,13 +285,6 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Заголовок секции
             HStack(spacing: 8) {
-                // 🔧 Continuous pulsing LIVE dot (top-of-section accent)
-                Circle()
-                    .fill(Color.raveDanger)
-                    .frame(width: 8, height: 8)
-                    .scaleEffect(livePulse ? 1.4 : 0.8)
-                    .opacity(livePulse ? 1.0 : 0.5)
-                    .shadow(color: Color.raveDanger.opacity(livePulse ? 0.7 : 0.2), radius: livePulse ? 8 : 3)
                 Text(loc.string(.homeWatchingNow))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
@@ -384,20 +320,6 @@ struct HomeView: View {
     private var recommendationsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                // 🔧 Floating shimmering dot (center-bottom accent)
-                ZStack {
-                    Circle()
-                        .fill(Color.bioEmerald)
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(recsFloat ? 1.3 : 0.85)
-                        .opacity(recsFloat ? 1.0 : 0.55)
-                    Circle()
-                        .stroke(Color.bioEmerald.opacity(recsFloat ? 0.6 : 0.15), lineWidth: 1)
-                        .frame(width: 16, height: 16)
-                        .scaleEffect(recsFloat ? 1.4 : 0.9)
-                        .opacity(recsFloat ? 0.0 : 0.8)
-                }
-                .shadow(color: Color.bioEmerald.opacity(recsFloat ? 0.6 : 0.15), radius: recsFloat ? 8 : 3)
                 Text("Рекомендации для тебя")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
@@ -439,23 +361,6 @@ struct HomeView: View {
             HStack(spacing: 14) {
                 // Icon
                 ZStack {
-                    // 🔧 Continuous shimmering aura (center of page)
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.bioCyan.opacity(aiShimmer ? 0.45 : 0.12),
-                                    Color.bioEmerald.opacity(aiShimmer ? 0.25 : 0.05),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: 32
-                            )
-                        )
-                        .frame(width: 70, height: 70)
-                        .scaleEffect(aiShimmer ? 1.15 : 0.85)
-
                     Circle()
                         .fill(
                             LinearGradient(
@@ -465,12 +370,11 @@ struct HomeView: View {
                             )
                         )
                         .frame(width: 44, height: 44)
-                        .scaleEffect(aiShimmer ? 1.06 : 0.96)
                     Image(systemName: "sparkles")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                 }
-                .shadow(color: Color.bioCyan.opacity(aiShimmer ? 0.7 : 0.25), radius: aiShimmer ? 16 : 6, y: 3)
+                .shadow(color: Color.bioCyan.opacity(0.4), radius: 8, y: 3)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Что посмотреть?")
@@ -560,17 +464,6 @@ struct HomeView: View {
         .padding(.horizontal, 20)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 40)
-        // 🔧 Continuous ambient glow on the bottom CTAs (bottom-of-page animation)
-        .shadow(
-            color: Color.bioCyan.opacity(ctaGlow ? 0.35 : 0.08),
-            radius: ctaGlow ? 18 : 6,
-            y: 4
-        )
-        .shadow(
-            color: Color.bioEmerald.opacity(ctaGlow ? 0.18 : 0.04),
-            radius: ctaGlow ? 14 : 5,
-            y: 3
-        )
     }
 
     /// 🔧 NEW: Reusable glass button — collapses from full label to icon-only.

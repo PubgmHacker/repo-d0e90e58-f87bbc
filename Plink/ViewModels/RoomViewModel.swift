@@ -171,15 +171,19 @@ final class RoomViewModel: WebSocketClientDelegate {
             wsClient.send(json)
         }
 
+        // 🔧 FIX: show real user info (nick, avatar, admin role) on own messages.
+        // Was: senderName: "You", senderAvatarURL: nil → no nick/avatar/badge shown.
+        let user = authService.currentUserValue
         messages.append(ChatMessage(
             id: UUID().uuidString,
             roomID: room.id,
             senderID: currentUserId,
-            senderName: "You",
+            senderName: user?.displayName ?? "You",
             text: trimmed,
             timestamp: Date(),
             isRead: false,
-            senderAvatarURL: nil
+            senderAvatarURL: user?.avatarURL,
+            senderRole: user?.role.rawValue
         ))
         chatText = ""
     }

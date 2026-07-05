@@ -34,6 +34,10 @@ struct SettingsView: View {
     @State private var showDeleteConfirm = false
     @State private var deleteReason = "Не пользуюсь приложением"
     @State private var isDeleting = false
+    /// 🔧 v11 (July 2026): Chat appearance section — bubble style picker.
+    /// Two subsections: DM (friends chat) + Room (movie room chat).
+    @State private var showChatAppearance = false
+    @State private var showPaywallForBubble = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -108,6 +112,24 @@ struct SettingsView: View {
                                     title: "Язык приложения",
                                     subtitle: LocalizationManager.shared.currentLanguageName,
                                     color: .bioRose,
+                                    showChevron: true
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // ── Chat Appearance Section (Плинк+) ──
+                        // 🔧 v11 (July 2026): Custom bubble styles for premium users.
+                        // Two subsections inside the sheet: DM (friends) + Room (movie room).
+                        settingsSection("Оформление чата") {
+                            Button {
+                                showChatAppearance = true
+                            } label: {
+                                rowContent(
+                                    icon: "bubble.left.and.bubble.right.fill",
+                                    title: "Стили пузырей",
+                                    subtitle: isPremium ? BubbleStylePreference.get().displayName : "Плинк+",
+                                    color: .bioAmber,
                                     showChevron: true
                                 )
                             }
@@ -255,6 +277,28 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showAdminPanel) {
             AdminPanelView()
+        }
+        // 🔧 v11 (July 2026): Chat Appearance — bubble style picker.
+        // Sheet shows two subsections: DM (friends) + Room (movie room).
+        // Picker itself is in BubbleStylePickerSheet, wrapper here adds the
+        // subsection navigation. For now both DM and Room use the SAME style
+        // (single BubbleStylePreference). Splitting into two separate
+        // preferences is a future enhancement — current behavior is shared.
+        .sheet(isPresented: $showChatAppearance) {
+            ChatAppearanceSheet(
+                isPremium: isPremium,
+                isAdmin: profileVM?.user?.isAdmin ?? false,
+                onPick: { style in
+                    // Persist via BubbleStylePreference (already done in picker)
+                    print("🎨 Bubble style selected: \(style.rawValue)")
+                },
+                onLockedTap: {
+                    showPaywallForBubble = true
+                }
+            )
+        }
+        .sheet(isPresented: $showPaywallForBubble) {
+            PaywallView()
         }
         // 🔧 Pack v3: Sign Out confirmation
         .alert("Выйти из аккаунта?", isPresented: $showSignOutConfirm) {

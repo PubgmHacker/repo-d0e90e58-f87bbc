@@ -146,12 +146,19 @@ final class RoomSyncManager: ObservableObject {
 
     func sendChatMessage(_ message: ChatMessage) {
         appendChatMessage(message)
+        // 🔧 v10 (July 2026): send bubbleStyle as a HINT to the server.
+        // The server runs processMessageStyle() on it and may downgrade to
+        // 'default' if the user lacks permission. The server-confirmed style
+        // comes back in the broadcast ChatMessage's `bubbleStyle` field,
+        // which is what we render. BubbleStylePreference.get() returns the
+        // user's locally-selected style from the picker (or 'default').
         sendCodable(ChatPayload(
             type: "chat",
             roomID: message.roomID,
             senderID: message.senderID,
             senderName: message.senderName,
-            text: message.text
+            text: message.text,
+            bubbleStyle: BubbleStylePreference.get().rawValue
         ))
     }
 

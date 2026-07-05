@@ -12,6 +12,9 @@ struct ChatMessage: Codable, Identifiable, Sendable {
     var senderAvatarURL: String?
     /// 🔧 Pack v3: Role of sender (USER/MODERATOR/ADMIN/FOUNDER) — для подсветки админов
     var senderRole: String?
+    /// 🔧 v11 (July 2026): Telegram-style display name (separate from @username).
+    /// Nil on old backends → falls back to senderName.
+    var senderDisplayName: String?
     /// 🔧 v10 (July 2026): Bubble style — confirmed by server in processMessageStyle().
     /// Clients must render based on this value (server-confirmed), NOT on what
     /// the local user "thinks" they picked. The server may downgrade a requested
@@ -25,6 +28,7 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         case id, roomID, senderID, senderName, text, timestamp
         case isRead = "is_read"  // backend doesn't send this — decodeIfPresent
         case senderAvatarURL, senderRole
+        case senderDisplayName
         case bubbleStyle = "bubbleStyle"  // 🔧 v10: backend sends camelCase
     }
 
@@ -39,6 +43,7 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
         senderAvatarURL = try c.decodeIfPresent(String.self, forKey: .senderAvatarURL)
         senderRole = try c.decodeIfPresent(String.self, forKey: .senderRole)
+        senderDisplayName = try c.decodeIfPresent(String.self, forKey: .senderDisplayName)
         // 🔧 v10: bubbleStyle is optional — old messages (pre-v10) won't have it.
         // Default to 'default' for backward compatibility.
         bubbleStyle = try c.decodeIfPresent(String.self, forKey: .bubbleStyle) ?? "default"
@@ -55,6 +60,7 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         try c.encode(isRead, forKey: .isRead)
         try c.encodeIfPresent(senderAvatarURL, forKey: .senderAvatarURL)
         try c.encodeIfPresent(senderRole, forKey: .senderRole)
+        try c.encodeIfPresent(senderDisplayName, forKey: .senderDisplayName)
         try c.encodeIfPresent(bubbleStyle, forKey: .bubbleStyle)
     }
 
@@ -62,6 +68,7 @@ struct ChatMessage: Codable, Identifiable, Sendable {
     init(id: String, roomID: String, senderID: String, senderName: String,
          text: String, timestamp: Date, isRead: Bool,
          senderAvatarURL: String?, senderRole: String? = nil,
+         senderDisplayName: String? = nil,
          bubbleStyle: String? = nil) {
         self.id = id
         self.roomID = roomID
@@ -72,12 +79,19 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         self.isRead = isRead
         self.senderAvatarURL = senderAvatarURL
         self.senderRole = senderRole
+        self.senderDisplayName = senderDisplayName
         self.bubbleStyle = bubbleStyle ?? "default"
     }
 
     /// 🔧 Pack v3: True если отправитель — админ
     var isSenderAdmin: Bool {
         (senderRole ?? "").uppercased() == "ADMIN" || (senderRole ?? "").uppercased() == "FOUNDER"
+    }
+
+    /// 🔧 v11: Telegram-style display name — prefer senderDisplayName, fall back to senderName.
+    /// UI code should use this for showing the sender's name in chat bubbles.
+    var displaySenderName: String {
+        (senderDisplayName?.isEmpty == false) ? senderDisplayName! : senderName
     }
 
     /// 🔧 v10: Typed accessor for the bubble style. Defensive — unknown values

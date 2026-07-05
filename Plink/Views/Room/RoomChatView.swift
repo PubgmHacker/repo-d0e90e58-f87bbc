@@ -284,18 +284,25 @@ struct RoomChatBubble: View {
                     HStack(spacing: 4) {
                         if message.isSenderAdmin {
                             AdminBadgeChip(compact: true)
-                            Text(message.senderName)
+                            Text(message.displaySenderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .adminShimmerText()
                         } else {
-                            Text(message.senderName)
+                            Text(message.displaySenderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .foregroundColor(.bioCyan)
                         }
                     }
-                    Text(message.text)
-                        .font(.system(size: textSize, weight: .medium))
-                        .foregroundColor(.white)
+                    // 🔧 v10: styled bubble — routes to DefaultBubble / CuteDuckBubble /
+                    // NeonCyberBubble / AdminBubble based on server-confirmed bubbleStyle.
+                    // The bubble background/animation is fully owned by StyledChatBubble;
+                    // we only provide the message text as content.
+                    StyledChatBubble(message: message, isOwn: isMyMessage) {
+                        Text(message.text)
+                            .font(.system(size: textSize, weight: .medium))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 myAvatar
             } else {
@@ -303,28 +310,29 @@ struct RoomChatBubble: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         if message.isSenderAdmin {
-                            Text(message.senderName)
+                            Text(message.displaySenderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .adminShimmerText()
                             AdminBadgeChip(compact: true)
                         } else {
-                            Text(message.senderName)
+                            Text(message.displaySenderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .foregroundColor(.bioCyan)
                         }
                     }
-                    Text(message.text)
-                        .font(.system(size: textSize, weight: .medium))
-                        .foregroundColor(.white)
+                    // 🔧 v10: styled bubble (see comment above)
+                    StyledChatBubble(message: message, isOwn: isMyMessage) {
+                        Text(message.text)
+                            .font(.system(size: textSize, weight: .medium))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, compact ? 10 : 14)
         .padding(.vertical, compact ? 6 : 10)
-        // 🔧 FIX: simple background — same for all messages, no cyan
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 16))
     }
 
     // MARK: - Avatars
@@ -343,34 +351,60 @@ struct RoomChatBubble: View {
 
     @ViewBuilder
     private var avatarView: some View {
-        // 🔧 FIX: For own messages, check local avatar first (ProfileViewModel.sharedAvatar).
-        // For other users, use senderAvatarURL from backend broadcast.
-        // Fallback to initials placeholder if no avatar available.
-        let isOwn = message.senderID == (currentUserID ?? UserDefaults.standard.string(forKey: "plink_current_user_id"))
-
-        if isOwn, let localImg = ProfileViewModel.sharedAvatar {
-            // Own message + local avatar image available
-            Image(uiImage: localImg)
-                .resizable()
-                .scaledToFill()
-        } else if let avatarURL = message.senderAvatarURL,
-                  !avatarURL.isEmpty,
-                  let url = URL(string: avatarURL) {
-            // Other user's message with avatar URL from backend
+        // 🔧 v11 (July 2026): avatar display fix.
+        //
+        // PREVIOUS BUG: for own messages, only checked local sharedAvatar. If the
+        // user uploaded an avatar via Edit Profile but `ProfileViewModel.sharedAvatar`
+        // wasn't populated (e.g. cold app launch, different ViewModels not synced),
+        // the user's own messages showed initials placeholder even though their
+        // avatar was correctly stored on the backend.
+        //
+        // FIX: prefer senderAvatarURL (which the server broadcasts for ALL messages,
+        // including the user's own — see sanitizeChatMessage in security.ts). Fall
+        // back to local sharedAvatar only if senderAvatarURL is nil/empty (e.g.
+        // backend hasn't replied to broadcast yet, or user is offline). Final
+        // fallback is the initials placeholder.
+        //
+        // This fixes the reported regression: 'снова пропала аватарка в чате комнаты
+        // и показывает инициалы моего ника'.
+        if let avatarURL = message.senderAvatarURL,
+           !avatarURL.isEmpty,
+           let url = URL(string: avatarURL) {
+            // Primary: server-broadcast avatar URL (works for both own + others)
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFill()
                 case .failure:
-                    avatarPlaceholder
+                    // Fall back to local shared avatar if available, else placeholder
+                    if let localImg = ProfileViewModel.sharedAvatar {
+                        Image(uiImage: localImg)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        avatarPlaceholder
+                    }
                 case .empty:
-                    avatarPlaceholder
+                    // While loading, show local shared avatar if available
+                    if let localImg = ProfileViewModel.sharedAvatar {
+                        Image(uiImage: localImg)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        avatarPlaceholder
+                    }
                 @unknown default:
                     avatarPlaceholder
                 }
             }
+        } else if let localImg = ProfileViewModel.sharedAvatar {
+            // Fallback: no URL but local avatar available (e.g. just uploaded,
+            // broadcast hasn't returned yet)
+            Image(uiImage: localImg)
+                .resizable()
+                .scaledToFill()
         } else {
-            // No avatar available — show initials
+            // Final fallback: initials placeholder
             avatarPlaceholder
         }
     }

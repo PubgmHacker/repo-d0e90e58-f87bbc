@@ -1,39 +1,62 @@
 import Foundation
 
 // MARK: - User Model
+//
+// 🔧 v11 (July 2026): Telegram-style naming split.
+//   - `username`  → unique @tag (e.g. "@alex_films"), used for search/friends/deeplinks
+//   - `displayName` → human-readable nick (e.g. "Alex Films"), shown in chat/profile
+//
+// Before v11, `username` was used for both — confusing because users couldn't have
+// a fancy display name with spaces/emoji separate from their unique @tag.
+//
+// `displayName` is OPTIONAL in JSON — old backends (pre-v11) don't send it,
+// so we fall back to `username` for backward compatibility.
+
 struct User: Codable, Identifiable, Sendable {
     let id: String
-    let username: String
+    let username: String          // unique @tag, e.g. "alex_films"
     let email: String
     let avatarURL: String?
+    /// 🔧 v11: Telegram-style display name (separate from @username).
+    /// nil on old backends → falls back to username.
+    let displayName: String?
+    /// 🔧 v11: profile cover photo URL (background banner on profile screen).
+    let coverURL: String?
     let isOnline: Bool
     let isPremium: Bool
     let role: String?
     let createdAt: Date
 
+    /// Initials for avatar placeholder — prefer displayName, fall back to username.
     var initials: String {
-        String(username.prefix(2).uppercased())
+        let source = (displayName?.isEmpty == false ? displayName : username) ?? ""
+        let parts = source.split(separator: " ")
+        let letters = parts.compactMap { $0.first }.prefix(2)
+        return letters.map { String($0).uppercased() }.joined()
     }
 
-    var displayName: String {
-        username
+    /// Display name shown in UI — Telegram-style: displayName if set, else username.
+    /// This is the ONLY property UI code should use for "what to show as the name".
+    var displayTitle: String {
+        displayName?.isEmpty == false ? displayName! : username
     }
 
-    /// True если пользователь имеет роль администратора
+    /// @-prefixed tag for search/deeplinks — same as username but with leading @.
+    var atTag: String {
+        "@\(username)"
+    }
+
+    /// True if user has admin role
     var isAdmin: Bool {
-        (role ?? "").uppercased() == "ADMIN"
+        (role ?? "").uppercased() == "ADMIN" || (role ?? "").uppercased() == "FOUNDER"
     }
 
-    /// 🔧 NEW: Short display ID — last 8 chars of the UUID, prefixed with #.
-    /// Shown in small text under the username so users can find each other by ID.
-    /// Example: id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890" → "#ef1234567890" (last 12 chars)
     var shortId: String {
         guard id.count >= 12 else { return "#\(id)" }
         let short = String(id.suffix(8))
         return "#\(short)"
     }
 
-    /// 🔧 NEW: Full ID for copy-to-clipboard / share. Used in friend search.
     var fullId: String {
         id
     }
@@ -41,9 +64,11 @@ struct User: Codable, Identifiable, Sendable {
     static var preview: User {
         User(
             id: "user_001",
-            username: "Alex",
+            username: "alex_films",
             email: "alex@example.com",
             avatarURL: nil,
+            displayName: "Alex Films",
+            coverURL: nil,
             isOnline: true,
             isPremium: false,
             role: nil,
@@ -52,15 +77,21 @@ struct User: Codable, Identifiable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, isOnline, isPremium, role, createdAt
+        case id, username, email, avatarURL
+        case displayName
+        case coverURL
+        case isOnline, isPremium, role, createdAt
     }
 
     init(id: String, username: String, email: String, avatarURL: String?,
+         displayName: String? = nil, coverURL: String? = nil,
          isOnline: Bool, isPremium: Bool, role: String? = nil, createdAt: Date) {
         self.id = id
         self.username = username
         self.email = email
         self.avatarURL = avatarURL
+        self.displayName = displayName
+        self.coverURL = coverURL
         self.isOnline = isOnline
         self.isPremium = isPremium
         self.role = role
@@ -73,6 +104,9 @@ struct User: Codable, Identifiable, Sendable {
         username = try container.decode(String.self, forKey: .username)
         email = try container.decode(String.self, forKey: .email)
         avatarURL = try container.decodeIfPresent(String.self, forKey: .avatarURL)
+        // 🔧 v11: optional fields, fall back gracefully on old backends
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        coverURL = try container.decodeIfPresent(String.self, forKey: .coverURL)
         isOnline = try container.decodeIfPresent(Bool.self, forKey: .isOnline) ?? true
         isPremium = try container.decodeIfPresent(Bool.self, forKey: .isPremium) ?? false
         role = try container.decodeIfPresent(String.self, forKey: .role)
@@ -85,6 +119,8 @@ struct User: Codable, Identifiable, Sendable {
         try container.encode(username, forKey: .username)
         try container.encode(email, forKey: .email)
         try container.encodeIfPresent(avatarURL, forKey: .avatarURL)
+        try container.encodeIfPresent(displayName, forKey: .displayName)
+        try container.encodeIfPresent(coverURL, forKey: .coverURL)
         try container.encode(isOnline, forKey: .isOnline)
         try container.encode(isPremium, forKey: .isPremium)
         try container.encodeIfPresent(role, forKey: .role)
@@ -97,9 +133,16 @@ struct UserPreview: Codable, Identifiable, Sendable, Hashable {
     let id: String
     let username: String
     let avatarURL: String?
+    /// 🔧 v11: optional display name (back-compat: nil on old backends)
+    let displayName: String?
     let isOnline: Bool
 
+    /// Display title — same logic as User.displayTitle
+    var displayTitle: String {
+        displayName?.isEmpty == false ? displayName! : username
+    }
+
     static var preview: UserPreview {
-        UserPreview(id: "user_002", username: "Jordan", avatarURL: nil, isOnline: true)
+        UserPreview(id: "user_002", username: "jordan", avatarURL: nil, displayName: nil, isOnline: true)
     }
 }

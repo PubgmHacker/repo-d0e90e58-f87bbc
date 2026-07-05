@@ -181,9 +181,22 @@ export default async function mediaRoutes(fastify, _options) {
   // Rate limit: 20 requests/minute (each request = 1 yt-dlp extraction).
 
   // v9.3: auth via query param (?token=JWT) — AVPlayer can't send headers reliably
+  // v9.4: override security headers — CORP same-origin blocks AVPlayer cross-origin
   fastify.get('/media/youtube-stream', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
+    // 🔧 v9.4: override restrictive security headers for this endpoint.
+    // The global securityHeaders hook sets:
+    //   Cross-Origin-Resource-Policy: same-origin
+    //   Cross-Origin-Embedder-Policy: require-corp
+    // These block AVPlayer (which makes cross-origin requests from the iOS
+    // app to the backend). Without overriding, AVPlayer gets -1008.
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    reply.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Headers', 'Range, Content-Type');
+    reply.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+
     const { id, token } = request.query as any;
     if (!id || typeof id !== 'string' || id.length > 20) {
       return reply.status(400).send({ error: 'Valid video ID required' });

@@ -25,6 +25,8 @@ final class AuthService: AuthServiceProtocol {
     // MARK: - Stored User + Token
 
     private(set) var currentUser: User?
+    /// 🔧 Pack v3: Protocol-required synchronous accessor
+    var currentUserValue: User? { currentUser }
     private(set) var authToken: String?
     private(set) var tokenExpiry: TimeInterval = 0
     private(set) var refreshToken: String?

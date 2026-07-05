@@ -307,45 +307,63 @@ struct SettingsView: View {
                     image: profileVM?.avatarImage,
                     imageURL: profileVM?.user?.avatarURL,
                     username: profileVM?.displayName ?? "?",
-                    size: 52,
+                    size: 56,
                     isPremium: isPremium,
                     isAdmin: profileVM?.user?.isAdmin ?? false
                 )
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
                         PremiumUsernameText(
                             text: profileVM?.displayName ?? "Гость",
                             isPremium: isPremium,
                             isAdmin: profileVM?.user?.isAdmin ?? false,
-                            font: .system(size: 17, weight: .bold)
+                            font: .system(size: 18, weight: .heavy)
                         )
+                        // 🔧 FIX: show admin badge OR premium badge
                         if profileVM?.user?.isAdmin == true {
                             AdminBadgeChip(compact: true)
+                        } else if isPremium {
+                            // 🔧 Плинк+ badge
+                            HStack(spacing: 3) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text("Плинк+")
+                                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                            }
+                            .foregroundColor(.bioCyan)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.bioCyan.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Color.bioCyan.opacity(0.4), lineWidth: 0.5))
                         }
                     }
-                    if let email = profileVM?.user?.email {
-                        Text(email)
-                            .font(.system(size: 12))
-                            .foregroundColor(.raveTextSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
+                    // 🔧 FIX: removed email — shown in profile page already.
+                    // Keep username + ID only.
                     if let user = profileVM?.user {
-                        HStack(spacing: 3) {
-                            Text("ID:")
-                                .font(.system(size: 10, weight: .medium))
+                        HStack(spacing: 6) {
+                            Text("@\(user.username)")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.raveTextSecondary)
+                            Text("·")
+                                .font(.system(size: 13))
                                 .foregroundColor(.raveTextTertiary)
-                            Text(user.shortId)
-                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.raveTextTertiary)
-                            Button {
-                                UIPasteboard.general.string = user.fullId
-                                HapticManager.impact(.light)
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 9))
+                            HStack(spacing: 2) {
+                                Text("ID:")
+                                    .font(.system(size: 11, weight: .medium))
                                     .foregroundColor(.raveTextTertiary)
+                                Text(user.shortId)
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.raveTextTertiary)
+                                Button {
+                                    UIPasteboard.general.string = user.fullId
+                                    HapticManager.impact(.light)
+                                } label: {
+                                    Image(systemName: "doc.on.doc")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.raveTextTertiary)
+                                }
                             }
                         }
                     }
@@ -354,24 +372,20 @@ struct SettingsView: View {
                 Spacer(minLength: 4)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.raveTextTertiary)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
-        )
     }
 
     // MARK: - Settings Section (grouped card)

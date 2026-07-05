@@ -10,12 +10,27 @@ const ROOMS_CACHE_TTL = 30; // 30 sec
 // iOS ожидает structured object, не строку — иначе decoding падает с typeMismatch
 // и весь Room decode ломается. Эта функция парсит строку обратно в объект.
 // Применяется во всех endpoints которые возвращают room: create, join, list, get.
+//
+// 🔧 ROBUSTNESS: try/catch вокруг JSON.parse. Если в БД лежит битая строка
+// (исторические данные, partial write и т.п.) — возвращаем null вместо того
+// чтобы ронять весь endpoint 500-й. Иначе iOS видит ошибку → myRooms = [] →
+// юзер думает что у него нет комнат, хотя они есть.
 function serializeRoom(room) {
     if (!room) return null;
     const { password, ...rest } = room;
+    let parsedMediaItem = null;
+    if (rest.mediaItem) {
+        try {
+            parsedMediaItem = JSON.parse(rest.mediaItem);
+        } catch (e) {
+            // Битая JSON-строка — логируем, возвращаем null, не роняем endpoint
+            console.warn(`[rooms] Failed to parse mediaItem for room ${rest.id}:`, e.message);
+            parsedMediaItem = null;
+        }
+    }
     return {
         ...rest,
-        mediaItem: rest.mediaItem ? JSON.parse(rest.mediaItem) : null,
+        mediaItem: parsedMediaItem,
     };
 }
 

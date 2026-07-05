@@ -46,8 +46,20 @@ final class APIClient: ObservableObject, @unchecked Sendable {
 
     init(baseURL: String = "https://plink-backend-production-ef31.up.railway.app/api") {
         self.baseURL = URL(string: baseURL)!
-        _encoder.keyEncodingStrategy = .convertToSnakeCase
+        // 🔧 FIX: Was `.convertToSnakeCase` — but the backend reads camelCase everywhere
+        // (rooms.ts: `mediaItem`, `hostName`, `maxParticipants`; auth.ts: `refreshToken`;
+        // friends.ts: `friendId`; profile.ts: `avatarURL`; messages.ts: `receiverId`).
+        // The encoder was silently converting iOS camelCase → snake_case, the backend
+        // then read undefined for every compound key, and stored null in the DB.
+        // Symptom: room created with YouTube → video never loads (mediaItem = null).
+        //
+        // Now: send camelCase as-is, backend reads camelCase. Single-word keys
+        // (email, password, code, name, etc.) were never affected and stay working.
+        _encoder.keyEncodingStrategy = .useDefaultKeys
         _encoder.dateEncodingStrategy = .iso8601
+        // Decoder: keep `.convertFromSnakeCase` — it's harmless for camelCase keys
+        // (only converts keys that actually contain underscores) and provides forward
+        // compat if any backend field ever switches to snake_case.
         _decoder.keyDecodingStrategy = .convertFromSnakeCase
         // 🔧 Pack v2: ISO8601 с поддержкой миллисекунд.
         // Бэкенд Prisma возвращает даты как "2026-07-03T16:53:52.778Z"

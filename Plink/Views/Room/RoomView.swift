@@ -280,7 +280,12 @@ struct RoomView: View {
 
                 VideoContainerView(
                     mediaURL: mediaItem.streamURL,
-                    playbackMode: .directStream,
+                    // 🔧 FIX: was hardcoded `.directStream` — but YouTube embed URLs
+                    // and cinema sites are HTML pages that AVPlayer can't play.
+                    // Now: consult mediaItem.effectivePlaybackMode which picks
+                    // .webview for HTML pages (YouTube embed, cinema) and
+                    // .directStream for actual video files (.mp4, .m3u8).
+                    playbackMode: mediaItem.effectivePlaybackMode,
                     isPlaying: viewModel.syncEngine.isPlaying,
                     currentTime: viewModel.syncEngine.currentTime,
                     duration: viewModel.syncEngine.duration,

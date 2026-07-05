@@ -121,6 +121,26 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         isLoadingMedia = true
         errorMessage = nil
 
+        // 🔧 FIX: For WebView playback mode (YouTube embed, cinema sites, HTML pages),
+        // AVPlayer can't play the URL — it would just spin forever. Skip AVPlayer setup
+        // entirely. RoomView's VideoContainerView will use WebVideoView instead.
+        // We still set currentMediaItem so RoomView knows to render the video section.
+        if item.effectivePlaybackMode == .webview {
+            currentMediaItem = item
+            isLoadingMedia = false
+            // Host still broadcasts the new media to participants
+            if isHost {
+                let msg = SyncMessage(
+                    command: .changeMedia,
+                    roomID: roomID,
+                    senderID: userID,
+                    mediaItem: item
+                )
+                broadcast(msg)
+            }
+            return
+        }
+
         guard let url = URL(string: item.streamURL) else {
             errorMessage = "Invalid media URL"
             isLoadingMedia = false

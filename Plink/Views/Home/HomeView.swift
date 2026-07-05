@@ -75,12 +75,18 @@ struct HomeView: View {
                         if !liveRooms.isEmpty {
                             liveSection
                                 .padding(.top, 24)
+                        } else {
+                            // 🔧 Pack v3: Заглушка когда нет активных комнат
+                            emptyLiveSection
+                                .padding(.top, 24)
                         }
 
                         // Секция 2: Рекомендации для тебя
-                        recommendationsSection
-                            .padding(.top, 28)
-                            .padding(.bottom, 120) // место под floating CTA
+                        if !recommendationRooms.isEmpty {
+                            recommendationsSection
+                                .padding(.top, 28)
+                        }
+                        Spacer(minLength: 120)
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -236,6 +242,44 @@ struct HomeView: View {
     }
 
     // MARK: - Live Section (Сейчас в эфире)
+
+    /// 🔧 Pack v3: Заглушка когда нет активных комнат
+    private var emptyLiveSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text(loc.string(.homeWatchingNow))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.raveTextPrimary)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+
+            VStack(spacing: 12) {
+                Image(systemName: "tv.slash")
+                    .font(.system(size: 36))
+                    .foregroundColor(.raveTextTertiary)
+
+                Text("Пока никто не смотрит")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.raveTextSecondary)
+
+                Text("Создайте комнату и пригласите друзей — они появятся здесь")
+                    .font(.system(size: 13))
+                    .foregroundColor(.raveTextTertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32)
+            .padding(.horizontal, 20)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+            )
+            .padding(.horizontal, 20)
+        }
+    }
 
     private var liveSection: some View {
         VStack(alignment: .leading, spacing: 12) {

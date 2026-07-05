@@ -197,17 +197,18 @@ extension View {
         ))
     }
 
-    /// 🔧 Admin обводка аватарки — ТОЛЬКО красные оттенки (per user request).
-    /// 🔧 5 оттенков красного: dark → scarlet → bright → scarlet → dark.
-    /// Создаёт заметную «волну» по кольцу аватара, синхронизированную с ником.
+    /// 🔧 Admin обводка аватарки — база алый, переливание тёмными оттенками.
+    /// 🔧 5 стопов: scarlet → red → dark crimson → red → scarlet.
+    /// Синхронизирована с ником — та же палитра, та же логика «тёмная волна
+    /// по яркому алому».
     func adminStroke(lineWidth: CGFloat = 2.5) -> some View {
         modifier(AnimatedStrokeModifier(
             colors: [
-                Color(hex: 0x8B0000),   // dark red
-                Color(hex: 0xFF1538),   // vivid scarlet
-                Color(hex: 0xFF4D4D),   // bright red (peak)
-                Color(hex: 0xFF1538),   // scarlet
-                Color(hex: 0x8B0000),   // dark red (loop)
+                Color(hex: 0xFF1538),   // scarlet — база
+                Color(hex: 0xCC0000),   // crimson — затемнение
+                Color(hex: 0xB00000),   // dark crimson — пик тёмной волны
+                Color(hex: 0xCC0000),   // crimson — подъём
+                Color(hex: 0xFF1538),   // scarlet — обратно в базу (loop)
             ],
             lineWidth: lineWidth
         ))
@@ -216,15 +217,14 @@ extension View {
 
 // MARK: - Admin Shimmer Text Modifier (переливающийся КРАСНЫЙ для админов)
 //
-// 🔧 USER REQUEST: «только красные оттенки, никакого золота/белого.
-// Переливающийся сочный красный ник, заметный эффект Вау».
+// 🔧 USER REQUEST v2: «сначала алый красный, переливается более тёмными
+// оттенками но не слишком».
 //
-// 🔧 PALETTE: 7 оттенков красного — от тёмного багрового до яркого алого.
-// Переливание создаётся за счёт контраста ТЁМНЫЙ → ЯРКИЙ → ТЁМНЫЙ.
-// Цикл: dark red → scarlet → bright red → scarlet → dark red → scarlet → dark red
-// Это создаёт видимую «волну» яркости, проходящую по тексту.
-///
-/// 🔧 FIX: was using `.overlay(LinearGradient.mask(content))` which layered
+// 🔧 PALETTE: база — ярко-алый, переливание — тёмная волна проходит по тексту.
+// 7 стопов: scarlet → red → crimson → dark-crimson → crimson → red → scarlet
+// Базовый цвет всегда яркий, тёмные оттенки создают видимую волну контраста.
+//
+// 🔧 FIX: was using `.overlay(LinearGradient.mask(content))` which layered
 /// the gradient ON TOP of the white text. Now: `.foregroundStyle` REPLACES
 /// text color with gradient — clean red, no white underlayer.
 struct AdminShimmerTextModifier: ViewModifier {
@@ -232,13 +232,13 @@ struct AdminShimmerTextModifier: ViewModifier {
     @State private var phase: CGFloat = -1
 
     init(colors: [Color] = [
-        Color(hex: 0x8B0000),   // dark red (low point — deep blood red)
-        Color(hex: 0xCC0000),   // crimson (rising)
-        Color(hex: 0xFF1538),   // vivid scarlet (raveDanger — peak bright)
-        Color(hex: 0xFF4D4D),   // bright light red (highest peak — "wow" flash)
-        Color(hex: 0xFF1538),   // scarlet (falling)
-        Color(hex: 0xCC0000),   // crimson (lower)
-        Color(hex: 0x8B0000),   // dark red (back to start — seamless loop)
+        Color(hex: 0xFF1538),   // scarlet — база (ярко-алый, максимум яркости)
+        Color(hex: 0xE60012),   // pure red — лёгкое затемнение
+        Color(hex: 0xCC0000),   // crimson — средне-тёмный
+        Color(hex: 0xB00000),   // dark crimson — пик тёмной волны (но не слишком)
+        Color(hex: 0xCC0000),   // crimson — подъём обратно
+        Color(hex: 0xE60012),   // pure red — почти яркий
+        Color(hex: 0xFF1538),   // scarlet — обратно в базу (бесшовный loop)
     ]) {
         self.colors = colors
     }
@@ -252,13 +252,13 @@ struct AdminShimmerTextModifier: ViewModifier {
                     endPoint: UnitPoint(x: phase + 1, y: 0.5)
                 )
             )
-            // 🔧 GLOW: red shadow makes the shimmer visibly "pop" — creates the wow effect
+            // 🔧 GLOW: red shadow makes the shimmer visibly "pop"
             .shadow(color: Color(hex: 0xFF1538).opacity(0.7), radius: 4)
             .shadow(color: Color(hex: 0xFF4D4D).opacity(0.4), radius: 8)
             .onAppear {
                 withAnimation(
-                    // 🔧 2.5s — fast enough to be noticeable, slow enough to feel premium
-                    .easeInOut(duration: 2.5)
+                    // 🔧 2.8s — заметное переливание, не нервное
+                    .easeInOut(duration: 2.8)
                     .repeatForever(autoreverses: false)
                 ) {
                     phase = 2

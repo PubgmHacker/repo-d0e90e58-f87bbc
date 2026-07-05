@@ -177,7 +177,7 @@ final class StoreManager: ObservableObject {
                 do {
                     let transaction = try Self.checkVerified(result)
                     guard let transaction = transaction else { continue }
-                    await self?.handleSuccessfulPurchase(transaction)
+                    self?.handleSuccessfulPurchase(transaction)
                     await transaction.finish()
                 } catch {
                     Logger.store.error("Transaction verification failed: \(error.localizedDescription)")

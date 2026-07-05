@@ -375,7 +375,7 @@ final class RoomSyncManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleAppBackground()
+            Task { @MainActor in self?.handleAppBackground() }
         }
 
         foregroundObserver = NotificationCenter.default.addObserver(
@@ -383,7 +383,7 @@ final class RoomSyncManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleAppForeground()
+            Task { @MainActor in self?.handleAppForeground() }
         }
     }
 

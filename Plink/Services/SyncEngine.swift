@@ -203,11 +203,13 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         guard isHost else { return }
         let clamped = max(0, min(time, duration))
 
-        let handler: (Bool) -> Void = { [weak self] _ in
+        let handler: @Sendable (Bool) -> Void = { [weak self] _ in
             guard let self else { return }
-            self.currentTime = clamped
-            self.broadcastSyncCommand(.seek, mediaTime: clamped)
-            self.seekCompletionHandler = nil
+            Task { @MainActor in
+                self.currentTime = clamped
+                self.broadcastSyncCommand(.seek, mediaTime: clamped)
+                self.seekCompletionHandler = nil
+            }
         }
         seekCompletionHandler = handler
         player?.seek(to: CMTime(seconds: clamped, preferredTimescale: 600),
@@ -406,9 +408,11 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         // Large drift — seek to compensated position, then play
         player?.seek(to: CMTime(seconds: compensatedTarget, preferredTimescale: 600)) { [weak self] _ in
             guard let self else { return }
-            self.player?.play()
-            self.isPlaying = true
-            self.currentTime = compensatedTarget
+            Task { @MainActor in
+                self.player?.play()
+                self.isPlaying = true
+                self.currentTime = compensatedTarget
+            }
         }
     }
 
@@ -428,7 +432,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
         // Seek to exact paused frame (async, non-blocking)
         player?.seek(to: CMTime(seconds: eventMediaTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            self?.currentTime = eventMediaTime
+            Task { @MainActor in self?.currentTime = eventMediaTime }
         }
     }
 
@@ -530,7 +534,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             toleranceAfter: tolerance,
             completionHandler: { [weak self] _ in
                 guard let self else { return }
-                self.currentTime = clamped
+                Task { @MainActor in self.currentTime = clamped }
             }
         )
         if preserveRate { player?.play() }
@@ -599,7 +603,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self, time.seconds.isFinite else { return }
-            self.currentTime = time.seconds
+            Task { @MainActor in self.currentTime = time.seconds }
         }
     }
 
@@ -665,11 +669,11 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             queue: .main
         ) { [weak self] _ in
             guard let self, !self.isHost else { return }
-            self.bufferUnderrunCount += 1
-            Logger.sync.warn("Buffer underrun #\(self.bufferUnderrunCount) — local pause (no broadcast)")
-            // Locally pause — do NOT broadcast pause to other participants.
-            // The host and other guests continue playing.
-            self.player?.pause()
+            Task { @MainActor in
+                self.bufferUnderrunCount += 1
+                Logger.sync.warn("Buffer underrun #\(self.bufferUnderrunCount) — local pause (no broadcast)")
+                self.player?.pause()
+            }
         }
 
         // Also observe isPlaybackLikelyToKeepUp for recovery

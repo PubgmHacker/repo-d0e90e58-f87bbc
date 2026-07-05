@@ -284,7 +284,27 @@ struct SettingsView: View {
             )
         }
         .sheet(isPresented: $showPaywallForBubble) {
-            PaywallView()
+            // 🔧 v11: PaywallView requires onPurchase/onRestore/onDismiss closures.
+            // Mirrors the same pattern used in ProfileView.swift line 138.
+            // All three callbacks update local isPremium state from
+            // PremiumStatusManager after the operation completes.
+            PaywallView(
+                onPurchase: {
+                    Task {
+                        await StoreManager.shared.purchase()
+                        isPremium = PremiumStatusManager.shared.isPremium
+                        showPaywallForBubble = false
+                    }
+                },
+                onRestore: {
+                    Task {
+                        await StoreManager.shared.restorePurchases()
+                        isPremium = PremiumStatusManager.shared.isPremium
+                        showPaywallForBubble = false
+                    }
+                },
+                onDismiss: { showPaywallForBubble = false }
+            )
         }
         // 🔧 Pack v3: Sign Out confirmation
         .alert("Выйти из аккаунта?", isPresented: $showSignOutConfirm) {

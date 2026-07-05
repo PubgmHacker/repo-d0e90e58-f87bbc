@@ -216,40 +216,44 @@ extension View {
 // MARK: - Admin Shimmer Text Modifier (переливающийся красный для админов)
 /// 🔧 Pack v3: Анимированный переливающийся градиент для ников админов в чате.
 ///
-/// 🔧 POLISH: smoother animation. Was `.linear(duration: 3)` with phase 0→1
-/// and 5 color stops in width×2 frame — visible "jump" at loop restart because
-/// the gradient didn't wrap seamlessly. Now:
-/// - Phase travels -1 → 2 (3× the width, longer sweep)
-/// - `.easeInOut(duration: 4.5)` for smooth accel/decel (matches avatar ring 4s)
-/// - Gradient colors duplicated so the wrap-around is seamless
-/// - Background base color added so text stays red-tinted even between shimmer passes
+/// 🔧 FIX: was using `.overlay(LinearGradient.mask(content))` which layered
+/// the gradient ON TOP of the white text → visible "double layer" conflict
+/// (white nickname + red shimmer on top = muddy pink instead of clean red).
+///
+/// Now: uses `.foregroundStyle(LinearGradient)` — same approach as the premium
+/// `ShimmerGradientTextModifier`. The gradient REPLACES the text color (no
+/// underlying white layer), so the nickname is purely red-shimmering.
+///
+/// 🔧 POLISH: smoother animation.
+/// - phase travels -1 → 2 (3× width, longer sweep)
+/// - .easeInOut(duration: 4.5) for smooth accel/decel (matches avatar ring 4s)
+/// - gradient colors duplicated (7 stops) for seamless wrap-around at loop restart
 struct AdminShimmerTextModifier: ViewModifier {
+    let colors: [Color]
     @State private var phase: CGFloat = -1
+
+    init(colors: [Color] = [
+        Color(hex: 0xFF4D6D),
+        Color(hex: 0xFF8FA3),
+        Color(hex: 0xFF6B6B),
+        Color(hex: 0xFF4D6D),
+        Color(hex: 0xFF8FA3),
+        Color(hex: 0xFF6B6B),
+        Color(hex: 0xFF4D6D),
+    ]) {
+        self.colors = colors
+    }
 
     func body(content: Content) -> some View {
         content
-            .foregroundColor(Color(hex: 0xFF6B6B))  // 🔧 base red tint — visible between shimmer passes
-            .overlay(
-                GeometryReader { geo in
-                    LinearGradient(
-                        // 🔧 Duplicate color stops so gradient wraps seamlessly when
-                        // phase loops. Without this, end color ≠ start color → jump.
-                        colors: [
-                            Color(hex: 0xFF4D6D),
-                            Color(hex: 0xFF8FA3),
-                            Color(hex: 0xFF6B6B),
-                            Color(hex: 0xFF4D6D),
-                            Color(hex: 0xFF8FA3),
-                            Color(hex: 0xFF6B6B),
-                            Color(hex: 0xFF4D6D),
-                        ],
-                        startPoint: UnitPoint(x: phase, y: 0.5),
-                        endPoint: UnitPoint(x: phase + 1, y: 0.5)
-                    )
-                    .frame(width: geo.size.width * 3)  // 🔧 wider frame for longer sweep
-                    .offset(x: -geo.size.width + (phase + 1) * geo.size.width)
-                    .mask(content)
-                }
+            // 🔧 FIX: foregroundStyle REPLACES the text color with the gradient.
+            // No underlying white layer, no overlay, no mask — clean red shimmer.
+            .foregroundStyle(
+                LinearGradient(
+                    colors: colors,
+                    startPoint: UnitPoint(x: phase, y: 0.5),
+                    endPoint: UnitPoint(x: phase + 1, y: 0.5)
+                )
             )
             .onAppear {
                 withAnimation(

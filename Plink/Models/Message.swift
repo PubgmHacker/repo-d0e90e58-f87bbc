@@ -12,6 +12,11 @@ struct ChatMessage: Codable, Identifiable, Sendable {
     var senderAvatarURL: String?
     /// 🔧 Pack v3: Role of sender (USER/MODERATOR/ADMIN/FOUNDER) — для подсветки админов
     var senderRole: String?
+    /// 🔧 v10 (July 2026): Bubble style — confirmed by server in processMessageStyle().
+    /// Clients must render based on this value (server-confirmed), NOT on what
+    /// the local user "thinks" they picked. The server may downgrade a requested
+    /// style to 'default' if the user lacks permission. See BubbleStyle.swift.
+    var bubbleStyle: String?
 
     /// 🔧 FIX: Custom CodingKeys — backend sends camelCase, but some fields
     /// might come as snake_case from older code. Also handle missing isRead
@@ -20,6 +25,7 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         case id, roomID, senderID, senderName, text, timestamp
         case isRead = "is_read"  // backend doesn't send this — decodeIfPresent
         case senderAvatarURL, senderRole
+        case bubbleStyle = "bubbleStyle"  // 🔧 v10: backend sends camelCase
     }
 
     init(from decoder: Decoder) throws {
@@ -33,6 +39,9 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
         senderAvatarURL = try c.decodeIfPresent(String.self, forKey: .senderAvatarURL)
         senderRole = try c.decodeIfPresent(String.self, forKey: .senderRole)
+        // 🔧 v10: bubbleStyle is optional — old messages (pre-v10) won't have it.
+        // Default to 'default' for backward compatibility.
+        bubbleStyle = try c.decodeIfPresent(String.self, forKey: .bubbleStyle) ?? "default"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -46,12 +55,14 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         try c.encode(isRead, forKey: .isRead)
         try c.encodeIfPresent(senderAvatarURL, forKey: .senderAvatarURL)
         try c.encodeIfPresent(senderRole, forKey: .senderRole)
+        try c.encodeIfPresent(bubbleStyle, forKey: .bubbleStyle)
     }
 
     // 🔧 Direct init for local messages
     init(id: String, roomID: String, senderID: String, senderName: String,
          text: String, timestamp: Date, isRead: Bool,
-         senderAvatarURL: String?, senderRole: String? = nil) {
+         senderAvatarURL: String?, senderRole: String? = nil,
+         bubbleStyle: String? = nil) {
         self.id = id
         self.roomID = roomID
         self.senderID = senderID
@@ -61,11 +72,19 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         self.isRead = isRead
         self.senderAvatarURL = senderAvatarURL
         self.senderRole = senderRole
+        self.bubbleStyle = bubbleStyle ?? "default"
     }
 
     /// 🔧 Pack v3: True если отправитель — админ
     var isSenderAdmin: Bool {
         (senderRole ?? "").uppercased() == "ADMIN" || (senderRole ?? "").uppercased() == "FOUNDER"
+    }
+
+    /// 🔧 v10: Typed accessor for the bubble style. Defensive — unknown values
+    /// (e.g. backend adds a new style before client is updated) fall back to
+    /// `.default` so we never crash on rendering.
+    var effectiveBubbleStyle: BubbleStyle {
+        BubbleStyle.from(bubbleStyle)
     }
 
     var timeString: String {
@@ -108,11 +127,20 @@ struct SystemMessage: Identifiable, Sendable {
 // MARK: - Chat Payload (WebSocket outbound)
 /// Сетевая структура для отправки текстовых сообщений через WebSocket.
 /// JSON-схема совпадает с бэкенд-типом `ChatPayload` (server/src/types/index.ts):
-///   { type, roomID, senderID, senderName, text }
+///   { type, roomID, senderID, senderName, text, bubbleStyle }
+///
+/// 🔧 v10 (July 2026): added `bubbleStyle` field. This is the user's REQUESTED
+/// style — the server runs processMessageStyle() on it and may downgrade to
+/// 'default'. The server-confirmed style comes back in the broadcast
+/// ChatMessage's `bubbleStyle` field, which is what clients should render.
 struct ChatPayload: Codable, Sendable {
     let type: String          // всегда "chat"
     let roomID: String
     let senderID: String
     let senderName: String
     let text: String
+    /// 🔧 v10: requested bubble style (HINT to server). Server may override.
+    /// For backward compatibility with old backends, this field is optional
+    /// in the JSON — old backends will simply ignore it.
+    let bubbleStyle: String?
 }

@@ -143,9 +143,10 @@ struct JoinRoomView: View {
                             .foregroundColor(.raveTextTertiary)
                             .padding(.horizontal, 16)
 
-                        Spacer(minLength: 32)
+                        Spacer(minLength: 100)  // 🔧 FIX: было 32 — кнопка зажималась, теперь 100 для запаса
                     }
                     .padding(.top, 8)
+                    .padding(.horizontal, 20)  // 🔧 FIX: horizontal padding отсутствовал — контент вылезал за края
                 }
 
             // ── Join Button (bottom) ──

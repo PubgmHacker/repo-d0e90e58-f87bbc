@@ -313,7 +313,25 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
-        config.websiteDataStore = WKWebsiteDataStore.default()  // 🔧 allow cookies
+
+        // 🔧 v10.2: for YouTube, use NON-PERSISTENT data store.
+        //
+        // Root cause of persistent 153: ServiceBrowserView loads m.youtube.com
+        // with iPad UA, setting cookies. Playback WebView inherits those cookies
+        // via WKWebsiteDataStore.default() (shared) but uses DEFAULT WKWebView UA.
+        // YouTube sees: "cookies set by iPad UA, but request from WKWebView UA"
+        // → UA/cookie mismatch → error 153.
+        //
+        // Rave doesn't have this problem because it has no ServiceBrowserView —
+        // no pre-browsing phase with different UA.
+        //
+        // Fix: nonPersistent() creates a fresh, isolated session with NO cookies
+        // from the browsing phase. YouTube sees a clean first-time visitor.
+        if isYouTube {
+            config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+        } else {
+            config.websiteDataStore = WKWebsiteDataStore.default()
+        }
 
         // 🔧 v10.1 (July 2026): for YouTube, use COMPLETELY clean WKWebView.
         // NO syncScript, NO videoBridge message handler, NO CSS injection.

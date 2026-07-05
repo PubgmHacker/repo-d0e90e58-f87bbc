@@ -208,8 +208,7 @@ struct PlinkApp: App {
             // Проверяем токен (getFreshToken рефрешит если истёк)
             let token = await authService.getFreshToken()
             let user = await authService.currentUser()
-            let minDelay: Void = Task { try? await Task.sleep(nanoseconds: 900_000_000); }.value
-            _ = minDelay
+            try? await Task.sleep(nanoseconds: 900_000_000)
 
             await MainActor.run {
                 // Токен валиден И пользователь есть → показываем приложение

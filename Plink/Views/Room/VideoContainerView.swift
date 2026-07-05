@@ -392,12 +392,14 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v20: use PlinkPlayerManager singleton — WebView created ONCE.
-            // No reload loops, no sandbox crashes, no DownloadFailed.
-            // Cookies accumulate over time → YouTube sees legitimate session.
+            // 🔧 v21: PlinkPlayerManager singleton + removeFromSuperview.
+            // Pull WebView from old container → re-attach to current SwiftUI context.
+            // Prevents iOS IdleExit (GPU process sleep) → black screen.
             let videoId = url.lastPathComponent
+            let managerWebView = PlinkPlayerManager.shared.webView
+            managerWebView.removeFromSuperview()
             PlinkPlayerManager.shared.loadYouTubeVideo(id: videoId)
-            print("📺 YouTube v20: PlinkPlayerManager (singleton WebView, no recreation)")
+            print("📺 YouTube v21: PlinkPlayerManager + removeFromSuperview (prevent IdleExit)")
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))

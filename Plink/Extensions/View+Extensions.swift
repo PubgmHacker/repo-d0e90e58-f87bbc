@@ -154,18 +154,22 @@ extension View {
 // MARK: - Animated Stroke Modifier (пульсирующая обводка)
 /// Вращает AngularGradient вокруг центра контента — обводка пульсирует.
 //
-// 🔧 VISIBLE ROTATION: пользователь жаловался «не заметно что анимированная и
-// вращается». Причины:
-// 1. Все цвета в градиенте были слишком похожи (все красные) — вращение
-//    AngularGradient не давало видимого контраста.
-// 2. linear(duration: 4) — слишком медленно для rotation, глаз не замечает.
-// 3. Не было glow — обводка сливалась с фоном.
-// Fix: добавлен bright accent (0xFF4D4D light red) как явная «отметка» в
-// градиенте, rotation ускорен до 3с, добавлен shadow glow.
+// 🔧 VISIBLE ROTATION v2: пользователь жаловался «обводка не переливается,
+// выглядит статично». Применил тот же подход что к админ-нику — многослойные
+// тени для яркости + более яркие accent-цвета в градиенте.
+//
+// 🔧 LAYERS:
+// 1. Inner stroke (AngularGradient) — вращается, lineWidth 3
+// 2. Outer glow shadow (scarlet 0.8 opacity, radius 6) — пульсирует яркостью
+// 3. Bright pulse shadow (light red 0.6, radius 12) — добавляет «halo» эффект
+//
+// 🔧 COLORS: bright accent 0xFF4D4D на 3 позициях в градиенте (was 2) —
+// более частая «отметка» = заметнее вращение.
 struct AnimatedStrokeModifier: ViewModifier {
     let colors: [Color]
     let lineWidth: CGFloat
     @State private var rotation: Double = 0
+    @State private var pulse: Bool = false  // 🔧 NEW: brightness pulse state
 
     func body(content: Content) -> some View {
         content
@@ -179,16 +183,27 @@ struct AnimatedStrokeModifier: ViewModifier {
                         lineWidth: lineWidth
                     )
                     .rotationEffect(.degrees(rotation))
-                    // 🔧 GLOW: делает обводку видимой на тёмном фоне
-                    .shadow(color: colors.first?.opacity(0.6) ?? .clear, radius: 4)
+                    // 🔧 MULTI-LAYER GLOW: 3 shadows разной интенсивности
+                    // — тот же подход что у админ-ника, делает обводку «живой»
+                    .shadow(color: colors.first?.opacity(0.8) ?? .clear, radius: 6)  // tight glow
+                    .shadow(color: Color(hex: 0xFF4D4D).opacity(pulse ? 0.7 : 0.3), radius: 12)  // 🔧 PULSING halo
+                    .shadow(color: Color(hex: 0xFF1538).opacity(pulse ? 0.5 : 0.2), radius: 18)  // 🔧 PULSING outer halo
             )
             .onAppear {
+                // 🔧 ROTATION: 3с — заметное вращение
                 withAnimation(
-                    // 🔧 VISIBLE: 3с rotation — заметно, но не нервно (было 4с)
                     .linear(duration: 3)
                     .repeatForever(autoreverses: false)
                 ) {
                     rotation = 360
+                }
+                // 🔧 PULSE: 2с — пульсация яркости halo (десинхронизирована с rotation
+                // для более «живого» эффекта)
+                withAnimation(
+                    .easeInOut(duration: 2.0)
+                    .repeatForever(autoreverses: true)
+                ) {
+                    pulse = true
                 }
             }
     }
@@ -210,18 +225,18 @@ extension View {
     }
 
     /// 🔧 Admin обводка аватарки — база алый, переливание тёмными оттенками.
-    /// 🔧 VISIBLE: добавлен bright accent (0xFF4D4D) как явная «отметка» в
-    /// градиенте, чтобы было видно вращение. lineWidth 3 (было 2.5) — заметнее.
-    /// Синхронизирована с ником — та же палитра, та же логика.
+    /// 🔧 VISIBLE v2: 3 bright accent (0xFF4D4D) в градиенте (было 2) — более
+    /// частая «отметка» = заметнее вращение. + многослойные тени в AnimatedStrokeModifier.
     func adminStroke(lineWidth: CGFloat = 3) -> some View {
         modifier(AnimatedStrokeModifier(
             colors: [
                 Color(hex: 0xFF1538),   // scarlet — база
+                Color(hex: 0xFF4D4D),   // 🔧 BRIGHT ACCENT #1
                 Color(hex: 0xCC0000),   // crimson — затемнение
-                Color(hex: 0xFF4D4D),   // 🔧 BRIGHT ACCENT — явная «отметка» для видимости вращения
                 Color(hex: 0xB00000),   // dark crimson — пик тёмной волны
-                Color(hex: 0xFF4D4D),   // bright accent (другая сторона)
+                Color(hex: 0xFF4D4D),   // 🔧 BRIGHT ACCENT #2
                 Color(hex: 0xCC0000),   // crimson
+                Color(hex: 0xFF4D4D),   // 🔧 BRIGHT ACCENT #3 (was 2 accents, now 3)
                 Color(hex: 0xFF1538),   // scarlet — обратно в базу (loop)
             ],
             lineWidth: lineWidth

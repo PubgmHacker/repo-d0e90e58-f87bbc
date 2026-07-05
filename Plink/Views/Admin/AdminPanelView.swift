@@ -38,69 +38,92 @@ struct AdminPanelView: View {
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground(orbColors: [Color.raveAccent, Color.bioCyan, Color.raveWarning])
+            // 🔧 MINIMALIST ADMIN: тёмно-красный живой фон (админ-палитра)
+            BioluminescentBackground(energy: 0.5, dimming: 0, palette: .crimson)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
-                HStack {
+                // ── Minimalist header ──
+                HStack(spacing: 12) {
+                    // Small admin icon
+                    Image("AdminBadge")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .foregroundColor(.raveDanger)
+
                     Text("Админ-панель")
-                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.raveTextPrimary)
+
                     Spacer()
+
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.raveTextSecondary)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(Color.white.opacity(0.06)))
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 16)
 
-                // Tab picker
-                HStack(spacing: 8) {
+                // ── Minimalist tab picker (underline style) ──
+                HStack(spacing: 0) {
                     ForEach(AdminTab.allCases, id: \.self) { tab in
                         Button {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 selectedTab = tab
                             }
                         } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: tab.icon)
-                                    .font(.system(size: 13))
-                                Text(tab.title)
-                                    .font(.system(size: 14, weight: .semibold))
+                            VStack(spacing: 6) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: tab.icon)
+                                        .font(.system(size: 11))
+                                    Text(tab.title)
+                                        .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .medium))
+                                }
+                                .foregroundColor(selectedTab == tab ? .raveDanger : .raveTextSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+
+                                // 🔧 Minimalist underline indicator
+                                Rectangle()
+                                    .fill(selectedTab == tab ? AnyShapeStyle(Color.raveDanger) : AnyShapeStyle(Color.clear))
+                                    .frame(height: 2)
                             }
-                            .foregroundColor(selectedTab == tab ? .white : .raveTextSecondary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(
-                                selectedTab == tab
-                                    ? AnyShapeStyle(Color.raveGradient)
-                                    : AnyShapeStyle(Color.white.opacity(0.06))
-                            )
-                            .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 16)
+                .padding(.bottom, 12)
+                .overlay(
+                    Rectangle()
+                        .fill(Color.white.opacity(0.05))
+                        .frame(height: 0.5),
+                    alignment: .bottom
+                )
 
-                // Search
+                // ── Minimalist search ──
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(.raveTextSecondary)
+                        .font(.system(size: 13))
+                        .foregroundColor(.raveTextTertiary)
                     TextField("Поиск...", text: $searchText)
+                        .font(.system(size: 14))
                         .foregroundColor(.raveTextPrimary)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .glassCard(cornerRadius: 12, opacity: 0.05)
+                .telegramGlass(cornerRadius: 12, borderColor: Color.raveDanger.opacity(0.15))
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
 
-                // Content
+                // ── Content ──
                 ScrollView {
                     switch selectedTab {
                     case .users: usersContent
@@ -122,7 +145,7 @@ struct AdminPanelView: View {
                     .foregroundColor(.raveTextPrimary)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .glassCard(cornerRadius: 14, opacity: 0.08)
+                    .telegramGlass(cornerRadius: 14, borderColor: Color.raveDanger.opacity(0.2))
                     .padding(.top, 50)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .onAppear {

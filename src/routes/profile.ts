@@ -59,12 +59,24 @@ export default async function profileRoutes(fastify) {
     reply.send(user);
   });
 
-  // 🔧 Pack v3: PATCH /users/me — обновление username + avatarURL
+  // 🔧 Pack v3: PATCH /users/me — обновление username + avatarURL + displayName + coverURL
+  // 🔧 v11 (July 2026): added displayName + coverURL (Telegram-style naming split).
   fastify.patch('/users/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { username, avatarURL } = request.body;
+    const { username, avatarURL, displayName, coverURL } = request.body;
     const data: any = {};
     if (username && username.trim().length >= 2) data.username = username.trim();
     if (avatarURL !== undefined) data.avatarURL = avatarURL;
+    // 🔧 v11: displayName — optional Telegram-style display name (1-50 chars).
+    // Empty string clears it (user wants to fall back to @username).
+    if (displayName !== undefined) {
+      const trimmed = String(displayName).trim();
+      if (trimmed.length === 0) {
+        data.displayName = null;  // clear → backend uses username as display
+      } else if (trimmed.length <= 50) {
+        data.displayName = trimmed;
+      }
+    }
+    if (coverURL !== undefined) data.coverURL = coverURL;
 
     if (Object.keys(data).length === 0) {
       return reply.status(400).send({ error: 'No fields to update' });
@@ -81,7 +93,9 @@ export default async function profileRoutes(fastify) {
     const updated = await prisma.user.update({
       where: { id: request.user.id },
       data,
-      select: { id: true, username: true, email: true, avatarURL: true, isPremium: true, premiumUntil: true, role: true, createdAt: true }
+      select: { id: true, username: true, email: true, avatarURL: true,
+                displayName: true, coverURL: true,
+                isPremium: true, premiumUntil: true, role: true, createdAt: true }
     });
     reply.send(updated);
   });

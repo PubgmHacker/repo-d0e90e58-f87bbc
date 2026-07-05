@@ -21,6 +21,11 @@ model User {
   email        String   @unique
   password     String
   avatarURL    String?
+  /// 🔧 v11 (July 2026): Telegram-style display name (separate from @username).
+  /// nil = use username as display name (backward compat).
+  displayName  String?
+  /// 🔧 v11: profile cover photo URL — banner shown on profile screen.
+  coverURL     String?
   isOnline     Boolean  @default(false)
   isPremium    Boolean  @default(false)
   premiumUntil DateTime?

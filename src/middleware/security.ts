@@ -187,17 +187,19 @@ export function requireHost(prisma) {
 }
 
 export async function sanitizeChatMessage(clientMsg: any, user: { id: string; username: string; role: string }, prisma?: any) {
-  // 🔧 FIX: fetch avatarURL + isPremium so chat bubbles can show avatars AND
-  // we can validate bubble style permissions server-side.
+  // 🔧 FIX: fetch avatarURL + isPremium + displayName so chat bubbles can show
+  // avatars, names, AND we can validate bubble style permissions server-side.
   let avatarURL: string | null = null;
+  let displayName: string | null = null;
   let isPremium = false;
   if (prisma) {
     try {
       const userData = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { avatarURL: true, isPremium: true, premiumUntil: true }
+        select: { avatarURL: true, isPremium: true, premiumUntil: true, displayName: true }
       });
       avatarURL = userData?.avatarURL || null;
+      displayName = userData?.displayName || null;
       // 🔧 v10 (bubble styles): premium is active only if isPremium=true AND
       // premiumUntil is in the future (or null = lifetime).
       const now = new Date();
@@ -223,16 +225,13 @@ export async function sanitizeChatMessage(clientMsg: any, user: { id: string; us
     roomID: clientMsg.roomID,
     id: clientMsg.id || crypto.randomUUID(),
     senderID: user.id,
-    senderName: user.username,
+    senderName: user.username,  // 🔧 v11: keep @username for compatibility
+    senderDisplayName: displayName,  // 🔧 v11: Telegram-style display name (nil on old clients)
     senderRole: user.role,
     senderAvatarURL: avatarURL,
     text: sanitizeText(clientMsg.text),
     timestamp: Date.now(),
     // 🔧 v10: confirmed bubble style — client uses this for rendering.
-    // The original clientMsg.bubbleStyle is DISCARDED — only the server-
-    // confirmed value is broadcast to other clients. This means even if a
-    // malicious client modifies the iOS app to send 'admin_bubble_style',
-    // the server will downgrade it to 'default' before broadcasting.
     bubbleStyle: confirmedStyleId,
   };
 }

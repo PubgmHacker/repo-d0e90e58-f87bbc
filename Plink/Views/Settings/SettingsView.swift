@@ -322,7 +322,7 @@ struct SettingsView: View {
                         )
                         // 🔧 FIX: show admin badge OR premium badge
                         if profileVM?.user?.isAdmin == true {
-                            AdminBadgeChip(compact: true)
+                            AdminBadgeChip()
                         } else if isPremium {
                             // 🔧 Плинк+ badge
                             HStack(spacing: 3) {

@@ -506,7 +506,18 @@ struct ServiceWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            // 🔧 FIX: Rutube opens video in new window. Check for video URL before loading.
             if let url = navigationAction.request.url {
+                let service = Self.serviceFromURL(url)
+                if let service, let detected = VideoService.detectVideoURL(url, for: service, title: nil) {
+                    DispatchQueue.main.async {
+                        self.parent.currentURL = url
+                        self.parent.pageTitle = webView.title ?? ""
+                        self.parent.onVideoDetected?(detected)
+                    }
+                    return nil  // Don't open new window — go straight to room creation
+                }
+                // Not a video — load in current webView
                 webView.load(URLRequest(url: url))
             }
             return nil

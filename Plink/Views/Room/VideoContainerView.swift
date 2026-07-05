@@ -388,12 +388,23 @@ struct WebVideoView: UIViewRepresentable {
 
         // 🔧 Load URL
         if isBackendPlayer {
-            // 🔧 v11: backend hosted IFrame player — clean WebView, no UA override.
-            // The page is served by our backend (real origin), so IFrame API
-            // postMessage works. YouTube's player runs inside an iframe loaded
-            // from youtube.com — YouTube's WKWebView detection doesn't apply
-            // because the PARENT page is our backend, not a WKWebView embed.
-            print("📺 YouTube v11: backend hosted IFrame player")
+            // 🔧 v11.2: backend hosted IFrame player + iOS Safari UA.
+            //
+            // v11 (no UA override): backend page loaded fine (no 153), but the
+            // IFRAME inside (youtube.com/embed/) was loaded with default WKWebView
+            // UA → YouTube classified as cbr=Webview → "Sign in to confirm you're
+            // not a bot" prompt.
+            //
+            // v11.2: set customUserAgent to iOS Safari UA. WKWebView applies
+            // customUserAgent to ALL requests including iframes. So the YouTube
+            // iframe inside our backend page gets cbr=Safari+Mobile → no bot check.
+            //
+            // This is the KEY difference from v10.3:
+            //   v10.3: iOS Safari UA on direct youtube.com/embed → 153 (WKWebView detection)
+            //   v11.2: iOS Safari UA on backend page → YouTube iframe gets Safari UA,
+            //          but PARENT page is our backend (no WKWebView detection) → no 153
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+            print("📺 YouTube v11.2: backend player + iOS Safari UA (iframe gets cbr=Safari+Mobile)")
             webView.load(URLRequest(url: url))
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

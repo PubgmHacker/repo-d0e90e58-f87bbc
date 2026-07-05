@@ -24,6 +24,9 @@ struct HomeView: View {
 
     @State private var reportRoomTarget: Room?
     @State private var blockRoomTarget: Room?
+    /// 🔧 NEW: room pending deletion (host can delete from Home long-press)
+    @State private var deleteRoomTarget: Room?
+    @State private var deleteErrorMessage: String?
     @ObservedObject private var loc = LocalizationManager.shared
 
     // Каскадная анимация появления
@@ -174,6 +177,31 @@ struct HomeView: View {
             } message: {
                 Text(loc.string(.blockHostMessage))
             }
+            // 🔧 NEW: Delete room confirmation alert (host-only, accessible from Home long-press)
+            .alert("Удалить комнату?", isPresented: Binding(
+                get: { deleteRoomTarget != nil },
+                set: { if !$0 { deleteRoomTarget = nil; deleteErrorMessage = nil } }
+            )) {
+                Button("Отмена", role: .cancel) { deleteRoomTarget = nil }
+                Button("Удалить", role: .destructive) {
+                    guard let room = deleteRoomTarget else { return }
+                    Task {
+                        do {
+                            try await viewModel.deleteRoom(room)
+                            toast = ToastMessage(text: "Комната удалена", icon: "trash.fill")
+                            deleteRoomTarget = nil
+                        } catch {
+                            deleteErrorMessage = error.localizedDescription
+                        }
+                    }
+                }
+            } message: {
+                if let room = deleteRoomTarget {
+                    Text("Комната «\(room.name)» (код \(room.code)) будет удалена без возможности восстановления. Все участники и история чата удалятся.")
+                } else if let deleteErrorMessage {
+                    Text("Ошибка: \(deleteErrorMessage)")
+                }
+            }
         }
         .preferredColorScheme(.dark)
         .onAppear {
@@ -306,6 +334,22 @@ struct HomeView: View {
                             LiveCardView(room: room)
                         }
                         .buttonStyle(.plain)
+                        // 🔧 NEW: long-press → context menu. Host can delete the room
+                        // (this also covers rooms that show on Home but don't appear in
+                        // "Mine" tab — for whatever reason). Non-host gets nothing.
+                        .contextMenu {
+                            if isCurrentUserHost(of: room) {
+                                ControlGroup {
+                                    Button {
+                                        HapticManager.impact(.medium)
+                                        deleteRoomTarget = room
+                                    } label: {
+                                        Label("Удалить комнату", systemImage: "trash")
+                                    }
+                                }
+                                .controlGroupStyle(.compactMenu)
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -554,6 +598,14 @@ struct HomeView: View {
     }
 
     // MARK: - Data
+
+    /// 🔧 NEW: Проверяет, является ли текущий юзер хостом комнаты.
+    /// Нужно для показа опции "Удалить комнату" в contextMenu на Home.
+    /// AuthService держит текущего юзера в `currentUserValue` (sync read, кэш в памяти).
+    private func isCurrentUserHost(of room: Room) -> Bool {
+        let authService = AuthService(api: apiClient)
+        return authService.currentUserValue?.id == room.hostID
+    }
 
     /// 🔧 Live-комнаты: топ 5-10 самых активных по онлайну, отсортированных по participantCount
     private var liveRooms: [Room] {

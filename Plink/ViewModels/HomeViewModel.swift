@@ -111,6 +111,20 @@ final class HomeViewModel {
         return room
     }
 
+    // MARK: - Delete Room
+
+    /// 🔧 NEW: Удаление комнаты (только host). Вызывает DELETE /rooms/:id на бэкенде,
+    /// после чего каскадно удаляются все participants, messages, playback states.
+    /// Локально убираем комнату из `rooms` и `myRooms` списков для мгновенного UI feedback.
+    /// В случае ошибки — пробрасываем наверх для показа alert.
+    @MainActor
+    func deleteRoom(_ room: Room) async throws {
+        try await roomService.deleteRoom(roomID: room.id)
+        // Убираем из обоих локальных списков (instant UI feedback)
+        rooms.removeAll { $0.id == room.id }
+        myRooms.removeAll { $0.id == room.id }
+    }
+
     func refresh() async {
         await loadRooms()
     }

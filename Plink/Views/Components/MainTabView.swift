@@ -99,6 +99,11 @@ struct RoomsTabContent: View {
     @State private var navigateToRoom: Room?
     @State private var selectedSubTab: RoomSubTab = .discover
 
+    /// 🔧 NEW: Room pending deletion — shows confirmation alert, then calls viewModel.deleteRoom
+    @State private var roomToDelete: Room?
+    @State private var isDeleting = false
+    @State private var deleteError: String?
+
     /// 🔧 NEW: Internal tabs within the Rooms tab
     enum RoomSubTab: String, CaseIterable, Identifiable {
         case discover = "Общие"
@@ -167,6 +172,32 @@ struct RoomsTabContent: View {
             if UserDefaults.standard.bool(forKey: "plink_switch_to_join") {
                 UserDefaults.standard.set(false, forKey: "plink_switch_to_join")
                 withAnimation { selectedSubTab = .join }
+            }
+        }
+        // 🔧 NEW: Confirmation alert before deleting a room
+        .alert("Удалить комнату?", isPresented: Binding(
+            get: { roomToDelete != nil },
+            set: { if !$0 { roomToDelete = nil; deleteError = nil } }
+        )) {
+            Button("Отмена", role: .cancel) { roomToDelete = nil }
+            Button("Удалить", role: .destructive) {
+                guard let room = roomToDelete else { return }
+                Task {
+                    isDeleting = true
+                    do {
+                        try await viewModel?.deleteRoom(room)
+                        roomToDelete = nil
+                    } catch {
+                        deleteError = error.localizedDescription
+                    }
+                    isDeleting = false
+                }
+            }
+        } message: {
+            if let room = roomToDelete {
+                Text("Комната «\(room.name)» (код \(room.code)) будет удалена без возможности восстановления. Все участники и история чата удалятся.")
+            } else if let deleteError {
+                Text("Ошибка: \(deleteError)")
             }
         }
     }
@@ -537,6 +568,18 @@ struct RoomsTabContent: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
         )
+        // 🔧 NEW: long-press context menu → delete room (host only)
+        .contextMenu {
+            ControlGroup {
+                Button {
+                    HapticManager.impact(.medium)
+                    roomToDelete = room
+                } label: {
+                    Label("Удалить комнату", systemImage: "trash")
+                }
+            }
+            .controlGroupStyle(.compactMenu)
+        }
     }
 }
 

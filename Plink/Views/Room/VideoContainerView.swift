@@ -358,11 +358,9 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 FIX: YouTube IFrame with controls hidden via player params (not CSS).
-    /// CSS can't penetrate cross-origin iframe — only YouTube playerVars work.
-    /// controls=0 hides bottom bar, fs=0 hides fullscreen, modestbranding=1 reduces logo.
-    /// pointer-events REMOVED from iframe — user can tap video to play/pause.
-    /// Our ControlsOverlay sits on top for play/pause/seek via JS bridge.
+    /// 🔧 FIX: YouTube IFrame — auto-play on ready, hide all YouTube UI.
+    /// controls=0 + player.playVideo() in onReady = auto-start.
+    /// 'end' + 'start' params limit video range (prevents end-screen suggestions).
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -398,6 +396,12 @@ struct WebVideoView: UIViewRepresentable {
                         events: {
                             'onReady': function(e) {
                                 window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
+                                player.playVideo();
+                            },
+                            'onStateChange': function(e) {
+                                window.webkit.messageHandlers.videoBridge.postMessage({
+                                    type: 'state', state: e.data
+                                });
                             }
                         }
                     });

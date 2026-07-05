@@ -302,55 +302,43 @@ struct SettingsView: View {
         Button {
             showFullProfile = true
         } label: {
-            HStack(spacing: 16) {
-                // 🔧 Pack v2: переиспользуемый AvatarView с Premium/Admin кольцами
-                // Синхронизация с профилем — тот же компонент
+            HStack(spacing: 14) {
                 AvatarView(
                     image: profileVM?.avatarImage,
                     imageURL: profileVM?.user?.avatarURL,
                     username: profileVM?.displayName ?? "?",
-                    size: 64,
+                    size: 52,
                     isPremium: isPremium,
                     isAdmin: profileVM?.user?.isAdmin ?? false
                 )
 
-                // Имя + подпись
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
                         PremiumUsernameText(
                             text: profileVM?.displayName ?? "Гость",
                             isPremium: isPremium,
                             isAdmin: profileVM?.user?.isAdmin ?? false,
-                            font: .system(size: 19, weight: .bold)
+                            font: .system(size: 17, weight: .bold)
                         )
-                        // 🔧 NEW: видимый админ-бейдж (раньше был только текст-шиммер,
-                        // теперь и иконка-чип — как в чате, но в едином стиле с приложением).
                         if profileVM?.user?.isAdmin == true {
-                            AdminBadgeChip()
+                            AdminBadgeChip(compact: true)
                         }
                     }
-                    Text("Аккаунт Плинк")
-                        .font(.system(size: 13))
-                        .foregroundColor(.raveTextSecondary)
-                        .textStroke()  // 🔧 subtle outline for readability
                     if let email = profileVM?.user?.email {
                         Text(email)
-                            .font(.system(size: 11))
-                            .foregroundColor(.raveTextTertiary)
+                            .font(.system(size: 12))
+                            .foregroundColor(.raveTextSecondary)
                             .lineLimit(1)
-                            .textStroke(opacity: 0.4)  // 🔧 subtle outline
+                            .truncationMode(.middle)
                     }
-                    // 🔧 NEW: Short user ID for friend search
                     if let user = profileVM?.user {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Text("ID:")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.raveTextTertiary)
-                                .textStroke(opacity: 0.4)
                             Text(user.shortId)
                                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.raveTextSecondary)
-                                .textStroke(opacity: 0.4)
+                                .foregroundColor(.raveTextTertiary)
                             Button {
                                 UIPasteboard.general.string = user.fullId
                                 HapticManager.impact(.light)
@@ -360,39 +348,28 @@ struct SettingsView: View {
                                     .foregroundColor(.raveTextTertiary)
                             }
                         }
-                        .padding(.top, 2)
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.raveTextTertiary)
             }
-            .padding(16)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.bioCyan.opacity(0.3),
-                                Color.white.opacity(0.04),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 16))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
-        // 🔧 FIX: removed glowPulse — too bright. Subtle static border instead.
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
         )
     }

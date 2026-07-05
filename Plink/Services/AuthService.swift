@@ -9,7 +9,7 @@ import Foundation
 /// 🔧 FIX C3: getFreshToken() now actually refreshes via /auth/refresh.
 /// 🔧 FIX H14: AuthService is @MainActor — currentUser restore is synchronous.
 @MainActor
-final class AuthService: AuthServiceProtocol {
+final class AuthService: AuthServiceProtocol, @unchecked Sendable {
 
     private let api: APIClient
     private let defaults = UserDefaults.standard
@@ -232,12 +232,12 @@ final class AuthService: AuthServiceProtocol {
     func setFCMToken(_ token: String) async {
         fcmToken = token
         defaults.set(token, forKey: Keys.fcmToken)
-        await registerFCMToken(token)
+        registerFCMToken(token)
     }
 
     private func registerFCMIfPresent() async {
         guard let fcmToken else { return }
-        await registerFCMToken(fcmToken)
+        registerFCMToken(fcmToken)
     }
 
     private func registerFCMToken(_ token: String) {

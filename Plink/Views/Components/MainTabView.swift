@@ -169,13 +169,6 @@ struct RoomsTabContent: View {
                 withAnimation { selectedSubTab = .join }
             }
         }
-        .onChange(of: selectedTab) { _, _ in
-            // Также проверяем при переключении на вкладку Комнаты
-            if UserDefaults.standard.bool(forKey: "plink_switch_to_join") {
-                UserDefaults.standard.set(false, forKey: "plink_switch_to_join")
-                withAnimation { selectedSubTab = .join }
-            }
-        }
     }
 
     // MARK: - Sub-Tab Bar

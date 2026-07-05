@@ -277,6 +277,7 @@ struct WebVideoView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsAirPlayForMediaPlayback = true
 
         let userScript = WKUserScript(
             source: Self.syncScript,
@@ -293,9 +294,84 @@ struct WebVideoView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
-        webView.load(URLRequest(url: url))
+        // 🔧 FIX: YouTube blocks direct embed URL load in WKWebView (error 153).
+        // Instead, load a custom HTML page with YouTube IFrame API that properly
+        // initializes the player. This is the official YouTube embed method.
+        if url.absoluteString.contains("youtube.com/embed/") {
+            // Extract video ID from embed URL
+            let videoId = url.lastPathComponent
+            let html = Self.youtubeIFrameHTML(videoId: videoId)
+            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
+        } else {
+            // Non-YouTube: load URL directly
+            webView.load(URLRequest(url: url))
+        }
 
         return webView
+    }
+
+    /// 🔧 FIX: YouTube IFrame API HTML — properly initializes YouTube player
+    /// in WKWebView. Direct embed URL load fails with error 153 (sandbox).
+    static func youtubeIFrameHTML(videoId: String) -> String {
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                * { margin: 0; padding: 0; }
+                body { background: #000; overflow: hidden; }
+                #player { width: 100%; height: 100vh; }
+            </style>
+        </head>
+        <body>
+            <div id="player"></div>
+            <script src="https://www.youtube.com/iframe_api"></script>
+            <script>
+                var player;
+                var videoId = '\(videoId)';
+
+                function onYouTubeIframeAPIReady() {
+                    player = new YT.Player('player', {
+                        videoId: videoId,
+                        playerVars: {
+                            'playsinline': 1,
+                            'autoplay': 0,
+                            'controls': 1,
+                            'rel': 0,
+                            'modestbranding': 1
+                        },
+                        events: {
+                            'onReady': onPlayerReady,
+                            'onStateChange': onPlayerStateChange
+                        }
+                    });
+                }
+
+                function onPlayerReady(event) {
+                    // Player is ready — can call playVideo()
+                    window.webkit.messageHandlers.videoBridge.postMessage({
+                        type: 'ready',
+                        duration: player.getDuration()
+                    });
+                }
+
+                function onPlayerStateChange(event) {
+                    // Send time updates periodically
+                    setInterval(function() {
+                        if (player && player.getCurrentTime) {
+                            window.webkit.messageHandlers.videoBridge.postMessage({
+                                type: 'time',
+                                currentTime: player.getCurrentTime(),
+                                duration: player.getDuration()
+                            });
+                        }
+                    }, 1000);
+                }
+            </script>
+        </body>
+        </html>
+        """
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}

@@ -20,13 +20,10 @@ final class OrientationManager {
             for vc in scene.windows.compactMap({ $0.rootViewController }) {
                 vc.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
-        }
-
-        // Fallback: старый API (для старых iOS)
-        UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
-        if #available(iOS 16.0, *) {
-            // уже вызвали setNeedsUpdateOfSupportedInterfaceOrientations выше
         } else {
+            // Fallback: старый API (для старых iOS) — на iOS 16+ выдаёт
+            // "BUG IN CLIENT OF UIKIT: Setting UIDevice.orientation is not supported"
+            UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
             UIViewController.attemptRotationToDeviceOrientation()
         }
     }
@@ -41,12 +38,8 @@ final class OrientationManager {
             for vc in scene.windows.compactMap({ $0.rootViewController }) {
                 vc.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
-        }
-
-        UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
-        if #available(iOS 16.0, *) {
-            // уже вызвали setNeedsUpdateOfSupportedInterfaceOrientations выше
         } else {
+            UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
             UIViewController.attemptRotationToDeviceOrientation()
         }
     }

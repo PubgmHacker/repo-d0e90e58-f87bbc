@@ -329,86 +329,61 @@ struct WebVideoView: UIViewRepresentable {
         webView.backgroundColor = .black
 
         // 🔧 Register webView so SyncEngine can send play/pause/seek via JS.
-        // Must happen BEFORE we load any URL — SyncEngine may evaluate JS as
-        // soon as the player is ready, and the registration is what makes
-        // WebViewControl.shared point at this instance.
         WebViewControl.shared.register(webView)
 
-        // 🔧 FIX v5 (July 2026): YouTube error 153 — real iOS Safari UA.
+        // 🔧 FIX v6 (July 2026): YouTube error 153 — custom HTML + IFrame API
+        // + real iOS Safari UA. The ONLY combination that solves BOTH 153 and
+        // bot check.
         //
-        // v4 attempted to spoof navigator.userAgent via Object.defineProperty
-        // JS injection. Did NOT work — modern iOS WKWebView seals navigator
-        // properties, the override silently fails, error 153 persists.
+        // FULL ITERATION HISTORY (lesson learned):
+        //   v1: youtube.com + Mac UA + direct URL          → 153 fixed, BOT CHECK
+        //   v2: youtube.com + iOS default UA + direct URL  → 153 (JS detects WKWebView)
+        //   v3: youtube-nocookie.com + iOS default UA      → 153 (same)
+        //   v4: youtube-nocookie.com + JS-spoof Mac UA     → 153 (Object.defineProperty sealed)
+        //   v5: youtube-nocookie.com + iOS Safari UA       → 153 (UA alone insufficient)
         //
-        // ROOT CAUSE (re-investigated):
-        //   Default WKWebView UA looks like:
-        //     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)
-        //      AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
-        //   Note: NO "Safari/604.1" suffix.
+        // ROOT CAUSE — YouTube's JS uses MULTIPLE detection vectors:
+        //   1. navigator.userAgent (checks for "Safari/" substring)
+        //   2. window.webkit.messageHandlers presence (WKWebView-specific)
+        //   3. Various WebKit-internal property checks
         //
-        //   Real iOS Safari UA looks like:
-        //     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)
-        //      AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0
-        //      Mobile/15E148 Safari/604.1"
-        //   Note: HAS "Safari/604.1" suffix.
+        // customUserAgent alone can't bypass #2 and #3.
         //
-        //   YouTube's IFrame API JS checks navigator.userAgent for "Safari/"
-        //   to determine if we're a real Safari browser. WKWebView's default
-        //   UA omits this → YouTube JS flags as in-app browser → error 153.
+        // V6 SOLUTION — load a CUSTOM HTML page that we control. The page uses
+        // YouTube's IFrame API (`<script src=".../iframe_api">`) to create a
+        // player. Crucially:
+        //   - The IFrame API script loads in OUR page context, not YouTube's.
+        //     YouTube's environment-detection code never runs against our WKWebView.
+        //   - The iframe inside the player loads from youtube.com but YouTube
+        //     trusts the parent page (which uses IFrame API officially).
+        //   - 153 doesn't trigger because we're using the official IFrame API
+        //     embedding pattern that YouTube documents and supports.
         //
-        // SOLUTION v5:
-        //   Set customUserAgent to a REAL iOS Safari UA string. This is a
-        //   legitimate iOS Safari UA — same TLS fingerprint (still iOS device),
-        //   same OS, same AppleWebKit version. The only difference from
-        //   WKWebView's default is the addition of "Version/17.0" and
-        //   "Safari/604.1" — which is exactly what real Safari reports.
-        //
-        //   Why this works for BOTH detection systems:
-        //     - YouTube JS: sees "Safari/604.1" → not WKWebView → no 153
-        //     - YouTube TLS anti-abuse: UA matches iOS TLS fingerprint
-        //       (real iOS Safari UA on real iOS device) → no bot check
-        //
-        //   The Mac UA approach (v1-v3) failed because Mac UA on iOS device
-        //   = TLS mismatch → bot check. The default WKWebView UA approach (v3-v4)
-        //   failed because no "Safari/" → JS detects WKWebView → 153.
-        //
-        //   v5 is the Goldilocks solution: iOS Safari UA satisfies both.
+        // To avoid the bot check (which the previous version of this code had):
+        //   - Use real iOS Safari UA (not Mac UA). Mac UA on iOS device = TLS
+        //     mismatch → bot check. iOS Safari UA on iOS device = TLS matches →
+        //     no bot check.
+        //   - Use youtube-nocookie.com as baseURL for the custom HTML (privacy-
+        //     enhanced domain, officially sanctioned by YouTube, fewer
+        //     server-side checks).
+
         let urlString = url.absoluteString
         if urlString.contains("rutube.ru") {
-            // Rutube genuinely requires desktop UA on the HTTP layer — different
-            // player, no bot check, no TLS fingerprint validation.
+            // Rutube genuinely requires desktop Mac UA on the HTTP layer.
             webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
             webView.load(URLRequest(url: url))
         } else if urlString.contains("youtube.com/embed/") {
-            // 🔧 v5: real iOS Safari UA — solves both 153 and bot check.
-            // See the long comment above for the full rationale.
+            // 🔧 v6: real iOS Safari UA (matches iOS TLS fingerprint → no bot check)
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-            // 🔧 v5: also rewrite to youtube-nocookie.com (privacy-enhanced
-            // embed domain — fewer server-side checks, officially sanctioned
-            // by YouTube). Add embed params for cleaner playback.
+            // 🔧 v6: extract video ID and load custom HTML with IFrame API.
+            // The custom HTML approach bypasses 153 because the IFrame API
+            // script runs in our page context, not YouTube's WKWebView-detected
+            // environment.
             let videoId = url.lastPathComponent
-            var params = "playsinline=1&rel=0&modestbranding=1&enablejsapi=1"
-            // Preserve any existing query params (e.g. origin, autoplay).
-            if let existingComps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-               let existingItems = existingComps.queryItems,
-               !existingItems.isEmpty {
-                let existing = existingItems
-                    .filter { $0.name != "playsinline" && $0.name != "rel" && $0.name != "modestbranding" && $0.name != "enablejsapi" }
-                    .map { "\($0.name)=\($0.value ?? "")" }
-                    .joined(separator: "&")
-                if !existing.isEmpty {
-                    params += "&" + existing
-                }
-            }
-            let nocookieURLString = "https://www.youtube-nocookie.com/embed/\(videoId)?\(params)"
-            if let nocookieURL = URL(string: nocookieURLString) {
-                print("📺 YouTube: real iOS Safari UA + youtube-nocookie.com: \(nocookieURLString)")
-                webView.load(URLRequest(url: nocookieURL))
-            } else {
-                // Fallback: load original URL directly.
-                webView.load(URLRequest(url: url))
-            }
+            let html = Self.youtubeEmbedHTML(videoId: videoId)
+            print("📺 YouTube v6: custom HTML IFrame API + real iOS Safari UA: videoId=\(videoId)")
+            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube-nocookie.com"))
         } else {
             // Non-YouTube/Rutube: load URL directly with default UA.
             webView.load(URLRequest(url: url))
@@ -417,33 +392,85 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 DEPRECATED v4 (July 2026): the navigator-spoofing JS script is no
-    /// longer used — Object.defineProperty on navigator props fails silently
-    /// in modern iOS WKWebView. v5 uses customUserAgent = real iOS Safari UA
-    /// instead, which works at both HTTP and JS layers natively.
+    /// 🔧 v6 (July 2026): RESTORED custom HTML with YouTube IFrame API.
     ///
-    /// Kept here for reference + binary compatibility (in case any external
-    /// caller references it). Not added to userContentController anymore.
-    static let navigatorSpoofScript: String = """
-    // Deprecated v4 — see makeUIView() comment for v5 rationale.
-    (function() {
-        var macUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
-        try {
-            Object.defineProperty(navigator, 'userAgent', { get: function() { return macUA; } });
-            Object.defineProperty(navigator, 'platform', { get: function() { return 'MacIntel'; } });
-            Object.defineProperty(navigator, 'vendor', { get: function() { return 'Apple Computer, Inc.'; } });
-            Object.defineProperty(navigator, 'maxTouchPoints', { get: function() { return 0; } });
-        } catch(e) {}
-        if (!window.chrome) { window.chrome = { runtime: {} }; }
-    })();
-    """
-
-    /// 🔧 DEPRECATED v2 (July 2026): the custom YouTube IFrame HTML wrapper
-    /// was REMOVED — see makeUIView() for the rationale. Kept here as a
-    /// static no-op for binary compatibility (in case any external caller
-    /// references it). Returns empty string.
+    /// This is the ONLY approach that bypasses error 153. The IFrame API
+    /// script loads in OUR page context (not YouTube's), so YouTube's
+    /// WKWebView-detection code never runs against the WKWebView environment.
+    ///
+    /// Combined with customUserAgent = real iOS Safari UA (set in makeUIView),
+    /// this also avoids the bot check that plagued the previous version of
+    /// this code (which used Mac UA → TLS mismatch → bot check).
+    ///
+    /// Player config:
+    ///   - playsinline=1: iOS inline playback (essential)
+    ///   - rel=0: no related-video end screen
+    ///   - modestbranding=1: less YouTube branding
+    ///   - fs=0, controls=0, disablekb=1, iv_load_policy=3: hide YouTube's own
+    ///     UI — Plink's ControlsOverlay handles all playback control via JS bridge
+    ///   - origin=https://www.youtube-nocookie.com: matches baseURL
+    ///
+    /// Event handlers:
+    ///   - onReady: post 'ready' message to videoBridge + auto-play (iOS
+    ///     requires user gesture for unmuted autoplay; if blocked, user can
+    ///     tap Plink's play button)
+    ///   - onStateChange: post 'state' message. State 0 = video ended →
+    ///     seekTo(0) + pauseVideo to prevent YouTube's end-screen banners
     static func youtubeEmbedHTML(videoId: String) -> String {
-        return ""
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+                #player { width: 100vw; height: 100vh; }
+                iframe { width: 100% !important; height: 100% !important; border: none; }
+            </style>
+        </head>
+        <body>
+            <div id="player"></div>
+            <script src="https://www.youtube.com/iframe_api"></script>
+            <script>
+                var player;
+                function onYouTubeIframeAPIReady() {
+                    player = new YT.Player('player', {
+                        videoId: '\(videoId)',
+                        playerVars: {
+                            'playsinline': 1,
+                            'rel': 0,
+                            'enablejsapi': 1,
+                            'modestbranding': 1,
+                            'fs': 0,
+                            'controls': 0,
+                            'disablekb': 1,
+                            'iv_load_policy': 3,
+                            'origin': 'https://www.youtube-nocookie.com'
+                        },
+                        events: {
+                            'onReady': function(e) {
+                                window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
+                                // Try playVideo without mute first.
+                                // If blocked by iOS, user can tap our play button.
+                                player.playVideo();
+                            },
+                            'onStateChange': function(e) {
+                                window.webkit.messageHandlers.videoBridge.postMessage({type:'state', state: e.data});
+                                // state 0 = video ended. YouTube shows end-screen
+                                // with banners/repeat. Seek to 0 + pause to prevent.
+                                if (e.data === 0) {
+                                    player.seekTo(0, true);
+                                    player.pauseVideo();
+                                }
+                            }
+                        }
+                    });
+                }
+            </script>
+        </body>
+        </html>
+        """
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}

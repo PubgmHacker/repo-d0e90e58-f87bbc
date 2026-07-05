@@ -437,12 +437,9 @@ struct RoomSetupView: View {
             if service == .youtube {
                 let videoId = contentURL.components(separatedBy: "/").last ?? ""
                 let backendBase = "https://plink-backend-production-ef31.up.railway.app/api"
-                finalStreamURL = "\(backendBase)/media/youtube-player?id=\(videoId)"
-                // source = .url so effectivePlaybackMode = .directStream → AVPlayer
-                // NO — we need .webview mode! The URL is an HTML page, not a video.
-                // Keep source = .youtube → effectivePlaybackMode = .webview
+                finalStreamURL = "\(backendBase)/media/youtube-embed?id=\(videoId)"
                 finalSource = .youtube
-                print("🔧 RoomSetupView: YouTube via backend player: \(finalStreamURL.prefix(80))")
+                print("🔧 RoomSetupView: YouTube via backend embed proxy: \(finalStreamURL.prefix(80))")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

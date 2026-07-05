@@ -308,8 +308,8 @@ struct WebVideoView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let urlString = url.absoluteString
         let isYouTube = urlString.contains("youtube.com/embed/") || urlString.contains("youtu.be/")
-        // 🔧 v11: backend hosted IFrame player URL
-        let isBackendPlayer = urlString.contains("plink-backend") && urlString.contains("youtube-player")
+        // 🔧 v12: backend embed proxy URL
+        let isBackendPlayer = urlString.contains("plink-backend") && (urlString.contains("youtube-player") || urlString.contains("youtube-embed"))
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
@@ -403,39 +403,16 @@ struct WebVideoView: UIViewRepresentable {
 
         // 🔧 Load URL
         if isBackendPlayer {
-            // 🔧 v11.4: pre-set CONSENT cookie + iOS Safari UA.
+            // 🔧 v12: backend embed proxy — YouTube's own embed page served from backend.
+            // No IFrame API, no iframe to youtube.com — the player runs directly
+            // in this page. No 153 (not loading youtube.com), no bot check
+            // (no iframe request from WKWebView to youtube.com).
             //
-            // YouTube shows "Sign in to confirm you're not a bot" when the
-            // embed iframe doesn't have a CONSENT cookie. The browsing phase
-            // (ServiceBrowserView) sets cookies on m.youtube.com, but those
-            // might not transfer to youtube.com/embed/ (different subdomain).
-            //
-            // Fix: manually inject a CONSENT cookie for .youtube.com domain
-            // into the WKWebView's cookie store BEFORE loading the page.
-            // This guarantees the iframe request has the cookie.
+            // iOS Safari UA so YouTube's static JS/CSS requests get cbr=Safari+Mobile.
+            // Default data store so YouTube's player JS can set/read cookies.
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-
-            // Pre-set CONSENT cookie
-            let consentCookie = HTTPCookie(properties: [
-                .domain: ".youtube.com",
-                .path: "/",
-                .name: "CONSENT",
-                .value: "YES+cb.20210328-17-p0.en+FX+",
-                .secure: "TRUE",
-                .expires: Date(timeIntervalSinceNow: 365 * 24 * 3600),
-            ])
-            if let cookie = consentCookie {
-                config.websiteDataStore.httpCookieStore.setCookie(cookie) { [weak webView] in
-                    // Load the page AFTER cookie is set
-                    DispatchQueue.main.async {
-                        print("📺 YouTube v11.4: backend player + iOS Safari UA + CONSENT cookie injected")
-                        webView?.load(URLRequest(url: url))
-                    }
-                }
-            } else {
-                print("📺 YouTube v11.4: cookie injection failed, loading without")
-                webView.load(URLRequest(url: url))
-            }
+            print("📺 YouTube v12: backend embed proxy (YouTube's own HTML, no iframe)")
+            webView.load(URLRequest(url: url))
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))

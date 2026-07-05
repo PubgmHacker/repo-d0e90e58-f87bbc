@@ -535,6 +535,7 @@ struct RoomsTabContent: View {
 struct HomeTabContent: View {
     @State private var navigateToRoom: Room?
     @State private var viewModel: HomeViewModel?
+    @EnvironmentObject private var apiClient: APIClient
     var onProfileTap: () -> Void
     /// 🔧 NEW: Closure to switch to the AI tab from Home's AI CTA card.
     var onSwitchToAITab: (() -> Void)?
@@ -549,7 +550,9 @@ struct HomeTabContent: View {
                 if let viewModel {
                     HomeView(
                         viewModel: viewModel,
-                        onProfileTap: onProfileTap
+                        onProfileTap: onProfileTap,
+                        onSwitchToAITab: onSwitchToAITab,
+                        onSwitchToJoinTab: onSwitchToJoinTab
                     )
                 } else {
                     ProgressView()
@@ -563,10 +566,9 @@ struct HomeTabContent: View {
         }
         .onAppear {
             if viewModel == nil {
-                let api = APIClient()
                 viewModel = HomeViewModel(
-                    roomService: RoomService(api: api),
-                    authService: AuthService(api: api)
+                    roomService: RoomService(api: apiClient),
+                    authService: AuthService(api: apiClient)
                 )
             }
         }
@@ -610,30 +612,7 @@ struct FriendsTabContent: View {
             .navigationTitle("Друзья")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // Кнопка «Запросы»
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showRequests = true } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "envelope.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(.ravePrimary)
-                            if !friendManager.incomingRequests.isEmpty {
-                                Circle()
-                                    .fill(Color.raveAccent)
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 4, y: -4)
-                            }
-                        }
-                    }
-                }
-                // Кнопка «Добавить друга»
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddFriend = true } label: {
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 17))
-                            .foregroundColor(.ravePrimary)
-                    }
-                }
+                // 🔧 Pack v3: Toolbar пустой — кнопки перенесены в friendsHeader
             }
             .navigationDestination(item: $selectedFriendForProfile) { friend in
                 FriendProfileView(friend: friend) {
@@ -654,7 +633,7 @@ struct FriendsTabContent: View {
 
     // MARK: - Header
     private var friendsHeader: some View {
-        HStack {
+        HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Друзья")
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
@@ -664,6 +643,37 @@ struct FriendsTabContent: View {
                     .foregroundColor(.raveTextSecondary)
             }
             Spacer()
+            // 🔧 Pack v3: Кнопки добавления и запросов — В заголовке, не в toolbar
+            HStack(spacing: 12) {
+                Button { showRequests = true } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.bioAmber)
+                        if !friendManager.incomingRequests.isEmpty {
+                            Text("\(friendManager.incomingRequests.count)")
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.raveDanger)
+                                .clipShape(Capsule())
+                                .offset(x: 10, y: -6)
+                        }
+                    }
+                    .frame(width: 40, height: 40)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Circle())
+                }
+                Button { showAddFriend = true } label: {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 18))
+                        .foregroundColor(.bioCyan)
+                        .frame(width: 40, height: 40)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Circle())
+                }
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)

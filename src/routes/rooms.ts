@@ -114,6 +114,46 @@ export default async function roomRoutes(fastify, _options) {
         reply.send(serializeRoom(roomWithoutPassword));
     });
 
+    // DELETE /api/rooms/:id — Удалить комнату (только host или ADMIN)
+    //
+    // 🔧 NEW: Раньше не было endpoint для удаления комнат — пользователь мог создать
+    // комнату, но не мог её удалить. Она висела на главной с 0 участников вечно.
+    // Удаляем cascade (schema.prisma: onDelete: Cascade на RoomParticipant, ChatMessage,
+    // PlaybackState, WatchHistory, Report, AdBreak — всё удалится автоматически).
+    fastify.delete('/rooms/:id', {
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const { id } = request.params;
+
+        const room = await prisma.room.findUnique({ where: { id } });
+        if (!room) {
+            return reply.status(404).send({ error: 'Комната не найдена' });
+        }
+
+        // Только host или ADMIN/FOUNDER может удалить комнату
+        const isHost = room.hostID === request.user.id;
+        const isAdmin = request.user.role === 'ADMIN' || request.user.role === 'FOUNDER';
+        if (!isHost && !isAdmin) {
+            return reply.status(403).send({ error: 'Нет прав на удаление комнаты' });
+        }
+
+        // Удаляем комнату — каскадно удалятся все связанные записи (participants,
+        // messages, playbackState, watchHistory, reports, adBreaks) согласно schema.prisma.
+        await prisma.room.delete({ where: { id } });
+
+        // Инвалидируем кэш списка публичных комнат
+        await cacheDel(ROOMS_CACHE_KEY);
+
+        await logAudit({
+            userId: request.user.id,
+            action: AuditActions.ROOM_DELETE,
+            ip: request.ip,
+            metadata: { roomId: id, roomCode: room.code, roomName: room.name },
+        });
+
+        reply.send({ success: true });
+    });
+
     // POST /api/rooms/:id/playback
     fastify.post('/rooms/:id/playback', {
         preHandler: [fastify.authenticate, requireHost(prisma)]

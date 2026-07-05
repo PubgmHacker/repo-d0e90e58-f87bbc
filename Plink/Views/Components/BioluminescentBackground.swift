@@ -147,18 +147,19 @@ struct BioluminescentBackground: View {
     }
 }
 
-// MARK: - Settings Background (grayscale gradient, no orbs)
+// MARK: - Settings Background (dark grayscale, fast shimmer, complex)
 //
-// 🔧 USER REQUEST: 'не с орбами а с чем то другим, сверху доминирует черный
-// а ближе к центру серый уже и переливается (живой фон)'.
+// 🔧 USER REQUEST v2: 'дарк + черно-серое и быстро переливающееся, посложнее дизайн'.
 //
-// 🔧 DESIGN: вертикальный градиент black (top) → grey (center) → black (bottom),
-// с лёгкой горизонтальной переливающейся волной. Никаких орбов — чистая
-// минималистичная серая палитра для B&W настроек.
+// 🔧 DESIGN: глубокий чёрно-серый градиент с множественными быстрыми волнами:
+// 1. Базовый вертикальный градиент: near-black → dark grey → near-black
+// 2. Быстрая горизонтальная волна (sweep 1.5с) — основная «переливающаяся»
+// 3. Вторая волна в противофазе (sweep 2.1с) — создаёт «сложный» паттерн
+// 4. Диагональный sheen (3с) — metallic brushed-aluminum эффект
+// 5. Точки-«звёзды» — редкие мерцающие точки (premium texture)
 struct SettingsBackground: View {
-    var energy: Double = 0.5
+    var energy: Double = 0.7
     @State private var isInBackground = false
-    @State private var phase: CGFloat = -1
 
     var body: some View {
         Group {
@@ -183,18 +184,17 @@ struct SettingsBackground: View {
         }
     }
 
-    /// 🔧 Vertical gradient + horizontal shimmer wave.
-    /// Top: pure black (bioObsidian). Center: animated grey. Bottom: black.
-    /// A subtle horizontal light band sweeps up-down slowly = "переливается".
+    /// 🔧 Complex multi-layer dark grayscale animation.
     private func drawGradient(context: GraphicsContext, size: CGSize, time: Double) {
-        // ── Base vertical gradient: black → grey → black ──
+        // ── Layer 1: Base vertical gradient (darker than before) ──
+        // near-black top → very dark grey center → near-black bottom
         let baseRect = CGRect(origin: .zero, size: size)
         let baseGradient = Gradient(colors: [
-            Color(white: 0.04),   // near-black top
-            Color(white: 0.18),   // dark grey upper-mid
-            Color(white: 0.28),   // mid grey center
-            Color(white: 0.18),   // dark grey lower-mid
-            Color(white: 0.04),   // near-black bottom
+            Color(white: 0.03),   // near-black top (was 0.04)
+            Color(white: 0.10),   // very dark grey upper-mid (was 0.18)
+            Color(white: 0.16),   // dark grey center (was 0.28 — DARKER)
+            Color(white: 0.10),   // very dark grey lower-mid
+            Color(white: 0.03),   // near-black bottom
         ])
         context.fill(
             Path(baseRect),
@@ -205,37 +205,61 @@ struct SettingsBackground: View {
             )
         )
 
-        // ── Horizontal shimmer band (slow sweep) ──
-        // A soft horizontal light band that travels vertically — gives "живой" feel.
-        let bandY = size.height * (0.5 + 0.35 * sin(time * 0.15))
-        let bandHeight = size.height * 0.4
-        let bandOpacity = 0.06 * energy
-        let bandRect = CGRect(
+        // ── Layer 2: Fast horizontal wave (1.5с sweep) ──
+        // Основная «переливающаяся» волна — движется быстро вверх-вниз.
+        let wave1Y = size.height * (0.5 + 0.4 * sin(time * 0.8))
+        let wave1Height = size.height * 0.35
+        let wave1Opacity = 0.08 * energy
+        let wave1Rect = CGRect(
             x: 0,
-            y: bandY - bandHeight / 2,
+            y: wave1Y - wave1Height / 2,
             width: size.width,
-            height: bandHeight
+            height: wave1Height
         )
         context.fill(
-            Path(bandRect),
+            Path(wave1Rect),
             with: .linearGradient(
                 Gradient(colors: [
                     Color.white.opacity(0),
-                    Color.white.opacity(bandOpacity),
+                    Color.white.opacity(wave1Opacity),
                     Color.white.opacity(0),
                 ]),
-                startPoint: .init(x: 0, y: bandRect.minY),
-                endPoint: .init(x: 0, y: bandRect.maxY)
+                startPoint: .init(x: 0, y: wave1Rect.minY),
+                endPoint: .init(x: 0, y: wave1Rect.maxY)
             )
         )
 
-        // ── Subtle diagonal sheen (very faint) ──
-        // Adds premium metallic feel — like brushed aluminum.
-        let sheenOffset = sin(time * 0.1) * size.width * 0.3
+        // ── Layer 3: Second wave (противофаза, 2.1с) — complexity ──
+        // Вторая волна в противофазе — создаёт «сложный» интерференционный паттерн.
+        let wave2Y = size.height * (0.5 + 0.35 * sin(time * 0.6 + .pi))
+        let wave2Height = size.height * 0.25
+        let wave2Opacity = 0.05 * energy
+        let wave2Rect = CGRect(
+            x: 0,
+            y: wave2Y - wave2Height / 2,
+            width: size.width,
+            height: wave2Height
+        )
+        context.fill(
+            Path(wave2Rect),
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color.white.opacity(0),
+                    Color(white: 0.7).opacity(wave2Opacity),
+                    Color.white.opacity(0),
+                ]),
+                startPoint: .init(x: 0, y: wave2Rect.minY),
+                endPoint: .init(x: 0, y: wave2Rect.maxY)
+            )
+        )
+
+        // ── Layer 4: Diagonal sheen (3с, brushed-aluminum) ──
+        // Медленный диагональный блик — premium metallic feel.
+        let sheenOffset = sin(time * 0.35) * size.width * 0.4
         let sheenRect = CGRect(
             x: sheenOffset - size.width * 0.5,
             y: 0,
-            width: size.width * 0.4,
+            width: size.width * 0.35,
             height: size.height
         )
         context.fill(
@@ -243,13 +267,30 @@ struct SettingsBackground: View {
             with: .linearGradient(
                 Gradient(colors: [
                     Color.white.opacity(0),
-                    Color.white.opacity(0.03 * energy),
+                    Color.white.opacity(0.04 * energy),
                     Color.white.opacity(0),
                 ]),
                 startPoint: .init(x: sheenRect.minX, y: 0),
                 endPoint: .init(x: sheenRect.maxX, y: 0)
             )
         )
+
+        // ── Layer 5: Twinkling stars (редкие мерцающие точки) ──
+        // Premium texture — как звезды в тёмном небе.
+        let starCount = 12
+        for i in 0..<starCount {
+            let seed = UInt64(i * 7919 + 31)
+            let xPos = (Double(seed % 1000) / 1000.0) * size.width
+            let yPos = (Double((seed * 31) % 1000) / 1000.0) * size.height
+            let phase = Double(i) * 0.7
+            let brightness = 0.5 + 0.5 * sin(time * 1.5 + phase)
+            let starOpacity = 0.15 * energy * brightness
+            let starRect = CGRect(x: xPos - 1, y: yPos - 1, width: 2, height: 2)
+            context.fill(
+                Path(starRect),
+                with: .color(Color.white.opacity(starOpacity))
+            )
+        }
     }
 }
 

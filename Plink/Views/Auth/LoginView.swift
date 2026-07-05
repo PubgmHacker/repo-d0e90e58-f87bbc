@@ -47,6 +47,10 @@ struct LoginView: View {
             VStack(spacing: 0) {
                 Spacer()
 
+                // 🔧 Pack v3: Admin code verification screen (third window)
+                if viewModel.needsAdminCode {
+                    adminCodeSection
+                } else {
                 // ── Logo / Branding ───────────────────────────
                 VStack(spacing: 16) {
                     ZStack {
@@ -240,12 +244,99 @@ struct LoginView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                     .padding(.bottom, 20)
+                } // end else (not admin code)
             }
         }
         .preferredColorScheme(.dark)
         .fullScreenCover(isPresented: $showSignUp) {
             SignUpView(viewModel: viewModel, onSignUp: onSignIn)
         }
+    }
+
+    // MARK: - Admin Code Section (third window)
+    private var adminCodeSection: some View {
+        VStack(spacing: 28) {
+            // Shield icon
+            ZStack {
+                Circle()
+                    .fill(Color.raveDanger.opacity(0.15))
+                    .frame(width: 90, height: 90)
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(.raveDanger)
+            }
+
+            VStack(spacing: 8) {
+                Text("Подтверждение администратора")
+                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                    .foregroundColor(.raveTextPrimary)
+
+                Text("Введите код подтверждения для активации админ-панели")
+                    .font(.subheadline)
+                    .foregroundColor(.raveTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            // Code input
+            TextField("Код подтверждения", text: $viewModel.adminCode)
+                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                .textInputAutocapitalization(.characters)
+                .disableAutocorrection(true)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.raveDanger.opacity(0.3), lineWidth: 0.5)
+                )
+                .padding(.horizontal, 40)
+
+            // Error
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.raveDanger)
+            }
+
+            // Verify button
+            Button {
+                Task {
+                    await viewModel.verifyAdminCode()
+                    if !viewModel.needsAdminCode {
+                        onSignIn()
+                    }
+                }
+            } label: {
+                Group {
+                    if viewModel.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Подтвердить")
+                            .font(.headline.bold())
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.raveDanger)
+                .foregroundColor(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(viewModel.adminCode.isEmpty || viewModel.isLoading)
+            .padding(.horizontal, 40)
+
+            // Cancel
+            Button("Отмена") {
+                viewModel.needsAdminCode = false
+                viewModel.adminCode = ""
+                viewModel.errorMessage = nil
+            }
+            .font(.subheadline)
+            .foregroundColor(.raveTextSecondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 60)
     }
 }
 

@@ -284,6 +284,32 @@ final class AuthService: AuthServiceProtocol {
     func updateCachedUser(_ user: User) {
         cacheUser(user)
     }
+
+    // 🔧 Pack v3: Verify admin code
+    func verifyAdminCode(email: String, code: String) async throws -> User {
+        struct AdminVerifyBody: Encodable {
+            let email: String
+            let code: String
+        }
+        let body = AdminVerifyBody(email: email, code: code)
+        let response: AuthResponse = try await api.request("auth/admin-verify", method: .post, body: body)
+
+        let user = User(
+            id: response.user.id,
+            username: response.user.username,
+            email: response.user.email,
+            avatarURL: response.user.avatarURL,
+            isOnline: true,
+            isPremium: response.user.isPremium ?? true,
+            role: response.user.role,
+            createdAt: response.user.createdAt ?? Date()
+        )
+
+        let expiry = Date().addingTimeInterval(86400 * 7).timeIntervalSince1970
+        await cacheToken(response.token, expiry: expiry, refreshToken: response.refreshToken)
+        cacheUser(user)
+        return user
+    }
 }
 
 // MARK: - API Request/Response Models

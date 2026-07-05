@@ -444,41 +444,27 @@ struct WebVideoView: UIViewRepresentable {
         //     enhanced domain, officially sanctioned by YouTube, fewer
         //     server-side checks).
 
+        // 🔧 v10 (July 2026): for YouTube, skip ALL CSS injection + customUserAgent.
+        // This is EXACTLY what Rave does — default UA, no scripts, just load URL.
+        // Previous 153 errors were caused by CSS injection (hiding controls) and
+        // customUserAgent overrides — YouTube's JS detected modifications and blocked.
         let urlString = url.absoluteString
+        let isYouTube = urlString.contains("youtube.com/embed/") || urlString.contains("youtu.be/")
+
+        if !isYouTube {
+            // Non-YouTube: inject CSS for fullscreen + hide native controls
+            config.userContentController.addUserScript(fullscreenCssScript)
+        }
+
         if urlString.contains("rutube.ru") {
-            // 🔧 v8: Rutube also uses iOS Safari UA now — Mac UA was causing
-            // TLS mismatch warnings in some cases. Rutube works fine with
-            // iOS Safari UA (verified via curl test in commit a8ec69b).
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
-        } else if urlString.contains("youtube.com/embed/") {
-            // 🔧 v8 (July 2026): revert to Rave-style direct URL load.
-            //
-            // v6/v7 used custom HTML with IFrame API script. This caused
-            // error 152-4 ('IFrame API postMessage failed') because
-            // loadHTMLString creates a page with null origin — YouTube's
-            // IFrame API can't establish cross-origin postMessage to the
-            // iframe, so the player never initializes.
-            //
-            // Rave (the working reference app) loads youtube.com/embed/
-            // directly via webView.load(URLRequest) and it works — YouTube's
-            // own IFrame API inside the embed page initializes correctly
-            // because the page has a real origin (https://www.youtube.com).
-            //
-            // We use real iOS Safari UA (matches TLS fingerprint → no bot
-            // check on /embed/). The CSS injection script (fullscreenCssScript)
-            // hides YouTube's native controls, so only Plink's ControlsOverlay
-            // is visible.
-            //
-            // The previous v6/v7 attempts to bypass error 153 via custom HTML
-            // + IFrame API are abandoned — 153 was caused by Mac UA on iOS
-            // device (TLS mismatch), not by WKWebView detection. With iOS
-            // Safari UA + direct URL load, 153 doesn't occur.
-            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            print("📺 YouTube v8: direct URL load + iOS Safari UA (Rave-style): \(url.lastPathComponent)")
+        } else if isYouTube {
+            // 🔧 v10: YouTube — NO customUserAgent, NO CSS injection, NO custom HTML.
+            // Default WKWebView UA + plain URL load. Exactly like Rave.
+            print("📺 YouTube v10: clean WebView (like Rave) — no UA, no CSS, no scripts")
             webView.load(URLRequest(url: url))
         } else {
-            // Non-YouTube/Rutube: load URL directly with default UA.
             webView.load(URLRequest(url: url))
         }
 

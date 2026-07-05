@@ -97,7 +97,8 @@ final class HomeViewModel {
             maxParticipants: maxParticipants,
             mediaItem: mediaItem,
             privacy: privacy,
-            password: password
+            password: password,
+            hostName: authService.currentUser?.username
         )
         let room = try await roomService.createRoom(request)
         rooms.insert(room, at: 0)

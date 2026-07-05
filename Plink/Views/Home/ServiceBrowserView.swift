@@ -87,6 +87,22 @@ struct ServiceBrowserView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
+            // 🔧 Pack v2: АВТО-переход к RoomSetupView при обнаружении видео.
+            // Раньше: alert "Создать комнату?" → ручное подтверждение.
+            // Теперь: тап на видео в YouTube → видео открылось → сразу
+            // auto-transition к настройкам комнаты (имя, приватность, участники).
+            // Это устраняет лишний шаг и делает UX плавным как в Teleparty.
+            .onChange(of: detectedVideo) { _, newVideo in
+                guard let video = newVideo else { return }
+                // Небольшая задержка чтобы WebView успел отрисовать видео
+                // (иначе переход будет резким)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    HapticManager.impact(.medium)
+                    // Сразу вызываем onCreateRoom — parent (RoomCreationView)
+                    // откроет RoomSetupView с этим контентом.
+                    onCreateRoom(video.embedURL, video.title ?? pageTitle)
+                }
+            }
             .alert("Создать комнату?", isPresented: $showCreateConfirm) {
                 Button("Отмена", role: .cancel) {}
                 Button("Создать") {
@@ -239,7 +255,7 @@ struct ServiceBrowserView: View {
 
 // MARK: - Detected Video Model
 
-struct DetectedVideo {
+struct DetectedVideo: Equatable {
     let title: String?
     let embedURL: String       // URL that can be used in our player
     let originalURL: String    // original page URL

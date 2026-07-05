@@ -116,9 +116,13 @@ struct ServiceSelectionView: View {
         // 🔧 NEW: When user picks a service, open the full-screen browser
         .sheet(item: $browseService) { service in
             ServiceBrowserView(service: service) { contentURL, contentTitle in
+                // 🔧 Pack v2: Сначала закрываем ServiceBrowserView,
+                // потом с задержкой вызываем onContentSelected чтобы
+                // RoomSetupView открылся поверх без конфликта sheet'ов.
                 browseService = nil
-                // Pass to the parent — it will open RoomSetupView
-                onContentSelected(service, contentURL, contentTitle)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    onContentSelected(service, contentURL, contentTitle)
+                }
             }
         }
     }

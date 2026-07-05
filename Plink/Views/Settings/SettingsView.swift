@@ -252,31 +252,15 @@ struct SettingsView: View {
             showFullProfile = true
         } label: {
             HStack(spacing: 16) {
-                // Аватар (большой, 64pt)
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.bioCyan, Color.bioEmerald],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 64, height: 64)
-                    Text((profileVM?.displayName ?? "?").prefix(2).uppercased())
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                .if(isPremium) { view in
-                    view.premiumStroke(lineWidth: 2)
-                }
-                .if(!isPremium) { view in
-                    view.overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
-                    )
-                }
-                .shadow(color: Color.bioCyan.opacity(0.3), radius: 12)
+                // 🔧 Pack v2: переиспользуемый AvatarView с Premium/Admin кольцами
+                // Синхронизация с профилем — тот же компонент
+                AvatarView(
+                    imageURL: profileVM?.user?.avatarURL,
+                    username: profileVM?.displayName ?? "?",
+                    size: 64,
+                    isPremium: isPremium,
+                    isAdmin: profileVM?.user?.isAdmin ?? false
+                )
 
                 // Имя + подпись
                 VStack(alignment: .leading, spacing: 4) {
@@ -429,11 +413,6 @@ struct SettingsView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
-
-        // Тонкий разделитель (как у iOS Settings)
-        Divider()
-            .background(Color.white.opacity(0.06))
-            .padding(.leading, 56)
     }
 
     // MARK: - Sign Out

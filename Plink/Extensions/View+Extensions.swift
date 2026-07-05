@@ -187,6 +187,21 @@ extension View {
             lineWidth: lineWidth
         ))
     }
+
+    /// 🔧 NEW: Admin обводка аватарки (crimson→red спектр, 4 сек цикл).
+    /// Используется для пользователей с role .admin или .founder.
+    func adminStroke(lineWidth: CGFloat = 2.5) -> some View {
+        modifier(AnimatedStrokeModifier(
+            colors: [
+                Color.raveDanger,
+                Color.bioObsidian,
+                Color(hex: 0xFF8FA3),
+                Color.bioObsidian,
+                Color.raveDanger,
+            ],
+            lineWidth: lineWidth
+        ))
+    }
 }
 
 // MARK: - Dismiss Keyboard On Tap Modifier

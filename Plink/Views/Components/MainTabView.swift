@@ -194,11 +194,13 @@ struct RoomsTabContent: View {
                 selectedSubTab = tab
             }
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Text(tab.icon)
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                 Text(tab.rawValue)
-                    .font(.system(size: 13, weight: isActive ? .bold : .medium))
+                    .font(.system(size: 12, weight: isActive ? .bold : .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
 
                 // 🔧 Red badge on Requests tab
                 if showBadge {
@@ -212,7 +214,7 @@ struct RoomsTabContent: View {
                 }
             }
             .foregroundColor(isActive ? .white : .raveTextSecondary)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .background(
                 isActive

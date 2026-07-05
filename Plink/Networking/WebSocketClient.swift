@@ -105,7 +105,7 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
 
     // MARK: - Init
 
-    init(serverURL: String = "wss://xpkcakpkfewp-ofewk-pkv-production.up.railway.app") {
+    init(serverURL: String = "wss://plink-backend-production-ef31.up.railway.app") {
         self.serverBaseURL = URL(string: serverURL)!
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = true

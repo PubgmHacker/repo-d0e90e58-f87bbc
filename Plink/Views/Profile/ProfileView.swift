@@ -113,20 +113,17 @@ struct ProfileView: View {
         VStack(spacing: 14) {
             Button { showPhotoPicker = true } label: {
                 ZStack(alignment: .bottomTrailing) {
-                    avatarView
-                        .frame(width: 120, height: 120)
-                        .clipShape(Circle())
-                        .if(isPremium) { view in
-                            view.premiumStroke(lineWidth: 3.5)
-                        }
-                        .if(!isPremium) { view in
-                            view.overlay(
-                                Circle()
-                                    .stroke(Color.raveGradient, lineWidth: 3)
-                            )
-                        }
-                        .neonGlow(color: .ravePrimary, radius: 20, y: 8)
+                    // 🔧 Pack v2: переиспользуемый AvatarView с Premium/Admin кольцами
+                    AvatarView(
+                        image: viewModel.avatarImage,
+                        imageURL: viewModel.avatarURL,
+                        username: viewModel.displayName,
+                        size: 120,
+                        isPremium: isPremium,
+                        isAdmin: viewModel.user?.isAdmin ?? false
+                    )
 
+                    // Кнопка камеры для смены аватара
                     Image(systemName: "camera.circle.fill")
                         .font(.system(size: 28))
                         .foregroundColor(.white)
@@ -491,6 +488,7 @@ struct EditProfileSheet: View {
     @State private var viewModel: ProfileViewModel
     @State private var newUsername = ""
     @State private var isSaving = false
+    @State private var isPremium = false
 
     init(viewModel: ProfileViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -503,21 +501,15 @@ struct EditProfileSheet: View {
                 AnimatedGradientBackground()
 
                 VStack(spacing: 24) {
-                    // Аватарка
-                    if let image = viewModel.avatarImage {
-                        Image(uiImage: image)
-                            .resizable().scaledToFill()
-                            .frame(width: 100, height: 100)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.raveGradient, lineWidth: 3))
-                    } else {
-                        ZStack {
-                            Circle().fill(Color.raveGradient).frame(width: 100, height: 100)
-                            Text(viewModel.displayName.prefix(2).uppercased())
-                                .font(.system(size: 36, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                    }
+                    // 🔧 Pack v2: переиспользуемый AvatarView (обводка только для Premium/Admin)
+                    AvatarView(
+                        image: viewModel.avatarImage,
+                        imageURL: viewModel.avatarURL,
+                        username: viewModel.displayName,
+                        size: 100,
+                        isPremium: isPremium,
+                        isAdmin: viewModel.user?.isAdmin ?? false
+                    )
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Имя пользователя")
@@ -558,6 +550,9 @@ struct EditProfileSheet: View {
                     Button("Отмена") { dismiss() }
                         .foregroundColor(.raveTextSecondary)
                 }
+            }
+            .task {
+                isPremium = PremiumStatusManager.shared.isPremium
             }
         }
     }

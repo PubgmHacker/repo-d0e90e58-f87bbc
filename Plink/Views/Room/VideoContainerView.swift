@@ -278,9 +278,6 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
-        // 🔧 Note: JavaScript is enabled by default in WKWebView.
-        // config.preferences.javaScriptEnabled is deprecated in iOS 14.
-        // YouTube embed JS works without setting this.
         config.websiteDataStore = WKWebsiteDataStore.default()  // 🔧 allow cookies
 
         let userScript = WKUserScript(
@@ -298,11 +295,29 @@ struct WebVideoView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
-        // 🔧 FIX: YouTube checks User-Agent — default WKWebView UA is blocked.
-        // Set iOS Safari UA so YouTube serves the proper embed player.
-        // Without this, YouTube shows "Video unavailable" error 152-4.
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        webView.load(URLRequest(url: url))
+        // 🔧 FIX: YouTube blocks mobile WKWebView UA (error 153).
+        // Use DESKTOP Safari UA — YouTube doesn't restrict desktop embeds.
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+        // 🔧 FIX: add embed parameters for proper playback in WKWebView.
+        // playsinline=1 → inline playback (not fullscreen)
+        // rel=0 → no related videos
+        // enablejsapi=1 → allow JS control
+        // modestbranding=1 → minimal YouTube branding
+        var loadURL = url
+        if url.absoluteString.contains("youtube.com/embed/") && !url.absoluteString.contains("?") {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.queryItems = [
+                URLQueryItem(name: "playsinline", value: "1"),
+                URLQueryItem(name: "rel", value: "0"),
+                URLQueryItem(name: "enablejsapi", value: "1"),
+                URLQueryItem(name: "modestbranding", value: "1")
+            ]
+            if let modifiedURL = components?.url {
+                loadURL = modifiedURL
+            }
+        }
+        webView.load(URLRequest(url: loadURL))
 
         return webView
     }

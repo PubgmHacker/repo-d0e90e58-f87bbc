@@ -204,29 +204,43 @@ struct RoomsTabContent: View {
 
     // MARK: - Sub-Tab Bar
     //
-    // 🔧 REDESIGNED per user request: Apple-style underline tab bar WITH emojis.
-    // Was: emoji + capsule background (looked cluttered). Now: emoji + text with
-    // thin accent underline on active tab — cleaner, but emojis preserved.
+    // 🔧 RESTORED: glassmorphic capsule buttons (was Apple-style underline).
+    // User asked to bring back the previous beautiful glass design + larger font.
     private var subTabBar: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             ForEach(RoomSubTab.allCases) { tab in
                 subTabButton(tab)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 6)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(
-            Color.bioObsidian.opacity(0.7)
-                .background(.ultraThinMaterial)
-                .ignoresSafeArea(edges: .horizontal)
+            // 🔧 Glass container — translucent material + subtle gradient border
+            RoundedRectangle(cornerRadius: 22)
+                .fill(.ultraThinMaterial)
+                .background(
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(Color.bioObsidian.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.bioCyan.opacity(0.25),
+                                    Color.bioEmerald.opacity(0.1),
+                                    Color.white.opacity(0.04)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.5
+                        )
+                )
+                .shadow(color: Color.bioCyan.opacity(0.08), radius: 12, y: 4)
         )
-        .overlay(
-            Rectangle()
-                .fill(Color.white.opacity(0.06))
-                .frame(height: 0.5),
-            alignment: .bottom
-        )
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
     }
 
     @ViewBuilder
@@ -240,37 +254,56 @@ struct RoomsTabContent: View {
                 selectedSubTab = tab
             }
         } label: {
-            VStack(spacing: 6) {
-                HStack(spacing: 4) {
-                    // 🔧 RESTORED: emoji preserved per user request
-                    Text(tab.icon)
-                        .font(.system(size: 13))
-                    Text(tab.rawValue)
-                        .font(.system(size: 13, weight: isActive ? .semibold : .medium))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+            HStack(spacing: 5) {
+                Text(tab.icon)
+                    .font(.system(size: 15))  // 🔧 BIGGER: was 13 → 15
+                Text(tab.rawValue)
+                    .font(.system(size: 14, weight: isActive ? .bold : .semibold))  // 🔧 BIGGER: was 12/medium → 14/semibold
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
 
-                    // 🔧 Red badge on Requests tab
-                    if showBadge {
-                        Text("\(inviteService.inviteCount)")
-                            .font(.system(size: 9, weight: .heavy).monospacedDigit())
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.raveDanger)
-                            .clipShape(Capsule())
+                if showBadge {
+                    Text("\(inviteService.inviteCount)")
+                        .font(.system(size: 10, weight: .heavy).monospacedDigit())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.raveDanger)
+                        .clipShape(Capsule())
+                }
+            }
+            .foregroundColor(isActive ? .white : .raveTextSecondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Group {
+                    if isActive {
+                        // 🔧 Active: gradient fill + glow
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.raveGradient)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [Color.white.opacity(0.3), Color.bioEmerald.opacity(0.2)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 0.5
+                                    )
+                            )
+                            .shadow(color: Color.bioCyan.opacity(0.35), radius: 8, y: 2)
+                    } else {
+                        // 🔧 Inactive: subtle glass
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.white.opacity(0.04))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                            )
                     }
                 }
-                .foregroundColor(isActive ? .raveTextPrimary : .raveTextSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-
-                // 🔧 Underline indicator (Apple-style)
-                Rectangle()
-                    .fill(isActive ? AnyShapeStyle(Color.raveGradient) : AnyShapeStyle(Color.clear))
-                    .frame(height: 2)
-                    .clipShape(RoundedRectangle(cornerRadius: 1))
-            }
+            )
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)

@@ -129,7 +129,7 @@ struct SettingsView: View {
 
                         // ── Developer Section ──
                         settingsSection("Разработчик") {
-                            Link(destination: URL(string: "https://t.me/@siientrage")!) {
+                            Link(destination: URL(string: "https://t.me/siIentrage")!) {
                                 settingsRowLink(
                                     icon: "paperplane.fill",
                                     title: "Telegram",

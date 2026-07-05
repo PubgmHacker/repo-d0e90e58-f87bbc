@@ -342,18 +342,11 @@ extension VideoService {
 
 // MARK: - ServiceWebView (WKWebView wrapper with video detection)
 
-// 🔧 v26 (July 2026): DEDICATED process pool for the search browser.
-//
-// Counterpart to plinkPlayerProcessPool in VideoContainerView. The search
-// browser MUST NOT share a WebContent process with the room player —
-// otherwise the player's custom plink-media:// scheme handler can leak
-// into the search browser's network security context, causing legitimate
-// https://youtube.com requests to fail with DownloadFailed before they
-// even reach the network.
-//
-// This pool is distinct from plinkPlayerProcessPool — iOS guarantees that
-// WebViews with different pools run in different WebContent processes.
-private let plinkSearchProcessPool = WKProcessPool()
+// 🔧 v27 (July 2026): WKProcessPool is DEPRECATED in iOS 15+. The v26
+// attempt to isolate via process pools was based on outdated info —
+// removed. Each WKWebView always gets its own WebContent process
+// automatically. The .nonPersistent() data store (kept from v25) is
+// the real isolation mechanism.
 
 struct ServiceWebView: UIViewRepresentable {
     let initialURL: URL
@@ -368,11 +361,6 @@ struct ServiceWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
-
-        // 🔧 v26: assign the search browser's DEDICATED process pool FIRST,
-        // before any other configuration. This guarantees the search WebView
-        // runs in a different WebContent process from the room player.
-        config.processPool = plinkSearchProcessPool
 
         // 🔧 v25 (July 2026): ISOLATED, NON-PERSISTENT data store for the
         // search browser.

@@ -392,28 +392,12 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v19 (July 2026): mobile UA + shared process pool + shared cookies.
-            //
-            // v18 had NO 153, but YouTube showed "Sign in to confirm you're not a bot"
-            // because Mac UA + no Google cookies = bot pattern.
-            //
-            // v19 fixes:
-            // 1. Mobile Safari UA (iPhone iOS 17.5) — YouTube is more lenient with
-            //    mobile UAs (no Google session is normal for mobile)
-            // 2. Shared WKProcessPool — playback WebView shares process with
-            //    ServiceBrowserView (browsing phase), inheriting "warmed" cookies
-            // 3. WKWebsiteDataStore.default() — shared cookies (CONSENT etc.)
-            //
-            // This is the Rave approach: single process pool + persistent cookies.
-            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1.15"
-            webView.scrollView.bounces = false
-
-            // Extract video ID from the nocookie embed URL
+            // 🔧 v20: use PlinkPlayerManager singleton — WebView created ONCE.
+            // No reload loops, no sandbox crashes, no DownloadFailed.
+            // Cookies accumulate over time → YouTube sees legitimate session.
             let videoId = url.lastPathComponent
-            let playerURL = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/media/youtube-player?id=\(videoId)")!
-
-            print("📺 YouTube v19: mobile UA + shared process pool + shared cookies")
-            webView.load(URLRequest(url: playerURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15.0))
+            PlinkPlayerManager.shared.loadYouTubeVideo(id: videoId)
+            print("📺 YouTube v20: PlinkPlayerManager (singleton WebView, no recreation)")
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
@@ -491,19 +475,29 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        // 🔧 v19.1: guard against reload loops — check if videoId is already in the URL.
-        // SwiftUI calls updateUIView on every state change (WebSocket, chat, etc).
-        // Without this guard, WKWebView reloads → OS kills sandbox → black screen.
-        // Extract videoId from the URL the same way makeUIView does
+        // 🔧 v20: for YouTube, PlinkPlayerManager handles loading (singleton guard).
+        // For non-YouTube, only reload if URL genuinely changed.
+        let urlString = url.absoluteString
+        let isYouTube = urlString.contains("youtube.com/embed/") ||
+                         urlString.contains("youtube-nocookie.com/embed/") ||
+                         urlString.contains("youtu.be/")
+
+        if isYouTube {
+            // PlinkPlayerManager.loadYouTubeVideo has its own guard —
+            // if videoId matches currentVideoId, it skips the load.
+            let videoId = url.lastPathComponent
+            PlinkPlayerManager.shared.loadYouTubeVideo(id: videoId)
+            return
+        }
+
+        // Non-YouTube: check if URL changed before reloading
         let videoId = url.lastPathComponent
         if let currentURL = uiView.url?.absoluteString, currentURL.contains(videoId) {
             return
         }
-        // Also skip if already loading
         if uiView.isLoading {
             return
         }
-        // Only load if URL genuinely changed
         print("📺 WebVideoView updateUIView: URL changed, loading \(url.absoluteString.prefix(60))")
         uiView.load(URLRequest(url: url))
     }

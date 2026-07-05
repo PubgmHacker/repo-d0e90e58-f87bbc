@@ -109,7 +109,11 @@ struct AIAssistantView: View {
                 }
             }
             .sheet(isPresented: $showHistory) {
-                AIHistorySheet(allHistoryKey: allHistoryKey)
+                AIHistorySheet(allHistoryKey: allHistoryKey) { selectedQuery in
+                    // 🔧 Load query from history into chat
+                    inputText = selectedQuery
+                    sendMessage()
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -392,19 +396,12 @@ struct AIAssistantView: View {
 }
 
 // MARK: - AI History Sheet
-/// 🔧 NEW: Shows all past AI queries in a list.
+/// 🔧 Shows all past AI queries. Tap to reload session, swipe to delete.
 struct AIHistorySheet: View {
     let allHistoryKey: String
     @Environment(\.dismiss) private var dismiss
-
-    private var queries: [(query: String, date: String)] {
-        let data = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: String]] ?? []
-        return data.reversed().compactMap { dict in
-            guard let q = dict["query"] else { return nil }
-            let d = dict["date"] ?? ""
-            return (query: q, date: d)
-        }
-    }
+    @State private var queries: [(query: String, date: String)] = []
+    var onSelectQuery: ((String) -> Void)? = nil  // 🔧 tap to load query
 
     var body: some View {
         NavigationStack {
@@ -421,9 +418,12 @@ struct AIHistorySheet: View {
                             .foregroundColor(.raveTextSecondary)
                     }
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(Array(queries.enumerated()), id: \.offset) { _, item in
+                    List {
+                        ForEach(Array(queries.enumerated()), id: \.offset) { _, item in
+                            Button {
+                                onSelectQuery?(item.query)
+                                dismiss()
+                            } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "sparkles")
                                         .font(.system(size: 12))
@@ -440,16 +440,25 @@ struct AIHistorySheet: View {
                                         }
                                     }
                                     Spacer()
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.raveTextTertiary)
                                 }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.white.opacity(0.04))
+                            .listRowSeparator(.hidden)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
+                        .onDelete { indexSet in
+                            // 🔧 FIX: instant delete with animation
+                            for index in indexSet {
+                                queries.remove(at: index)
+                            }
+                            saveQueries()
+                        }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("История")
@@ -462,7 +471,10 @@ struct AIHistorySheet: View {
                 if !queries.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            UserDefaults.standard.removeObject(forKey: allHistoryKey)
+                            withAnimation {
+                                queries.removeAll()
+                            }
+                            saveQueries()
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 14))
@@ -471,8 +483,24 @@ struct AIHistorySheet: View {
                     }
                 }
             }
+            .onAppear { loadQueries() }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func loadQueries() {
+        let data = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: String]] ?? []
+        queries = data.reversed().compactMap { dict in
+            guard let q = dict["query"] else { return nil }
+            let d = dict["date"] ?? ""
+            return (query: q, date: d)
+        }
+    }
+
+    private func saveQueries() {
+        // queries is reversed — un-reverse before saving
+        let toSave = queries.reversed().map { ["query": $0.query, "date": $0.date] }
+        UserDefaults.standard.set(toSave, forKey: allHistoryKey)
     }
 
     private func formatDate(_ iso: String) -> String {

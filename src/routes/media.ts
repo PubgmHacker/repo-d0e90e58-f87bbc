@@ -1,5 +1,6 @@
 // src/routes/media.ts — Pack 3: обновлённый с yt-dlp extraction
 import { extractStream, extractYouTubeStream, extractMetadata, UPSTREAM_USER_AGENT } from '../services/streamExtractor.js';
+import { youtubePlayerHTML } from '../services/youtubePlayer.js';
 import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
 
 const EXTRACT_CACHE_TTL = 3600; // 1 час — прямой URL живёт долго
@@ -288,5 +289,37 @@ export default async function mediaRoutes(fastify, _options) {
       console.error('[youtube-stream] proxy error', e.message);
       return reply.status(500).send({ error: 'Stream proxy failed: ' + e.message });
     }
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // GET /api/media/youtube-player?id=VIDEO_ID — Hosted IFrame Player (v11)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Serves a static HTML page that uses YouTube IFrame API.
+  // iOS WKWebView loads this URL (not youtube.com/embed/ directly).
+  //
+  // The page has a REAL origin (https://plink-backend...) so:
+  //   - IFrame API postMessage works (no 152-4)
+  //   - YouTube's WKWebView detection doesn't run in our page context (no 153)
+  //   - No bot check (we're not loading youtube.com directly)
+  //
+  // No auth required — video ID is public. Rate limited to prevent abuse.
+
+  fastify.get('/media/youtube-player', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request: any, reply: any) => {
+    const { id } = request.query as any;
+    if (!id || typeof id !== 'string' || id.length > 20) {
+      return reply.status(400).send('Valid video ID required');
+    }
+
+    // Override security headers for HTML page
+    reply.header('Content-Type', 'text/html; charset=utf-8');
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    reply.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    reply.header('Access-Control-Allow-Origin', '*');
+
+    const html = youtubePlayerHTML(id);
+    return reply.send(html);
   });
 }

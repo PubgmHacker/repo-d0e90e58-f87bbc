@@ -386,29 +386,18 @@ struct WebVideoView: UIViewRepresentable {
         WebViewControl.shared.register(webView)
 
         // 🔧 Load URL
-        if isBackendPlayer {
-            // v12 backend player (kept for fallback)
-            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            print("📺 YouTube v12: backend embed proxy")
-            webView.load(URLRequest(url: url))
-        } else if isYouTube {
-            // 🔧 v23: Coordinator-based guard — standard SwiftUI lifecycle.
-            // WebView created normally → iOS grants sandbox.
-            // Coordinator blocks duplicate loads from WebSocket state changes.
+        if isBackendPlayer || isYouTube {
+            // 🔧 v24: ALL YouTube paths (backend player + direct embed + nocookie)
+            // go through PlinkSchemeHandler via Coordinator.
+            // NO direct webView.load() — that causes 153.
             let videoId = url.lastPathComponent
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
-            // 🔧 DO NOT set loadedVideoId here — let loadVideoOnce do it.
-            // Setting it here would cause the guard in loadVideoOnce to always
-            // block the load (id == loadedVideoId → return).
-            print("📺 YouTube v23: makeUIView → Coordinator.loadVideoOnce")
+            print("📺 YouTube v24: makeUIView → Coordinator.loadVideoOnce")
             context.coordinator.loadVideoOnce(id: videoId, webView: webView)
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            webView.load(URLRequest(url: url))
-        } else if isYouTube {
-            // Direct YouTube embed (fallback — shouldn't be used in v11)
             webView.load(URLRequest(url: url))
         } else {
             webView.load(URLRequest(url: url))

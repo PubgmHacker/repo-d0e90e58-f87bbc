@@ -81,8 +81,8 @@ struct PlinkApp: App {
     // MARK: - Init
 
     init() {
-        // 🔧 v23: start local HTTP server for YouTube player (localhost)
-        PlinkLocalServer.shared.start()
+        // 🔧 v24: PlinkLocalServer removed — replaced by WKURLSchemeHandler
+        // (PlinkSchemeHandler). No network server needed.
 
         let api = APIClient()
         apiClient = api

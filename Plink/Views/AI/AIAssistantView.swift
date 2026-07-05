@@ -79,44 +79,78 @@ struct AIAssistantView: View {
     }
 
     // MARK: - Welcome Section
-
+    //
+    // 🔧 STYLED: was plain VStack with bare circle + text. Now: glass card
+    // with gradient border + warm amber accent (was cyan-only) for visual
+    // diversity across tabs.
     private var welcomeSection: some View {
         VStack(spacing: 20) {
-            Spacer().frame(height: 40)
+            Spacer().frame(height: 30)
 
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.bioCyan, Color.raveAccent],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
+            VStack(spacing: 18) {
+                ZStack {
+                    // 🔧 DIVERSITY: warm amber→coral gradient (was cyan-only)
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.bioAmber, Color.bioCoral],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 80, height: 80)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(.white)
-            }
-            .shadow(color: Color.ravePrimary.opacity(0.4), radius: 20, y: 8)
-            // 🔧 SUBTLE: slow glow pulse on welcome sparkles — "thinking" cue, doesn't
-            // compete with the streaming cursor (that animation only appears during replies).
-            .glowPulse(color: Color.bioCyan, minRadius: 12, maxRadius: 22, minOpacity: 0.15, maxOpacity: 0.5, period: 2.4)
+                        .frame(width: 84, height: 84)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 38, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .shadow(color: Color.bioAmber.opacity(0.5), radius: 18, y: 6)
+                .glowPulse(color: Color.bioAmber, minRadius: 14, maxRadius: 26, minOpacity: 0.2, maxOpacity: 0.6, period: 2.4)
 
-            VStack(spacing: 8) {
-                Text("Что посмотреть?")
-                    .font(.system(size: 24, weight: .heavy, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
-                Text("Спроси ИИ — подберёт фильм, сериал или видео для совместного просмотра")
-                    .font(.subheadline)
-                    .foregroundColor(.raveTextSecondary)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 8) {
+                    Text("Что посмотреть?")
+                        .font(.system(size: 26, weight: .heavy, design: .rounded))
+                        .foregroundColor(.raveTextPrimary)
+                    Text("Спроси ИИ — подберёт фильм, сериал или видео для совместного просмотра")
+                        .font(.subheadline)
+                        .foregroundColor(.raveTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 40)
+            .padding(.vertical, 28)
+            .padding(.horizontal, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(.ultraThinMaterial)
+                    .background(
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(Color.bioObsidian.opacity(0.3))
+                    )
+            )
+            .overlay(
+                // 🔧 DIVERSITY: amber→coral gradient border (was cyan)
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.bioAmber.opacity(0.35),
+                                Color.bioCoral.opacity(0.15),
+                                Color.white.opacity(0.04)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .shadow(color: Color.bioAmber.opacity(0.12), radius: 16, y: 4)
+            .padding(.horizontal, 20)
         }
     }
 
     // MARK: - Quick Chips
-
+    //
+    // 🔧 STYLED: was plain glass capsules with cyan border. Now: warm amber
+    // accent gradient border for diversity (matches welcome card palette).
     private var quickChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
@@ -128,12 +162,29 @@ struct AIAssistantView: View {
                         Text(prompt)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.raveTextPrimary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .glassCard(cornerRadius: 16, opacity: 0.06)
-                            .overlay(
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
                                 Capsule()
-                                    .stroke(Color.ravePrimary.opacity(0.2), lineWidth: 0.5)
+                                    .fill(.ultraThinMaterial)
+                                    .background(
+                                        Capsule().fill(Color.bioObsidian.opacity(0.3))
+                                    )
+                            )
+                            .overlay(
+                                // 🔧 DIVERSITY: amber→emerald gradient border (was cyan-only)
+                                Capsule()
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.bioAmber.opacity(0.4),
+                                                Color.bioEmerald.opacity(0.2)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 0.5
+                                    )
                             )
                     }
                     .buttonStyle(.plain)
@@ -152,7 +203,9 @@ struct AIAssistantView: View {
     ]
 
     // MARK: - Input Bar
-
+    //
+    // 🔧 STYLED: was plain `.ultraThinMaterial`. Now: glass with warm amber
+    // gradient border on top edge (subtle accent, matches welcome card).
     private var inputBar: some View {
         HStack(spacing: 10) {
             TextField("Спросите что угодно...", text: $inputText, axis: .vertical)
@@ -161,10 +214,30 @@ struct AIAssistantView: View {
                 .lineLimit(1...4)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .glassCard(cornerRadius: 22, opacity: 0.06)
+                .background(
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(.ultraThinMaterial)
+                        .background(
+                            RoundedRectangle(cornerRadius: 22)
+                                .fill(Color.bioObsidian.opacity(0.3))
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.bioAmber.opacity(0.25),
+                                    Color.bioEmerald.opacity(0.1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.5
+                        )
+                )
                 .focused($isInputFocused)
                 .onChange(of: inputText) { _, newValue in
-                    // 🔧 CHAR LIMIT: Truncate at 200 chars
                     if newValue.count > charLimit {
                         inputText = String(newValue.prefix(charLimit))
                         HapticManager.impact(.light)
@@ -175,14 +248,21 @@ struct AIAssistantView: View {
                 sendMessage()
             } label: {
                 ZStack {
+                    // 🔧 DIVERSITY: amber→coral gradient (was cyan-only raveGradient)
                     Circle()
-                        .fill(Color.raveGradient)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.bioAmber, Color.bioCoral],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .frame(width: 44, height: 44)
                     Image(systemName: "arrow.up")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
                 }
-                .shadow(color: .ravePrimary.opacity(0.4), radius: 10, y: 4)
+                .shadow(color: Color.bioAmber.opacity(0.45), radius: 10, y: 4)
             }
             .buttonStyle(.plain)
             .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
@@ -190,6 +270,22 @@ struct AIAssistantView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .background(
+            // 🔧 Top edge accent — subtle warm gradient line
+            VStack(spacing: 0) {
+                LinearGradient(
+                    colors: [
+                        Color.bioAmber.opacity(0.4),
+                        Color.bioCoral.opacity(0.2),
+                        .clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 0.5)
+                Spacer()
+            }
+        )
         .background(.ultraThinMaterial)
     }
 
@@ -357,7 +453,7 @@ struct AIMessageBubble: View {
                     // 🔧 Streaming cursor — pulsing block at the end of text
                     if isStreaming && !message.text.isEmpty {
                         Rectangle()
-                            .fill(Color.bioCyan)
+                            .fill(Color.bioAmber)  // 🔧 DIVERSITY: amber cursor (was cyan)
                             .frame(width: 2, height: 16)
                             .opacity(cursorVisible ? 1 : 0)
                             .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: cursorVisible)
@@ -368,16 +464,34 @@ struct AIMessageBubble: View {
                 .padding(.vertical, 12)
                 .background(
                     message.role == .user
-                        ? AnyShapeStyle(Color.raveGradient)
+                        ? AnyShapeStyle(
+                            // 🔧 DIVERSITY: user bubble — amber→coral gradient (was cyan raveGradient)
+                            LinearGradient(
+                                colors: [Color.bioAmber, Color.bioCoral],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         : AnyShapeStyle(.ultraThinMaterial)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(
-                    // Тонкая стеклянная обводка для AI-сообщений
+                    // 🔧 DIVERSITY: AI bubble — amber tint border (was white-only)
                     Group {
                         if message.role == .ai {
                             RoundedRectangle(cornerRadius: 18)
-                                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.bioAmber.opacity(0.25),
+                                            Color.bioEmerald.opacity(0.1),
+                                            Color.white.opacity(0.06)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 0.5
+                                )
                         }
                     }
                 )

@@ -63,7 +63,7 @@ struct SettingsSlidePanel: View {
         .ignoresSafeArea(.keyboard)
         .task {
             if profileVM == nil {
-                let api = APIClient() // legacy fallback
+                let api = APIClient.shared // 🔧 Pack v3: shared, не новый без токена
                 let vm = ProfileViewModel(authService: AuthService(api: api))
                 await vm.loadUser()
                 profileVM = vm

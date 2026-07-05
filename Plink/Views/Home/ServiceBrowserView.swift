@@ -103,23 +103,7 @@ struct ServiceBrowserView: View {
                     onCreateRoom(video.embedURL, video.title ?? pageTitle)
                 }
             }
-            .alert("Создать комнату?", isPresented: $showCreateConfirm) {
-                Button("Отмена", role: .cancel) {}
-                Button("Создать") {
-                    // Use detected video URL if available, otherwise current page URL
-                    let url = detectedVideo?.embedURL ?? currentURL?.absoluteString ?? ""
-                    let title = detectedVideo?.title ?? pageTitle
-                    if !url.isEmpty {
-                        onCreateRoom(url, title)
-                    }
-                }
-            } message: {
-                if let title = detectedVideo?.title ?? (!pageTitle.isEmpty ? pageTitle : nil) {
-                    Text("Контент: \(title)\n\nСоздать комнату для совместного просмотра?")
-                } else {
-                    Text("Создать комнату для совместного просмотра этого контента?")
-                }
-            }
+            // 🔧 Pack v3: alert showCreateConfirm убран — авто-переход работает через onChange
         }
         .preferredColorScheme(.dark)
     }

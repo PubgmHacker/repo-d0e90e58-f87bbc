@@ -187,17 +187,36 @@ export function requireHost(prisma) {
 }
 
 export async function sanitizeChatMessage(clientMsg: any, user: { id: string; username: string; role: string }, prisma?: any) {
-  // 🔧 FIX: fetch avatarURL so chat bubbles can show avatars
+  // 🔧 FIX: fetch avatarURL + isPremium so chat bubbles can show avatars AND
+  // we can validate bubble style permissions server-side.
   let avatarURL: string | null = null;
+  let isPremium = false;
   if (prisma) {
     try {
       const userData = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { avatarURL: true }
+        select: { avatarURL: true, isPremium: true, premiumUntil: true }
       });
       avatarURL = userData?.avatarURL || null;
+      // 🔧 v10 (bubble styles): premium is active only if isPremium=true AND
+      // premiumUntil is in the future (or null = lifetime).
+      const now = new Date();
+      isPremium = !!userData?.isPremium && (
+        !userData.premiumUntil || userData.premiumUntil > now
+      );
     } catch {}
   }
+
+  // 🔧 v10 (bubble styles): validate requested bubble style against user's
+  // permissions. processMessageStyle() returns a guaranteed-safe style id
+  // that the client is allowed to use. NEVER trust the client's style id
+  // directly — always re-derive it here.
+  const confirmedStyleId = await processMessageStyle(
+    user.id,
+    clientMsg.bubbleStyle || clientMsg.bubble_style || 'default',
+    { role: user.role, isPremium },
+    prisma
+  );
 
   return {
     type: 'chat',
@@ -209,7 +228,141 @@ export async function sanitizeChatMessage(clientMsg: any, user: { id: string; us
     senderAvatarURL: avatarURL,
     text: sanitizeText(clientMsg.text),
     timestamp: Date.now(),
+    // 🔧 v10: confirmed bubble style — client uses this for rendering.
+    // The original clientMsg.bubbleStyle is DISCARDED — only the server-
+    // confirmed value is broadcast to other clients. This means even if a
+    // malicious client modifies the iOS app to send 'admin_bubble_style',
+    // the server will downgrade it to 'default' before broadcasting.
+    bubbleStyle: confirmedStyleId,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔧 v10 (July 2026): Chat Bubble Styles — server-side validation
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Permission matrix:
+//   ┌──────────────────┬──────────┬───────────────┬───────────────────┐
+//   │ Style ID         │ Default  │ Плинк+ (paid) │ Admin/Founder     │
+//   ├──────────────────┼──────────┼───────────────┼───────────────────┤
+//   │ default          │    ✅    │      ✅       │        ✅          │
+//   │ cute_duck        │    ❌    │      ✅       │        ✅*         │
+//   │ neon_cyber       │    ❌    │      ✅       │        ✅*         │
+//   │ admin_bubble     │    ❌    │      ❌       │        ✅          │
+//   └──────────────────┴──────────┴───────────────┴───────────────────┘
+//   * Admins get Плинк+ features implicitly, but their messages use the
+//     admin_bubble style automatically (override), not the Плинк+ style.
+//
+// Anti-tampering: clients can send ANY string as bubbleStyle. This function
+// is the ONLY authority that decides which style is actually used. Unknown
+// or unauthorized styles are downgraded to 'default'. Admin style attempts
+// from non-admins are HARD-BLOCKED (also downgraded to 'default', not
+// silently kept) — we log this as a security event for monitoring.
+
+const ALLOWED_STYLES = new Set([
+  'default',
+  'cute_duck',
+  'neon_cyber',
+  'admin_bubble',
+]);
+
+const PREMIUM_STYLES = new Set([
+  'cute_duck',
+  'neon_cyber',
+]);
+
+const ADMIN_STYLES = new Set([
+  'admin_bubble',
+]);
+
+/**
+ * Validates a requested bubble style against the user's permissions.
+ *
+ * @param userId       - The sender's user ID (for DB lookup if needed)
+ * @param requestedStyleId - The style the client requested (UNTRUSTED)
+ * @param user         - Cached user context: { role, isPremium }
+ * @param prisma       - Optional DB handle (used only if user.isPremium is
+ *                       undefined and we need to refresh from DB)
+ * @returns confirmed_style_id — guaranteed to be one of ALLOWED_STYLES,
+ *          safe to broadcast to other clients.
+ */
+export async function processMessageStyle(
+  userId: string,
+  requestedStyleId: string,
+  user: { role: string; isPremium?: boolean },
+  prisma?: any
+): Promise<string> {
+  // ── 1. Normalize input ──────────────────────────────────────────────
+  // Reject anything that's not a non-empty string. Default to 'default'.
+  if (typeof requestedStyleId !== 'string' || !requestedStyleId.trim()) {
+    return 'default';
+  }
+  const requested = requestedStyleId.trim().toLowerCase();
+
+  // Unknown style id (client tampering or outdated client) → default.
+  if (!ALLOWED_STYLES.has(requested)) {
+    console.warn(
+      `[security] Unknown bubble style '${requested}' from user ${userId}. ` +
+      `Downgrading to 'default'.`
+    );
+    return 'default';
+  }
+
+  // ── 2. Resolve user context (refresh from DB if isPremium is unknown) ──
+  let isPremium = user.isPremium;
+  const role = (user.role || '').toUpperCase();
+  const isAdmin = role === 'ADMIN' || role === 'FOUNDER';
+
+  if (isPremium === undefined && prisma) {
+    try {
+      const userData = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { isPremium: true, premiumUntil: true }
+      });
+      const now = new Date();
+      isPremium = !!userData?.isPremium && (
+        !userData.premiumUntil || userData.premiumUntil > now
+      );
+    } catch {
+      isPremium = false;
+    }
+  }
+  isPremium = !!isPremium;
+
+  // ── 3. Admin override — admins ALWAYS get admin_bubble style ──────────
+  // This is by design: admin messages should be visually distinct in the
+  // chat, so we apply the admin style automatically, regardless of what
+  // the client requested. The client's requestedStyleId is ignored.
+  if (isAdmin) {
+    return 'admin_bubble';
+  }
+
+  // ── 4. Hard-block admin_bubble attempts from non-admins ──────────────
+  // This is a security event — log it for monitoring. Non-admins trying to
+  // use admin_bubble are either tampering with the client or using an
+  // outdated version that doesn't know about the permission system.
+  if (ADMIN_STYLES.has(requested)) {
+    console.warn(
+      `[security] Non-admin user ${userId} (role=${role}) attempted to use ` +
+      `admin bubble style '${requested}'. HARD-BLOCKED, downgrading to 'default'.`
+    );
+    return 'default';
+  }
+
+  // ── 5. Premium styles — requires active Плинк+ subscription ──────────
+  if (PREMIUM_STYLES.has(requested)) {
+    if (!isPremium) {
+      console.warn(
+        `[security] Non-premium user ${userId} attempted to use premium ` +
+        `bubble style '${requested}'. Downgrading to 'default'.`
+      );
+      return 'default';
+    }
+    return requested;  // User is premium, style is allowed
+  }
+
+  // ── 6. 'default' is always allowed for everyone ──────────────────────
+  return 'default';
 }
 
 function sanitizeText(text: string): string {

@@ -126,7 +126,8 @@ struct RoomsTabContent: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BioluminescentBackground(energy: 0.35, dimming: 0)
+                // 🔧 ROOMS: тёплая crimson палитра (отличается от Home ocean)
+                BioluminescentBackground(energy: 0.7, dimming: 0, palette: .crimson)
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
@@ -781,7 +782,13 @@ struct SettingsTabContent: View {
     let authService: AuthService
 
     var body: some View {
-        SettingsView(authService: authService)
+        // 🔧 SETTINGS: обёртка с mono-палитрой (B&W живой фон) — сама SettingsView
+        // использует свой NavigationStack, поэтому оборачиваем здесь.
+        ZStack {
+            BioluminescentBackground(energy: 0.5, dimming: 0, palette: .mono)
+                .ignoresSafeArea()
+            SettingsView(authService: authService)
+        }
     }
 }
 
@@ -807,7 +814,9 @@ struct FriendsTabContent: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                // 🔧 FRIENDS: зелёная emerald палитра — социальное тепло
+                BioluminescentBackground(energy: 0.7, dimming: 0, palette: .emerald)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 16) {
                     friendsHeader

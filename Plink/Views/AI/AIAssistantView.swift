@@ -20,11 +20,13 @@ struct AIAssistantView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Живой фон ЗА карточками
-                AnimatedGradientBackground(orbColors: [Color(hex: 0x7B2CBF), Color.bioCyan, Color.raveAccent])
+                // 🔧 AI: собственная amber-палитра (отличается от Home/Rooms)
+                // Тёплые янтарные/золотые орбы — премиум-чувство
+                BioluminescentBackground(energy: 0.75, dimming: 0, palette: .amber)
+                    .ignoresSafeArea()
 
                 // Лёгкое затемнение для читаемости сообщений
-                Color.black.opacity(0.3).ignoresSafeArea()
+                Color.black.opacity(0.25).ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     // Чат
@@ -73,6 +75,24 @@ struct AIAssistantView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color.clear, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // 🔧 PREMIUM: clear chat history button (was missing)
+                    Button {
+                        HapticManager.impact(.medium)
+                        withAnimation {
+                            messages.removeAll()
+                            UserDefaults.standard.removeObject(forKey: storageKey)
+                        }
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.raveDanger)
+                    }
+                    .disabled(messages.isEmpty)
+                    .opacity(messages.isEmpty ? 0.4 : 1)
+                }
+            }
         }
         .preferredColorScheme(.dark)
         .onAppear { loadHistory() }
@@ -80,16 +100,14 @@ struct AIAssistantView: View {
 
     // MARK: - Welcome Section
     //
-    // 🔧 STYLED: was plain VStack with bare circle + text. Now: glass card
-    // with gradient border + warm amber accent (was cyan-only) for visual
-    // diversity across tabs.
+    // 🔧 PREMIUM AI: стеклянная карточка с amber акцентом + премиум-иконка
     private var welcomeSection: some View {
         VStack(spacing: 20) {
             Spacer().frame(height: 30)
 
             VStack(spacing: 18) {
                 ZStack {
-                    // 🔧 DIVERSITY: warm amber→coral gradient (was cyan-only)
+                    // 🔧 Premium: двойное кольцо вокруг иконки
                     Circle()
                         .fill(
                             LinearGradient(
@@ -118,39 +136,15 @@ struct AIAssistantView: View {
             }
             .padding(.vertical, 28)
             .padding(.horizontal, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(.ultraThinMaterial)
-                    .background(
-                        RoundedRectangle(cornerRadius: 24)
-                            .fill(Color.bioObsidian.opacity(0.3))
-                    )
-            )
-            .overlay(
-                // 🔧 DIVERSITY: amber→coral gradient border (was cyan)
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.bioAmber.opacity(0.35),
-                                Color.bioCoral.opacity(0.15),
-                                Color.white.opacity(0.04)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
-            )
-            .shadow(color: Color.bioAmber.opacity(0.12), radius: 16, y: 4)
+            // 🔧 TELEGRAM-STYLE: прозрачное стекло + металлическая обводка
+            .telegramGlass(cornerRadius: 24, borderColor: Color.bioAmber.opacity(0.3))
             .padding(.horizontal, 20)
         }
     }
 
     // MARK: - Quick Chips
     //
-    // 🔧 STYLED: was plain glass capsules with cyan border. Now: warm amber
-    // accent gradient border for diversity (matches welcome card palette).
+    // 🔧 PREMIUM: telegram-glass chips с amber tintом
     private var quickChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
@@ -164,28 +158,8 @@ struct AIAssistantView: View {
                             .foregroundColor(.raveTextPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(
-                                Capsule()
-                                    .fill(.ultraThinMaterial)
-                                    .background(
-                                        Capsule().fill(Color.bioObsidian.opacity(0.3))
-                                    )
-                            )
-                            .overlay(
-                                // 🔧 DIVERSITY: amber→emerald gradient border (was cyan-only)
-                                Capsule()
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.bioAmber.opacity(0.4),
-                                                Color.bioEmerald.opacity(0.2)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 0.5
-                                    )
-                            )
+                            // 🔧 TELEGRAM-STYLE glass chips
+                            .telegramGlass(cornerRadius: 18, borderColor: Color.bioAmber.opacity(0.25))
                     }
                     .buttonStyle(.plain)
                 }
@@ -204,8 +178,7 @@ struct AIAssistantView: View {
 
     // MARK: - Input Bar
     //
-    // 🔧 STYLED: was plain `.ultraThinMaterial`. Now: glass with warm amber
-    // gradient border on top edge (subtle accent, matches welcome card).
+    // 🔧 PREMIUM: telegram-glass input + amber send button
     private var inputBar: some View {
         HStack(spacing: 10) {
             TextField("Спросите что угодно...", text: $inputText, axis: .vertical)
@@ -214,28 +187,8 @@ struct AIAssistantView: View {
                 .lineLimit(1...4)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 22)
-                        .fill(.ultraThinMaterial)
-                        .background(
-                            RoundedRectangle(cornerRadius: 22)
-                                .fill(Color.bioObsidian.opacity(0.3))
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.bioAmber.opacity(0.25),
-                                    Color.bioEmerald.opacity(0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.5
-                        )
-                )
+                // 🔧 TELEGRAM-STYLE glass input
+                .telegramGlass(cornerRadius: 22, borderColor: Color.bioAmber.opacity(0.2))
                 .focused($isInputFocused)
                 .onChange(of: inputText) { _, newValue in
                     if newValue.count > charLimit {
@@ -248,7 +201,7 @@ struct AIAssistantView: View {
                 sendMessage()
             } label: {
                 ZStack {
-                    // 🔧 DIVERSITY: amber→coral gradient (was cyan-only raveGradient)
+                    // 🔧 AI: amber→coral gradient (matches welcome card)
                     Circle()
                         .fill(
                             LinearGradient(
@@ -271,7 +224,7 @@ struct AIAssistantView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(
-            // 🔧 Top edge accent — subtle warm gradient line
+            // 🔧 Top edge accent — amber gradient line
             VStack(spacing: 0) {
                 LinearGradient(
                     colors: [
@@ -462,43 +415,43 @@ struct AIMessageBubble: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(
-                    message.role == .user
-                        ? AnyShapeStyle(
-                            // 🔧 DIVERSITY: user bubble — amber→coral gradient (was cyan raveGradient)
-                            LinearGradient(
-                                colors: [Color.bioAmber, Color.bioCoral],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        : AnyShapeStyle(.ultraThinMaterial)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(
-                    // 🔧 DIVERSITY: AI bubble — amber tint border (was white-only)
-                    Group {
-                        if message.role == .ai {
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.bioAmber.opacity(0.25),
-                                            Color.bioEmerald.opacity(0.1),
-                                            Color.white.opacity(0.06)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 0.5
-                                )
-                        }
-                    }
-                )
+                .modifier(AIBubbleBackground(role: message.role))
             }
 
             if message.role == .ai { Spacer() }
         }
         .padding(.horizontal, 20)
+    }
+}
+
+// MARK: - AI Bubble Background Modifier
+//
+// 🔧 PREMIUM: раздельные стили для user / AI bubble.
+// User — amber→coral gradient fill (premium-look).
+// AI — telegram-glass (прозрачное стекло + металлическая обводка).
+private struct AIBubbleBackground: ViewModifier {
+    let role: AIMessage.Role
+
+    func body(content: Content) -> some View {
+        switch role {
+        case .user:
+            content
+                .background(
+                    LinearGradient(
+                        colors: [Color.bioAmber, Color.bioCoral],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                )
+                .shadow(color: Color.bioAmber.opacity(0.3), radius: 6, y: 2)
+        case .ai:
+            content
+                .telegramGlass(cornerRadius: 18, borderColor: Color.bioAmber.opacity(0.25))
+        }
     }
 }

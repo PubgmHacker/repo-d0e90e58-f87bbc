@@ -38,8 +38,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
-                // 🔧 SETTINGS: B&W монохромная палитра (per user request)
-                BioluminescentBackground(energy: 0.5, dimming: 0, palette: .mono)
+                // 🔧 SETTINGS: grayscale gradient (black top → grey center → black bottom)
+                // + horizontal shimmer band. No orbs — minimalist B&W per user request.
+                SettingsBackground(energy: 0.7)
                     .ignoresSafeArea()
 
                 ScrollView {
@@ -331,11 +332,13 @@ struct SettingsView: View {
                     Text("Аккаунт Плинк")
                         .font(.system(size: 13))
                         .foregroundColor(.raveTextSecondary)
+                        .textStroke()  // 🔧 subtle outline for readability
                     if let email = profileVM?.user?.email {
                         Text(email)
                             .font(.system(size: 11))
                             .foregroundColor(.raveTextTertiary)
                             .lineLimit(1)
+                            .textStroke(opacity: 0.4)  // 🔧 subtle outline
                     }
                     // 🔧 NEW: Short user ID for friend search
                     if let user = profileVM?.user {
@@ -343,9 +346,11 @@ struct SettingsView: View {
                             Text("ID:")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.raveTextTertiary)
+                                .textStroke(opacity: 0.4)
                             Text(user.shortId)
                                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                 .foregroundColor(.raveTextSecondary)
+                                .textStroke(opacity: 0.4)
                             Button {
                                 UIPasteboard.general.string = user.fullId
                                 HapticManager.impact(.light)

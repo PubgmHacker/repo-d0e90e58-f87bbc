@@ -147,6 +147,112 @@ struct BioluminescentBackground: View {
     }
 }
 
+// MARK: - Settings Background (grayscale gradient, no orbs)
+//
+// 🔧 USER REQUEST: 'не с орбами а с чем то другим, сверху доминирует черный
+// а ближе к центру серый уже и переливается (живой фон)'.
+//
+// 🔧 DESIGN: вертикальный градиент black (top) → grey (center) → black (bottom),
+// с лёгкой горизонтальной переливающейся волной. Никаких орбов — чистая
+// минималистичная серая палитра для B&W настроек.
+struct SettingsBackground: View {
+    var energy: Double = 0.5
+    @State private var isInBackground = false
+    @State private var phase: CGFloat = -1
+
+    var body: some View {
+        Group {
+            if !isInBackground {
+                TimelineView(.animation(minimumInterval: 1.0/30.0)) { timeline in
+                    Canvas { context, size in
+                        let t = timeline.date.timeIntervalSinceReferenceDate
+                        drawGradient(context: context, size: size, time: t)
+                    }
+                }
+            } else {
+                Color.bioObsidian
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            isInBackground = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            isInBackground = false
+        }
+    }
+
+    /// 🔧 Vertical gradient + horizontal shimmer wave.
+    /// Top: pure black (bioObsidian). Center: animated grey. Bottom: black.
+    /// A subtle horizontal light band sweeps up-down slowly = "переливается".
+    private func drawGradient(context: GraphicsContext, size: CGSize, time: Double) {
+        // ── Base vertical gradient: black → grey → black ──
+        let baseRect = CGRect(origin: .zero, size: size)
+        let baseGradient = Gradient(colors: [
+            Color(white: 0.04),   // near-black top
+            Color(white: 0.18),   // dark grey upper-mid
+            Color(white: 0.28),   // mid grey center
+            Color(white: 0.18),   // dark grey lower-mid
+            Color(white: 0.04),   // near-black bottom
+        ])
+        context.fill(
+            Path(baseRect),
+            with: .linearGradient(
+                baseGradient,
+                startPoint: .init(x: 0, y: 0),
+                endPoint: .init(x: 0, y: size.height)
+            )
+        )
+
+        // ── Horizontal shimmer band (slow sweep) ──
+        // A soft horizontal light band that travels vertically — gives "живой" feel.
+        let bandY = size.height * (0.5 + 0.35 * sin(time * 0.15))
+        let bandHeight = size.height * 0.4
+        let bandOpacity = 0.06 * energy
+        let bandRect = CGRect(
+            x: 0,
+            y: bandY - bandHeight / 2,
+            width: size.width,
+            height: bandHeight
+        )
+        context.fill(
+            Path(bandRect),
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color.white.opacity(0),
+                    Color.white.opacity(bandOpacity),
+                    Color.white.opacity(0),
+                ]),
+                startPoint: .init(x: 0, y: bandRect.minY),
+                endPoint: .init(x: 0, y: bandRect.maxY)
+            )
+        )
+
+        // ── Subtle diagonal sheen (very faint) ──
+        // Adds premium metallic feel — like brushed aluminum.
+        let sheenOffset = sin(time * 0.1) * size.width * 0.3
+        let sheenRect = CGRect(
+            x: sheenOffset - size.width * 0.5,
+            y: 0,
+            width: size.width * 0.4,
+            height: size.height
+        )
+        context.fill(
+            Path(sheenRect),
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color.white.opacity(0),
+                    Color.white.opacity(0.03 * energy),
+                    Color.white.opacity(0),
+                ]),
+                startPoint: .init(x: sheenRect.minX, y: 0),
+                endPoint: .init(x: sheenRect.maxX, y: 0)
+            )
+        )
+    }
+}
+
 // MARK: - Bio Palette
 //
 // 🔧 PER-TAB PALETTES: каждая вкладка имеет свой уникальный фон.
@@ -554,5 +660,17 @@ extension View {
                     .stroke(borderColor, lineWidth: 0.5)
             )
             .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+    }
+
+    /// 🔧 TEXT STROKE: тонкая чёрная обводка для букв/текста через 4-directional shadow.
+    /// Используется для лейблов в Settings/Profile (Аккаунт Плинк, email, ID) —
+    /// улучшает читаемость на живом фоне. Без обводки текст «сливается» с фоном.
+    /// SwiftUI не имеет native text stroke — это workaround через 4 тени.
+    func textStroke(opacity: Double = 0.5, radius: CGFloat = 0.4) -> some View {
+        self
+            .shadow(color: .black.opacity(opacity), radius: radius, x: radius, y: 0)
+            .shadow(color: .black.opacity(opacity), radius: radius, x: -radius, y: 0)
+            .shadow(color: .black.opacity(opacity), radius: radius, x: 0, y: radius)
+            .shadow(color: .black.opacity(opacity), radius: radius, x: 0, y: -radius)
     }
 }

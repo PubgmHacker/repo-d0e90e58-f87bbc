@@ -58,20 +58,44 @@ export default async function roomRoutes(fastify, _options) {
             ? await hashRoomPassword(password) 
             : null;
 
-        const room = await prisma.room.create({
-            data: {
-                name,
-                hostID: request.user.id,
-                hostName: resolvedHostName,
-                code: generateRoomCode(),
-                maxParticipants: maxParticipants || 10,
-                mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
-                privacy: privacy || 'public',
-                password: hashedPassword,
-                hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
-                isActive: true,
-            }
-        });
+        // 🔧 SAFETY: try with endedAt first (new schema), fallback to without
+        // (old DB without migration). Prevents 500 error if Railway didn't
+        // run prisma db push yet.
+        let room;
+        try {
+            room = await prisma.room.create({
+                data: {
+                    name,
+                    hostID: request.user.id,
+                    hostName: resolvedHostName,
+                    code: generateRoomCode(),
+                    maxParticipants: maxParticipants || 10,
+                    mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
+                    privacy: privacy || 'public',
+                    password: hashedPassword,
+                    hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
+                    isActive: true,
+                    endedAt: null,
+                }
+            });
+        } catch (createErr) {
+            // Fallback: endedAt column doesn't exist — create without it
+            console.warn('[rooms] create with endedAt failed, retrying without:', createErr.message);
+            room = await prisma.room.create({
+                data: {
+                    name,
+                    hostID: request.user.id,
+                    hostName: resolvedHostName,
+                    code: generateRoomCode(),
+                    maxParticipants: maxParticipants || 10,
+                    mediaItem: mediaItem ? JSON.stringify(mediaItem) : null,
+                    privacy: privacy || 'public',
+                    password: hashedPassword,
+                    hostIsPremium: await getUserPremiumStatus(prisma, request.user.id),
+                    isActive: true,
+                }
+            });
+        }
 
         // Invalidate cache
         await cacheDel(ROOMS_CACHE_KEY);

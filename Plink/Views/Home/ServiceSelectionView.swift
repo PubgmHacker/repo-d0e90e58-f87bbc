@@ -113,8 +113,10 @@ struct ServiceSelectionView: View {
                 }
             }
         }
-        // 🔧 NEW: When user picks a service, open the full-screen browser
-        .sheet(item: $browseService) { service in
+        // 🔧 FIX: was .sheet — накапливал окна (sheet on sheet on sheet).
+        // Now: .fullScreenCover — заменяет предыдущий экран, не накапливает.
+        // User: 'вкладки предыдущие должны закрываться иначе создается 10+ окон'.
+        .fullScreenCover(item: $browseService) { service in
             ServiceBrowserView(service: service) { contentURL, contentTitle in
                 // 🔧 Pack v2: Сначала закрываем ServiceBrowserView,
                 // потом с задержкой вызываем onContentSelected чтобы

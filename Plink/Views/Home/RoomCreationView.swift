@@ -77,8 +77,9 @@ struct RoomCreationView: View {
                 onDismiss: { showPaywallForLimit = false }
             )
         }
-        // 🔧 NEW: RoomSetupView — final step after browsing content
-        .sheet(isPresented: $showRoomSetup) {
+        // 🔧 FIX: was .sheet — накапливал окна. Now: .fullScreenCover — заменяет.
+        // User: 'вкладки предыдущие должны закрываться иначе создается 10+ окон'.
+        .fullScreenCover(isPresented: $showRoomSetup) {
             RoomSetupView(
                 service: setupService,
                 contentURL: setupContentURL,

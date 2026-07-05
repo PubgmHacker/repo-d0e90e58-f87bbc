@@ -22,9 +22,9 @@ function serializeRoom(room) {
     if (rest.mediaItem) {
         try {
             parsedMediaItem = JSON.parse(rest.mediaItem);
-        } catch (e) {
+        } catch (e: any) {
             // Битая JSON-строка — логируем, возвращаем null, не роняем endpoint
-            console.warn(`[rooms] Failed to parse mediaItem for room ${rest.id}:`, e.message);
+            console.warn(`[rooms] Failed to parse mediaItem for room ${rest.id}:`, e?.message || e);
             parsedMediaItem = null;
         }
     }
@@ -304,8 +304,8 @@ export default async function roomRoutes(fastify, _options) {
             });
             await cacheDel(ROOMS_CACHE_KEY);
             console.log(`[cleanup] Auto-ended ${toEnd.length} orphan room(s)`);
-        } catch (e) {
-            console.error('[cleanup] Error:', e);
+        } catch (e: any) {
+            console.error('[cleanup] Error:', e?.message || e);
         }
     }, 5 * 60 * 1000).unref();
 }

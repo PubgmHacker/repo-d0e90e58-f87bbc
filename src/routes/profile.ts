@@ -108,8 +108,8 @@ export default async function profileRoutes(fastify) {
       //  WatchHistory, PlaybackState, Subscription, UserBlock, Report, RefreshToken, AuditLog)
       await prisma.user.delete({ where: { id: request.user.id } });
       reply.send({ deleted: true });
-    } catch (e) {
-      reply.status(500).send({ error: 'Failed to delete account: ' + e.message });
+    } catch (e: any) {
+      reply.status(500).send({ error: 'Failed to delete account: ' + (e?.message || String(e)) });
     }
   });
 

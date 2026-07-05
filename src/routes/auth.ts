@@ -168,45 +168,56 @@ export default async function authRoutes(fastify) {
   });
 
   // POST /api/auth/refresh — 60 в минуту (часто, т.к. каждый запуск приложения)
+  // 🔧 FIX: wrapped in try/catch — same 500-protection as signin/signup.
   fastify.post('/auth/refresh', {
     config: {
       rateLimit: { max: 60, timeWindow: '1 minute' }
     }
   }, async (request, reply) => {
-    const { refreshToken } = request.body;
-    if (!refreshToken) {
-      return reply.status(400).send({ error: 'Refresh token required' });
+    try {
+      const { refreshToken } = request.body;
+      if (!refreshToken) {
+        return reply.status(400).send({ error: 'Refresh token required' });
+      }
+
+      const verified = await verifyRefreshToken(fastify, refreshToken);
+      if (!verified) {
+        await alertWarning('Invalid refresh token attempt');
+        return reply.status(401).send({ error: 'Invalid or expired refresh token' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: verified.userId },
+        select: { id: true, username: true, email: true, role: true, isPremium: true, bannedUntil: true }
+      });
+      if (!user) return reply.status(401).send({ error: 'User not found' });
+      if (user.bannedUntil && user.bannedUntil > new Date()) {
+        return reply.status(403).send({ error: 'Account banned' });
+      }
+
+      const tokens = await issueTokenPair(fastify, user.id, user.username);
+
+      await logAudit({
+        userId: user.id,
+        action: AuditActions.TOKEN_REFRESH,
+        ip: request.ip,
+      });
+
+      reply.send({
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        accessExpiresAt: tokens.accessExpiresAt,
+        user,
+      });
+    } catch (err: any) {
+      console.error('[auth/refresh] FATAL:', err?.message || err);
+      console.error('[auth/refresh] Stack:', err?.stack);
+      return reply.status(500).send({
+        error: 'Server error during token refresh',
+        hint: 'Database schema may be out of sync. Check server logs.',
+        requestId: request.id,
+      });
     }
-
-    const verified = await verifyRefreshToken(fastify, refreshToken);
-    if (!verified) {
-      await alertWarning('Invalid refresh token attempt');
-      return reply.status(401).send({ error: 'Invalid or expired refresh token' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: verified.userId },
-      select: { id: true, username: true, email: true, role: true, isPremium: true, bannedUntil: true }
-    });
-    if (!user) return reply.status(401).send({ error: 'User not found' });
-    if (user.bannedUntil && user.bannedUntil > new Date()) {
-      return reply.status(403).send({ error: 'Account banned' });
-    }
-
-    const tokens = await issueTokenPair(fastify, user.id, user.username);
-    
-    await logAudit({
-      userId: user.id,
-      action: AuditActions.TOKEN_REFRESH,
-      ip: request.ip,
-    });
-
-    reply.send({
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessExpiresAt: tokens.accessExpiresAt,
-      user,
-    });
   });
 
   // POST /api/auth/logout

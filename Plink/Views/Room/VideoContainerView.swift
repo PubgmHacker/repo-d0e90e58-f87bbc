@@ -336,7 +336,6 @@ struct WebVideoView: UIViewRepresentable {
         // enhanced embed domain that has fewer restrictions. Also build a custom
         // HTML page with IFrame API instead of loading the embed URL directly.
         // This bypasses YouTube's WKWebView detection.
-        var loadURL = url
         if url.absoluteString.contains("youtube.com/embed/") {
             // Extract video ID and use youtube-nocookie.com
             let videoId = url.lastPathComponent

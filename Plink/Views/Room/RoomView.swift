@@ -172,7 +172,15 @@ struct RoomView: View {
             )
             .frame(height: max(chatHeight, 100))
             // 🔧 PREMIUM THEME: apply chat background gradient
-            .background(roomTheme.hasPlayerBorder ? roomTheme.chatBackground : Color.clear)
+            .background(
+                Group {
+                    if roomTheme.hasPlayerBorder {
+                        roomTheme.chatBackground
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
             // 🔧 Pack v3: Убран DragGesture — конфиликтовал с клавиатурой и скроллом.

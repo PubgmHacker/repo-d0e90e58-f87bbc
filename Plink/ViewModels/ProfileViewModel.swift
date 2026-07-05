@@ -315,14 +315,73 @@ final class ProfileViewModel {
     func updateUsername(_ newName: String) async {
         guard let current = user else { return }
         // 🔧 Pack v3: Отправляем на сервер (PATCH /users/me)
+        // 🔧 v11 (July 2026): pass displayName + coverURL through too (so
+        // updating username doesn't wipe displayName on the server).
         do {
-            let updated: User = try await authService.updateProfile(username: newName, avatarURL: current.avatarURL)
+            let updated: User = try await authService.updateProfile(
+                username: newName,
+                avatarURL: current.avatarURL,
+                displayName: current.displayName,
+                coverURL: current.coverURL
+            )
             user = updated
             authService.updateCachedUser(updated)
         } catch {
             // Fallback: локальное обновление
             user = User(id: current.id, username: newName, email: current.email,
-                        avatarURL: current.avatarURL, isOnline: current.isOnline,
+                        avatarURL: current.avatarURL,
+                        displayName: current.displayName, coverURL: current.coverURL,
+                        isOnline: current.isOnline,
+                        isPremium: current.isPremium, role: current.role, createdAt: current.createdAt)
+            errorMessage = "Не удалось сохранить на сервере: \(error.localizedDescription)"
+        }
+    }
+
+    /// 🔧 v11 (July 2026): Update display name separately from @username.
+    /// Empty string clears the display name → backend uses @username as fallback.
+    func updateDisplayName(_ newDisplayName: String) async {
+        guard let current = user else { return }
+        let trimmed = newDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let updated: User = try await authService.updateProfile(
+                username: nil,
+                avatarURL: nil,
+                displayName: trimmed.isEmpty ? "" : trimmed,
+                coverURL: nil
+            )
+            user = updated
+            authService.updateCachedUser(updated)
+        } catch {
+            user = User(id: current.id, username: current.username, email: current.email,
+                        avatarURL: current.avatarURL,
+                        displayName: trimmed.isEmpty ? nil : trimmed,
+                        coverURL: current.coverURL,
+                        isOnline: current.isOnline,
+                        isPremium: current.isPremium, role: current.role, createdAt: current.createdAt)
+            errorMessage = "Не удалось сохранить на сервере: \(error.localizedDescription)"
+        }
+    }
+
+    /// 🔧 v11: Combined update — username + displayName in one server call.
+    /// Used by EditProfileSheet's Save button so user can change both at once.
+    func updateProfile(username: String, displayName: String) async {
+        guard let current = user else { return }
+        let trimmedDisplay = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let updated: User = try await authService.updateProfile(
+                username: username,
+                avatarURL: current.avatarURL,
+                displayName: trimmedDisplay.isEmpty ? "" : trimmedDisplay,
+                coverURL: current.coverURL
+            )
+            user = updated
+            authService.updateCachedUser(updated)
+        } catch {
+            user = User(id: current.id, username: username, email: current.email,
+                        avatarURL: current.avatarURL,
+                        displayName: trimmedDisplay.isEmpty ? nil : trimmedDisplay,
+                        coverURL: current.coverURL,
+                        isOnline: current.isOnline,
                         isPremium: current.isPremium, role: current.role, createdAt: current.createdAt)
             errorMessage = "Не удалось сохранить на сервере: \(error.localizedDescription)"
         }

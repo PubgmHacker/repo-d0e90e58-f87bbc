@@ -345,6 +345,12 @@ struct WebVideoView: UIViewRepresentable {
         //   - body, html, iframe: 100% width + height, no margins
         //   - common player container IDs/classes: also 100%
         //   - object-fit: contain so video keeps aspect ratio
+        //   - 🔧 v11 (July 2026): for Rutube, hide native player controls via CSS
+        //     so Plink's ControlsOverlay is the only UI visible. Without this,
+        //     Rutube's own play/pause/seek bar overlaps Plink's controls and
+        //     confuses users (reported: 'контроллеры рутуба где-то болтаются').
+        //     Rutube's player uses standard HTML5 video element controls, so we
+        //     target video::-webkit-media-controls and Rutube-specific wrappers.
         let fullscreenCssScript = WKUserScript(
             source: """
             (function() {
@@ -359,6 +365,39 @@ struct WebVideoView: UIViewRepresentable {
                         max-width: 100% !important; max-height: 100% !important;
                         margin: 0 !important; padding: 0 !important;
                         object-fit: contain !important;
+                    }
+                    /* 🔧 v11: hide native HTML5 video controls on Rutube/VK embeds.
+                       We provide our own ControlsOverlay; the native controls
+                       overlap and confuse users. Hiding via ::-webkit-media-controls
+                       works because WKWebView uses WebKit (Safari) engine. */
+                    video::-webkit-media-controls,
+                    video::-webkit-media-controls-enclosure,
+                    video::-webkit-media-controls-panel,
+                    video::-webkit-media-controls-timeline,
+                    video::-webkit-media-controls-current-time-display,
+                    video::-webkit-media-controls-time-remaining-display,
+                    video::-webkit-media-controls-play-button,
+                    video::-webkit-media-controls-volume-slider,
+                    video::-webkit-media-controls-mute-button,
+                    video::-webkit-media-controls-fullscreen-button,
+                    video::-webkit-media-controls-overlay-play-button,
+                    video::-webkit-media-controls-overlay-enclosure {
+                        display: none !important;
+                        opacity: 0 !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
+                    }
+                    /* Rutube-specific: hide their custom player UI overlays */
+                    .pl-video-player__controls,
+                    .pl-video-player__progress,
+                    .pl-video-player__toolbar,
+                    [class*="controls-"],
+                    [class*="ControlsPanel"],
+                    [class*="player-controls"] {
+                        display: none !important;
+                        opacity: 0 !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
                     }
                 `;
                 (document.head || document.documentElement).appendChild(style);

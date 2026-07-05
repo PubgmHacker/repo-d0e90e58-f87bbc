@@ -230,23 +230,43 @@ struct ProfileView: View {
                 Button {
                     showCoverPicker = true
                 } label: {
+                    // 🔧 v11 (July 2026): enlarged cover camera button — was 36pt,
+                    // hard to see/tap. Now 44pt with brighter material + clear
+                    // "edit cover" affordance. Always visible (not just on tap).
                     ZStack {
                         Circle()
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 36, height: 36)
-                        Circle()
-                            .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
-                            .frame(width: 36, height: 36)
+                            .fill(.regularMaterial)
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.6), lineWidth: 1.5)
+                            )
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 17, weight: .bold))
                             .foregroundColor(.white)
                     }
+                    .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
                 }
                 .buttonStyle(.plain)
-                .padding(12)
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
             .frame(height: 150)
             .clipped()
+            .overlay(
+                // 🔧 v11: "Изменить обложку" hint label — always visible, helps
+                // users discover that the cover is editable without entering
+                // Edit Profile mode.
+                Text("Изменить обложку")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(10),
+                alignment: .topLeading
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
@@ -275,12 +295,21 @@ struct ProfileView: View {
                             isAdmin: viewModel.user?.isAdmin ?? false
                         )
 
+                        // 🔧 v11 (July 2026): enlarged camera button — was 26pt,
+                        // now 32pt with stronger shadow + brighter background.
+                        // Helps users discover that the avatar is editable
+                        // directly without entering Edit Profile mode.
                         Image(systemName: "camera.circle.fill")
-                            .font(.system(size: 26))
+                            .font(.system(size: 32))
                             .foregroundColor(.white)
                             .background(Circle().fill(Color.ravePrimary))
                             .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                            .shadow(color: .black.opacity(0.5), radius: 5, y: 2)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                                    .frame(width: 32, height: 32)
+                            )
                     }
                 }
                 .buttonStyle(.plain)
@@ -647,6 +676,9 @@ struct EditProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ProfileViewModel
     @State private var newUsername = ""
+    /// 🔧 v11 (July 2026): Telegram-style display name (separate from @username).
+    /// nil/empty means "use @username as display name" (backward compat).
+    @State private var newDisplayName = ""
     @State private var isSaving = false
     @State private var isPremium = false
     @State private var showAvatarPicker = false
@@ -657,6 +689,7 @@ struct EditProfileSheet: View {
     init(viewModel: ProfileViewModel) {
         _viewModel = State(initialValue: viewModel)
         _newUsername = State(initialValue: viewModel.username)
+        _newDisplayName = State(initialValue: viewModel.user?.displayName ?? "")
     }
 
     var body: some View {
@@ -782,7 +815,7 @@ struct EditProfileSheet: View {
                             Text("Текущий: @\(viewModel.username)")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(.raveTextTertiary)
-                            TextField("Введите новое имя", text: $newUsername)
+                            TextField("Введите новый @username", text: $newUsername)
                                 .textFieldStyle(RaveTextFieldStyle())
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
@@ -801,13 +834,51 @@ struct EditProfileSheet: View {
                         }
                         .padding(.horizontal, 4)
 
+                        // ─── DISPLAY NAME (v11) ───
+                        // 🔧 v11 (July 2026): Telegram-style display name — the
+                        // human-readable nick shown in chat/profile, separate from
+                        // the unique @username tag. Empty = fall back to @username.
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "textformat")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.bioAmber)
+                                Text("Отображаемое имя (ник)")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.raveTextPrimary)
+                            }
+                            Text("Показывается в чате вместо @username. Можно использовать пробелы и эмодзи. Пусто — использовать @username.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.raveTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            TextField("Например: Alex Films", text: $newDisplayName)
+                                .textFieldStyle(RaveTextFieldStyle())
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            LinearGradient(
+                                                colors: [
+                                                    Color.bioAmber.opacity(0.35),
+                                                    Color.bioCoral.opacity(0.15)
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 0.5
+                                        )
+                                )
+                        }
+                        .padding(.horizontal, 4)
+
                         Spacer(minLength: 20)
 
                         // ─── SAVE BUTTON ───
                         Button {
                             Task {
                                 isSaving = true
-                                await viewModel.updateUsername(newUsername)
+                                // 🔧 v11: combined update — username + displayName in one call.
+                                // If displayName is empty, backend clears it (uses @username as fallback).
+                                await viewModel.updateProfile(username: newUsername, displayName: newDisplayName)
                                 isSaving = false
                                 dismiss()
                             }

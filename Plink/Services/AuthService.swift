@@ -274,12 +274,26 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
     }
 
     // 🔧 Pack v3: Update profile on server
-    func updateProfile(username: String?, avatarURL: String?) async throws -> User {
+    // 🔧 v11 (July 2026): added displayName + coverURL params (Telegram-style
+    // naming split + profile cover photo).
+    func updateProfile(
+        username: String? = nil,
+        avatarURL: String? = nil,
+        displayName: String? = nil,
+        coverURL: String? = nil
+    ) async throws -> User {
         struct UpdateBody: Encodable {
             let username: String?
             let avatarURL: String?
+            let displayName: String?
+            let coverURL: String?
         }
-        let body = UpdateBody(username: username, avatarURL: avatarURL)
+        let body = UpdateBody(
+            username: username,
+            avatarURL: avatarURL,
+            displayName: displayName,
+            coverURL: coverURL
+        )
         let user: User = try await api.request("users/me", method: .patch, body: body)
         cacheUser(user)
         return user

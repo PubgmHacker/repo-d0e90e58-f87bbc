@@ -40,6 +40,10 @@
                 <key>NSAllowsArbitraryLoadsInWebContent</key>
                 <true/>
         </dict>
+        <key>PLINK_AI_API_KEY</key>
+        <string>$(PLINK_AI_API_KEY)</string>
+        <key>YANDEX_CLIENT_ID</key>
+        <string>$(YANDEX_CLIENT_ID)</string>
         <key>UILaunchScreen</key>
         <dict>
                 <key>UIColorName</key>

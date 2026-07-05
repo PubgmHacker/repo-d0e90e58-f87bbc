@@ -108,22 +108,31 @@ struct ShimmerModifier: ViewModifier {
 
 // MARK: - Shimmer Gradient Text Modifier
 /// Переливающийся градиентный текст. Маска сдвигает видимость по горизонтали.
+///
+/// 🔧 POLISH: smoother animation — was `.linear(duration: 3.5)` with phase 0→2,
+/// which created a visible "jump" at loop restart (gradient snapped back).
+/// Now: phase goes -1 → 2 (longer travel), `.easeInOut(duration: 4.5)` for
+/// smoother accel/decel, and the gradient is duplicated so the wrap-around
+/// is seamless. Matches the smooth rotation of the avatar ring (4s period).
 struct ShimmerGradientTextModifier: ViewModifier {
     let colors: [Color]
-    @State private var phase: CGFloat = 0
+    @State private var phase: CGFloat = -1
 
     func body(content: Content) -> some View {
         content
             .foregroundStyle(
                 LinearGradient(
-                    colors: colors,
-                    startPoint: UnitPoint(x: phase - 1, y: 0.5),
-                    endPoint: UnitPoint(x: phase, y: 0.5)
+                    // 🔧 Duplicate the color stops so the gradient wraps smoothly
+                    // when phase loops back to start. Without this, there's a visible
+                    // jump because the gradient ends with color[N-1] but restarts at color[0].
+                    colors: colors + colors,
+                    startPoint: UnitPoint(x: phase, y: 0.5),
+                    endPoint: UnitPoint(x: phase + 1, y: 0.5)
                 )
             )
             .onAppear {
                 withAnimation(
-                    .linear(duration: 3.5)
+                    .easeInOut(duration: 4.5)
                     .repeatForever(autoreverses: false)
                 ) {
                     phase = 2
@@ -206,32 +215,48 @@ extension View {
 
 // MARK: - Admin Shimmer Text Modifier (переливающийся красный для админов)
 /// 🔧 Pack v3: Анимированный переливающийся градиент для ников админов в чате.
+///
+/// 🔧 POLISH: smoother animation. Was `.linear(duration: 3)` with phase 0→1
+/// and 5 color stops in width×2 frame — visible "jump" at loop restart because
+/// the gradient didn't wrap seamlessly. Now:
+/// - Phase travels -1 → 2 (3× the width, longer sweep)
+/// - `.easeInOut(duration: 4.5)` for smooth accel/decel (matches avatar ring 4s)
+/// - Gradient colors duplicated so the wrap-around is seamless
+/// - Background base color added so text stays red-tinted even between shimmer passes
 struct AdminShimmerTextModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
+    @State private var phase: CGFloat = -1
 
     func body(content: Content) -> some View {
         content
+            .foregroundColor(Color(hex: 0xFF6B6B))  // 🔧 base red tint — visible between shimmer passes
             .overlay(
                 GeometryReader { geo in
                     LinearGradient(
+                        // 🔧 Duplicate color stops so gradient wraps seamlessly when
+                        // phase loops. Without this, end color ≠ start color → jump.
                         colors: [
                             Color(hex: 0xFF4D6D),
                             Color(hex: 0xFF8FA3),
+                            Color(hex: 0xFF6B6B),
                             Color(hex: 0xFF4D6D),
+                            Color(hex: 0xFF8FA3),
                             Color(hex: 0xFF6B6B),
                             Color(hex: 0xFF4D6D),
                         ],
-                        startPoint: .leading,
-                        endPoint: .trailing
+                        startPoint: UnitPoint(x: phase, y: 0.5),
+                        endPoint: UnitPoint(x: phase + 1, y: 0.5)
                     )
-                    .frame(width: geo.size.width * 2)
-                    .offset(x: -geo.size.width + phase * geo.size.width * 2)
+                    .frame(width: geo.size.width * 3)  // 🔧 wider frame for longer sweep
+                    .offset(x: -geo.size.width + (phase + 1) * geo.size.width)
                     .mask(content)
                 }
             )
             .onAppear {
-                withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
-                    phase = 1
+                withAnimation(
+                    .easeInOut(duration: 4.5)
+                    .repeatForever(autoreverses: false)
+                ) {
+                    phase = 2
                 }
             }
     }

@@ -203,23 +203,27 @@ struct RoomsTabContent: View {
     }
 
     // MARK: - Sub-Tab Bar
-
+    //
+    // 🔧 REDESIGNED per user request: Apple-style underline tab bar WITH emojis.
+    // Was: emoji + capsule background (looked cluttered). Now: emoji + text with
+    // thin accent underline on active tab — cleaner, but emojis preserved.
     private var subTabBar: some View {
         HStack(spacing: 0) {
             ForEach(RoomSubTab.allCases) { tab in
                 subTabButton(tab)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
         .background(
-            Color.bioObsidian.opacity(0.85)
+            Color.bioObsidian.opacity(0.7)
                 .background(.ultraThinMaterial)
                 .ignoresSafeArea(edges: .horizontal)
         )
         .overlay(
             Rectangle()
-                .fill(Color.bioCyan.opacity(0.08))
+                .fill(Color.white.opacity(0.06))
                 .frame(height: 0.5),
             alignment: .bottom
         )
@@ -236,34 +240,37 @@ struct RoomsTabContent: View {
                 selectedSubTab = tab
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(tab.icon)
-                    .font(.system(size: 13))
-                Text(tab.rawValue)
-                    .font(.system(size: 12, weight: isActive ? .bold : .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+            VStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    // 🔧 RESTORED: emoji preserved per user request
+                    Text(tab.icon)
+                        .font(.system(size: 13))
+                    Text(tab.rawValue)
+                        .font(.system(size: 13, weight: isActive ? .semibold : .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
 
-                // 🔧 Red badge on Requests tab
-                if showBadge {
-                    Text("\(inviteService.inviteCount)")
-                        .font(.system(size: 9, weight: .heavy).monospacedDigit())
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.raveDanger)
-                        .clipShape(Capsule())
+                    // 🔧 Red badge on Requests tab
+                    if showBadge {
+                        Text("\(inviteService.inviteCount)")
+                            .font(.system(size: 9, weight: .heavy).monospacedDigit())
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.raveDanger)
+                            .clipShape(Capsule())
+                    }
                 }
+                .foregroundColor(isActive ? .raveTextPrimary : .raveTextSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+
+                // 🔧 Underline indicator (Apple-style)
+                Rectangle()
+                    .fill(isActive ? AnyShapeStyle(Color.raveGradient) : AnyShapeStyle(Color.clear))
+                    .frame(height: 2)
+                    .clipShape(RoundedRectangle(cornerRadius: 1))
             }
-            .foregroundColor(isActive ? .white : .raveTextSecondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(
-                isActive
-                    ? AnyShapeStyle(Color.raveGradient)
-                    : AnyShapeStyle(Color.clear)
-            )
-            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
@@ -301,10 +308,11 @@ struct RoomsTabContent: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let myRooms = viewModel?.myRooms, !myRooms.isEmpty {
                     ForEach(myRooms) { room in
-                        Button { navigateToRoom = room } label: {
-                            myRoomCard(room)
-                        }
-                        .buttonStyle(.plain)
+                        // 🔧 REDESIGNED: was a Button wrapping the card → that swallowed
+                        // all taps including the delete button. Now: card with explicit
+                        // tap gesture for navigation + a separate delete icon button on
+                        // the right that doesn't conflict.
+                        myRoomCard(room)
                     }
                 } else {
                     emptyState(icon: "rectangle.stack.badge.plus", text: "Создайте комнату с главной")
@@ -510,85 +518,114 @@ struct RoomsTabContent: View {
     }
 
     // MARK: - My Room Card
-
+    //
+    // 🔧 REDESIGNED per user request:
+    // 1. Separate trash icon button on the right (was: long-press context menu —
+    //    user said "не нужно зажимать её").
+    // 2. Card itself is tappable for navigation (via .onTapGesture on the card,
+    //    NOT via Button wrapper — Button swallows all taps including the trash).
+    // 3. chevron.right removed — redundant with tap affordance.
     @ViewBuilder
     private func myRoomCard(_ room: Room) -> some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(Color.bioCyan.opacity(0.12))
-                    .frame(width: 44, height: 44)
-                if let source = room.mediaItem?.source, source != .url {
-                    ServiceLogoView(service: source, size: 24)
-                } else {
-                    Image(systemName: "play.rectangle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.bioCyan)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(room.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    // 🔧 Participant badge (glass)
-                    ParticipantBadge(count: room.participantCount)
-
-                    Text("· \(room.hostName)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.raveTextTertiary)
-                        .lineLimit(1)
-
-                    if room.isActive {
-                        HStack(spacing: 2) {
-                            Circle()
-                                .fill(Color.bioEmerald)
-                                .frame(width: 5, height: 5)
-                            Text("LIVE")
-                                .font(.system(size: 9, weight: .heavy))
-                        }
-                        .foregroundColor(.bioEmerald)
+        HStack(spacing: 12) {
+            // ── Card body (tap → open room) ──
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.bioCyan.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    if let source = room.mediaItem?.source, source != .url {
+                        ServiceLogoView(service: source, size: 24)
+                    } else {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.bioCyan)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(room.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.raveTextPrimary)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        // 🔧 Participant badge (glass)
+                        ParticipantBadge(count: room.participantCount)
+
+                        Text("· \(room.hostName)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.raveTextTertiary)
+                            .lineLimit(1)
+
+                        if room.isActive {
+                            HStack(spacing: 2) {
+                                Circle()
+                                    .fill(Color.bioEmerald)
+                                    .frame(width: 5, height: 5)
+                                Text("LIVE")
+                                    .font(.system(size: 9, weight: .heavy))
+                            }
+                            .foregroundColor(.bioEmerald)
+                        } else {
+                            // 🔧 NEW: indicate ended rooms (history view)
+                            Text("завершена")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.raveTextTertiary)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(room.code)
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.bioCyan)
+                    Text("код")
+                        .font(.system(size: 8))
+                        .foregroundColor(.raveTextTertiary)
+                }
+            }
+            .contentShape(Rectangle())  // весь HStack — tappable
+            .onTapGesture {
+                HapticManager.impact(.light)
+                navigateToRoom = room
             }
 
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(room.code)
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundColor(.bioCyan)
-                Text("код")
-                    .font(.system(size: 8))
-                    .foregroundColor(.raveTextTertiary)
+            // ── Delete button (separate, doesn't trigger navigation) ──
+            Button {
+                HapticManager.impact(.medium)
+                roomToDelete = room
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.raveDanger)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(Color.raveDanger.opacity(0.1))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.raveDanger.opacity(0.3), lineWidth: 0.5)
+                    )
             }
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12))
-                .foregroundColor(.raveTextTertiary)
+            .buttonStyle(.plain)
+            .disabled(isDeleting)
         }
         .padding(14)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+                .stroke(
+                    room.isActive
+                        ? Color.white.opacity(0.06)
+                        : Color.white.opacity(0.03),  // ended rooms — dimmer border
+                    lineWidth: 0.5
+                )
         )
-        // 🔧 NEW: long-press context menu → delete room (host only)
-        .contextMenu {
-            ControlGroup {
-                Button {
-                    HapticManager.impact(.medium)
-                    roomToDelete = room
-                } label: {
-                    Label("Удалить комнату", systemImage: "trash")
-                }
-            }
-            .controlGroupStyle(.compactMenu)
-        }
     }
 }
 

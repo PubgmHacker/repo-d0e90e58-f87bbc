@@ -106,6 +106,10 @@
 		F2C0C87435A63FAF6B0DB111 /* ServiceBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18793C12382C80F5DFD7D121 /* ServiceBrowserView.swift */; };
 		F76C6F3631908AB6464F2275 /* StreamReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308FEC240508CE4128B8AE01 /* StreamReceiver.swift */; };
 		FA017EE2154FF2E72E2B0F4E /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90929E1C056E5DE84984B92E /* StoreManager.swift */; };
+		5AF4A24FFE80452487387900 /* BubbleStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80EE110CE7BC40DB89F68B54 /* BubbleStyle.swift */; };
+		53485412AA044C7C877E3C95 /* StyledChatBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23C0592367D4639B61E2D1F /* StyledChatBubble.swift */; };
+		EEA5A576E8ED4B77BD2426AC /* ChatAppearanceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1939DFFB43F34719936C8172 /* ChatAppearanceSheet.swift */; };
+		61975DEF512643018DFA76B1 /* BubbleStylePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633441F3FC24464085D1D9DB /* BubbleStylePickerSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -211,6 +215,10 @@
 		F8D8246EBA71FB1F118F7EC2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F9B51CED228CB76EC394EFF7 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		FA57BE41DCC7665D62F6558F /* ParticipantBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantBadge.swift; sourceTree = "<group>"; };
+		80EE110CE7BC40DB89F68B54 /* BubbleStyle.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "BubbleStyle.swift"; sourceTree = "<group>"; };
+		B23C0592367D4639B61E2D1F /* StyledChatBubble.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "StyledChatBubble.swift"; sourceTree = "<group>"; };
+		1939DFFB43F34719936C8172 /* ChatAppearanceSheet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "ChatAppearanceSheet.swift"; sourceTree = "<group>"; };
+		633441F3FC24464085D1D9DB /* BubbleStylePickerSheet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "BubbleStylePickerSheet.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -244,6 +252,7 @@
 		214303C545054A5EF86379FE /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				80EE110CE7BC40DB89F68B54 /* BubbleStyle.swift */,
 				BEC4BDA09D1C2EAD50D92CFB /* DirectMessage.swift */,
 				0FB572D74BBCA285B4EBA85F /* Friendship.swift */,
 				E79E73D60DFB7D1CB7793FCB /* MediaItem.swift */,
@@ -351,6 +360,7 @@
 		90FDFEB95E379F6426DF2417 /* Room */ = {
 			isa = PBXGroup;
 			children = (
+				B23C0592367D4639B61E2D1F /* StyledChatBubble.swift */,
 				EBF226DF4CBF7C89A3BEDAA9 /* AdPlayerView.swift */,
 				2D9E8E9CB378AC660548C206 /* AmbilightBackground.swift */,
 				F51BB46A9532270FAA961502 /* ChatSlidePanel.swift */,
@@ -395,6 +405,8 @@
 		AA43E4AAE8CCD5F2673285DA /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				633441F3FC24464085D1D9DB /* BubbleStylePickerSheet.swift */,
+				1939DFFB43F34719936C8172 /* ChatAppearanceSheet.swift */,
 				7DB6329E62D8C688D35D0383 /* LanguagePickerView.swift */,
 				A913136D8619A01F247C2135 /* NotificationsView.swift */,
 				54BD1AF1047F7DDDA8B618D9 /* PrivacySettingsView.swift */,
@@ -578,6 +590,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				61975DEF512643018DFA76B1 /* BubbleStylePickerSheet.swift in Sources */,
+				EEA5A576E8ED4B77BD2426AC /* ChatAppearanceSheet.swift in Sources */,
+				53485412AA044C7C877E3C95 /* StyledChatBubble.swift in Sources */,
+				5AF4A24FFE80452487387900 /* BubbleStyle.swift in Sources */,
 				51EEE5BA33137558F57C4A98 /* AIAssistantView.swift in Sources */,
 				08E357CDDAF3E9FA6F154670 /* AIService.swift in Sources */,
 				EC7AAC0759CFCD8F552F6D76 /* APIClient.swift in Sources */,

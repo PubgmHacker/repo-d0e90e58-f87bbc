@@ -343,23 +343,32 @@ struct RoomChatBubble: View {
 
     @ViewBuilder
     private var avatarView: some View {
-        // 🔧 FIX: check local avatar first (ProfileViewModel.sharedAvatar),
-        // then try URL, then fallback to initials.
-        if let localImg = ProfileViewModel.sharedAvatar,
-           message.senderID == (currentUserID ?? UserDefaults.standard.string(forKey: "plink_current_user_id")) {
+        // 🔧 FIX: For own messages, check local avatar first (ProfileViewModel.sharedAvatar).
+        // For other users, use senderAvatarURL from backend broadcast.
+        // Fallback to initials placeholder if no avatar available.
+        let isOwn = message.senderID == (currentUserID ?? UserDefaults.standard.string(forKey: "plink_current_user_id"))
+
+        if isOwn, let localImg = ProfileViewModel.sharedAvatar {
+            // Own message + local avatar image available
             Image(uiImage: localImg)
                 .resizable()
                 .scaledToFill()
-        } else if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
+        } else if let avatarURL = message.senderAvatarURL,
+                  !avatarURL.isEmpty,
+                  let url = URL(string: avatarURL) {
+            // Other user's message with avatar URL from backend
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFill()
-                default:
+                case .failure:
+                    avatarPlaceholder
+                @unknown default:
                     avatarPlaceholder
                 }
             }
         } else {
+            // No avatar available — show initials
             avatarPlaceholder
         }
     }

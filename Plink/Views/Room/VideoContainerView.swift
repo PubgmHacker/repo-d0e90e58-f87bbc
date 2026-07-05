@@ -398,11 +398,18 @@ struct WebVideoView: UIViewRepresentable {
             // 🔧 v24: ALL YouTube paths (backend player + direct embed + nocookie)
             // go through PlinkSchemeHandler via Coordinator.
             // NO direct webView.load() — that causes 153.
-            let videoId = url.lastPathComponent
+            //
+            // 🔧 v29 BUG FIX: previous code did `url.lastPathComponent` which for
+            // the broken URL "youtube-nocookie.com/embed/watch?v=VIDEO_ID" returns
+            // "watch" (not a video ID). With v29 fix in RoomSetupView, the URL is
+            // now correctly "youtube-nocookie.com/embed/VIDEO_ID" so lastPathComponent
+            // returns the proper video ID. But we ALSO support watch?v= URLs as a
+            // safety net — extract video ID properly via query param OR path.
+            let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
-            print("📺 YouTube v24: makeUIView → Coordinator.loadVideoOnce")
+            print("📺 YouTube v29: makeUIView → Coordinator.loadVideoOnce, videoId='\(videoId)', url='\(urlString.prefix(80))'")
             context.coordinator.loadVideoOnce(id: videoId, webView: webView)
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -567,9 +574,56 @@ final class VideoTimeBridge: NSObject, WKScriptMessageHandler {
                                didReceive message: WKScriptMessage) {
         if let time = message.body as? Double { closure(time) }
     }
-}
 
-// MARK: - Video Placeholder
+    // MARK: - YouTube Video ID Extraction (v29)
+    // NOTE: this static helper lives here in VideoTimeBridge as a convenient
+    // location — it's stateless and doesn't depend on VideoTimeBridge itself.
+    // WebVideoView calls it via VideoTimeBridge.extractYouTubeVideoID(from:).
+
+    /// 🔧 v29 (July 2026): Properly extract video ID from any YouTube URL format.
+    /// Same logic as RoomSetupView.extractYouTubeVideoID — duplicated here to
+    /// keep WebVideoView self-contained.
+    ///
+    /// Supports:
+    ///   - https://www.youtube.com/watch?v=VIDEO_ID
+    ///   - https://m.youtube.com/watch?v=VIDEO_ID
+    ///   - https://youtu.be/VIDEO_ID
+    ///   - https://www.youtube.com/embed/VIDEO_ID
+    ///   - https://www.youtube-nocookie.com/embed/VIDEO_ID
+    ///   - https://www.youtube.com/shorts/VIDEO_ID
+    private static func extractYouTubeVideoID(from url: URL) -> String? {
+        let urlString = url.absoluteString
+        let host = url.host?.lowercased() ?? ""
+        guard host.contains("youtube.com") || host.contains("youtu.be") || host.contains("youtube-nocookie.com") else {
+            return nil
+        }
+
+        // Format 1: youtube.com/watch?v=VIDEO_ID
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           let videoId = components.queryItems?.first(where: { $0.name == "v" })?.value,
+           !videoId.isEmpty {
+            return videoId
+        }
+
+        // Format 2: youtu.be/VIDEO_ID or /embed/VIDEO_ID or /shorts/VIDEO_ID
+        let pathSegments = url.path.split(separator: "/").map(String.init)
+        if let lastSegment = pathSegments.last,
+           lastSegment != "watch" && lastSegment.count >= 6 && lastSegment.count <= 20 {
+            return lastSegment
+        }
+
+        // Format 3: backend player URL — /api/media/youtube-player?id=VIDEO_ID
+        if urlString.contains("youtube-player") || urlString.contains("youtube-embed") {
+            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let videoId = components.queryItems?.first(where: { $0.name == "id" })?.value,
+               !videoId.isEmpty {
+                return videoId
+            }
+        }
+
+        return nil
+    }
+}
 
 struct VideoPlaceholder: View {
     var body: some View {

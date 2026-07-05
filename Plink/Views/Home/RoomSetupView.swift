@@ -435,7 +435,7 @@ struct RoomSetupView: View {
             let finalSource: MediaItem.MediaSource
 
             if service == .youtube {
-                // 🔧 v14 (July 2026): YouTube IFrame embed — proper configuration.
+                // 🔧 v29 (July 2026): YouTube IFrame embed — proper configuration.
                 //
                 // Based on analysis of how Rave/Discord Activities work:
                 // 1. Use youtube-nocookie.com (weaker bot detection)
@@ -445,12 +445,39 @@ struct RoomSetupView: View {
                 // 5. Standard mobile Safari UA (cbr=Safari+Mobile, not cbr=Webview)
                 // 6. Clean WKWebView (no scripts/handlers/CSS that trigger detection)
                 //
-                // This exact combination has NEVER been tried before. Previous
-                // attempts always missed at least one of these requirements.
-                let videoId = contentURL.components(separatedBy: "/").last ?? ""
-                finalStreamURL = "https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&origin=https://plink.app&widget_referrer=https://plink.app"
+                // 🔧 v29 BUG FIX: previous code did `contentURL.components(separatedBy: "/").last`
+                // which for "https://www.youtube.com/watch?v=VIDEO_ID" returns "watch?v=VIDEO_ID"
+                // (the WHOLE query string), NOT the video ID. Result: the embed URL became
+                // "youtube-nocookie.com/embed/watch?v=VIDEO_ID?playsinline=1&..." which has
+                // TWO `?` signs (broken URL) and YouTube returns error 153 because
+                // "watch?v=VIDEO_ID" is not a valid video ID.
+                //
+                // FIX: properly parse the video ID from any YouTube URL format:
+                //   - youtube.com/watch?v=VIDEO_ID → query param v
+                //   - youtu.be/VIDEO_ID → last path component
+                //   - youtube.com/embed/VIDEO_ID → last path component
+                //   - youtube-nocookie.com/embed/VIDEO_ID → last path component
+                let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? ""
+                guard !videoId.isEmpty else {
+                    print("❌ RoomSetupView: failed to extract YouTube video ID from '\(contentURL)'")
+                    await MainActor.run {
+                        errorMessage = "Не удалось извлечь ID видео из ссылки"
+                    }
+                    return
+                }
+                // Build embed URL using URLComponents so query params are properly encoded
+                var embedComponents = URLComponents(string: "https://www.youtube-nocookie.com/embed/\(videoId)")!
+                embedComponents.queryItems = [
+                    URLQueryItem(name: "playsinline", value: "1"),
+                    URLQueryItem(name: "rel", value: "0"),
+                    URLQueryItem(name: "modestbranding", value: "1"),
+                    URLQueryItem(name: "iv_load_policy", value: "3"),
+                    URLQueryItem(name: "origin", value: "https://plink.app"),
+                    URLQueryItem(name: "widget_referrer", value: "https://plink.app"),
+                ]
+                finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube-nocookie.com/embed/\(videoId)"
                 finalSource = .youtube
-                print("🔧 RoomSetupView: YouTube nocookie embed + origin + widget_referrer (v14)")
+                print("🔧 RoomSetupView v29: YouTube embed URL='\(finalStreamURL)', videoId='\(videoId)'")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource
@@ -550,5 +577,48 @@ struct RoomSetupView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - YouTube Video ID Extraction
+
+    /// 🔧 v29 (July 2026): Properly extract video ID from any YouTube URL format.
+    ///
+    /// Supports:
+    ///   - https://www.youtube.com/watch?v=VIDEO_ID
+    ///   - https://m.youtube.com/watch?v=VIDEO_ID&feature=shared
+    ///   - https://youtu.be/VIDEO_ID?si=...
+    ///   - https://www.youtube.com/embed/VIDEO_ID
+    ///   - https://www.youtube-nocookie.com/embed/VIDEO_ID
+    ///   - https://www.youtube.com/shorts/VIDEO_ID
+    ///
+    /// Returns nil if the URL doesn't match any known YouTube format.
+    private static func extractYouTubeVideoID(from urlString: String) -> String? {
+        guard let url = URL(string: urlString) else { return nil }
+        let host = url.host?.lowercased() ?? ""
+        guard host.contains("youtube.com") || host.contains("youtu.be") || host.contains("youtube-nocookie.com") else {
+            return nil
+        }
+
+        // Format 1: youtube.com/watch?v=VIDEO_ID (also m.youtube.com)
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           let videoId = components.queryItems?.first(where: { $0.name == "v" })?.value,
+           !videoId.isEmpty {
+            return videoId
+        }
+
+        // Format 2: youtu.be/VIDEO_ID or youtube.com/embed/VIDEO_ID or /shorts/VIDEO_ID
+        let pathSegments = url.path.split(separator: "/").map(String.init)
+        if !pathSegments.isEmpty {
+            let lastSegment = pathSegments.last!
+            // For /embed/VIDEO_ID and /shorts/VIDEO_ID → last segment IS the video ID
+            // For youtu.be/VIDEO_ID → last segment IS the video ID
+            // For /watch → last segment is "watch" (not a video ID), skip
+            if lastSegment != "watch" && lastSegment.count >= 6 && lastSegment.count <= 20 {
+                // YouTube video IDs are 11 chars, but allow some flexibility
+                return lastSegment
+            }
+        }
+
+        return nil
     }
 }

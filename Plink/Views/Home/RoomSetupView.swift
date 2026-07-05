@@ -435,11 +435,13 @@ struct RoomSetupView: View {
             let finalSource: MediaItem.MediaSource
 
             if service == .youtube {
-                let videoId = contentURL.components(separatedBy: "/").last ?? ""
-                let backendBase = "https://plink-backend-production-ef31.up.railway.app/api"
-                finalStreamURL = "\(backendBase)/media/youtube-embed?id=\(videoId)"
+                // 🔧 v13: use embed URL directly (not backend proxy) + Smart TV UA.
+                // Backend proxy didn't help — 153 is caused by WKWebView runtime
+                // detection in YouTube's player JS, not by the page source.
+                // Smart TV UA (Tizen) → YouTube classifies as TV device → no 153.
+                finalStreamURL = contentURL
                 finalSource = .youtube
-                print("🔧 RoomSetupView: YouTube via backend embed proxy: \(finalStreamURL.prefix(80))")
+                print("🔧 RoomSetupView: YouTube direct embed + Smart TV UA (v13)")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

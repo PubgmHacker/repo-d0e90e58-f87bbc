@@ -28,7 +28,10 @@ final class AIService: ObservableObject {
     /// Default model — Claude 3.5 Sonnet (good balance of quality + speed).
     /// Other options: "openai/gpt-4o", "google/gemini-flash-1.5",
     /// "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat"
-    private let defaultModel = "anthropic/claude-3.5-sonnet"
+    // 🔧 FIX: use free model — user has free OpenRouter key, claude-3.5-sonnet is paid.
+    // Free models on OpenRouter: meta-llama/llama-3.2-3b-instruct:free,
+    // google/gemma-2-9b-it:free, mistralai/mistral-7b-instruct:free
+    private let defaultModel = "meta-llama/llama-3.2-3b-instruct:free"
 
     /// Lighter model for quick recommendations (faster + cheaper).
     private let lightModel = "google/gemini-flash-1.5"

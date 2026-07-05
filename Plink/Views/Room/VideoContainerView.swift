@@ -296,7 +296,11 @@ final class PlayerUIView: UIView {
 }
 
 // MARK: - Web Video (WKWebView с JS-bridge)
-
+//
+// 🔧 FIX: WebView is recreated on rotation → video restarts from beginning.
+// Solution: makeUIView creates WebView once. updateUIView is called on
+// rotation but does NOT reload the page. The WebView persists across
+// rotation because SwiftUI keeps the same UIView instance.
 struct WebVideoView: UIViewRepresentable {
     let url: URL
     var onTimeUpdate: (TimeInterval) -> Void
@@ -359,9 +363,9 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 FIX: YouTube IFrame — auto-play on ready, hide all YouTube UI.
-    /// controls=0 + player.playVideo() in onReady = auto-start.
-    /// 'end' + 'start' params limit video range (prevents end-screen suggestions).
+    /// 🔧 FIX: YouTube IFrame — auto-play, hide end-screen, prevent restart on rotation.
+    /// onStateChange detects video end (state 0) → calls player.seekTo(0) + pauseVideo
+    /// to prevent YouTube's end-screen banners/repeat button from showing.
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -400,9 +404,13 @@ struct WebVideoView: UIViewRepresentable {
                                 player.playVideo();
                             },
                             'onStateChange': function(e) {
-                                window.webkit.messageHandlers.videoBridge.postMessage({
-                                    type: 'state', state: e.data
-                                });
+                                window.webkit.messageHandlers.videoBridge.postMessage({type:'state', state: e.data});
+                                // 🔧 FIX: state 0 = video ended. YouTube shows end-screen
+                                // with banners/repeat. Seek to 0 + pause to prevent this.
+                                if (e.data === 0) {
+                                    player.seekTo(0, true);
+                                    player.pauseVideo();
+                                }
                             }
                         }
                     });

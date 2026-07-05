@@ -280,11 +280,6 @@ struct RoomView: View {
 
                 VideoContainerView(
                     mediaURL: mediaItem.streamURL,
-                    // 🔧 FIX: was hardcoded `.directStream` — but YouTube embed URLs
-                    // and cinema sites are HTML pages that AVPlayer can't play.
-                    // Now: consult mediaItem.effectivePlaybackMode which picks
-                    // .webview for HTML pages (YouTube embed, cinema) and
-                    // .directStream for actual video files (.mp4, .m3u8).
                     playbackMode: mediaItem.effectivePlaybackMode,
                     isPlaying: viewModel.syncEngine.isPlaying,
                     currentTime: viewModel.syncEngine.currentTime,
@@ -297,7 +292,8 @@ struct RoomView: View {
                 videoPlaceholder
             }
 
-            // Оверлей контролов (по центру видео)
+            // 🔧 OUR controls overlay — ALWAYS visible (YouTube controls are hidden
+            // via controls=0 in embed HTML, so only Plink controls show).
             ControlsOverlay(
                 isPlaying: viewModel.syncEngine.isPlaying,
                 currentTime: viewModel.syncEngine.currentTime,
@@ -320,7 +316,6 @@ struct RoomView: View {
                 },
                 onClose: {
                     if isFullscreen {
-                        // Из fullscreen → обратно в портрет
                         exitFullscreen()
                     } else {
                         Task {

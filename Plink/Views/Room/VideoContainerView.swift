@@ -2,6 +2,38 @@ import SwiftUI
 import AVKit
 import WebKit
 
+// MARK: - WebViewControl (singleton for JS bridge to WKWebView)
+//
+// 🔧 NEW: SyncEngine calls WebViewControl.shared.play()/pause()/seek() when
+// in webview mode (player == nil). This singleton holds a weak reference to
+// the active WKWebView and evaluates JavaScript to control the YouTube player.
+@MainActor
+final class WebViewControl {
+    static let shared = WebViewControl()
+    private weak var webView: WKWebView?
+
+    func register(_ webView: WKWebView) {
+        self.webView = webView
+    }
+
+    func unregister() {
+        self.webView = nil
+    }
+
+    func play() {
+        webView?.evaluateJavaScript("if(typeof player!=='undefined'&&player.playVideo){player.playVideo();} else {document.getElementById('player').contentWindow.postMessage('{\"event\":\"command\",\"func\":\"playVideo\",\"args\":[]}','*');}", completionHandler: nil)
+    }
+
+    func pause() {
+        webView?.evaluateJavaScript("if(typeof player!=='undefined'&&player.pauseVideo){player.pauseVideo();} else {document.getElementById('player').contentWindow.postMessage('{\"event\":\"command\",\"func\":\"pauseVideo\",\"args\":[]}','*');}", completionHandler: nil)
+    }
+
+    func seek(to time: TimeInterval) {
+        let js = "if(typeof player!=='undefined'&&player.seekTo){player.seekTo(\(time),true);}"
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+}
+
 // MARK: - Video Container View v2
 /// Контейнер видео с соотношением 16:9, центрированный по горизонтали.
 ///
@@ -295,9 +327,9 @@ struct WebVideoView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
-        // 🔧 FIX: YouTube blocks mobile WKWebView UA (error 153).
-        // Use DESKTOP Safari UA — YouTube doesn't restrict desktop embeds.
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        // 🔧 Register webView so SyncEngine can send play/pause/seek via JS
+        WebViewControl.shared.register(webView)
 
         // 🔧 FIX: YouTube blocks /embed/ in WKWebView with error 153.
         // Solution: use youtube-nocookie.com domain — it's YouTube's privacy-
@@ -335,9 +367,13 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 FIX: Custom YouTube IFrame embed HTML using youtube-nocookie.com.
-    /// fs=0 disables YouTube's fullscreen button (prevents YouTube taking
-    /// control in landscape). controls=1 keeps play/pause/seek bar.
+    /// 🔧 FIX: YouTube IFrame with ALL controls hidden — only Plink controls visible.
+    /// Uses YouTube IFrame API for JS control (playVideo/pauseVideo/seekTo).
+    /// controls=0 hides YouTube's play/pause/seek bar
+    /// fs=0 disables fullscreen button
+    /// disablekb=1 disables keyboard shortcuts
+    /// iv_load_policy=3 hides annotations
+    /// pointer-events:none on iframe prevents user tapping YouTube UI
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -348,15 +384,36 @@ struct WebVideoView: UIViewRepresentable {
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
                 #player { width: 100%; height: 100%; }
-                iframe { width: 100%; height: 100%; border: none; }
+                iframe { width: 100%; height: 100%; border: none; pointer-events: none; }
             </style>
         </head>
         <body>
-            <iframe id="player" type="text/html"
-                src="https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&enablejsapi=1&modestbranding=1&fs=0&origin=https://www.youtube-nocookie.com"
-                frameborder="0"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                ></iframe>
+            <div id="player"></div>
+            <script src="https://www.youtube.com/iframe_api"></script>
+            <script>
+                var player;
+                function onYouTubeIframeAPIReady() {
+                    player = new YT.Player('player', {
+                        videoId: '\(videoId)',
+                        playerVars: {
+                            'playsinline': 1,
+                            'rel': 0,
+                            'enablejsapi': 1,
+                            'modestbranding': 1,
+                            'fs': 0,
+                            'controls': 0,
+                            'disablekb': 1,
+                            'iv_load_policy': 3,
+                            'origin': 'https://www.youtube-nocookie.com'
+                        },
+                        events: {
+                            'onReady': function(e) {
+                                window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
+                            }
+                        }
+                    });
+                }
+            </script>
         </body>
         </html>
         """

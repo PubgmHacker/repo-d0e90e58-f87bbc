@@ -303,17 +303,13 @@ struct ProfileView: View {
     @ViewBuilder
     private var premiumBanner: some View {
         if isPremium {
-            // ── Статус подписки: «Plink Premium активен до: [дата]» ──
             let expiryDate = PremiumStatusManager.shared.subscriptionExpiry ?? Date().addingTimeInterval(30 * 86400)
             let formatter = DateFormatter()
             let _ = { formatter.locale = Locale(identifier: "ru_RU"); formatter.dateFormat = "d MMMM yyyy" }()
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(
-                            LinearGradient(colors: [Color.bioCyan.opacity(0.2), Color.bioEmerald.opacity(0.15)],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
+                        .fill(Color.bioCyan.opacity(0.15))
                         .frame(width: 44, height: 44)
                     Image(systemName: "sparkles")
                         .font(.system(size: 20))
@@ -324,6 +320,7 @@ struct ProfileView: View {
                     Text("Плинк+ активен")
                         .font(.subheadline.bold())
                         .foregroundColor(.white)
+                        .textStroke()
                     Text("Действует до \(formatter.string(from: expiryDate))")
                         .font(.caption)
                         .foregroundColor(.raveTextSecondary)
@@ -337,31 +334,24 @@ struct ProfileView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .glassCard(cornerRadius: 16, opacity: 0.06)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.bioCyan.opacity(0.2), lineWidth: 0.5)
-            )
+            .telegramGlass(cornerRadius: 16, borderColor: Color.bioCyan.opacity(0.25))
         } else {
-            // Кнопка оформления подписки — стильная, не убогая
             Button { showPaywall = true } label: {
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
-                            .fill(
-                                LinearGradient(colors: [Color.ravePrimary.opacity(0.2), Color.raveAccent.opacity(0.15)],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                            )
+                            .fill(Color.bioCyan.opacity(0.15))
                             .frame(width: 44, height: 44)
                         Image(systemName: "sparkles")
                             .font(.system(size: 20))
-                            .foregroundColor(.ravePrimary)
+                            .foregroundColor(.bioCyan)
                     }
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Оформить Premium")
+                        Text("Оформить Плинк+")
                             .font(.subheadline.bold())
                             .foregroundColor(.white)
+                            .textStroke()
                         Text("Без рекламы · 4K · Дизайн · Бейдж")
                             .font(.caption)
                             .foregroundColor(.raveTextSecondary)
@@ -371,42 +361,38 @@ struct ProfileView: View {
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundColor(.ravePrimary)
+                        .foregroundColor(.raveTextSecondary)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
-                .glassCard(cornerRadius: 16, opacity: 0.06)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.ravePrimary.opacity(0.2), lineWidth: 0.5)
-                )
+                .telegramGlass(cornerRadius: 16)
             }
             .buttonStyle(.plain)
         }
     }
 
-    // MARK: - Activity Block (что смотрит сейчас + последние просмотры)
+    // MARK: - Activity Block
 
     private var activityBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
                     .font(.system(size: 14))
-                    .foregroundColor(.ravePrimary)
+                    .foregroundColor(.bioCyan)
                 Text("Активность")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
+                    .textStroke()
             }
 
-            // Что сейчас смотрит (если есть активная комната)
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(Color.raveGreen.opacity(0.15))
+                        .fill(Color.bioEmerald.opacity(0.15))
                         .frame(width: 40, height: 40)
                     Image(systemName: "play.fill")
                         .font(.system(size: 16))
-                        .foregroundColor(.raveGreen)
+                        .foregroundColor(.bioEmerald)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -418,15 +404,15 @@ struct ProfileView: View {
                         .foregroundColor(.raveTextSecondary)
                 }
                 Spacer()
-                PulsingDot(color: .raveGreen).frame(width: 8, height: 8)
+                PulsingDot(color: .bioEmerald).frame(width: 8, height: 8)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .glassCard(cornerRadius: 14, opacity: 0.04)
+            .telegramGlass(cornerRadius: 14)
         }
     }
 
-    // MARK: - Stats (кликабельные)
+    // MARK: - Stats
 
     private var statsRow: some View {
         HStack(spacing: 0) {
@@ -437,7 +423,7 @@ struct ProfileView: View {
             statBox(value: "\(friendManager?.friends.count ?? 0)", label: loc.string(.profileStatsFriends))
         }
         .padding(.vertical, 16)
-        .glassCard(cornerRadius: 18, opacity: 0.04)
+        .telegramGlass(cornerRadius: 18)
     }
 
     private func statBox(value: String, label: String) -> some View {
@@ -453,7 +439,7 @@ struct ProfileView: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: - Watch History (горизонтальная карусель постеров)
+    // MARK: - Watch History
 
     private var watchHistorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -461,6 +447,7 @@ struct ProfileView: View {
                 Text(loc.string(.profileHistory))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
+                    .textStroke()
                 Spacer()
                 if !viewModel.history.isEmpty {
                     Button(loc.string(.profileClear)) { viewModel.clearHistory() }
@@ -480,9 +467,8 @@ struct ProfileView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
-                .glassCard(cornerRadius: 16, opacity: 0.04)
+                .telegramGlass(cornerRadius: 16)
             } else {
-                // Горизонтальная карусель постеров
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(viewModel.history) { item in

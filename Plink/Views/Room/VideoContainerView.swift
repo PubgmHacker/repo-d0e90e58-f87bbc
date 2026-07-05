@@ -318,12 +318,12 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
-
-        // 🔧 v19: persistent cookies for ALL WebViews (YouTube needs CONSENT cookie)
-        // On iOS 15+, all WKWebViews using WKWebsiteDataStore.default() automatically
-        // share the same process pool and cookies — no explicit WKProcessPool needed
-        // (deprecated since iOS 15).
         config.websiteDataStore = WKWebsiteDataStore.default()
+
+        // 🔧 v24: register custom URL scheme handler — serves YouTube player
+        // HTML from memory. No network → no sandbox → no ATS → no DownloadFailed.
+        // URL: plink-media://plink.app/?v=VIDEO_ID (host = plink.app, not localhost)
+        config.setURLSchemeHandler(PlinkSchemeHandler(), forURLScheme: "plink-media")
 
         let isYouTubeLike = isYouTube || isBackendPlayer
 
@@ -519,13 +519,15 @@ struct WebVideoView: UIViewRepresentable {
             guard id != loadedVideoId else { return }
             self.loadedVideoId = id
 
-            // 🔧 v23: load from local HTTP server (localhost) — no ATS, no sandbox issues
-            let localPort = PlinkLocalServer.shared.port
-            let playerURLString = "http://localhost:\(localPort)/?v=\(id)"
+            // 🔧 v24: custom URL scheme — plink-media://plink.app/?v=VIDEO_ID
+            // PlinkSchemeHandler intercepts this and serves HTML from memory.
+            // No network → no sandbox → no ATS → no DownloadFailed.
+            // Host is plink.app (not localhost) → YouTube sees legitimate domain.
+            let playerURLString = "plink-media://plink.app/?v=\(id)"
             guard let url = URL(string: playerURLString) else { return }
 
-            print("📺 YouTube v23: loading via localhost:\(localPort) (no sandbox, no ATS)")
-            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10.0)
+            print("📺 YouTube v24: loading via plink-media:// scheme handler (no network, no sandbox)")
+            let request = URLRequest(url: url)
             DispatchQueue.main.async {
                 webView.load(request)
             }

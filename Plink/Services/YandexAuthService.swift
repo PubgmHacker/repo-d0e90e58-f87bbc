@@ -54,7 +54,7 @@ final class YandexAuthService: NSObject, ObservableObject {
         super.init()
 
         // Восстанавливаем токен из Keychain при запуске
-        if let token = KeychainHelper.shared.read(for: "yandex_jwt"),
+        if let token = KeychainHelper.read(for: "yandex_jwt"),
            !token.isEmpty {
             isAuthenticated = true
             Task { await fetchProfile(token: token) }
@@ -92,7 +92,7 @@ final class YandexAuthService: NSObject, ObservableObject {
 
             // 2. Обмениваем code на JWT через backend
             let token = try await exchangeCodeForToken(code)
-            KeychainHelper.shared.save(token, for: "yandex_jwt")
+            KeychainHelper.save(token, for: "yandex_jwt")
 
             // 3. Загружаем профиль
             await fetchProfile(token: token)
@@ -122,7 +122,7 @@ final class YandexAuthService: NSObject, ObservableObject {
         isAuthenticated = false
         isPlus = false
         user = nil
-        KeychainHelper.shared.delete(for: "yandex_jwt")
+        KeychainHelper.delete(for: "yandex_jwt")
     }
 
     // MARK: - ASWebAuthenticationSession
@@ -236,6 +236,7 @@ private struct YandexProfileResponse: Codable {
 enum YandexAuthError: LocalizedError {
     case missingCode
     case exchangeFailed
+    case clientIDNotConfigured
 
     var errorDescription: String? {
         switch self {
@@ -243,58 +244,11 @@ enum YandexAuthError: LocalizedError {
             return "Не удалось получить код авторизации от Яндекса."
         case .exchangeFailed:
             return "Не удалось обменять код на токен. Попробуйте позже."
-        }
-    }
-}
-
-// MARK: - Keychain Helper
-
-final class KeychainHelper {
-    static let shared = KeychainHelper()
-    private init() {}
-
-    func save(_ value: String, for key: String) {
-        guard let data = value.data(using: .utf8) else { return }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-        ]
-        SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
-    }
-
-    func read(for key: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        SecItemCopyMatching(query as CFDictionary, &result)
-        guard let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    func delete(for key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-        ]
-        SecItemDelete(query as CFDictionary)
-    }
-}
-
-// MARK: - Yandex Auth Errors
-/// 🔧 FIX C14: Clear error for misconfigured Yandex client ID
-enum YandexAuthError: LocalizedError {
-    case clientIDNotConfigured
-
-    var errorDescription: String? {
-        switch self {
         case .clientIDNotConfigured:
             return "Yandex Client ID не настроен. Установите YANDEX_CLIENT_ID в xcconfig."
         }
     }
 }
+
+// MARK: - Yandex Auth Errors
+/// 🔧 FIX C14: Clear error for misconfigured Yandex client ID — merged into YandexAuthError above.

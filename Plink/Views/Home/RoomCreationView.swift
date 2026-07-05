@@ -235,7 +235,7 @@ struct RoomCreationView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
-                    if friendManager.friends.isEmpty {
+                    if (friendManager?.friends.isEmpty ?? true) {
                         VStack(spacing: 14) {
                             Image(systemName: "person.2.slash")
                                 .font(.system(size: 44))
@@ -255,7 +255,7 @@ struct RoomCreationView: View {
                             .font(.subheadline.bold())
                             .foregroundColor(.raveTextPrimary)
 
-                        ForEach(friendManager.friends) { friend in
+                        ForEach(friendManager?.friends ?? []) { friend in
                             friendRow(friend)
                         }
                     }

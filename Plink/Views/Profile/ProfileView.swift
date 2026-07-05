@@ -63,19 +63,9 @@ struct ProfileView: View {
             isPremium = PremiumStatusManager.shared.isPremium
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView(onSignOut: {
-                Task {
-                    try? await viewModel.authService.signOut()
-                    onSignOut()
-                    dismiss()
-                }
-            }, onDeleteAccount: {
-                Task {
-                    await viewModel.deleteAccount()
-                    onSignOut()
-                    dismiss()
-                }
-            })
+            if let concreteAuth = viewModel.authService as? AuthService {
+                SettingsView(isPresented: $showSettings, authService: concreteAuth)
+            }
         }
         .sheet(isPresented: $showEditProfile) {
             EditProfileSheet(viewModel: viewModel)
@@ -343,7 +333,7 @@ struct ProfileView: View {
             Divider().frame(height: 40).background(Color.white.opacity(0.06))
             statBox(value: "\(viewModel.hoursWatched)", label: loc.string(.profileStatsHours))
             Divider().frame(height: 40).background(Color.white.opacity(0.06))
-            statBox(value: "\(friendManager.friends.count)", label: loc.string(.profileStatsFriends))
+            statBox(value: "\(friendManager?.friends.count ?? 0)", label: loc.string(.profileStatsFriends))
         }
         .padding(.vertical, 16)
         .glassCard(cornerRadius: 18, opacity: 0.04)
@@ -570,132 +560,6 @@ struct EditProfileSheet: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Settings View (без друзей — теперь в TabBar)
-struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var loc = LocalizationManager.shared
-    var onSignOut: () -> Void
-    var onDeleteAccount: () -> Void
-
-    @State private var showNotifications = false
-    @State private var showPrivacy = false
-    @State private var showLanguage = false
-    @State private var showDeleteAlert = false
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                AnimatedGradientBackground()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        // Настройки
-                        settingsSection("Настройки") {
-                            settingsRow(icon: "bell.fill", title: loc.string(.profileNotifications), color: .raveWarning) { showNotifications = true }
-                            settingsRow(icon: "shield.fill", title: loc.string(.profilePrivacy), color: .raveGreen) { showPrivacy = true }
-                            settingsRow(icon: "globe", title: loc.string(.profileLanguage), color: .raveAccent) { showLanguage = true }
-                        }
-
-                        // Опасная зона
-                        settingsSection("Опасная зона") {
-                            Button(role: .destructive) {
-                                showDeleteAlert = true
-                            } label: {
-                                HStack {
-                                    Image(systemName: "trash").foregroundColor(.raveDanger)
-                                    Text(loc.string(.profileDeleteAccount)).foregroundColor(.raveDanger)
-                                    Spacer()
-                                    Image(systemName: "chevron.right").font(.caption).foregroundColor(.raveTextSecondary.opacity(0.5))
-                                }
-                            }
-                        }
-
-                        // Выход
-                        Button(action: { dismiss(); onSignOut() }) {
-                            HStack {
-                                Image(systemName: "arrow.right.square.fill")
-                                Text(loc.string(.profileSignOut))
-                                Spacer()
-                            }
-                            .font(.headline)
-                            .foregroundColor(.raveWarning)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 4)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                }
-            }
-            .navigationTitle("Настройки")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.ravePrimary)
-                    }
-                }
-            }
-            .alert(loc.string(.profileDeleteConfirm), isPresented: $showDeleteAlert) {
-                Button(loc.string(.cancel), role: .cancel) {}
-                Button(loc.string(.delete), role: .destructive) {
-                    dismiss()
-                    onDeleteAccount()
-                }
-            } message: {
-                Text(loc.string(.profileDeleteMessage))
-            }
-            .sheet(isPresented: $showPrivacy) {
-                PrivacySettingsView().preferredColorScheme(.dark).presentationDetents([.medium, .large])
-            }
-            .sheet(isPresented: $showLanguage) {
-                LanguagePickerView().preferredColorScheme(.dark).presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showNotifications) {
-                NotificationsView().preferredColorScheme(.dark).presentationDetents([.medium, .large])
-            }
-        }
-    }
-
-    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.caption.bold())
-                .foregroundColor(.raveTextSecondary)
-                .padding(.leading, 4)
-                .padding(.bottom, 8)
-            content()
-        }
-    }
-
-    private func settingsRow(icon: String, title: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundColor(color)
-                    .frame(width: 30, height: 30)
-                    .background(color.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundColor(.raveTextPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.raveTextSecondary.opacity(0.5))
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 4)
-        }
-        .buttonStyle(.plain)
     }
 }
 

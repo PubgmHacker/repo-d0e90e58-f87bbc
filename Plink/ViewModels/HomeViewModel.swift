@@ -91,11 +91,13 @@ final class HomeViewModel {
         }
     }
 
-    func createRoom(name: String, maxParticipants: Int, mediaItem: MediaItem?) async throws -> Room {
+    func createRoom(name: String, maxParticipants: Int, mediaItem: MediaItem?, privacy: RoomPrivacy = .publicRoom, password: String? = nil) async throws -> Room {
         let request = CreateRoomRequest(
             name: name,
             maxParticipants: maxParticipants,
-            mediaItem: mediaItem
+            mediaItem: mediaItem,
+            privacy: privacy,
+            password: password
         )
         let room = try await roomService.createRoom(request)
         rooms.insert(room, at: 0)

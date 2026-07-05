@@ -503,7 +503,7 @@ struct RoomView: View {
         let message = ChatMessage(
             id: UUID().uuidString,
             roomID: room.id,
-            senderID: viewModel?.currentUserId ?? "unknown",
+            senderID: viewModel.currentUserId ?? "unknown",
             senderName: "You",
             text: text,
             timestamp: Date(),

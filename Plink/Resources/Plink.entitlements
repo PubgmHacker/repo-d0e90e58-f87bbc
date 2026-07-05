@@ -1,31 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-        <!-- 🔧 FIX C13: Associated Domains for Universal Links (deep linking) -->
-        <!-- Replace 'raveclone.app' with your actual domain -->
-        <key>com.apple.developer.associated-domains</key>
-        <array>
-                <string>applinks:raveclone.app</string>
-        </array>
-
-        <!-- 🔧 FIX C13: In-App Payments (StoreKit 2 subscriptions) -->
-        <key>com.apple.developer.in-app-payments</key>
-        <array>
-                <string>merchant.com.syncwatch.raveclone</string>
-        </array>
-
-        <!-- 🔧 FIX C13: Push Notifications (FCM via APNs) -->
-        <!-- Use 'development' for TestFlight, 'production' for App Store -->
-        <key>aps-environment</key>
-        <string>development</string>
-
-        <!-- 🔧 FIX C13: Background Modes for voice chat + sync over WS -->
-        <key>com.apple.developer.background-modes</key>
-        <array>
-                <string>audio</string>
-                <string>voip</string>
-                <string>remote-notification</string>
-        </array>
-</dict>
+<dict/>
 </plist>

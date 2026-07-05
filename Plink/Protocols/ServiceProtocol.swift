@@ -20,6 +20,7 @@ protocol RoomServiceProtocol: Sendable {
     func leaveRoom(roomID: String) async throws
     func fetchActiveRooms() async throws -> [Room]
     func fetchRoom(id: String) async throws -> Room
+    func fetchMyRooms() async throws -> [Room]
     func deleteRoom(roomID: String) async throws
 }
 

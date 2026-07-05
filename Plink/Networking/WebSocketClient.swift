@@ -19,7 +19,7 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
     // MARK: - Public State
 
     weak var delegate: WebSocketClientDelegate?
-    private(set) var isConnected: Bool = false
+    nonisolated(unsafe) private(set) var isConnected: Bool = false
 
     /// Synchronous, thread-safe disconnect для вызова из `deinit`.
     /// Не трогает @MainActor state — только underlying socket.
@@ -52,8 +52,8 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
     /// between connectInternal (@MainActor), disconnect (@MainActor),
     /// cancelSocketForDeinit (nonisolated), and sendRaw (background queue).
     private let socketLock = NSLock()
-    private var _socket: URLSessionWebSocketTask?
-    private var socket: URLSessionWebSocketTask? {
+    nonisolated(unsafe) private var _socket: URLSessionWebSocketTask?
+    nonisolated(unsafe) private var socket: URLSessionWebSocketTask? {
         get {
             socketLock.lock(); defer { socketLock.unlock() }
             return _socket
@@ -88,7 +88,7 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol {
 
     private var heartbeatTimer: DispatchSourceTimer?
     private let heartbeatInterval: TimeInterval = 25.0   // < 30s server timeout
-    private var lastPongReceived: TimeInterval = 0
+    nonisolated(unsafe) private var lastPongReceived: TimeInterval = 0
     private var pendingPingTimestamp: TimeInterval?
 
     // MARK: - Message Queue

@@ -148,21 +148,67 @@ struct BioluminescentBackground: View {
 }
 
 // MARK: - Bio Palette
+//
+// 🔧 PER-TAB PALETTES: каждая вкладка имеет свой уникальный фон.
+// .ocean — Home (cyan/emerald/amber/teal/coral — текущий)
+// .crimson — Rooms (тёплые красные/оранжевые — отличает от Home)
+// .amber — AI (тёплые янтарные/коралл — премиум-чувство)
+// .emerald — Friends (зелёные/изумрудные — социальное тепло)
+// .mono — Settings (чёрно-белая палитра с лёгким blue accent)
 enum BioPalette {
-    case ocean
+    case ocean       // Home
     case abyss
     case coral
+    case crimson     // Rooms
+    case amber       // AI
+    case emerald     // Friends
+    case mono        // Settings (B&W)
 
     func color(for index: Int) -> Color {
         let colors: [Color]
         switch self {
         case .ocean:
-            // Pack v3: смешиваем холодные и тёплые для разнообразия
             colors = [Color.bioCyan, Color.bioEmerald, Color.bioAmber, Color.bioTeal, Color.bioCoral]
         case .abyss:
             colors = [Color.bioTeal, Color.bioCyan.opacity(0.8), Color.bioRose, Color.bioTeal]
         case .coral:
             colors = [Color.bioCoral, Color.bioAmber, Color.bioEmerald, Color.bioRose]
+        case .crimson:
+            // 🔧 ROOMS: тёплая палитра — красный/оранжевый/розовый спектр
+            colors = [
+                Color(hex: 0xFF6B35),   // vivid orange
+                Color(hex: 0xFF1538),   // scarlet red
+                Color(hex: 0xFFB800),   // amber
+                Color(hex: 0xE63946),   // coral red
+                Color(hex: 0xFF8C42),   // warm orange
+            ]
+        case .amber:
+            // 🔧 AI: янтарная премиум-палитра
+            colors = [
+                Color.bioAmber,         // 0xFFB454
+                Color.bioCoral,         // 0xFF7B54
+                Color(hex: 0xFFD700),   // gold
+                Color(hex: 0xFF8C00),   // dark orange
+                Color(hex: 0xE6A800),   // deep amber
+            ]
+        case .emerald:
+            // 🔧 FRIENDS: зелёная палитра — социальное тепло
+            colors = [
+                Color.bioEmerald,       // 0x34D399
+                Color.bioTeal,          // 0x14B8A6
+                Color(hex: 0x10B981),   // emerald
+                Color(hex: 0x059669),   // dark emerald
+                Color(hex: 0x6EE7B7),   // light emerald
+            ]
+        case .mono:
+            // 🔧 SETTINGS: чёрно-белая палитра с лёгким steel accent
+            colors = [
+                Color(white: 0.85),    // light grey
+                Color(white: 0.55),    // mid grey
+                Color(white: 0.95),    // near white
+                Color(hex: 0x4A5568),  // steel blue-grey
+                Color(white: 0.65),    // silver
+            ]
         }
         return colors[index % colors.count]
     }
@@ -468,5 +514,45 @@ extension View {
             glow: glow,
             ringColor: ringColor
         ) { self }
+    }
+
+    /// 🔧 TELEGRAM-STYLE: прозрачное жидкое стекло + тонкая металлическая обводка.
+    /// Используется для ВСЕХ кнопок в приложении — единый стиль как у Telegram.
+    /// Особенности:
+    /// - .ultraThinMaterial (жидкое стекло)
+    /// - Чёрная полупрозрачная обводка 0.5pt (metalllic look)
+    /// - Лёгкая внутренняя тень сверху (имитация блика стекла)
+    /// - Без заливки цветом — полностью прозрачный
+    /// - cornerRadius 14 (как у Telegram-кнопок)
+    func telegramGlass(
+        cornerRadius: CGFloat = 14,
+        borderColor: Color = .black.opacity(0.4)
+    ) -> some View {
+        self
+            .background(
+                ZStack {
+                    // Жидкое стекло
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.ultraThinMaterial)
+                    // Верхний блик (glass highlight)
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.12),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: UnitPoint(x: 0.5, y: 0.4)
+                            )
+                        )
+                }
+            )
+            .overlay(
+                // Металлическая обводка
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(borderColor, lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
     }
 }

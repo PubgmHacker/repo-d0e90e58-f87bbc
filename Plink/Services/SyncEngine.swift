@@ -149,7 +149,38 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             return
         }
 
-        let asset = AVAsset(url: url)
+        // 🔧 FIX v8.1 (July 2026): use AVURLAsset with custom HTTP headers
+        // for googlevideo.com URLs (backend yt-dlp extraction results).
+        //
+        // Without proper User-Agent header, AVPlayer gets HTTP 403 from
+        // YouTube's googlevideo CDN → AVPlayer fails with code=-11828
+        // "Не удается открыть" (Cannot Open / noSourceTrack).
+        //
+        // AVAsset(url:) doesn't let you set headers, but AVURLAsset does via
+        // AVURLAssetHTTPHeaderFieldsKey option. We set:
+        //   - User-Agent: real iOS Safari UA (YouTube CDN expects this)
+        //   - Referer: https://www.youtube.com/ (YouTube CDN checks this)
+        //
+        // For non-googlevideo URLs (.mp4 from elsewhere, .m3u8, etc.) we skip
+        // custom headers — they're not needed and could break other CDNs.
+        let asset: AVAsset
+        let lowerURL = item.streamURL.lowercased()
+        if lowerURL.contains("googlevideo.com") {
+            let headers: [String: String] = [
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                "Referer": "https://www.youtube.com/",
+                "Origin": "https://www.youtube.com",
+            ]
+            let options: [String: Any] = [
+                AVURLAssetHTTPHeaderFieldsKey: headers,
+                AVURLAssetPreferPreciseDurationAndTimingKey: true,
+            ]
+            asset = AVURLAsset(url: url, options: options)
+            Logger.sync.info("🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers")
+        } else {
+            asset = AVAsset(url: url)
+        }
+
         let playerItem = AVPlayerItem(asset: asset)
         self.playerItem = playerItem
 

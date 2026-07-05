@@ -319,19 +319,16 @@ export default async function mediaRoutes(fastify, _options) {
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
     reply.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
     reply.header('Access-Control-Allow-Origin', '*');
-    // 🔧 v11.1: override CSP to allow YouTube IFrame API script + iframe
-    // The global securityHeaders sets script-src 'self' which BLOCKS
-    // <script src="https://www.youtube.com/iframe_api">.
-    // We need: script-src from youtube.com + iframe-src from youtube.com
+    // 🔧 v18.1: override CSP — allow youtube-nocookie.com in frame-src
     reply.header('Content-Security-Policy',
-      "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; " +
-      "style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data: https:; " +
-      "media-src 'self' https:; " +
-      "connect-src 'self' wss: https:; " +
-      "frame-src https://www.youtube.com https://youtube.com; " +
-      "child-src https://www.youtube.com https://youtube.com");
+      "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+      "script-src * 'unsafe-inline' 'unsafe-eval'; " +
+      "style-src * 'unsafe-inline'; " +
+      "img-src * data: blob:; " +
+      "media-src *; " +
+      "connect-src * wss:; " +
+      "frame-src *; " +
+      "child-src *;");
 
     const html = youtubePlayerHTML(id);
     return reply.send(html);

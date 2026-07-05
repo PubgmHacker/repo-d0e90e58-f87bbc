@@ -10,7 +10,6 @@ struct RoomChatView: View {
     let messages: [ChatMessage]
     @Binding var chatText: String
     var onSend: () -> Void
-    /// 🔧 Pack v3: ID текущего пользователя для определения "моё/чужое" сообщение
     var currentUserID: String?
 
     /// Layout mode (передаётся из RoomView на основе ориентации)
@@ -29,6 +28,17 @@ struct RoomChatView: View {
     private let charLimit = 150
     /// 🔧 RATE LIMIT: min 1s between chat messages
     @State private var lastSendTime: Date = .distantPast
+
+    // 🔧 Pack v3: Custom init — portrait mode doesn't require isPanelOpen
+    init(messages: [ChatMessage], chatText: Binding<String>, onSend: @escaping () -> Void,
+         currentUserID: String? = nil, mode: LayoutMode, isPanelOpen: Binding<Bool> = .constant(false)) {
+        self.messages = messages
+        self._chatText = chatText
+        self.onSend = onSend
+        self.currentUserID = currentUserID
+        self.mode = mode
+        self._isPanelOpen = isPanelOpen
+    }
 
     enum LayoutMode {
         case portrait   // снизу под видео

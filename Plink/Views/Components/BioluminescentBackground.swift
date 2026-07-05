@@ -17,7 +17,11 @@ struct BioluminescentBackground: View {
     @State private var isInBackground = false
 
     var body: some View {
-        // 🔧 FIX 4.4: Use pausable timeline — renders only when in foreground
+        // 🔧 FIX: Canvas was being constrained to the top portion of the screen
+        // inside NavigationStack + TabView. Adding .frame(maxWidth/maxHeight: .infinity)
+        // forces the Group to fill ALL available space before .ignoresSafeArea() extends it.
+        // Without this, the Canvas size parameter returns a small height and orbs only
+        // render in the top 1/3 — user reported "background cuts off at top".
         Group {
             if !isInBackground {
                 TimelineView(.animation(minimumInterval: 1.0/30.0)) { timeline in
@@ -28,12 +32,11 @@ struct BioluminescentBackground: View {
                     }
                 }
             } else {
-                // Static frame when in background — just the base color
                 Color.bioObsidian
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)  // 🔧 CRITICAL FIX
         .overlay(
-            // Затемнение под плеером
             LinearGradient(
                 colors: [.clear, Color.bioObsidian.opacity(dimming * 0.9)],
                 startPoint: .top,
@@ -42,7 +45,6 @@ struct BioluminescentBackground: View {
             .allowsHitTesting(false)
         )
         .overlay(
-            // Лёгкая зернистость для премиум-текстуры
             Canvas { context, size in
                 drawNoise(context: context, size: size)
             }

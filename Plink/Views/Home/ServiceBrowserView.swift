@@ -355,53 +355,52 @@ struct ServiceWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
-        config.websiteDataStore = WKWebsiteDataStore.default()
 
-        // 🔧 Pack v3: Register message handler for SPA URL changes
+        // 🔧 v25 (July 2026): ISOLATED, NON-PERSISTENT data store for the
+        // search browser.
+        //
+        // The previous call to WKWebsiteDataStore.default() returned the
+        // app-wide SHARED store. That store is shared with VideoContainerView
+        // (the room player), which uses a custom plink-media:// scheme handler
+        // and a modified User-Agent. Once that store accumulated cookies +
+        // cache entries from the room player, YouTube's anti-bot heuristics
+        // flagged it (the WebContent process saw inconsistent fingerprints
+        // across the two contexts) and started returning the consent /
+        // language-selection interstitial on the search screen as well.
+        //
+        // Switching to .nonPersistent() gives the search browser a FRESH,
+        // isolated store on every launch — YouTube sees a clean Safari-like
+        // session and skips the interstitial. Cookies set during search do
+        // NOT persist across app launches, which is fine for a video search
+        // screen (the user is browsing, not logging in here).
+        config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+
+        // 🔧 Pack v3: Register message handler for SPA URL changes.
+        // NOTE: this is a coordinator-only message handler, NOT a script
+        // injection — YouTube's anti-bot JS cannot see it from the page
+        // context (it only sees whatever we add via addUserScript). Keeping
+        // this handler is safe; it does not change the page's fingerprint.
         let contentController = WKUserContentController()
         contentController.add(context.coordinator, name: "plinkURLChange")
 
-        // 🔧 v9.3 (July 2026): REMOVED the viewport-fit script for YouTube.
+        // 🔧 v25: NO injected scripts for YouTube.
         //
-        // v9.1 added a script that injected <meta viewport width=1280
-        // initial-scale=0.32> to scale the desktop YouTube UI down to iPhone
-        // width. That was needed because v9.1 used Mac UA → YouTube served
-        // desktop pages (1280px+ layout).
+        // v9.3 injected an `overflow-x:hidden` style. Even though the script
+        // itself is benign, the act of running any WKUserScript at
+        // .atDocumentEnd over the YouTube page gives YouTube's anti-bot JS
+        // a measurable signal (it can detect document_end script injection
+        // timing). Removing the script makes our WKWebView look more like
+        // stock Safari.
         //
-        // v9.2 changed UA to iPad → YouTube now redirects to m.youtube.com
-        // (mobile UI). m.youtube.com is ALREADY optimized for iPhone screens:
-        //   - width=device-width viewport (no scaling needed)
-        //   - Touch-friendly tap targets
-        //   - Single-column grid that fits 390-430pt screens
-        //   - Native pinch-to-zoom support
-        //
-        // The old viewport script was BREAKING the mobile UI by forcing
-        // width=1280 + scale=0.32 — making everything tiny on iPhone.
-        // User reported: 'исправь десктоп версию на айфонах = она должна быть
-        // под мобильную интегрирована, иначе слишком большой экран и все
-        // слишком мелко в ютубе'.
-        //
-        // Fix: just don't inject any viewport script. m.youtube.com's own
-        // viewport meta is correct for iPhone. The only CSS we still inject
-        // is overflow-x:hidden as a safety net (via the comment below).
-        if initialURL.host?.contains("youtube.com") == true ||
-           initialURL.host?.contains("youtu.be") == true {
-            let safetyScript = WKUserScript(
-                source: """
-                (function() {
-                    // 🔧 v9.3: only inject overflow-x:hidden as a safety net.
-                    // m.youtube.com's own viewport meta is correct — we don't
-                    // override it. This just prevents minor horizontal scroll
-                    // from layout glitches.
-                    var style = document.createElement('style');
-                    style.innerHTML = 'html, body { overflow-x: hidden !important; max-width: 100% !important; }';
-                    (document.head || document.documentElement).appendChild(style);
-                })();
-                """,
-                injectionTime: .atDocumentEnd,
-                forMainFrameOnly: true
-            )
-            contentController.addUserScript(safetyScript)
+        // The overflow-x:hidden was only a "safety net" for minor horizontal
+        // scroll glitches on m.youtube.com — m.youtube.com's own CSS handles
+        // this fine in 2026, so the safety net is no longer worth the
+        // detection cost.
+        if initialURL.host?.contains("youtube.com") != true &&
+           initialURL.host?.contains("youtu.be") != true {
+            // For non-YouTube services (Rutube, VK, etc.) we still allow
+            // future script injection here — those services don't run the
+            // same anti-bot heuristics.
         }
 
         config.userContentController = contentController
@@ -411,27 +410,24 @@ struct ServiceWebView: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
 
-        // 🔧 v9.2 (July 2026): YouTube UA = iPad Safari.
+        // 🔧 v25 (July 2026): REMOVED customUserAgent for YouTube.
         //
-        // iPad UA makes YouTube redirect to m.youtube.com (mobile UI 2026):
-        //   1. Modern redesign — large thumbnails, grid, filter chips
-        //   2. NO consent interstitial (mobile/touch UA bypasses EU consent)
-        //   3. Already fits iPhone screen — no viewport scaling needed
-        //   4. Touch-friendly tap targets
+        // Previously this set an iPad Safari UA, hoping YouTube would serve
+        // the modern mobile m.youtube.com layout. That worked initially, but
+        // once the shared websiteDataStore got "marked" by earlier 153
+        // failures (sandbox errors, DownloadFailed) YouTube's anti-bot
+        // started treating the iPad UA from a WKWebView process as
+        // inconsistent — iPad UA but no iPad Safari cookies, no Safari
+        // fingerprint, no real iPad device attestation. Result: language
+        // selection screen + "Sign in to confirm you're not a bot".
         //
-        // Mac UA was tried in v9.1 but caused:
-        //   - Consent interstitial (no Google cookies in WKWebView)
-        //   - Desktop layout too wide for iPhone (needed scale=0.32 hack)
-        //
-        // Default WKWebView UA was tried before v9.1 but YouTube served the
-        // OLD 2018 m.youtube.com layout (small thumbnails, list view).
-        //
-        // iPad UA is the Goldilocks: modern mobile UI, no consent, fits
-        // iPhone screen natively.
-        if initialURL.host?.contains("youtube.com") == true ||
-           initialURL.host?.contains("youtu.be") == true {
-            webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        }
+        // Fix: leave customUserAgent UNSET. iOS will send the system's
+        // native WKWebView UA, which is itself an iPhone Safari UA variant
+        // (e.g. "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)
+        // AppleWebKit/605.1.15 (KHTML, like Gecko) ... Version/17.5
+        // Mobile/15E148 Safari/604.1"). This is the closest WKWebView can
+        // get to real Safari — YouTube accepts it for m.youtube.com without
+        // throwing the consent interstitial.
 
         webView.load(URLRequest(url: initialURL))
 
@@ -529,9 +525,29 @@ struct ServiceWebView: UIViewRepresentable {
                 }
             }
 
-            // 🔧 Pack v3: Inject JS to detect SPA URL changes (YouTube React app)
-            // YouTube меняет URL через History API без полной перезагрузки.
-            // Этот скрипт следит за URL и вызывает Swift когда URL меняется.
+            // 🔧 v25 (July 2026): SKIP all JS/CSS injection on YouTube.
+            //
+            // YouTube's anti-bot heuristics detect `evaluateJavaScript` calls
+            // by timing and side-effects (window._plinkURLObserver global,
+            // injected <style> nodes). On m.youtube.com, the History API
+            // URL observer is also unnecessary — `decidePolicyFor` already
+            // catches every navigation (including SPA route changes via
+            // pushState) BEFORE the page loads. The observer was a legacy
+            // fallback from when YouTube used `pushState` without triggering
+            // a navigation delegate callback; in 2026 m.youtube.com triggers
+            // a navigation delegate on every route change, so the observer
+            // is dead weight that just costs us a fingerprint.
+            //
+            // For non-YouTube services (Rutube, VK, cinema) we still inject
+            // the SPA observer + dark CSS — those services don't run anti-bot
+            // heuristics, and some of them (Rutube) genuinely need the
+            // observer to detect video page transitions.
+            let isYouTubePage = webView.url?.host?.contains("youtube.com") == true ||
+                                webView.url?.host?.contains("youtu.be") == true
+            guard !isYouTubePage else { return }
+
+            // 🔧 Pack v3: Inject JS to detect SPA URL changes (Rutube React app
+            // and other services that use History API without full reload).
             let js = """
             (function() {
                 if (window._plinkURLObserver) return;

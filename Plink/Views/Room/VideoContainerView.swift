@@ -318,7 +318,14 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
-        config.websiteDataStore = WKWebsiteDataStore.default()
+        // 🔧 v25: ISOLATED non-persistent data store — same rationale as
+        // ServiceBrowserView. The room player must NOT share cookies/cache
+        // with the search browser. Previously this used .default() (the
+        // app-wide shared store), which caused YouTube's anti-bot to flag
+        // both contexts once any 153 / DownloadFailed errors accumulated.
+        // .nonPersistent() gives each room a fresh, isolated store — YouTube
+        // sees a clean session every time the user enters a room.
+        config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
         // 🔧 v24: register custom URL scheme handler — serves YouTube player
         // HTML from memory. No network → no sandbox → no ATS → no DownloadFailed.

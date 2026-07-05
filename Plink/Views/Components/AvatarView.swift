@@ -141,9 +141,18 @@ struct AvatarView: View {
             Circle()
                 .stroke(isAdmin ? Color.raveDanger : Color.ravePrimary, lineWidth: 1)
 
-            Image(systemName: isAdmin ? "shield.fill" : "crown.fill")
-                .font(.system(size: badgeSize * 0.5, weight: .semibold))
-                .foregroundColor(isAdmin ? Color.raveDanger : Color.bioAmber)
+            if isAdmin {
+                // 🔧 FIX: user's custom admin icon (was SF Symbol 'shield.fill')
+                Image("AdminBadge")
+                    .resizable()
+                    .scaledToFit()
+                    .padding(badgeSize * 0.15)
+                    .foregroundColor(.raveDanger)
+            } else {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: badgeSize * 0.5, weight: .semibold))
+                    .foregroundColor(.bioAmber)
+            }
         }
         .frame(width: badgeSize, height: badgeSize)
     }
@@ -203,17 +212,20 @@ private struct RingModifier: ViewModifier {
 // MARK: - AdminBadgeChip
 //
 // 🔧 NEW: Маленький чип-бейдж «Админ» для размещения рядом с именем пользователя
-// в Settings, Profile, EditProfile — не только в чате. Использует ту же палитру
-// что и AvatarView badge (raveDanger red + bioObsidian bg) для консистентности.
+// в Settings, Profile, EditProfile — не только в чате.
 //
-// Визуально: capsule с красным свечением, shield.fill иконка + текст «АДМИН».
+// 🔧 FIX: Uses Image('AdminBadge') — user's custom admin icon (uploaded PNG,
+// 512×512 RGBA). Was using SF Symbol 'shield.fill' which user didn't want.
 struct AdminBadgeChip: View {
     var compact: Bool = false    // true = только иконка (для tight layouts)
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: "shield.fill")
-                .font(.system(size: compact ? 9 : 10, weight: .bold))
+            // 🔧 FIX: user-provided custom icon (was SF Symbol 'shield.fill')
+            Image("AdminBadge")
+                .resizable()
+                .scaledToFit()
+                .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
             if !compact {
                 Text("АДМИН")
                     .font(.system(size: 9, weight: .heavy, design: .rounded))

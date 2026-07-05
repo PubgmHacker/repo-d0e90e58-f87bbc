@@ -322,9 +322,24 @@ struct WebVideoView: UIViewRepresentable {
         // need our syncScript or videoBridge.
         let isYouTubeLike = isYouTube || isBackendPlayer
 
-        if isYouTubeLike {
+        // 🔧 v11.3: for backend YouTube player, use PERSISTENT (shared) data store.
+        //
+        // v10.2 used nonPersistent() to avoid cookie/UA mismatch. But now
+        // with v11.2 (iOS Safari UA on backend player), the iframe to
+        // youtube.com/embed/ needs CONSENT cookies — which were set by
+        // ServiceBrowserView when the user browsed m.youtube.com.
+        //
+        // nonPersistent() = no cookies at all → YouTube shows "Sign in to
+        // confirm you're not a bot" (no CONSENT cookie).
+        // default() = shared cookies → iframe gets CONSENT cookie from
+        // browsing phase → no bot check.
+        if isYouTube && !isBackendPlayer {
+            // Direct YouTube embed (legacy): keep nonPersistent to avoid
+            // cookie/UA mismatch (ServiceBrowserView used iPad UA).
             config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
         } else {
+            // Backend player + Rutube + others: use shared (persistent) store.
+            // Backend player iframe needs CONSENT cookies from browsing phase.
             config.websiteDataStore = WKWebsiteDataStore.default()
         }
 

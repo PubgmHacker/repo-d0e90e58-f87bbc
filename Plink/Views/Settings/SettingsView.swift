@@ -390,9 +390,11 @@ struct SettingsView: View {
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-        // 🔧 SUBTLE: slow glow on the profile card — draws the eye to the main entry point
-        // without being distracting. Period 3.4s — slower than other screens for calm.
-        .glowPulse(color: Color.bioCyan, minRadius: 6, maxRadius: 14, minOpacity: 0.08, maxOpacity: 0.22, period: 3.4)
+        // 🔧 FIX: removed glowPulse — too bright. Subtle static border instead.
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Settings Section (grouped card)

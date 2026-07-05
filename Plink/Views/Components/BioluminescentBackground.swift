@@ -147,15 +147,16 @@ struct BioluminescentBackground: View {
     }
 }
 
-// MARK: - Settings Background (dark blue/black, Telegram-style)
+// MARK: - Settings Background (oil + mercury palette)
 //
-// 🔧 USER REQUEST v3: 'цвета темные используй, синий черный блэк дарк'
-// + 'как у телеграм или инстаграм с анимациями но не сложными'.
+// 🔧 USER REQUEST: 'настройки сделать в стиле нефть+ртуть, трехцветную
+// палитру промежуточную между дарк и ртуть'.
 //
-// 🔧 DESIGN: глубокий тёмно-синий градиент с медленным движущимся
-// световым пятном (как в Telegram Settings). Простые, не сложные анимации.
+// 🔧 DESIGN: тёмная палитра oil (чёрно-синий) + mercury (стальной серый).
+// 3 цвета: deep oil black → mercury steel → oil black.
+// Медленные световые пятна стального цвета — как жидкий металл.
 struct SettingsBackground: View {
-    var energy: Double = 0.7
+    var energy: Double = 0.6
     @State private var isInBackground = false
 
     var body: some View {
@@ -168,7 +169,7 @@ struct SettingsBackground: View {
                     }
                 }
             } else {
-                Color(hex: 0x0A0E1A)
+                Color(hex: 0x0B0F14)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -181,14 +182,14 @@ struct SettingsBackground: View {
         }
     }
 
-    /// 🔧 Dark blue/black gradient with slow moving light spot (Telegram-style).
+    /// 🔧 Oil + mercury — 3-color palette with slow mercury light spots.
     private func drawGradient(context: GraphicsContext, size: CGSize, time: Double) {
-        // ── Layer 1: Base vertical gradient — deep dark blue to black ──
+        // ── Layer 1: Base — oil black → mercury steel → oil black ──
         let baseRect = CGRect(origin: .zero, size: size)
         let baseGradient = Gradient(colors: [
-            Color(hex: 0x0A0E1A),   // very dark blue-black (top)
-            Color(hex: 0x0D1320),   // dark navy
-            Color(hex: 0x080B14),   // near-black blue (bottom)
+            Color(hex: 0x0B0F14),   // oil black (top)
+            Color(hex: 0x1C2530),   // mercury steel (center)
+            Color(hex: 0x0B0F14),   // oil black (bottom)
         ])
         context.fill(
             Path(baseRect),
@@ -199,54 +200,47 @@ struct SettingsBackground: View {
             )
         )
 
-        // ── Layer 2: Slow moving blue light spot (Telegram-style) ──
-        // A soft blue glow that drifts across the screen slowly.
-        let spotX = size.width * (0.3 + 0.4 * sin(time * 0.12))
-        let spotY = size.height * (0.4 + 0.3 * cos(time * 0.08))
-        let spotRadius = max(size.width, size.height) * 0.4
-        let spotOpacity = 0.06 * energy
+        // ── Layer 2: Slow mercury light spot — steel blue glow ──
+        let spot1X = size.width * (0.3 + 0.35 * sin(time * 0.1))
+        let spot1Y = size.height * (0.4 + 0.25 * cos(time * 0.07))
+        let spot1Radius = max(size.width, size.height) * 0.38
+        let spot1Opacity = 0.05 * energy
 
-        let spotRect = CGRect(
-            x: spotX - spotRadius,
-            y: spotY - spotRadius,
-            width: spotRadius * 2,
-            height: spotRadius * 2
+        let spot1Rect = CGRect(
+            x: spot1X - spot1Radius, y: spot1Y - spot1Radius,
+            width: spot1Radius * 2, height: spot1Radius * 2
         )
         context.fill(
-            Path(ellipseIn: spotRect),
+            Path(ellipseIn: spot1Rect),
             with: .radialGradient(
                 Gradient(colors: [
-                    Color(hex: 0x2B5F8A).opacity(spotOpacity),
-                    Color(hex: 0x2B5F8A).opacity(0),
+                    Color(hex: 0x4A5C6E).opacity(spot1Opacity),   // mercury steel
+                    Color(hex: 0x4A5C6E).opacity(0),
                 ]),
-                center: .init(x: spotX / size.width, y: spotY / size.height),
-                startRadius: 0,
-                endRadius: spotRadius
+                center: .init(x: spot1X / size.width, y: spot1Y / size.height),
+                startRadius: 0, endRadius: spot1Radius
             )
         )
 
-        // ── Layer 3: Second spot — deeper blue, different phase ──
-        let spot2X = size.width * (0.7 + 0.3 * sin(time * 0.1 + .pi))
-        let spot2Y = size.height * (0.6 + 0.25 * cos(time * 0.15 + .pi))
-        let spot2Radius = max(size.width, size.height) * 0.35
-        let spot2Opacity = 0.04 * energy
+        // ── Layer 3: Second spot — darker oil blue, different phase ──
+        let spot2X = size.width * (0.7 + 0.3 * sin(time * 0.09 + .pi))
+        let spot2Y = size.height * (0.6 + 0.2 * cos(time * 0.12 + .pi))
+        let spot2Radius = max(size.width, size.height) * 0.32
+        let spot2Opacity = 0.035 * energy
 
         let spot2Rect = CGRect(
-            x: spot2X - spot2Radius,
-            y: spot2Y - spot2Radius,
-            width: spot2Radius * 2,
-            height: spot2Radius * 2
+            x: spot2X - spot2Radius, y: spot2Y - spot2Radius,
+            width: spot2Radius * 2, height: spot2Radius * 2
         )
         context.fill(
             Path(ellipseIn: spot2Rect),
             with: .radialGradient(
                 Gradient(colors: [
-                    Color(hex: 0x1A3A5C).opacity(spot2Opacity),
-                    Color(hex: 0x1A3A5C).opacity(0),
+                    Color(hex: 0x2A3A4A).opacity(spot2Opacity),   // dark oil blue
+                    Color(hex: 0x2A3A4A).opacity(0),
                 ]),
                 center: .init(x: spot2X / size.width, y: spot2Y / size.height),
-                startRadius: 0,
-                endRadius: spot2Radius
+                startRadius: 0, endRadius: spot2Radius
             )
         )
     }

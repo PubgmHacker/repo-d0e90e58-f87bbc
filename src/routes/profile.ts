@@ -36,6 +36,19 @@ export default async function profileRoutes(fastify) {
     reply.send(updated);
   });
 
+  // 🔧 Pack v3: DELETE /users/me — полное удаление аккаунта (cascade)
+  fastify.delete('/users/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      // Cascade delete через Prisma — все связанные записи удалятся автоматически
+      // (Room, RoomParticipant, ChatMessage, DirectMessage, FriendRequest, Friendship,
+      //  WatchHistory, PlaybackState, Subscription, UserBlock, Report, RefreshToken, AuditLog)
+      await prisma.user.delete({ where: { id: request.user.id } });
+      reply.send({ deleted: true });
+    } catch (e) {
+      reply.status(500).send({ error: 'Failed to delete account: ' + e.message });
+    }
+  });
+
   fastify.get('/users/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params;
     const user = await prisma.user.findUnique({

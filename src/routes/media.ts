@@ -180,12 +180,24 @@ export default async function mediaRoutes(fastify, _options) {
   // Auth: requires JWT (prevents anonymous abuse).
   // Rate limit: 20 requests/minute (each request = 1 yt-dlp extraction).
 
+  // v9.3: auth via query param (?token=JWT) — AVPlayer can't send headers reliably
   fastify.get('/media/youtube-stream', {
-    preHandler: [fastify.authenticate],
-    config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
-    const { id } = request.query as any;
-    if (!id) return reply.status(400).send({ error: 'Video ID required' });
+    const { id, token } = request.query as any;
+    if (!id || typeof id !== 'string' || id.length > 20) {
+      return reply.status(400).send({ error: 'Valid video ID required' });
+    }
+    // Auth via query param (AVPlayer drops Authorization headers on Range requests)
+    if (!token || typeof token !== 'string') {
+      return reply.status(401).send({ error: 'Token required' });
+    }
+    try {
+      const payload = fastify.jwt.verify(token);
+      (request as any).user = payload;
+    } catch {
+      return reply.status(401).send({ error: 'Invalid token' });
+    }
 
     // ── 1. Extract googlevideo URL (cached) ──────────────────────────
     const cacheKey = `yt:stream:${id}`;

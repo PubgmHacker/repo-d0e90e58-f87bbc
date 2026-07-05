@@ -743,10 +743,9 @@ struct SettingsTabContent: View {
     let authService: AuthService
 
     var body: some View {
-        // 🔧 SETTINGS: обёртка с mono-палитрой (B&W живой фон) — сама SettingsView
-        // использует свой NavigationStack, поэтому оборачиваем здесь.
+        // 🔧 SETTINGS: grayscale gradient background (B&W, no orbs)
         ZStack {
-            BioluminescentBackground(energy: 0.5, dimming: 0, palette: .mono)
+            SettingsBackground(energy: 0.7)
                 .ignoresSafeArea()
             SettingsView(authService: authService)
         }

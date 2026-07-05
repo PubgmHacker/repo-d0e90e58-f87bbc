@@ -248,6 +248,7 @@ struct ProfileView: View {
                 Text(viewModel.email)
                     .font(.caption)
                     .foregroundColor(.raveTextSecondary)
+                    .textStroke(opacity: 0.4)  // 🔧 subtle outline for readability
             }
             .padding(.top, 8)
 
@@ -592,6 +593,10 @@ struct EditProfileSheet: View {
     @State private var newUsername = ""
     @State private var isSaving = false
     @State private var isPremium = false
+    @State private var showAvatarPicker = false
+    @State private var showCoverPicker = false
+    @State private var selectedAvatarItem: PhotosPickerItem?
+    @State private var selectedCoverItem: PhotosPickerItem?
 
     init(viewModel: ProfileViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -601,122 +606,216 @@ struct EditProfileSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                // 🔧 EDIT PROFILE: own ocean palette (cyan/emerald — premium feel)
+                BioluminescentBackground(energy: 0.7, dimming: 0, palette: .ocean)
+                    .ignoresSafeArea()
 
-                VStack(spacing: 24) {
-                    // 🔧 Pack v2: переиспользуемый AvatarView (обводка только для Premium/Admin)
-                    AvatarView(
-                        image: viewModel.avatarImage,
-                        imageURL: viewModel.avatarURL,
-                        username: viewModel.displayName,
-                        size: 100,
-                        isPremium: isPremium,
-                        isAdmin: viewModel.user?.isAdmin ?? false
-                    )
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        // 🔧 DIVERSIFIED: лейбл с тёплым акцентом (amber) вместо обычного white
-                        HStack(spacing: 6) {
-                            Image(systemName: "person.crop.circle.badge.checkmark")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.bioAmber)
-                            Text("Имя пользователя")
-                                .font(.subheadline.bold())
-                                .foregroundColor(.raveTextPrimary)
-                            // 🔧 NEW: админ-бейдж рядом с лейблом (если юзер — админ)
-                            if viewModel.user?.isAdmin == true {
-                                AdminBadgeChip(compact: true)
-                            }
-                        }
-                        TextField("Введите имя", text: $newUsername)
-                            .textFieldStyle(RaveTextFieldStyle())
-                            // 🔧 DIVERSIFIED: тонкая amber-cyan градиентная обводка вместо плоской raveSurface
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.bioAmber.opacity(0.4),
-                                                Color.bioCyan.opacity(0.2)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 0.5
-                                    )
-                            )
-                    }
-
-                    Spacer()
-
-                    // 🔧 DIVERSIFIED: кнопка сохранить — градиент cyan→emerald (раньше плоский cyan)
-                    // + иконка checkmark для визуального якоря
-                    Button {
-                        Task {
-                            isSaving = true
-                            await viewModel.updateUsername(newUsername)
-                            isSaving = false
-                            dismiss()
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            if isSaving {
-                                ProgressView().tint(.white)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // ─── COVER (VK-style, same as ProfileView but smaller) ───
+                        ZStack(alignment: .bottomTrailing) {
+                            if let coverImage = viewModel.coverImage {
+                                Image(uiImage: coverImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 140)
+                                    .clipped()
                             } else {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                            Text(isSaving ? "Сохранение…" : "Сохранить")
-                                .font(.headline.bold())
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [
-                                    Color.bioCyan,
-                                    Color.bioEmerald
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.25),
-                                            Color.bioAmber.opacity(0.15)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 0.5
+                                LinearGradient(
+                                    colors: [
+                                        Color.bioCyan.opacity(0.6),
+                                        Color.bioEmerald.opacity(0.5),
+                                        Color.bioTeal.opacity(0.7)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
+                                .frame(height: 140)
+                                .overlay(
+                                    RadialGradient(
+                                        colors: [Color.white.opacity(0.15), .clear],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: 160
+                                    )
+                                )
+                            }
+
+                            LinearGradient(
+                                colors: [.clear, Color.bioObsidian.opacity(0.9)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 45)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+
+                            Button {
+                                showCoverPicker = true
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 34, height: 34)
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                                        .frame(width: 34, height: 34)
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .padding(10)
+                        }
+                        .frame(height: 140)
+                        .clipped()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
                         )
-                        .shadow(color: Color.bioCyan.opacity(0.4), radius: 10, y: 4)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                        // ─── AVATAR (overlapping cover) ───
+                        ZStack {
+                            Circle()
+                                .fill(Color.bioObsidian)
+                                .frame(width: 108, height: 108)
+                            Circle()
+                                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                                .frame(width: 108, height: 108)
+
+                            Button { showAvatarPicker = true } label: {
+                                ZStack(alignment: .bottomTrailing) {
+                                    AvatarView(
+                                        image: viewModel.avatarImage,
+                                        imageURL: viewModel.avatarURL,
+                                        username: viewModel.displayName,
+                                        size: 96,
+                                        isPremium: isPremium,
+                                        isAdmin: viewModel.user?.isAdmin ?? false
+                                    )
+
+                                    Image(systemName: "camera.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.white)
+                                        .background(Circle().fill(Color.ravePrimary))
+                                        .clipShape(Circle())
+                                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .offset(y: -45)
+                        .padding(.bottom, -35)
+
+                        // ─── USERNAME FIELD ───
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.crop.circle.badge.checkmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.bioCyan)
+                                Text("Имя пользователя")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.raveTextPrimary)
+                                    // 🔧 TEXT STROKE: subtle black outline for readability
+                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: 0.4, y: 0)
+                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: -0.4, y: 0)
+                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: 0, y: 0.4)
+                                    .shadow(color: .black.opacity(0.5), radius: 0.4, x: 0, y: -0.4)
+                                if viewModel.user?.isAdmin == true {
+                                    AdminBadgeChip(compact: true)
+                                }
+                            }
+                            TextField("Введите имя", text: $newUsername)
+                                .textFieldStyle(RaveTextFieldStyle())
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            LinearGradient(
+                                                colors: [
+                                                    Color.bioCyan.opacity(0.35),
+                                                    Color.bioEmerald.opacity(0.15)
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 0.5
+                                        )
+                                )
+                        }
+                        .padding(.horizontal, 4)
+
+                        Spacer(minLength: 20)
+
+                        // ─── SAVE BUTTON ───
+                        Button {
+                            Task {
+                                isSaving = true
+                                await viewModel.updateUsername(newUsername)
+                                isSaving = false
+                                dismiss()
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if isSaving {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18, weight: .semibold))
+                                }
+                                Text(isSaving ? "Сохранение…" : "Сохранить")
+                                    .font(.headline.bold())
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            // 🔧 TELEGRAM-GLASS: убран cyan→emerald gradient + glow.
+                            // Now neutral glass with metallic border.
+                            .telegramGlass(cornerRadius: 14, borderColor: .black.opacity(0.5))
+                        }
+                        .disabled(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+                        .opacity(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving ? 0.5 : 1)
                     }
-                    .disabled(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
-                    .opacity(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving ? 0.5 : 1)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 32)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
             }
             .dismissKeyboardOnTap()
             .navigationTitle("Редактировать")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    // 🔧 DIVERSIFIED: кнопка Отмена — тёплый акцент вместо серого
                     Button("Отмена") { dismiss() }
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(.bioCyan)
                 }
             }
             .task {
                 isPremium = PremiumStatusManager.shared.isPremium
+            }
+            .photosPicker(isPresented: $showAvatarPicker, selection: $selectedAvatarItem, matching: .images)
+            .onChange(of: selectedAvatarItem) { _, newItem in
+                guard let newItem else { return }
+                newItem.loadTransferable(type: Data.self) { result in
+                    DispatchQueue.main.async {
+                        if case .success(let data?) = result, let img = UIImage(data: data) {
+                            viewModel.saveAvatar(img)
+                        }
+                    }
+                }
+                selectedAvatarItem = nil
+            }
+            .photosPicker(isPresented: $showCoverPicker, selection: $selectedCoverItem, matching: .images)
+            .onChange(of: selectedCoverItem) { _, newItem in
+                guard let newItem else { return }
+                newItem.loadTransferable(type: Data.self) { result in
+                    DispatchQueue.main.async {
+                        if case .success(let data?) = result, let img = UIImage(data: data) {
+                            viewModel.saveCover(img)
+                        }
+                    }
+                }
+                selectedCoverItem = nil
             }
         }
     }

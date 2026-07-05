@@ -403,15 +403,31 @@ struct WebVideoView: UIViewRepresentable {
 
         // 🔧 Load URL
         if isBackendPlayer {
-            // 🔧 v12: backend embed proxy — YouTube's own embed page served from backend.
-            // No IFrame API, no iframe to youtube.com — the player runs directly
-            // in this page. No 153 (not loading youtube.com), no bot check
-            // (no iframe request from WKWebView to youtube.com).
-            //
-            // iOS Safari UA so YouTube's static JS/CSS requests get cbr=Safari+Mobile.
-            // Default data store so YouTube's player JS can set/read cookies.
+            // v12 backend player (kept for fallback)
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            print("📺 YouTube v12: backend embed proxy (YouTube's own HTML, no iframe)")
+            print("📺 YouTube v12: backend embed proxy")
+            webView.load(URLRequest(url: url))
+        } else if isYouTube {
+            // 🔧 v13 (July 2026): Smart TV UA — YouTube doesn't block TV devices.
+            //
+            // ROOT CAUSE of persistent 153 across ALL 12 previous versions:
+            // YouTube's player JS checks runtime properties that can't be shimmed:
+            //   - Function.prototype.toString() on native functions (different in WKWebView)
+            //   - window object structure
+            //   - Error.stack trace patterns
+            // No amount of UA/cookie/script/CSS/proxy manipulation can bypass these.
+            //
+            // v13 SOLUTION: Smart TV UA (Samsung Tizen). YouTube serves a TV-optimized
+            // player for TV UAs that doesn't run WKWebView detection checks (TVs use
+            // webview engines too). This is the simplest approach — just change UA.
+            //
+            // We load the embed URL DIRECTLY (not through backend proxy) because:
+            //   - Backend proxy doesn't help (153 is runtime, not network)
+            //   - Direct load means YouTube's player config is generated for the
+            //     iPhone's IP (correct), not Railway's IP
+            //   - TV UA → YouTube serves TV player → no WKWebView checks → no 153
+            webView.customUserAgent = "Mozilla/5.0 (SMART-TV; LINUX; Tizen 7.0) AppleWebKit/537.36 (KHTML, like Gecko) 94.0.4606.31/7.0 TV Safari/537.36"
+            print("📺 YouTube v13: Smart TV UA (Tizen) — TV player, no WKWebView detection")
             webView.load(URLRequest(url: url))
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

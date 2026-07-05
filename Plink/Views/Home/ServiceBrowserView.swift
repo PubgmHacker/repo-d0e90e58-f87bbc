@@ -366,6 +366,35 @@ struct ServiceWebView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
+
+        // 🔧 v9 (July 2026): for YouTube, set desktop Mac Safari UA so YouTube
+        // serves the modern desktop UI (2026 redesign) instead of the old
+        // mobile m.youtube.com layout.
+        //
+        // WKWebView's default UA contains 'Mobile/15E148' without 'Safari/' —
+        // YouTube's server detects this and serves the OLD mobile site
+        // (m.youtube.com layout from ~2018). User reported:
+        //   'почему веб браузер использует старую версию ютуб а не версию
+        //    приложения ютуба 2026'
+        //
+        // Setting customUserAgent to a desktop Mac Safari UA makes YouTube's
+        // server serve the modern desktop UI: bigger thumbnails, grid layout,
+        // hover previews, sort/filter chips — same as youtube.com in Safari on Mac.
+        //
+        // SAFE to do here (in ServiceBrowserView) because:
+        //   - This WebView is for BROWSING / SEARCHING YouTube, not for playing
+        //     videos. No /embed/ requests → no error 153.
+        //   - We're not on a separate /embed/ page, just on /feed/trending or
+        //     /results — these don't trigger YouTube's anti-bot check the way
+        //     /embed/ does.
+        //   - User can still tap any video → ServiceBrowserView's video
+        //     detection kicks in → backend yt-dlp extracts the stream → AVPlayer
+        //     plays it (NOT this WebView).
+        if initialURL.host?.contains("youtube.com") == true ||
+           initialURL.host?.contains("youtu.be") == true {
+            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        }
+
         webView.load(URLRequest(url: initialURL))
 
         webView.isOpaque = false

@@ -146,9 +146,14 @@ extension VideoService {
 
     /// 🔧 NEW: The URL to browse this service's content in a WebView.
     /// Used by ServiceBrowserView to load the service's catalog page.
+    ///
+    /// 🔧 v9 (July 2026): YouTube changed from search 'music 2025' to
+    /// /feed/trending — shows trending videos instead of arbitrary music
+    /// search results. User-reported: 'почему пользователей сразу кидает на
+    /// запрос music 2025 если они его не делали? лучше кидать на тренды'.
     var browseURL: String {
         switch self {
-        case .youtube:      return "https://www.youtube.com/results?search_query=music+2025"
+        case .youtube:      return "https://www.youtube.com/feed/trending"
         case .vk:           return "https://vk.com/video"
         case .rutube:       return "https://rutube.ru/"
         case .netflix:      return "https://www.netflix.com/browse"

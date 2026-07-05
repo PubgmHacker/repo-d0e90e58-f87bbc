@@ -279,7 +279,6 @@ struct RoomChatBubble: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if isMyMessage {
-                // Моё сообщение — справа
                 Spacer(minLength: 50)
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(message.text)
@@ -289,25 +288,20 @@ struct RoomChatBubble: View {
                 }
                 myAvatar
             } else {
-                // Чужое сообщение — слева
                 otherAvatar
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         if message.isSenderAdmin {
-                            Text("[A]")
-                                .font(.system(size: nameSize - 2, weight: .heavy))
-                                .foregroundColor(.raveDanger)
+                            // 🔧 FIX: убран [A] текст — оставлен только shimmer ник + AdminBadge
                             Text(message.senderName)
                                 .font(.system(size: nameSize, weight: .bold))
                                 .adminShimmerText()
-                            Image("AdminBadge")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: nameSize + 2, height: nameSize + 2)
+                            AdminBadgeChip(compact: true)
                         } else {
                             Text(message.senderName)
                                 .font(.system(size: nameSize, weight: .bold))
-                                .foregroundColor(.ravePrimary)
+                                .foregroundColor(.bioCyan)
+                                .textStroke(opacity: 0.4)
                         }
                     }
                     Text(message.text)
@@ -320,20 +314,10 @@ struct RoomChatBubble: View {
         }
         .padding(.horizontal, compact ? 10 : 14)
         .padding(.vertical, compact ? 6 : 10)
-        .background(
-            isMyMessage
-                ? Color.ravePrimary.opacity(0.15)
-                : Color.white.opacity(0.06)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: compact ? 12 : 16)
-                .stroke(
-                    isMyMessage
-                        ? Color.ravePrimary.opacity(0.2)
-                        : Color.white.opacity(0.08),
-                    lineWidth: 0.5
-                )
+        // 🔧 FIX: telegram-glass для bubble — было плоский ravePrimary/white
+        .telegramGlass(
+            cornerRadius: compact ? 12 : 16,
+            borderColor: isMyMessage ? Color.bioCyan.opacity(0.25) : .black.opacity(0.4)
         )
     }
 

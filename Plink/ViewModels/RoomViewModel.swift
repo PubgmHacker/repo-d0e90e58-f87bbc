@@ -266,7 +266,13 @@ final class RoomViewModel: WebSocketClientDelegate {
 
         // Try chat (has "senderID" field)
         if json["senderID"] != nil || json["sender_id"] != nil {
-            if let chatMsg = try? JSONDecoder().decode(ChatMessage.self, from: data) {
+            // 🔧 FIX: use custom decoder with .secondsSince1970 date strategy.
+            // Backend sends timestamp as Date.now() (unix milliseconds), but
+            // Swift's default decoder expects ISO8601 string → decode fails
+            // silently → no chat messages shown.
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .secondsSince1970
+            if let chatMsg = try? decoder.decode(ChatMessage.self, from: data) {
                 messages.append(chatMsg)
                 if messages.count > maxMessages {
                     messages.removeFirst(messages.count - maxMessages)

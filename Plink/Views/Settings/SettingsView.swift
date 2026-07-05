@@ -63,9 +63,9 @@ struct SettingsView: View {
                             }
                             settingsRow(
                                 icon: "sparkles",
-                                title: "Плинк+",
+                                title: "Оформить Плинк+",
                                 subtitle: premiumSubtitle,
-                                color: .bioEmerald
+                                color: .bioAmber
                             ) {
                                 showPremium = true
                             }
@@ -73,36 +73,42 @@ struct SettingsView: View {
 
                         // ── Privacy & Notifications Section ──
                         settingsSection("Конфиденциальность") {
-                            // 🔧 FIX: Open as full-screen push via NavigationLink, not .sheet
-                            NavigationLink(value: SettingsDestination.privacy) {
+                            // 🔧 Pack v3: Button + navigationPath вместо NavigationLink
+                            // NavigationLink с .buttonStyle(.plain) плохо регистрировал тапы
+                            Button {
+                                navigationPath.append(SettingsDestination.privacy)
+                            } label: {
                                 rowContent(
                                     icon: "lock.shield.fill",
                                     title: "Конфиденциальность",
                                     subtitle: nil,
-                                    color: .bioTeal,
+                                    color: .bioCoral,
                                     showChevron: true
                                 )
                             }
                             .buttonStyle(.plain)
 
-                            NavigationLink(value: SettingsDestination.notifications) {
+                            Button {
+                                navigationPath.append(SettingsDestination.notifications)
+                            } label: {
                                 rowContent(
                                     icon: "bell.badge.fill",
                                     title: "Уведомления",
                                     subtitle: nil,
-                                    color: .bioEmerald,
+                                    color: .bioAmber,
                                     showChevron: true
                                 )
                             }
                             .buttonStyle(.plain)
 
-                            // 🔧 NEW: Language switching
-                            NavigationLink(value: SettingsDestination.language) {
+                            Button {
+                                navigationPath.append(SettingsDestination.language)
+                            } label: {
                                 rowContent(
                                     icon: "globe",
                                     title: "Язык приложения",
                                     subtitle: LocalizationManager.shared.currentLanguageName,
-                                    color: .bioCyan,
+                                    color: .bioRose,
                                     showChevron: true
                                 )
                             }

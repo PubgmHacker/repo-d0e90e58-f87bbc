@@ -70,30 +70,27 @@ struct BioluminescentBackground: View {
     }
 
     /// 4 крупных биолюминесцентных облака — размытые, плавно дрейфующие.
-    /// Каждое облако: крупный эллипс с радиальным градиентом (центр яркий → края прозрачные).
+    /// Pack v3: ускорено в 3x, облака в центре тоже, добавлены тёплые акценты.
     private func drawClouds(context: GraphicsContext, size: CGSize, time: Double) {
         let clouds: [(cx: Double, cy: Double, r: Double, speed: Double, phase: Double)] = [
-            (0.2, 0.3, 240, 0.08, 0.0),   // верх-лево — большой cyan
-            (0.8, 0.7, 200, 0.10, 1.5),   // низ-право — emerald
-            (0.5, 0.5, 280, 0.06, 3.0),   // центр — крупный teal
-            (0.15, 0.85, 180, 0.12, 4.5), // низ-лево — cyan
+            (0.2, 0.3, 280, 0.24, 0.0),   // верх-лево — большой cyan
+            (0.8, 0.7, 240, 0.30, 1.5),   // низ-право — emerald
+            (0.5, 0.5, 320, 0.20, 3.0),   // центр — крупный (тёплый accent)
+            (0.15, 0.85, 200, 0.36, 4.5), // низ-лево — cyan
+            (0.85, 0.2, 180, 0.28, 2.0),  // верх-право — тёплый accent
         ]
 
         for (i, cloud) in clouds.enumerated() {
-            // Дрейф: лиссажу-подобная траектория
-            let dx = sin(time * cloud.speed + cloud.phase) * 60
-            let dy = cos(time * cloud.speed * 0.7 + cloud.phase) * 40
+            let dx = sin(time * cloud.speed + cloud.phase) * 80
+            let dy = cos(time * cloud.speed * 0.7 + cloud.phase) * 60
             let cx = cloud.cx * size.width + dx
             let cy = cloud.cy * size.height + dy
-            let radius = cloud.r * (0.9 + 0.1 * sin(time * 0.3 + cloud.phase))
+            let radius = cloud.r * (0.9 + 0.15 * sin(time * 0.5 + cloud.phase))
 
-            // Цвет облака
             let color = palette.color(for: i)
-            // Пульсация яркости (медленная, 3-4 сек цикл)
-            let pulse = 0.5 + 0.3 * sin(time * 0.4 + cloud.phase)
-            let opacity = pulse * energy * 0.6
+            let pulse = 0.5 + 0.35 * sin(time * 0.6 + cloud.phase)
+            let opacity = pulse * energy * 0.7
 
-            // Радиальный градиент: центр яркий → края прозрачные
             let center = CGPoint(x: cx, y: cy)
             let rect = CGRect(
                 x: cx - radius,
@@ -146,11 +143,12 @@ enum BioPalette {
         let colors: [Color]
         switch self {
         case .ocean:
-            colors = [Color.bioCyan, Color.bioEmerald, Color.bioTeal, Color.bioCyan]
+            // Pack v3: смешиваем холодные и тёплые для разнообразия
+            colors = [Color.bioCyan, Color.bioEmerald, Color.bioAmber, Color.bioTeal, Color.bioCoral]
         case .abyss:
-            colors = [Color.bioTeal, Color.bioCyan.opacity(0.8), Color.bioEmerald, Color.bioTeal]
+            colors = [Color.bioTeal, Color.bioCyan.opacity(0.8), Color.bioRose, Color.bioTeal]
         case .coral:
-            colors = [Color.bioEmerald, Color.bioCyan, Color.bioTeal, Color.bioEmerald]
+            colors = [Color.bioCoral, Color.bioAmber, Color.bioEmerald, Color.bioRose]
         }
         return colors[index % colors.count]
     }

@@ -181,25 +181,30 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             asset = AVURLAsset(url: url, options: options)
             Logger.sync.info("🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers")
         } else if lowerURL.contains("plink-backend") && lowerURL.contains("youtube-stream") {
-            // 🔧 v9.2: re-add Authorization header — backend STILL requires auth.
+            // 🔧 v9.3: auth via query param — AVPlayer drops Authorization headers
+            // on Range requests, causing 401 → -1008. Instead, append token as
+            // ?token=JWT to the URL itself. AVPlayer always sends the full URL,
+            // so the token is guaranteed to reach the backend.
             //
-            // v9.1 removed the auth header, causing -1013 (401 auth challenge).
-            // The previous -1008 was NOT an auth error — it was a streaming bug
-            // on the backend (Readable.fromWeb). Auth header was working fine.
-            //
-            // v9.2: re-add the Authorization header via AVURLAssetHTTPHeaderFieldsKey.
-            // Also append token as query parameter as a fallback for Range requests
-            // where AVPlayer might drop the header.
-            var headers: [String: String] = [:]
+            // The URL already has ?id=VIDEO_ID — we append &token=JWT.
+            // Backend reads token from query param (v9.3) instead of header.
+            var finalURL = url
             if let token = KeychainHelper.read(for: "rave_auth_token") {
-                headers["Authorization"] = "Bearer \(token)"
+                // Append token as query param
+                var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let tokenItem = URLQueryItem(name: "token", value: token)
+                if var existing = components?.queryItems {
+                    existing.append(tokenItem)
+                    components?.queryItems = existing
+                } else {
+                    components?.queryItems = [tokenItem]
+                }
+                if let modifiedURL = components?.url {
+                    finalURL = modifiedURL
+                }
             }
-            let options: [String: Any] = [
-                "AVURLAssetHTTPHeaderFieldsKey": headers,
-                AVURLAssetPreferPreciseDurationAndTimingKey: true,
-            ]
-            asset = AVURLAsset(url: url, options: options)
-            Logger.sync.info("🔍 loadMedia: backend proxy URL — auth header added (token: \(headers["Authorization"] != nil ? "yes" : "nil"))")
+            asset = AVAsset(url: finalURL)
+            Logger.sync.info("🔍 loadMedia: backend proxy URL — token in query param: \(finalURL.absoluteString.prefix(80))...")
         } else {
             asset = AVAsset(url: url)
         }

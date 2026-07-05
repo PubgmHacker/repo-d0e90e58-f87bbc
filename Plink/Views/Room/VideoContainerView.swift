@@ -373,17 +373,31 @@ struct WebVideoView: UIViewRepresentable {
             webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
             webView.load(URLRequest(url: url))
         } else if urlString.contains("youtube.com/embed/") {
-            // 🔧 v6: real iOS Safari UA (matches iOS TLS fingerprint → no bot check)
+            // 🔧 v7: real iOS Safari UA (matches iOS TLS fingerprint → no bot check)
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-            // 🔧 v6: extract video ID and load custom HTML with IFrame API.
-            // The custom HTML approach bypasses 153 because the IFrame API
-            // script runs in our page context, not YouTube's WKWebView-detected
-            // environment.
+            // 🔧 v7 (July 2026): CRITICAL FIX — use https://www.youtube.com as
+            // baseURL, NOT youtube-nocookie.com.
+            //
+            // v6 used youtube-nocookie.com as baseURL, but the IFrame API
+            // script's `origin` parameter was also set to youtube-nocookie.com.
+            // Result: when YouTube's IFrame API made its authentication request,
+            // the Origin header said youtube-nocookie.com but the IFrame API
+            // server expected youtube.com. YouTube's anti-abuse flagged this as
+            // a potential bot attempt → "sign in to confirm you are not a bot".
+            //
+            // v7: change baseURL to https://www.youtube.com AND set origin
+            // param to https://www.youtube.com. Now Origin header matches what
+            // YouTube's IFrame API server expects → no bot check.
+            //
+            // We still use the IFrame API script (https://www.youtube.com/iframe_api)
+            // because it bypasses error 153 — the IFrame API runs in OUR page
+            // context, not YouTube's, so YouTube's WKWebView-detection code
+            // never runs.
             let videoId = url.lastPathComponent
             let html = Self.youtubeEmbedHTML(videoId: videoId)
-            print("📺 YouTube v6: custom HTML IFrame API + real iOS Safari UA: videoId=\(videoId)")
-            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube-nocookie.com"))
+            print("📺 YouTube v7: custom HTML IFrame API + iOS Safari UA + youtube.com baseURL: videoId=\(videoId)")
+            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
         } else {
             // Non-YouTube/Rutube: load URL directly with default UA.
             webView.load(URLRequest(url: url))
@@ -392,30 +406,16 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 v6 (July 2026): RESTORED custom HTML with YouTube IFrame API.
+    /// 🔧 v7 (July 2026): custom HTML with YouTube IFrame API.
     ///
-    /// This is the ONLY approach that bypasses error 153. The IFrame API
-    /// script loads in OUR page context (not YouTube's), so YouTube's
-    /// WKWebView-detection code never runs against the WKWebView environment.
+    /// This bypasses error 153 because the IFrame API script runs in OUR page
+    /// context (not YouTube's), so YouTube's WKWebView-detection code never
+    /// runs against our WKWebView environment.
     ///
-    /// Combined with customUserAgent = real iOS Safari UA (set in makeUIView),
-    /// this also avoids the bot check that plagued the previous version of
-    /// this code (which used Mac UA → TLS mismatch → bot check).
-    ///
-    /// Player config:
-    ///   - playsinline=1: iOS inline playback (essential)
-    ///   - rel=0: no related-video end screen
-    ///   - modestbranding=1: less YouTube branding
-    ///   - fs=0, controls=0, disablekb=1, iv_load_policy=3: hide YouTube's own
-    ///     UI — Plink's ControlsOverlay handles all playback control via JS bridge
-    ///   - origin=https://www.youtube-nocookie.com: matches baseURL
-    ///
-    /// Event handlers:
-    ///   - onReady: post 'ready' message to videoBridge + auto-play (iOS
-    ///     requires user gesture for unmuted autoplay; if blocked, user can
-    ///     tap Plink's play button)
-    ///   - onStateChange: post 'state' message. State 0 = video ended →
-    ///     seekTo(0) + pauseVideo to prevent YouTube's end-screen banners
+    /// v7 FIX: 'origin' parameter changed from 'youtube-nocookie.com' to
+    /// 'youtube.com' to match the new baseURL. This is what was causing the
+    /// 'sign in to confirm you are not a bot' interstitial — Origin header
+    /// mismatch between what the IFrame API expected and what we sent.
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -446,19 +446,15 @@ struct WebVideoView: UIViewRepresentable {
                             'controls': 0,
                             'disablekb': 1,
                             'iv_load_policy': 3,
-                            'origin': 'https://www.youtube-nocookie.com'
+                            'origin': 'https://www.youtube.com'
                         },
                         events: {
                             'onReady': function(e) {
                                 window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
-                                // Try playVideo without mute first.
-                                // If blocked by iOS, user can tap our play button.
                                 player.playVideo();
                             },
                             'onStateChange': function(e) {
                                 window.webkit.messageHandlers.videoBridge.postMessage({type:'state', state: e.data});
-                                // state 0 = video ended. YouTube shows end-screen
-                                // with banners/repeat. Seek to 0 + pause to prevent.
                                 if (e.data === 0) {
                                     player.seekTo(0, true);
                                     player.pauseVideo();

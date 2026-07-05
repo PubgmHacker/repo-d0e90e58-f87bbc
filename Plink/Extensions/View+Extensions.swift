@@ -271,6 +271,13 @@ struct AdminShimmerTextModifier: ViewModifier {
                     endPoint: UnitPoint(x: phase + 1, y: 0.5)
                 )
             )
+            // 🔧 TEXT STROKE: тонкая чёрная обводка через 4-directional shadow.
+            // Без неё красный «испепеляет» буквы — они сливаются в пятно.
+            // 4 shadow (up/down/left/right) по 0.5px каждая = эффект stroke.
+            .shadow(color: .black.opacity(0.6), radius: 0.5, x: 0.5, y: 0)
+            .shadow(color: .black.opacity(0.6), radius: 0.5, x: -0.5, y: 0)
+            .shadow(color: .black.opacity(0.6), radius: 0.5, x: 0, y: 0.5)
+            .shadow(color: .black.opacity(0.6), radius: 0.5, x: 0, y: -0.5)
             // 🔧 GLOW: red shadow makes the shimmer visibly "pop"
             .shadow(color: Color(hex: 0xFF1538).opacity(0.7), radius: 4)
             .shadow(color: Color(hex: 0xFF4D4D).opacity(0.4), radius: 8)

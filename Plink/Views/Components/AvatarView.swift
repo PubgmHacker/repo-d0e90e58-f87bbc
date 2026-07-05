@@ -221,7 +221,6 @@ struct AdminBadgeChip: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            // 🔧 FIX: user-provided custom icon (was SF Symbol 'shield.fill')
             Image("AdminBadge")
                 .resizable()
                 .scaledToFit()
@@ -230,6 +229,11 @@ struct AdminBadgeChip: View {
                 Text("АДМИН")
                     .font(.system(size: 9, weight: .heavy, design: .rounded))
                     .tracking(0.5)
+                    // 🔧 TEXT STROKE: тонкая чёрная обводка для читаемости красного текста
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0.4, y: 0)
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: -0.4, y: 0)
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: 0.4)
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: -0.4)
             }
         }
         .foregroundColor(Color.raveDanger)

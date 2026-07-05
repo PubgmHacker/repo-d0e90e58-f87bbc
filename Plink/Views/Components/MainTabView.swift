@@ -254,35 +254,34 @@ struct RoomsTabContent: View {
                 selectedSubTab = tab
             }
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Text(tab.icon)
-                    .font(.system(size: 15))  // 🔧 BIGGER: was 13 → 15
+                    .font(.system(size: 13))  // 🔧 FIX: was 15 — обрезало "Запросы"
                 Text(tab.rawValue)
-                    .font(.system(size: 14, weight: isActive ? .bold : .semibold))  // 🔧 BIGGER: was 12/medium → 14/semibold
+                    .font(.system(size: 12, weight: isActive ? .bold : .semibold))  // 🔧 FIX: was 14
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)  // 🔧 FIX: was 0.7 — позволяет сжиматься сильнее
 
                 if showBadge {
                     Text("\(inviteService.inviteCount)")
-                        .font(.system(size: 10, weight: .heavy).monospacedDigit())
+                        .font(.system(size: 9, weight: .heavy).monospacedDigit())  // 🔧 FIX: was 10
                         .foregroundColor(.white)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Color.raveDanger)
                         .clipShape(Capsule())
                 }
             }
             .foregroundColor(isActive ? .white : .raveTextSecondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 10)  // 🔧 FIX: was 14 — компактнее
+            .padding(.vertical, 9)     // 🔧 FIX: was 10
             .background(
                 Group {
                     if isActive {
-                        // 🔧 Active: gradient fill + glow
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: 14)
                             .fill(Color.raveGradient)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 16)
+                                RoundedRectangle(cornerRadius: 14)
                                     .stroke(
                                         LinearGradient(
                                             colors: [Color.white.opacity(0.3), Color.bioEmerald.opacity(0.2)],
@@ -294,11 +293,10 @@ struct RoomsTabContent: View {
                             )
                             .shadow(color: Color.bioCyan.opacity(0.35), radius: 8, y: 2)
                     } else {
-                        // 🔧 Inactive: subtle glass
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: 14)
                             .fill(Color.white.opacity(0.04))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 16)
+                                RoundedRectangle(cornerRadius: 14)
                                     .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
                             )
                     }
@@ -325,7 +323,8 @@ struct RoomsTabContent: View {
                         .buttonStyle(.plain)
                     }
                 } else {
-                    emptyState(icon: "globe.americas.fill", text: "Нет активных комнат")
+                    emptyState(icon: "globe.americas.fill", text: "Нет активных комнат",
+                               subtitle: "Создайте новую комнату с главной страницы")
                 }
             }
             .padding(.horizontal, 20)
@@ -348,7 +347,8 @@ struct RoomsTabContent: View {
                         myRoomCard(room)
                     }
                 } else {
-                    emptyState(icon: "rectangle.stack.badge.plus", text: "Создайте комнату с главной")
+                    emptyState(icon: "rectangle.stack.badge.plus", text: "Создайте комнату с главной",
+                               subtitle: "Здесь появятся комнаты, которые вы создали или посетили")
                 }
             }
             .padding(.horizontal, 20)
@@ -367,15 +367,16 @@ struct RoomsTabContent: View {
     }
 
     // MARK: - Join Content (embedded JoinRoomView)
-
+    //
+    // 🔧 FIX: was wrapping JoinRoomView in another ScrollView + .frame(minHeight: 500).
+    // JoinRoomView already has its own internal ScrollView → double-scroll caused
+    // content to overflow horizontally and the bottom join button to clip off-screen.
+    // Now: embed JoinRoomView directly with proper padding. It manages its own layout.
     private var joinContent: some View {
-        ScrollView(showsIndicators: false) {
-            JoinRoomView { room in
-                navigateToRoom = room
-            }
-            .frame(minHeight: 500)
-            .padding(.top, 8)
+        JoinRoomView { room in
+            navigateToRoom = room
         }
+        .padding(.top, 8)
     }
 
     // MARK: - Requests Content (Room invites)
@@ -384,7 +385,8 @@ struct RoomsTabContent: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
                 if inviteService.pendingInvites.isEmpty {
-                    emptyState(icon: "envelope.open", text: "Нет запросов на присоединение")
+                    emptyState(icon: "envelope.open", text: "Нет запросов на присоединение",
+                               subtitle: "Приглашайте друзей и получайте запросы на вход сюда")
                 } else {
                     ForEach(inviteService.pendingInvites) { invite in
                         inviteCard(invite)
@@ -536,18 +538,83 @@ struct RoomsTabContent: View {
 
     // MARK: - Empty State
 
-    private func emptyState(icon: String, text: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 32))
-                .foregroundColor(.raveTextTertiary)
-            Text(text)
-                .font(.subheadline)
-                .foregroundColor(.raveTextSecondary)
+    /// 🔧 PREMIUM empty state — was bare icon + text. Now: glass card with
+    /// gradient ring around icon + title + subtitle for better UX guidance.
+    private func emptyState(icon: String, text: String, subtitle: String? = nil) -> some View {
+        VStack(spacing: 12) {
+            // 🔧 PREMIUM: icon in gradient ring instead of bare SF Symbol
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.bioCyan.opacity(0.15),
+                                Color.bioEmerald.opacity(0.08),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 72, height: 72)
+                Circle()
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.bioCyan.opacity(0.3),
+                                Color.bioEmerald.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+                    .frame(width: 72, height: 72)
+                Image(systemName: icon)
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(.bioCyan)
+            }
+            .shadow(color: Color.bioCyan.opacity(0.2), radius: 8, y: 2)
+
+            VStack(spacing: 4) {
+                Text(text)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.raveTextSecondary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(.raveTextTertiary)
+                        .multilineTextAlignment(.center)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 30)
-        .glassCard(cornerRadius: 16, opacity: 0.04)
+        .padding(.vertical, 40)
+        .padding(.horizontal, 24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.bioObsidian.opacity(0.3))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.bioCyan.opacity(0.2),
+                            Color.bioEmerald.opacity(0.08),
+                            Color.white.opacity(0.04)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
+        )
+        .padding(.horizontal, 20)
     }
 
     // MARK: - My Room Card

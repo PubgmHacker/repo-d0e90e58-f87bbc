@@ -1,4 +1,36 @@
 import SwiftUI
+import UIKit
+
+// MARK: - AppDelegate (orientation lock)
+//
+// 🔧 FIX v2 (July 2026): user-reported bug — "when watching video in landscape
+// and swiping left = tabbar appears, screen auto-rotates to portrait, room closes".
+//
+// Root cause: RoomView was opened via `navigationDestination(item:)` inside a
+// NavigationStack inside a TabView. The iOS edge-swipe gesture (used by
+// NavigationStack for "swipe to go back") fires when the user swipes left
+// from the screen edge in landscape — popping RoomView, returning to the tab,
+// re-showing the tabbar, and triggering RoomView.onDisappear → forcePortrait().
+// Result: room closes and screen rotates — exactly what the user reported.
+//
+// Fix: lock the device orientation at the AppDelegate level while RoomView is
+// presented. AppDelegate.orientationLock is set to .landscape or .portrait by
+// RoomView (via OrientationManager) and to .allByDefault otherwise. Combined
+// with `interactiveDismissDisabled(true)` and `.fullScreenCover` presentation
+// (see MainTabView), this completely isolates RoomView from TabView gestures
+// and system edge-swipe handling.
+final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
+
+    /// Active orientation mask. Defaults to `.all` so the rest of the app
+    /// supports all orientations. RoomView sets this to `.portrait` or
+    /// `.landscape` via OrientationManager.lockOrientation(_:).
+    static var orientationLock: UIInterfaceOrientationMask = .all
+
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return PlinkAppDelegate.orientationLock
+    }
+}
 
 // MARK: - App Entry Point
 /// Конфигурирует dependency injection, прокидывает JWT-токен между сервисами,
@@ -6,6 +38,10 @@ import SwiftUI
 /// и обрабатывает Universal Links (deep-linking, Блок 3).
 @main
 struct PlinkApp: App {
+
+    // 🔧 Wire up AppDelegate so `supportedInterfaceOrientationsFor` is consulted
+    // by UIKit. Required for the orientation-lock fix above.
+    @UIApplicationDelegateAdaptor(PlinkAppDelegate.self) private var appDelegate
 
     // MARK: - Service Singletons (app lifetime)
 

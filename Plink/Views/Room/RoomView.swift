@@ -87,18 +87,11 @@ struct RoomView: View {
         // but that caused tabbar to appear in landscape when swiping chat.
         // User: 'в горизонтальном если свайпать чат = появляется таббар'.
         .toolbar(.hidden, for: .tabBar)
-        // 🔧 FIX: block ALL edge swipes — prevents escaping to other tabs.
-        // User: 'свайп на таббар прямо из комнаты до сих пор работает'.
-        // This overlay captures touches on screen edges where iOS edge swipe fires.
-        .overlay {
-            // Invisible blocks on left and right edges to eat edge-swipe gestures
-            HStack(spacing: 0) {
-                Color.clear.frame(width: 30).contentShape(Rectangle())
-                Spacer()
-                Color.clear.frame(width: 30).contentShape(Rectangle())
-            }
-            .allowsHitTesting(true)
-        }
+        // 🔧 FIX v2 (July 2026): prevent interactive swipe-down dismissal of the
+        // modal RoomView. Combined with the fullScreenCover presentation in
+        // MainTabView, this kills ALL system edge-swipe paths that previously
+        // caused 'swipe left → tabbar appears → screen rotates → room closes'.
+        .interactiveDismissDisabled(true)
         .task {
             guard let viewModel else { return }
             await viewModel.joinRoomFlow()
@@ -124,6 +117,10 @@ struct RoomView: View {
             }
         }
         .onDisappear {
+            // 🔧 FIX v2 (July 2026): release the AppDelegate orientation lock so the
+            // rest of the app can rotate freely. forcePortrait() alone is not enough
+            // — the lock stays active and would constrain other screens.
+            OrientationManager.shared.unlockOrientation()
             OrientationManager.shared.forcePortrait()
 
             guard let viewModel else { return }
@@ -439,11 +436,15 @@ struct RoomView: View {
 
     /// Принудительный сброс в портрет — вызывается при onAppear, возврате из background,
     /// и при смене scenePhase на .active. Гарантирует что чат всегда корректного размера.
+    ///
+    /// 🔧 FIX v2 (July 2026): now ALSO locks the orientation at the AppDelegate
+    /// level via OrientationManager.lockToPortrait(). This prevents system edge-swipe
+    /// gestures and accidental device rotations from interfering with the chat layout.
     private func resetToPortrait() {
         isFullscreenMode = false
         showChatPanel = true
         showEmojiPicker = false
-        OrientationManager.shared.forcePortrait()
+        OrientationManager.shared.lockToPortrait()
     }
 
     // MARK: - Fullscreen (YouTube-style)
@@ -453,7 +454,9 @@ struct RoomView: View {
             isFullscreenMode = true
             showControls = true
         }
-        OrientationManager.shared.forceLandscape()
+        // 🔧 FIX v2: lock to landscape at AppDelegate level so device rotation
+        // events outside our control can't switch back to portrait mid-video.
+        OrientationManager.shared.lockToLandscape()
         resetControlsTimer()
     }
 
@@ -462,7 +465,8 @@ struct RoomView: View {
             isFullscreenMode = false
             showControls = true
         }
-        OrientationManager.shared.forcePortrait()
+        // 🔧 FIX v2: lock back to portrait.
+        OrientationManager.shared.lockToPortrait()
         resetControlsTimer()
     }
 

@@ -71,4 +71,52 @@ final class OrientationManager {
         }
         return false
     }
+
+    // MARK: - Orientation Lock (fix v2)
+    //
+    // 🔧 FIX v2 (July 2026): AppDelegate-level orientation lock for RoomView.
+    // See PlinkAppDelegate in RaveCloneApp.swift for the full rationale.
+    //
+    // Why both `lockOrientation(_:)` AND `forceLandscape()`/`forcePortrait()`:
+    //   - `forceLandscape/Portrait` ROTATES the device NOW (imperative).
+    //   - `lockOrientation(_:)` SETS the set of allowed orientations for future
+    //     rotation events (declarative). UIKit consults
+    //     `application(_:supportedInterfaceOrientationsFor:)` on every rotation
+    //     request — if the requested orientation isn't in the lock, the rotation
+    //     is suppressed.
+    //
+    // RoomView uses BOTH: on enter, lock + force the desired orientation; on
+    // exit, unlock (.all) so the rest of the app can rotate freely.
+    //
+    // IMPORTANT: also call `setNeedsUpdateOfSupportedInterfaceOrientations()` on
+    // all root VCs so UIKit re-queries the lock immediately rather than waiting
+    // for the next rotation event.
+
+    /// Lock the device to a specific set of orientations.
+    /// Pass `.all` to release the lock (allow any orientation).
+    func lockOrientation(_ mask: UIInterfaceOrientationMask) {
+        PlinkAppDelegate.orientationLock = mask
+        // Force UIKit to re-evaluate the supported orientations NOW.
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        for vc in scene.windows.compactMap({ $0.rootViewController }) {
+            vc.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+    }
+
+    /// Convenience: lock to portrait only.
+    func lockToPortrait() {
+        lockOrientation(.portrait)
+        forcePortrait()
+    }
+
+    /// Convenience: lock to landscape only.
+    func lockToLandscape() {
+        lockOrientation(.landscape)
+        forceLandscape()
+    }
+
+    /// Convenience: release all orientation locks (allow any orientation).
+    func unlockOrientation() {
+        lockOrientation(.all)
+    }
 }

@@ -327,101 +327,60 @@ struct WebVideoView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        // 🔧 FIX: disable user interaction on WKWebView — it captures ALL touch events
-        // even when our SwiftUI ControlsOverlay is on top. This prevents YouTube's
-        // buttons/banners from being tappable and lets our controls receive all touches.
-        // Video still renders — only touch is disabled. All playback control via JS bridge.
-        webView.isUserInteractionEnabled = false
+
+        // 🔧 FIX v2 (July 2026): user-reported "YouTube asks to confirm not a bot
+        // and sign in". Root cause — Plink was using a DESKTOP Mac Safari User-Agent
+        // string on an iOS device. YouTube detected the mismatch (iOS device + Mac UA
+        // + WKWebView TLS fingerprint) and flagged the request as suspicious, showing
+        // the "confirm you're not a bot" interstitial.
+        //
+        // Rave (working reference) uses the DEFAULT WKWebView UA — which YouTube
+        // recognizes as legitimate iOS Safari. Fix: do NOT override customUserAgent
+        // for YouTube. Only override for Rutube, which actually needs the desktop UA.
+        let urlString = url.absoluteString
+        if urlString.contains("rutube.ru") {
+            // Rutube genuinely requires desktop UA to serve embed properly.
+            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        }
+        // For YouTube and all others: leave default UA (iOS Safari).
+
+        // 🔧 FIX v2: re-enable user interaction. The previous "isUserInteractionEnabled = false"
+        // was added to prevent YouTube's own controls from being tapped, but:
+        //   1. It also blocked the "I'm not a bot" / sign-in prompts from being answerable
+        //   2. It blocked any in-video interactions YouTube requires for verification
+        //   3. Plink's ControlsOverlay is rendered ON TOP of the WebView in SwiftUI's
+        //      ZStack — it receives touches first via standard hit-testing, no need to
+        //      disable the underlying WebView.
+        // (webView.isUserInteractionEnabled stays at default `true`)
+
         // 🔧 Register webView so SyncEngine can send play/pause/seek via JS
         WebViewControl.shared.register(webView)
 
-        // 🔧 FIX: YouTube blocks /embed/ in WKWebView with error 153.
-        // Solution: use youtube-nocookie.com domain — it's YouTube's privacy-
-        // enhanced embed domain that has fewer restrictions. Also build a custom
-        // HTML page with IFrame API instead of loading the embed URL directly.
-        // This bypasses YouTube's WKWebView detection.
-        if url.absoluteString.contains("youtube.com/embed/") {
-            // Extract video ID and use youtube-nocookie.com
-            let videoId = url.lastPathComponent
-            let html = Self.youtubeEmbedHTML(videoId: videoId)
-            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube-nocookie.com"))
-            return webView
-        } else if url.absoluteString.contains("rutube.ru/play/embed/") {
-            // 🔧 FIX: Rutube embed — load directly with desktop UA (already set).
-            // Rutube doesn't block WKWebView like YouTube does, just needs proper UA.
-            webView.load(URLRequest(url: url))
-            return webView
-        } else {
-            // Non-YouTube/Rutube: load URL directly
-            var request = URLRequest(url: url)
-            request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
-            request.setValue("https://www.youtube.com", forHTTPHeaderField: "Referer")
-            webView.load(request)
-        }
+        // 🔧 FIX v2 (July 2026): Rave-style direct URL load. The previous custom
+        // HTML wrapper with youtube-nocookie.com baseURL + IFrame API was causing
+        // two problems:
+        //   1. youtube-nocookie.com has STRICTER bot detection than youtube.com —
+        //      it's the privacy-enhanced domain, and YouTube treats unauthenticated
+        //      embeds from it as suspicious, often triggering sign-in prompts
+        //   2. Loading a custom HTML string with `<script src=".../iframe_api">`
+        //      is itself a fingerprinting signal that YouTube's anti-abuse systems
+        //      flag as automation
+        // Rave loads the embed URL directly via URLRequest and YouTube accepts it
+        // as a legitimate iOS Safari embed. Same approach here.
+        //
+        // Origin/Referer headers removed — they were also a fingerprint mismatch
+        // (claiming origin=youtube.com while loading from a different context).
+        webView.load(URLRequest(url: url))
 
         return webView
     }
 
-    /// 🔧 FIX: YouTube IFrame — auto-play, hide end-screen, prevent restart on rotation.
-    /// onStateChange detects video end (state 0) → calls player.seekTo(0) + pauseVideo
-    /// to prevent YouTube's end-screen banners/repeat button from showing.
+    /// 🔧 DEPRECATED v2 (July 2026): the custom YouTube IFrame HTML wrapper
+    /// was REMOVED — see makeUIView() for the rationale. Kept here as a
+    /// static no-op for binary compatibility (in case any external caller
+    /// references it). Returns empty string.
     static func youtubeEmbedHTML(videoId: String) -> String {
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-                #player { width: 100vw; height: 100vh; }
-                iframe { width: 100% !important; height: 100% !important; border: none; }
-            </style>
-        </head>
-        <body>
-            <div id="player"></div>
-            <script src="https://www.youtube.com/iframe_api"></script>
-            <script>
-                var player;
-                function onYouTubeIframeAPIReady() {
-                    player = new YT.Player('player', {
-                        videoId: '\(videoId)',
-                        playerVars: {
-                            'playsinline': 1,
-                            'rel': 0,
-                            'enablejsapi': 1,
-                            'modestbranding': 1,
-                            'fs': 0,
-                            'controls': 0,
-                            'disablekb': 1,
-                            'iv_load_policy': 3,
-                            'origin': 'https://www.youtube-nocookie.com'
-                        },
-                        events: {
-                            'onReady': function(e) {
-                                window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
-                                // 🔧 FIX: try playVideo without mute first.
-                                // If blocked by iOS, user can tap our play button.
-                                // Muting was causing random pauses + no sound.
-                                player.playVideo();
-                            },
-                            'onStateChange': function(e) {
-                                window.webkit.messageHandlers.videoBridge.postMessage({type:'state', state: e.data});
-                                // 🔧 FIX: state 0 = video ended. YouTube shows end-screen
-                                // with banners/repeat. Seek to 0 + pause to prevent this.
-                                if (e.data === 0) {
-                                    player.seekTo(0, true);
-                                    player.pauseVideo();
-                                }
-                            }
-                        }
-                    });
-                }
-            </script>
-        </body>
-        </html>
-        """
+        return ""
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}

@@ -372,7 +372,10 @@ struct PremiumManagementView: View {
                         if isPremium {
                             // Управление подпиской
                             Button {
-                                // TODO: открыть управление подпиской в App Store
+                                // 🔧 Pack v3: Открыть управление подпиской в App Store
+                                if let url = URL(string: "itms-apps://apps.apple.com/account/subscriptions") {
+                                    UIApplication.shared.open(url)
+                                }
                             } label: {
                                 HStack {
                                     Image(systemName: "creditcard.fill")

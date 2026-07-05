@@ -8,7 +8,7 @@ import Foundation
 /// 🔧 FIX H11: request<T> now handles 204 No Content gracefully.
 /// 🔧 FIX C6: APIClient conforms to ObservableObject so it can be injected
 /// via @EnvironmentObject into AdminPanelView (was: each view created its own
-/// unauthenticated APIClient()).
+/// unauthenticated APIClient — now fixed with .shared singleton).
 final class APIClient: ObservableObject, @unchecked Sendable {
     /// 🔧 Pack v3: Singleton — для использования в views без EnvironmentObject
     static let shared = APIClient()

@@ -217,8 +217,8 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 28)
                     .onAppear {
-                        // TODO: Wire up real Google Sign-In / Sign in with Apple
-                        // For now, fallback to email sign in after a moment
+                        // 🔧 Pack v3: Google/Apple Sign-In не реализованы —
+                        // авто-переход на email через 1.5 сек
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             withAnimation(.easeInOut(duration: 0.25)) {
                                 selectedAuthMethod = .email

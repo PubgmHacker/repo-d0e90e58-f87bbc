@@ -137,7 +137,8 @@ final class StreamReceiver: ObservableObject {
         guard let _ = json["sdp"] as? String else { return }
         connectionState = .negotiating
 
-        // TODO: После подключения GoogleWebRTC SDK:
+        // 🔧 Pack v3: WebRTC SDK не подключён — используется заглушка.
+        // При подключении GoogleWebRTC SDK:
         // 1. RTCPeerConnection.setRemoteDescription(offer)
         // 2. Создать answer
         // 3. RTCPeerConnection.setLocalDescription(answer)
@@ -152,8 +153,8 @@ final class StreamReceiver: ObservableObject {
     }
 
     private func handleICECandidate(_ json: [String: Any]) {
-        // TODO: После подключения GoogleWebRTC SDK:
-        // RTCPeerConnection.add(candidate)
+        // 🔧 Pack v3: WebRTC SDK не подключён — заглушка.
+        // При подключении: RTCPeerConnection.add(candidate)
     }
 
     // MARK: - Fallback: AVPlayer Stream

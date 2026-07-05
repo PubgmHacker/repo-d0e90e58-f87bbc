@@ -27,11 +27,19 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack {
-            // 🔧 PROFILE: own ocean palette (cyan/emerald/amber — distinct from tabs)
-            // was: AnimatedGradientBackground() — теперь BioluminescentBackground
-            // для консистентности с другими вкладками + лучшая видимость орбов.
-            BioluminescentBackground(energy: 0.75, dimming: 0, palette: .ocean)
-                .ignoresSafeArea()
+            // 🔧 FIX: plain dark background — NO orbs. Orbs clash with cover photo
+            // and avatar. User asked 5-6 times to remove them.
+            // Simple deep dark gradient that complements cover/avatar.
+            LinearGradient(
+                colors: [
+                    Color(hex: 0x0A0D14),   // deep dark (top)
+                    Color(hex: 0x0D1117),   // slightly lighter (center)
+                    Color(hex: 0x0A0D14),   // deep dark (bottom)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 24) {
@@ -246,9 +254,8 @@ struct ProfileView: View {
                 }
 
                 Text(viewModel.email)
-                    .font(.caption)
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.raveTextSecondary)
-                    .textStroke(opacity: 0.4)  // 🔧 subtle outline for readability
             }
             .padding(.top, 8)
 
@@ -320,7 +327,7 @@ struct ProfileView: View {
                     Text("Плинк+ активен")
                         .font(.subheadline.bold())
                         .foregroundColor(.white)
-                        .textStroke()
+                        
                     Text("Действует до \(formatter.string(from: expiryDate))")
                         .font(.caption)
                         .foregroundColor(.raveTextSecondary)
@@ -351,7 +358,7 @@ struct ProfileView: View {
                         Text("Оформить Плинк+")
                             .font(.subheadline.bold())
                             .foregroundColor(.white)
-                            .textStroke()
+                            
                         Text("Без рекламы · 4K · Дизайн · Бейдж")
                             .font(.caption)
                             .foregroundColor(.raveTextSecondary)
@@ -382,7 +389,7 @@ struct ProfileView: View {
                 Text("Активность")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
-                    .textStroke()
+                    
             }
 
             HStack(spacing: 10) {
@@ -447,7 +454,7 @@ struct ProfileView: View {
                 Text(loc.string(.profileHistory))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.raveTextPrimary)
-                    .textStroke()
+                    
                 Spacer()
                 if !viewModel.history.isEmpty {
                     Button(loc.string(.profileClear)) { viewModel.clearHistory() }

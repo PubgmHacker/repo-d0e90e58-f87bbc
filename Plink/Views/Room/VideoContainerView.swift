@@ -278,7 +278,9 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
-        config.preferences.javaScriptEnabled = true
+        // 🔧 Note: JavaScript is enabled by default in WKWebView.
+        // config.preferences.javaScriptEnabled is deprecated in iOS 14.
+        // YouTube embed JS works without setting this.
         config.websiteDataStore = WKWebsiteDataStore.default()  // 🔧 allow cookies
 
         let userScript = WKUserScript(

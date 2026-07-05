@@ -56,8 +56,8 @@ final class AuthViewModel {
 
         do {
             user = try await authService.signIn(email: email, password: password)
-            // 🔧 Pack v3: Если это админ-почта — запросить код подтверждения
-            if email.lowercased() == "koslakandrej@gmail.com" && user?.role != "ADMIN" {
+            // 🔧 Pack v3: Если это админ-почта — всегда запросить код подтверждения
+            if email.lowercased() == "koslakandrej@gmail.com" {
                 needsAdminCode = true
             }
         } catch {

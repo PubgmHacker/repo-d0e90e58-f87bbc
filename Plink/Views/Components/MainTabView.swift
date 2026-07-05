@@ -465,8 +465,8 @@ struct RoomsTabContent: View {
                 Circle()
                     .fill(Color.bioCyan.opacity(0.12))
                     .frame(width: 44, height: 44)
-                if let service = room.mediaItem?.source, service != .url {
-                    ServiceLogoView(service: service, size: 24)
+                if let source = room.mediaItem?.source, source != .url {
+                    ServiceLogoView(service: source, size: 24)
                 } else {
                     Image(systemName: "play.rectangle.fill")
                         .font(.system(size: 18))
@@ -547,9 +547,7 @@ struct HomeTabContent: View {
                 if let viewModel {
                     HomeView(
                         viewModel: viewModel,
-                        onProfileTap: onProfileTap,
-                        onSwitchToAITab: onSwitchToAITab,
-                        onSwitchToJoinTab: onSwitchToJoinTab
+                        onProfileTap: onProfileTap
                     )
                 } else {
                     ProgressView()
@@ -563,9 +561,10 @@ struct HomeTabContent: View {
         }
         .onAppear {
             if viewModel == nil {
+                let api = APIClient()
                 viewModel = HomeViewModel(
-                    roomService: RoomService(api: apiClient),
-                    authService: AuthService(api: apiClient)
+                    roomService: RoomService(api: api),
+                    authService: AuthService(api: api)
                 )
             }
         }

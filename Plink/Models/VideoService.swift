@@ -17,7 +17,7 @@ enum PlaybackMode: String, Sendable {
 /// - `.direct`: YouTube, VK Видео, RuTube — извлекаем прямой поток.
 /// - `.cinema`: Кинопоиск, Иви, Okko, Wink, Start, Premier, Смотрим, КИОН — WebView + своя подписка.
 /// - `.universal`: Браузер, Своя ссылка.
-enum VideoService: String, CaseIterable, Identifiable, Sendable {
+enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable {
     // Прямые потоки
     case youtube
     case vk

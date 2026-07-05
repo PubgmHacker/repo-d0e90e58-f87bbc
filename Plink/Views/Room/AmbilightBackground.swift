@@ -81,11 +81,10 @@ final class AmbilightSampler: ObservableObject {
         // Проверка энергосбережения
         guard !EnergyController.shared.isLowPower else { return }
 
-        // 🔧 FIX H7: Retain the pixel buffer for the lifetime of the detached Task.
-        CVPixelBufferRetain(pixelBuffer)
+        // 🔧 FIX H7: pixelBuffer is automatically retained by Swift ARC for the
+        // lifetime of the detached Task (CVPixelBufferRetain/Release are unavailable
+        // — Core Foundation objects are automatically memory-managed in Swift).
         Task.detached(priority: .utility) { [ciContext] in
-            // Release when done — guarantees the buffer outlives the CIImage render.
-            defer { CVPixelBufferRelease(pixelBuffer) }
             let extracted = await Self.extractDominantColors(from: pixelBuffer, context: ciContext)
             await MainActor.run {
                 self.colors = extracted

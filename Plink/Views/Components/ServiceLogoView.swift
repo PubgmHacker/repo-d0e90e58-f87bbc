@@ -17,6 +17,19 @@ struct ServiceLogoView: View {
     /// When false (default), shows just the square logo icon.
     var wordmark: Bool = false
 
+    /// 🔧 Convenience init from MediaItem.MediaSource — converts via rawValue.
+    init(service source: MediaItem.MediaSource, size: CGFloat = 48, wordmark: Bool = false) {
+        self.service = VideoService(rawValue: source.rawValue) ?? .youtube
+        self.size = size
+        self.wordmark = wordmark
+    }
+
+    init(service: VideoService, size: CGFloat = 48, wordmark: Bool = false) {
+        self.service = service
+        self.size = size
+        self.wordmark = wordmark
+    }
+
     // 🔧 FIX 4.5: Static cache — loaded once, reused forever
     private static let imageCache: [String: UIImage] = {
         var cache: [String: UIImage] = [:]

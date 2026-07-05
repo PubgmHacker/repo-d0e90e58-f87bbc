@@ -331,7 +331,7 @@ struct RoomSetupView: View {
     private func privacyIcon(_ level: RoomPrivacy) -> String {
         switch level {
         case .publicRoom:   return "globe"
-        case .friendsOnly:  return "person.2.fill"
+        case .byLink:       return "link"
         case .privateRoom:  return "lock.fill"
         }
     }
@@ -339,7 +339,7 @@ struct RoomSetupView: View {
     private func privacyColor(_ level: RoomPrivacy) -> Color {
         switch level {
         case .publicRoom:   return .bioCyan
-        case .friendsOnly:  return .bioEmerald
+        case .byLink:       return .bioEmerald
         case .privateRoom:  return .bioTeal
         }
     }

@@ -345,9 +345,15 @@ struct PremiumManagementView: View {
                                 Text("Плинк+ активна")
                                     .font(.title2.bold())
                                     .foregroundColor(.raveTextPrimary)
-                                if let expiry = PremiumStatusManager.shared.subscriptionExpiry { let f = DateFormatter(); f.dateStyle = .long; f.locale = Locale(identifier: "ru_RU"); Text("Действует до \(f.string(from: expiry))") } else { Text("Активна") }
-                                    .font(.subheadline)
-                                    .foregroundColor(.raveTextSecondary)
+                                if let expiry = PremiumStatusManager.shared.subscriptionExpiry {
+                                    Text("Действует до \(expiry, format: .dateTime.month().day().year())")
+                                        .font(.subheadline)
+                                        .foregroundColor(.raveTextSecondary)
+                                } else {
+                                    Text("Активна")
+                                        .font(.subheadline)
+                                        .foregroundColor(.raveTextSecondary)
+                                }
                             } else {
                                 Text("Плинк+ не активна")
                                     .font(.title2.bold())

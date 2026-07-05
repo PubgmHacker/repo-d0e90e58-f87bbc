@@ -29,11 +29,9 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
     /// Премиум-статус отправителя — true для своих сообщений,
     /// когда текущий юзер премиум (проверяется через PremiumStatusManager).
     /// 🔧 FIX N3 (NEW): Replaced MainActor.assumeIsolated with a thread-safe check.
+    @MainActor
     var isOwnPremium: Bool {
         guard isOwnMessage else { return false }
-        // 🔧 FIX N3: MainActor.assumeIsolated crashes if called off-main.
-        // Use Thread.isMainThread check before touching @MainActor state.
-        guard Thread.isMainThread else { return false }
         return PremiumStatusManager.shared.isPremium
     }
 

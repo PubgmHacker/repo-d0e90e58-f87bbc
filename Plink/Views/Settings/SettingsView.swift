@@ -295,16 +295,16 @@ struct SettingsView: View {
                             .lineLimit(1)
                     }
                     // 🔧 NEW: Short user ID for friend search
-                    if let userId = profileVM?.user?.id {
+                    if let user = profileVM?.user {
                         HStack(spacing: 4) {
                             Text("ID:")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.raveTextTertiary)
-                            Text(userId.shortId)
+                            Text(user.shortId)
                                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                 .foregroundColor(.raveTextSecondary)
                             Button {
-                                UIPasteboard.general.string = userId.fullId
+                                UIPasteboard.general.string = user.fullId
                                 HapticManager.impact(.light)
                             } label: {
                                 Image(systemName: "doc.on.doc")
@@ -460,10 +460,9 @@ struct SettingsView: View {
 extension LocalizationManager {
     var currentLanguageName: String {
         switch currentLanguage {
-        case "ru": return "Русский"
-        case "en": return "English"
-        case "zh": return "中文"
-        default: return "Русский"
+        case .russian: return "Русский"
+        case .english: return "English"
+        case .chinese: return "中文"
         }
     }
 }

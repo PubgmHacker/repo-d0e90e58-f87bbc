@@ -20,6 +20,15 @@ enum AppLanguage: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// English name of the language.
+    var englishName: String {
+        switch self {
+        case .russian: return "Russian"
+        case .english: return "English"
+        case .chinese: return "Chinese"
+        }
+    }
+
     /// Флаг для иконки.
     var flag: String {
         switch self {

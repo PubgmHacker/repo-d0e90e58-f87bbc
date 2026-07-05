@@ -455,7 +455,7 @@ struct HomeView: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    gradient.colors.first?.opacity(0.15) ?? Color.white.opacity(0.05),
+                                    Color.ravePrimary.opacity(0.15),
                                     Color.clear,
                                 ],
                                 startPoint: .topLeading,
@@ -479,7 +479,7 @@ struct HomeView: View {
                         lineWidth: 0.5
                     )
             )
-            .shadow(color: (gradient.colors.first ?? .ravePrimary).opacity(0.3), radius: 8, y: 3)
+            .shadow(color: Color.ravePrimary.opacity(0.3), radius: 8, y: 3)
         }
         .buttonStyle(GlassButtonStyle())
     }
@@ -524,7 +524,7 @@ struct HomeView: View {
         var seen = Set<VideoService>()
         var result: [Room] = []
         for room in all {
-            if let service = room.mediaItem?.source, !seen.contains(service) {
+            if let source = room.mediaItem?.source, let service = VideoService(rawValue: source.rawValue), !seen.contains(service) {
                 seen.insert(service)
                 result.append(room)
             }
@@ -783,8 +783,8 @@ private struct RecommendationCardView: View {
 
             // 🔧 Service name + host
             HStack(spacing: 4) {
-                if let media = room.mediaItem {
-                    Text(media.source.brandName)
+                if let media = room.mediaItem, let svc = VideoService(rawValue: media.source.rawValue) {
+                    Text(svc.brandName)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.bioCyan)
                 }

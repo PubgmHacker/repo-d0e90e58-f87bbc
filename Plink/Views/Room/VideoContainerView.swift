@@ -505,7 +505,26 @@ struct WebVideoView: UIViewRepresentable {
         """
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        // 🔧 v18.1: guard against reload loops.
+        // SwiftUI calls updateUIView on every state change (WebSocket, syncEngine,
+        // chat messages). Without this guard, WKWebView.reload() would be called
+        // repeatedly → OS kills sandbox → black screen + DownloadFailed errors.
+        // Only reload if the URL actually changed AND the WebView isn't already
+        // loading/loaded that URL.
+        guard let currentURL = uiView.url else { return }
+        let targetURL = url.absoluteString
+        // If already loading or loaded the target URL, skip
+        if currentURL.absoluteString.contains(targetURL) || uiView.isLoading {
+            return
+        }
+        // Only reload if URL genuinely changed (different video)
+        // For YouTube backend player, the video ID is in the URL query param
+        if targetURL != currentURL.absoluteString {
+            print("📺 WebVideoView: URL changed, reloading: \(targetURL.prefix(60))")
+            uiView.load(URLRequest(url: url))
+        }
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 

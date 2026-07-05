@@ -453,8 +453,8 @@ enum L10n {
             .chinese: "发现"
         ],
         .homeWatchingNow: [
-            .russian: "смотрят сейчас",
-            .english: "watching now",
+            .russian: "Смотрят сейчас",
+            .english: "Watching now",
             .chinese: "正在观看"
         ],
         .homeCreateRoom: [

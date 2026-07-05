@@ -98,6 +98,9 @@ struct AIAssistantView: View {
                     .foregroundColor(.white)
             }
             .shadow(color: Color.ravePrimary.opacity(0.4), radius: 20, y: 8)
+            // 🔧 SUBTLE: slow glow pulse on welcome sparkles — "thinking" cue, doesn't
+            // compete with the streaming cursor (that animation only appears during replies).
+            .glowPulse(color: Color.bioCyan, minRadius: 12, maxRadius: 22, minOpacity: 0.15, maxOpacity: 0.5, period: 2.4)
 
             VStack(spacing: 8) {
                 Text("Что посмотреть?")

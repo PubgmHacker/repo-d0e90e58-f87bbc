@@ -284,6 +284,9 @@ private struct FriendRow: View {
                     Circle()
                         .fill(friend.isOnline ? Color.raveGreen : Color.raveTextTertiary)
                         .frame(width: 6, height: 6)
+                        // 🔧 SUBTLE: only the ONLINE dot breathes (offline stays static) —
+                        // makes presence feel alive without animating every row at once.
+                        .modifier(ConditionalBreathing(isActive: friend.isOnline, maxScale: 1.3, period: 1.8))
                     Text(friend.isOnline ? loc.string(.friendsOnline) : loc.string(.friendsOffline))
                         .font(.caption)
                         .foregroundColor(.raveTextSecondary)

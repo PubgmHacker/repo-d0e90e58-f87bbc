@@ -418,6 +418,15 @@ struct RoomCreationView: View {
             .buttonStyle(PremiumButtonStyle(glowColor: .ravePrimary))
             .disabled(!canProceed)
             .opacity(canProceed ? 1 : 0.5)
+            // 🔧 SUBTLE: glow pulses only when the form is ready to proceed —
+            // functional feedback that says "you can tap me now". When disabled, no animation.
+            .modifier(ConditionalGlow(
+                isActive: canProceed && !isCreating,
+                color: Color.ravePrimary,
+                minRadius: 6, maxRadius: 14,
+                minOpacity: 0.15, maxOpacity: 0.35,
+                period: 2.0
+            ))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

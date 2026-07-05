@@ -69,6 +69,8 @@ struct LoginView: View {
                             .foregroundColor(.white)
                     }
                     .shadow(color: Color.ravePrimary.opacity(0.5), radius: 20, y: 8)
+                    // 🔧 SUBTLE: gentle breathing on the brand mark — calm heartbeat, not flashy.
+                    .breathingScale(minScale: 1.0, maxScale: 1.035, period: 3.0)
 
                     Text(loc.string(.appName))
                         .font(.system(size: 34, weight: .heavy, design: .rounded))

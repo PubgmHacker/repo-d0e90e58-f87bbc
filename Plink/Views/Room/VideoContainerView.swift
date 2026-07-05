@@ -116,21 +116,17 @@ struct VideoContainerView: View {
     // MARK: - WebView (кинотеатры)
 
     @ViewBuilder
-    private var webVideoViewContent: some View {
+    private func webVideoView(size: CGSize) -> some View {
         if let url = URL(string: mediaURL) {
             WebVideoView(url: url) { time in
                 onSeek(time)
             }
-        } else {
-            VideoPlaceholder()
-        }
-    }
-
-    @ViewBuilder
-    private func webVideoView(size: CGSize) -> some View {
-        webVideoViewContent
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 12))
+        } else {
+            VideoPlaceholder()
+                .frame(width: size.width, height: size.height)
+        }
     }
 }
 
@@ -375,8 +371,8 @@ struct WebVideoView: UIViewRepresentable {
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-                #player { width: 100%; height: 100%; }
-                iframe { width: 100%; height: 100%; border: none; }
+                #player { width: 100vw; height: 100vh; }
+                iframe { width: 100% !important; height: 100% !important; border: none; }
             </style>
         </head>
         <body>

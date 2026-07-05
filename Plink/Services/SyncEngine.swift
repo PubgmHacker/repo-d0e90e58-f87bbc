@@ -237,12 +237,10 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         let clamped = max(0, min(time, duration))
 
         // 🔧 FIX: for webview mode, there's no AVPlayer to seek. Just update
-        // currentTime and broadcast — no need for AVPlayer seek + timeout.
-        // Without this guard, seek() tries player?.seek() which returns nil
-        // (player is nil in webview mode), then the 2s timeout fires every
-        // time, flooding the console with "Seek timeout — broadcasting anyway".
+        // currentTime, send JS seek to YouTube player, and broadcast.
         if player == nil {
             currentTime = clamped
+            WebViewControl.shared.seek(to: clamped)
             broadcastSyncCommand(.seek, mediaTime: clamped)
             return
         }

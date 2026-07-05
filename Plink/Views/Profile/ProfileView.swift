@@ -157,31 +157,15 @@ struct ProfileView: View {
                 onDismiss: { showPaywall = false }
             )
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            guard let newItem else { return }
-            newItem.loadTransferable(type: Data.self) { result in
-                DispatchQueue.main.async {
-                    if case .success(let data?) = result, let img = UIImage(data: data) {
-                        viewModel.saveAvatar(img)
-                    }
-                }
-            }
-            selectedPhotoItem = nil
-        }
-        // 🔧 NEW: Cover photo picker (separate from avatar)
-        .photosPicker(isPresented: $showCoverPicker, selection: $selectedCoverItem, matching: .images)
-        .onChange(of: selectedCoverItem) { _, newItem in
-            guard let newItem else { return }
-            newItem.loadTransferable(type: Data.self) { result in
-                DispatchQueue.main.async {
-                    if case .success(let data?) = result, let img = UIImage(data: data) {
-                        viewModel.saveCover(img)
-                    }
-                }
-            }
-            selectedCoverItem = nil
-        }
+        // 🔧 v11 (July 2026): REMOVED direct photosPicker handlers from
+        // ProfileView. Avatar/cover editing is now ONLY available inside
+        // EditProfileSheet (tap 'Редактировать' button). The showPhotoPicker /
+        // showCoverPicker / selectedPhotoItem / selectedCoverItem state
+        // variables remain declared (for backward-compat with any external
+        // callers) but are no longer wired to anything in this view — they
+        // were triggering the iOS PhotosPicker sheet which let users change
+        // avatar/cover without entering Edit mode, which the user explicitly
+        // asked us to prevent.
     }
 
     // MARK: - Profile Header
@@ -191,6 +175,13 @@ struct ProfileView: View {
             // ─── COVER (VK-style, lower height) ───
             // 🔧 VK-STYLE: 150pt (was 180) — VK uses ~140-160pt cover.
             // Lower = avatar sits closer to top, more elegant.
+            //
+            // 🔧 v11 (July 2026): REMOVED direct camera button from cover.
+            // User explicitly requested: 'без нажатия редактировать профиль
+            // нельзя поменять аватарку и обложку'. Cover/avatar are now
+            // read-only here — editing only via EditProfileSheet (tap
+            // 'Редактировать' button below). This avoids accidental taps
+            // and keeps the profile header clean.
             ZStack(alignment: .bottomTrailing) {
                 if let coverImage = viewModel.coverImage {
                     Image(uiImage: coverImage)
@@ -226,47 +217,9 @@ struct ProfileView: View {
                 )
                 .frame(height: 50)
                 .frame(maxHeight: .infinity, alignment: .bottom)
-
-                Button {
-                    showCoverPicker = true
-                } label: {
-                    // 🔧 v11 (July 2026): enlarged cover camera button — was 36pt,
-                    // hard to see/tap. Now 44pt with brighter material + clear
-                    // "edit cover" affordance. Always visible (not just on tap).
-                    ZStack {
-                        Circle()
-                            .fill(.regularMaterial)
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.6), lineWidth: 1.5)
-                            )
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
-                }
-                .buttonStyle(.plain)
-                .padding(14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
             .frame(height: 150)
             .clipped()
-            .overlay(
-                // 🔧 v11: "Изменить обложку" hint label — always visible, helps
-                // users discover that the cover is editable without entering
-                // Edit Profile mode.
-                Text("Изменить обложку")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .padding(10),
-                alignment: .topLeading
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
@@ -276,6 +229,9 @@ struct ProfileView: View {
             // ─── AVATAR (overlapping cover, VK-style) ───
             // 🔧 VK-STYLE: 100pt avatar + 6px ring = 112pt total (was 120+12=132)
             // Smaller avatar = more elegant, matches VK proportions.
+            //
+            // 🔧 v11 (July 2026): REMOVED direct camera button from avatar.
+            // Read-only display here. Editing only via EditProfileSheet.
             ZStack {
                 Circle()
                     .fill(Color.bioObsidian)
@@ -284,35 +240,14 @@ struct ProfileView: View {
                     .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                     .frame(width: 112, height: 112)
 
-                Button { showPhotoPicker = true } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        AvatarView(
-                            image: viewModel.avatarImage,
-                            imageURL: viewModel.avatarURL,
-                            username: viewModel.displayName,
-                            size: 100,
-                            isPremium: isPremium,
-                            isAdmin: viewModel.user?.isAdmin ?? false
-                        )
-
-                        // 🔧 v11 (July 2026): enlarged camera button — was 26pt,
-                        // now 32pt with stronger shadow + brighter background.
-                        // Helps users discover that the avatar is editable
-                        // directly without entering Edit Profile mode.
-                        Image(systemName: "camera.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(.white)
-                            .background(Circle().fill(Color.ravePrimary))
-                            .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.5), radius: 5, y: 2)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
-                                    .frame(width: 32, height: 32)
-                            )
-                    }
-                }
-                .buttonStyle(.plain)
+                AvatarView(
+                    image: viewModel.avatarImage,
+                    imageURL: viewModel.avatarURL,
+                    username: viewModel.displayName,
+                    size: 100,
+                    isPremium: isPremium,
+                    isAdmin: viewModel.user?.isAdmin ?? false
+                )
             }
             .offset(y: -50)  // 🔧 VK-style: avatar overlaps cover (was -60)
             .padding(.bottom, -40)  // compensate (was -50)

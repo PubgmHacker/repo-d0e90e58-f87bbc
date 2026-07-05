@@ -35,7 +35,14 @@ final class ProfileViewModel {
 
     /// 🔧 FIX: Подписка на смену аватара другим инстансом (например, когда юзер
     /// меняет фото в ProfileView — SettingsView тоже должен обновиться немедленно).
-    private var avatarObserver: NSObjectProtocol?
+    ///
+    /// 🔧 SWIFT 6: `nonisolated(unsafe)` — observer токен мутируется только в
+    /// init (main actor) и удаляется в nonisolated deinit. NSObjectProtocol
+    /// — это opaque тикет, чтение/удаление через NotificationCenter
+    /// потокобезопасны (внутри NotificationCenter используется своя блокировка).
+    /// Поэтому nonisolated deinit может безопасно удалить observer без
+    /// захвата main-actor isolation.
+    nonisolated(unsafe) private var avatarObserver: NSObjectProtocol?
 
     // История просмотров (Блок 2)
     var history: [WatchHistoryItem] {

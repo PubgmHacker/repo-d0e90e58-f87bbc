@@ -319,24 +319,15 @@ struct WebVideoView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
 
-        // 🔧 v11: for YouTube (both direct embed AND backend player), use
-        // completely clean WKWebView — no scripts, no handlers, no CSS.
-        // The backend player page has its OWN IFrame API JS — it doesn't
-        // need our syncScript or videoBridge.
-        let isYouTubeLike = isYouTube || isBackendPlayer
+        // 🔧 v19: shared process pool — playback WebView shares process with
+        // ServiceBrowserView (browsing phase). YouTube cookies from browsing
+        // are available to the playback iframe → no bot check.
+        config.processPool = PlinkWebViewProcessPool.shared
 
-        // 🔧 v14: for YouTube, use PERSISTENT (shared) data store.
-        // YouTube needs CONSENT cookie to skip "Sign in to confirm you're not a bot".
-        // nonPersistent() clears all cookies → bot check. default() keeps them.
-        if isYouTube && !isBackendPlayer {
-            // 🔧 v14: YouTube nocookie embed needs persistent cookies for CONSENT.
-            // Previous v10.2 used nonPersistent() which caused bot check.
-            config.websiteDataStore = WKWebsiteDataStore.default()
-        } else if isBackendPlayer {
-            config.websiteDataStore = WKWebsiteDataStore.default()
-        } else {
-            config.websiteDataStore = WKWebsiteDataStore.default()
-        }
+        // 🔧 v19: persistent cookies for ALL WebViews (YouTube needs CONSENT cookie)
+        config.websiteDataStore = WKWebsiteDataStore.default()
+
+        let isYouTubeLike = isYouTube || isBackendPlayer
 
         if !isYouTubeLike {
             // Non-YouTube (Rutube, VK, etc.): add sync script + bridge + CSS
@@ -403,31 +394,27 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v18 (July 2026): load backend player via REAL HTTPS URLRequest.
+            // 🔧 v19 (July 2026): mobile UA + shared process pool + shared cookies.
             //
-            // KEY INSIGHT: ALL local methods (loadHTMLString, load(data:),
-            // loadFileURL) trigger sandbox errors → 153. Only REAL HTTPS URL
-            // gives native Origin/Referer that iOS trusts.
+            // v18 had NO 153, but YouTube showed "Sign in to confirm you're not a bot"
+            // because Mac UA + no Google cookies = bot pattern.
             //
-            // Backend serves player HTML at /api/media/youtube-player?id=VIDEO_ID
-            // WKWebView loads it via plain URLRequest → iOS sets:
-            //   Origin: https://plink-backend...
-            //   Referer: https://plink-backend...
-            // natively. No sandbox issues.
+            // v19 fixes:
+            // 1. Mobile Safari UA (iPhone iOS 17.5) — YouTube is more lenient with
+            //    mobile UAs (no Google session is normal for mobile)
+            // 2. Shared WKProcessPool — playback WebView shares process with
+            //    ServiceBrowserView (browsing phase), inheriting "warmed" cookies
+            // 3. WKWebsiteDataStore.default() — shared cookies (CONSENT etc.)
             //
-            // The backend page uses YouTube IFrame API with:
-            //   host: 'https://www.youtube-nocookie.com' (weaker bot detection)
-            //   origin: window.location.origin (backend domain)
-            //
-            // This is the approach Rave uses — real HTTPS page on their domain.
-            webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+            // This is the Rave approach: single process pool + persistent cookies.
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1.15"
             webView.scrollView.bounces = false
 
             // Extract video ID from the nocookie embed URL
             let videoId = url.lastPathComponent
             let playerURL = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/media/youtube-player?id=\(videoId)")!
 
-            print("📺 YouTube v18: real HTTPS URLRequest to backend player (no local HTML, no sandbox)")
+            print("📺 YouTube v19: mobile UA + shared process pool + shared cookies")
             webView.load(URLRequest(url: playerURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15.0))
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -586,4 +573,9 @@ struct VideoPlaceholder: View {
             }
         }
     }
+}
+
+// MARK: - Shared Process Pool (v19)
+final class PlinkWebViewProcessPool {
+    static let shared = WKProcessPool()
 }

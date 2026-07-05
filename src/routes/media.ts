@@ -1,6 +1,7 @@
 // src/routes/media.ts — Pack 3: обновлённый с yt-dlp extraction
 import { extractStream, extractYouTubeStream, extractMetadata, UPSTREAM_USER_AGENT } from '../services/streamExtractor.js';
 import { youtubePlayerHTML } from '../services/youtubePlayer.js';
+import { proxyYouTubeEmbed } from '../services/youtubeEmbedProxy.js';
 import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
 
 const EXTRACT_CACHE_TTL = 3600; // 1 час — прямой URL живёт долго
@@ -334,5 +335,56 @@ export default async function mediaRoutes(fastify, _options) {
 
     const html = youtubePlayerHTML(id);
     return reply.send(html);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // GET /api/media/youtube-embed?id=VIDEO_ID — Full Embed Proxy (v12)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // v12: backend fetches the ENTIRE youtube.com/embed/ page and serves it.
+  // WKWebView loads this from backend URL (not youtube.com) → no 153.
+  // YouTube's player JS runs directly in the page → no iframe → no bot check.
+  // Only youtube.com requests from WKWebView are static JS/CSS (not bot-checked).
+  //
+  // This is fundamentally different from v11:
+  //   v11: our HTML + IFrame API → creates iframe to youtube.com → bot check
+  //   v12: YouTube's OWN embed HTML → player runs directly → NO iframe request
+
+  fastify.get('/media/youtube-embed', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request: any, reply: any) => {
+    const { id } = request.query as any;
+    if (!id || typeof id !== 'string' || id.length > 20) {
+      return reply.status(400).send('Valid video ID required');
+    }
+
+    // Override security headers
+    reply.header('Content-Type', 'text/html; charset=utf-8');
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    reply.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    reply.header('Access-Control-Allow-Origin', '*');
+    // Allow YouTube's scripts, styles, images, and media
+    reply.header('Content-Security-Policy',
+      "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+      "script-src * 'unsafe-inline' 'unsafe-eval'; " +
+      "style-src * 'unsafe-inline'; " +
+      "img-src * data: blob:; " +
+      "media-src *; " +
+      "connect-src * wss:; " +
+      "frame-src *;");
+
+    try {
+      // Cache the proxied page for 1 hour
+      const cacheKey = `yt:embed:${id}`;
+      let html = await cacheGet<string>(cacheKey);
+      if (!html) {
+        html = await proxyYouTubeEmbed(id);
+        await cacheSet(cacheKey, html, EXTRACT_CACHE_TTL);
+      }
+      return reply.send(html);
+    } catch (e: any) {
+      console.error('[youtube-embed] proxy error', e.message);
+      return reply.status(500).send('Embed proxy failed: ' + e.message);
+    }
   });
 }

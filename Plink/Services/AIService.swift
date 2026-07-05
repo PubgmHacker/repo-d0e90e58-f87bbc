@@ -28,13 +28,15 @@ final class AIService: ObservableObject {
     /// Default model — Claude 3.5 Sonnet (good balance of quality + speed).
     /// Other options: "openai/gpt-4o", "google/gemini-flash-1.5",
     /// "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat"
-    // 🔧 FIX: try multiple free models in order. Some free models may be temporarily
-    // unavailable on OpenRouter. We try them in order until one works.
+    // 🔧 FIX: updated free models list based on OpenRouter API (July 2025).
+    // 404 = model doesn't exist. 429 = rate limited (key works!).
+    // These are confirmed working free models:
     private let freeModels = [
-        "google/gemma-2-9b-it:free",
-        "mistralai/mistral-7b-instruct:free",
+        "deepseek/deepseek-chat-v3-0324:free",
+        "deepseek/deepseek-r1:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
         "meta-llama/llama-3.2-3b-instruct:free",
-        "qwen/qwen-2-7b-instruct:free",
     ]
     private var currentModelIndex = 0
     private var defaultModel: String { freeModels[currentModelIndex] }

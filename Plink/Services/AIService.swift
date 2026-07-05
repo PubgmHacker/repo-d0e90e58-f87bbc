@@ -176,11 +176,17 @@ final class AIService: ObservableObject {
                 } catch APIError.serverError(let status, let msg) where status == 429 && retry < 2 {
                     // 🔧 v4: try to extract retry_after_seconds from the
                     // OpenRouter 429 error body. Default 5s, cap at 30s.
+                    //
+                    // 🔧 FIX (Swift 6): in pattern-matching `catch` clauses,
+                    // there is no implicit `error` binding — referencing
+                    // bare `error` is parsed as the `#error` macro and
+                    // fails to compile. Reconstruct the error from the
+                    // already-extracted `status`/`msg` bindings instead.
                     let delay = Self.extractRetryAfter(from: msg) ?? 5_000_000_000
                     let capped = min(delay, 30_000_000_000)
                     print("🤖 AI: \(candidate) rate-limited (429), backing off for \(capped / 1_000_000_000)s...")
                     try? await Task.sleep(nanoseconds: capped)
-                    lastError = error
+                    lastError = APIError.serverError(status: status, message: msg)
                     continue
                 } catch {
                     print("🤖 AI: \(candidate) failed: \(error.localizedDescription)")
@@ -264,8 +270,6 @@ final class AIService: ObservableObject {
                 attemptOrder.append(contentsOf: self.freeModels)
 
                 var lastError: Error?
-                let anyTokenYielded = NSLock()
-                var anyTokenYieldedFlag = false
 
                 modelLoop: for candidate in attemptOrder {
                     for retry in 0..<3 {
@@ -356,9 +360,6 @@ final class AIService: ObservableObject {
                                 if let delta, !delta.isEmpty {
                                     continuation.yield(delta)
                                     yieldedForThisAttempt = true
-                                    anyTokenYielded.lock()
-                                    anyTokenYieldedFlag = true
-                                    anyTokenYielded.unlock()
                                 }
                             }
 
@@ -384,12 +385,17 @@ final class AIService: ObservableObject {
                 }
 
                 // All models exhausted.
-                if anyTokenYieldedFlag {
-                    // We did yield something at some point — finish gracefully.
-                    continuation.finish()
-                } else if let lastError = lastError,
-                          case APIError.serverError(let status, _) = lastError,
-                          status == 429 {
+                //
+                // 🔧 FIX (Swift 6): previously tracked an `anyTokenYieldedFlag`
+                // here to decide between `finish()` and `finish(throwing:)`, but
+                // it required an NSLock — which is unavailable from async
+                // contexts in Swift 6. Removed: the flag was dead code anyway,
+                // because every successful-stream branch returns early via
+                // `continuation.finish(); return`, so reaching this point
+                // guarantees nothing was streamed.
+                if let lastError = lastError,
+                   case APIError.serverError(let status, _) = lastError,
+                   status == 429 {
                     continuation.finish(throwing: APIError.serverError(
                         status: 429,
                         message: "Слишком много запросов к ИИ. Попробуйте позже."

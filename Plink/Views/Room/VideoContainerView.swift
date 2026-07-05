@@ -401,10 +401,9 @@ struct WebVideoView: UIViewRepresentable {
                         events: {
                             'onReady': function(e) {
                                 window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
-                                // 🔧 FIX: mute first to bypass iOS autoplay policy,
-                                // then play. iOS blocks autoplay with sound without
-                                // user interaction. Muted autoplay is always allowed.
-                                player.mute();
+                                // 🔧 FIX: try playVideo without mute first.
+                                // If blocked by iOS, user can tap our play button.
+                                // Muting was causing random pauses + no sound.
                                 player.playVideo();
                             },
                             'onStateChange': function(e) {

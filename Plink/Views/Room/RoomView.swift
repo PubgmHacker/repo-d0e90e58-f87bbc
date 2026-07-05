@@ -87,6 +87,18 @@ struct RoomView: View {
         // but that caused tabbar to appear in landscape when swiping chat.
         // User: 'в горизонтальном если свайпать чат = появляется таббар'.
         .toolbar(.hidden, for: .tabBar)
+        // 🔧 FIX: block ALL edge swipes — prevents escaping to other tabs.
+        // User: 'свайп на таббар прямо из комнаты до сих пор работает'.
+        // This overlay captures touches on screen edges where iOS edge swipe fires.
+        .overlay {
+            // Invisible blocks on left and right edges to eat edge-swipe gestures
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 30).contentShape(Rectangle())
+                Spacer()
+                Color.clear.frame(width: 30).contentShape(Rectangle())
+            }
+            .allowsHitTesting(true)
+        }
         .task {
             guard let viewModel else { return }
             await viewModel.joinRoomFlow()

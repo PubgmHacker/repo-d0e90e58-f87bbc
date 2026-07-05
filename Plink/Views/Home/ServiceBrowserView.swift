@@ -87,6 +87,8 @@ struct ServiceBrowserView: View {
             .onChange(of: detectedVideo) { _, newVideo in
                 guard let video = newVideo else { return }
                 HapticManager.impact(.medium)
+                // 🔧 DEBUG: log what we're passing to onCreateRoom
+                print("🔍 ServiceBrowserView: detected video, embedURL='\(video.embedURL)', title='\(video.title ?? "nil")', pageTitle='\(pageTitle)'")
                 onCreateRoom(video.embedURL, video.title ?? pageTitle)
             }
         }

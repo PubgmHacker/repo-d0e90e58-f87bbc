@@ -387,6 +387,9 @@ struct RoomSetupView: View {
         errorMessage = nil
         HapticManager.impact(.medium)
 
+        // 🔧 DEBUG: log what we received from ServiceBrowserView
+        print("🔍 RoomSetupView.createRoom: contentURL='\(contentURL)', contentTitle='\(contentTitle)', service=\(service.rawValue)")
+
         // Build MediaItem from the browsed URL
         // 🔧 FIX: set proper `source` based on the selected service — was always `.url`.
         // RoomView uses this to pick playbackMode (YouTube embed URL → WebView,
@@ -409,6 +412,8 @@ struct RoomSetupView: View {
             mediaType: .video,
             source: mediaSource
         )
+        // 🔧 DEBUG: log the constructed mediaItem
+        print("🔍 RoomSetupView.createRoom: mediaItem.streamURL='\(mediaItem.streamURL)', source=\(mediaItem.source.rawValue)")
 
         // 🔧 FIX H1: Actually call the REST API to create the room server-side.
         // Was: built a local Room object without persisting → room never appeared

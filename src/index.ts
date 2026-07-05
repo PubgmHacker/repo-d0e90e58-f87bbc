@@ -81,6 +81,16 @@ await fastify.register(aiRoutes, { prefix: '/api' });  // ← Pack 6
 
 setupWebSocketHandler(fastify.websocketServer, prisma, fastify);
 
+// 🔧 FIX: Register /ws and /ws/room/:id as Fastify websocket routes.
+// Without this, Fastify returns 404 for the HTTP upgrade request and
+// iOS WS client can't connect → RoomView hangs on "loading" forever.
+// @fastify/websocket plugin auto-routes upgrade requests to these handlers.
+// The actual connection logic is in setupWebSocketHandler (raw 'connection'
+// event on fastify.websocketServer). These route handlers are no-ops —
+// they exist only so Fastify allows the WebSocket upgrade.
+fastify.get('/ws', { websocket: true }, async () => {});
+fastify.get('/ws/room/:id', { websocket: true }, async () => {});
+
 fastify.get('/health', async () => {
   const db = await checkDatabase();
   const redis = await checkRedis();

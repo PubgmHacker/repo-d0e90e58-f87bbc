@@ -17,8 +17,16 @@ struct AIAssistantView: View {
     @State private var lastSendTime: Date = .distantPast
 
     private let storageKey = "ai_chat_history"
-    /// 🔧 NEW: separate key for ALL past sessions (history of queries)
-    private let allHistoryKey = "ai_all_queries_history"
+    /// 🔧 v5 (July 2026): ALL past SESSIONS (each session = full dialog with
+    /// user + AI messages). Previously this stored a flat list of user queries,
+    /// which broke conversations into separate history items even when they
+    /// belonged to the same chat. v5 stores complete sessions so tapping a
+    /// history entry loads the entire dialog back into the chat view.
+    private let allHistoryKey = "ai_all_sessions_history"
+
+    /// 🔧 v5: ID of the current session. New session = new UUID.
+    /// Persists across app launches so reopening AI tab continues the same dialog.
+    @State private var currentSessionId: String = UUID().uuidString
 
     var body: some View {
         NavigationStack {
@@ -89,15 +97,20 @@ struct AIAssistantView: View {
                             .foregroundColor(.raveTextSecondary)
                     }
                 }
-                // 🔧 NEW: right — new chat (clears current, starts fresh)
+                // 🔧 v5: right — new chat (clears current, starts fresh session)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         HapticManager.impact(.medium)
-                        // Save current queries to all-history before clearing
-                        saveToAllHistory()
+                        // 🔧 v5: Save the entire current session (user+AI messages
+                        // together) to all-history before clearing. Previously
+                        // only user queries were saved — now the full dialog is
+                        // preserved as a single history entry.
+                        saveCurrentSessionToHistory()
                         withAnimation {
                             messages.removeAll()
                             UserDefaults.standard.removeObject(forKey: storageKey)
+                            // 🔧 v5: start a brand-new session ID for the next chat.
+                            currentSessionId = UUID().uuidString
                         }
                     } label: {
                         Image(systemName: "plus.bubble")
@@ -109,10 +122,21 @@ struct AIAssistantView: View {
                 }
             }
             .sheet(isPresented: $showHistory) {
-                AIHistorySheet(allHistoryKey: allHistoryKey) { selectedQuery in
-                    // 🔧 Load query from history into chat
-                    inputText = selectedQuery
-                    sendMessage()
+                // 🔧 v5: history sheet now shows full sessions, not just queries.
+                // Tapping a session loads the entire dialog (user + AI messages)
+                // back into the chat view.
+                AIHistorySheet(allHistoryKey: allHistoryKey) { selectedSession in
+                    // 🔧 v5: load the full session messages into the chat view
+                    messages = selectedSession.messages.map { dict in
+                        AIMessage(
+                            id: dict["id"] ?? UUID().uuidString,
+                            role: AIMessage.Role(rawValue: dict["role"] ?? "user") ?? .user,
+                            text: dict["text"] ?? "",
+                            timestamp: ISO8601DateFormatter().date(from: dict["timestamp"] ?? "") ?? Date()
+                        )
+                    }
+                    currentSessionId = selectedSession.id
+                    saveHistory()
                 }
             }
         }
@@ -335,20 +359,37 @@ struct AIAssistantView: View {
         do {
             let stream = AIService.shared.chatStream(messages: allMessages)
             var gotTokens = false
+            var accumulatedResponse = ""
             for try await token in stream {
                 gotTokens = true
+                accumulatedResponse += token
                 await MainActor.run {
                     if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
                         self.messages[idx].text += token
                     }
                 }
             }
+            // 🔧 v5: post-hoc sanitization of the streamed response. If the AI
+            // was jailbroken into off-topic content (cars, prompts, code, etc.),
+            // replace the entire response with the canned refusal. This runs
+            // AFTER streaming completes so the user sees the streaming animation
+            // even for sanitized responses (less jarring than instant refusal).
+            let sanitized = AIService.sanitizeResponse(accumulatedResponse)
+            if sanitized != accumulatedResponse {
+                await MainActor.run {
+                    if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
+                        self.messages[idx].text = sanitized
+                    }
+                }
+            }
             // 🔧 FALLBACK: if streaming returned no tokens, try non-streaming
             if !gotTokens {
                 let response = try await AIService.shared.chat(messages: allMessages)
+                // 🔧 v5: sanitize non-streaming response too.
+                let sanitizedNonStream = AIService.sanitizeResponse(response)
                 await MainActor.run {
                     if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
-                        self.messages[idx].text = response
+                        self.messages[idx].text = sanitizedNonStream
                     }
                     self.isLoading = false
                     self.saveHistory()
@@ -363,9 +404,11 @@ struct AIAssistantView: View {
             // 🔧 FALLBACK: streaming failed → try non-streaming
             do {
                 let response = try await AIService.shared.chat(messages: allMessages)
+                // 🔧 v5: sanitize fallback response too.
+                let sanitizedFallback = AIService.sanitizeResponse(response)
                 await MainActor.run {
                     if let idx = self.messages.firstIndex(where: { $0.id == messageId }) {
-                        self.messages[idx].text = response
+                        self.messages[idx].text = sanitizedFallback
                     }
                     self.isLoading = false
                     self.saveHistory()
@@ -391,6 +434,12 @@ struct AIAssistantView: View {
             ["id": msg.id, "role": msg.role.rawValue, "text": msg.text]
         }
         UserDefaults.standard.set(data, forKey: storageKey)
+        // 🔧 v5: also save/update the session in all-history so it shows up
+        // immediately when user opens the history sheet. Previously this only
+        // happened when user clicked "+" to start a new chat — meaning if the
+        // app was killed or user navigated away, the in-progress dialog was
+        // lost from history. Now every message triggers a session save.
+        saveCurrentSessionToHistory()
     }
 
     private func loadHistory() {
@@ -402,30 +451,87 @@ struct AIAssistantView: View {
         }
     }
 
-    /// 🔧 NEW: Save all user queries to persistent all-history.
-    /// Called when starting a new chat — preserves past queries for history view.
-    private func saveToAllHistory() {
-        let userQueries = messages.filter { $0.role == .user }.map { $0.text }
-        var existing = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: String]] ?? []
+    /// 🔧 v5 (July 2026): Saves the CURRENT session (full dialog of user + AI
+    /// messages) as a single entry in the all-history. Replaces the old
+    /// `saveToAllHistory()` which only extracted user queries as a flat list.
+    ///
+    /// Each session entry contains:
+    ///   - id: unique session UUID (so we can dedupe / load by ID)
+    ///   - date: ISO8601 timestamp of when the session was last active
+    ///   - title: first user message (used as display title in history list)
+    ///   - messages: full array of {id, role, text, timestamp}
+    private func saveCurrentSessionToHistory() {
+        guard !messages.isEmpty else { return }
+
         let now = ISO8601DateFormatter().string(from: Date())
-        for query in userQueries {
-            existing.append(["query": query, "date": now])
+        let title = messages.first(where: { $0.role == .user })?.text ?? "Диалог"
+        let messagesArray = messages.map { msg -> [String: String] in
+            return [
+                "id": msg.id,
+                "role": msg.role.rawValue,
+                "text": msg.text,
+                "timestamp": ISO8601DateFormatter().string(from: msg.timestamp),
+            ]
         }
-        // Keep last 100 queries
-        if existing.count > 100 {
-            existing = Array(existing.suffix(100))
+
+        var existing = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: Any]] ?? []
+
+        // 🔧 v5: if a session with the same ID already exists (e.g. user
+        // clicked "+" then reloaded the same session from history), update it
+        // in place rather than creating a duplicate.
+        if let existingIdx = existing.firstIndex(where: { ($0["id"] as? String) == currentSessionId }) {
+            existing[existingIdx] = [
+                "id": currentSessionId,
+                "date": now,
+                "title": title,
+                "messages": messagesArray,
+            ]
+        } else {
+            existing.append([
+                "id": currentSessionId,
+                "date": now,
+                "title": title,
+                "messages": messagesArray,
+            ])
+        }
+
+        // Keep last 50 sessions (was 100 queries — sessions are bigger).
+        if existing.count > 50 {
+            existing = Array(existing.suffix(50))
         }
         UserDefaults.standard.set(existing, forKey: allHistoryKey)
     }
 }
 
 // MARK: - AI History Sheet
-/// 🔧 Shows all past AI queries in glass cards. Tap to reload, swipe to delete.
+//
+// 🔧 v5 (July 2026): Shows full SESSIONS (each = a complete dialog with user +
+// AI messages), not flat query lists. Tap loads the whole dialog back into the
+// chat view. Long-press / context menu to delete a session.
 struct AIHistorySheet: View {
     let allHistoryKey: String
     @Environment(\.dismiss) private var dismiss
-    @State private var queries: [(query: String, date: String)] = []
-    var onSelectQuery: ((String) -> Void)? = nil
+
+    /// 🔧 v5: A loaded session — title, date, full message list.
+    struct SavedSession: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let date: String
+        /// Each message is a dictionary: {id, role, text, timestamp}
+        let messages: [[String: String]]
+        /// First AI response (for preview snippet)
+        var preview: String {
+            if let firstAI = messages.first(where: { ($0["role"] ?? "") == "ai" }) {
+                return firstAI["text"] ?? ""
+            }
+            return ""
+        }
+        /// Message count for display ("3 сообщения")
+        var messageCount: Int { messages.count }
+    }
+
+    @State private var sessions: [SavedSession] = []
+    var onSelectSession: ((SavedSession) -> Void)? = nil
 
     var body: some View {
         NavigationStack {
@@ -433,21 +539,24 @@ struct AIHistorySheet: View {
                 BioluminescentBackground(energy: 0.4, dimming: 0, palette: .amber)
                     .ignoresSafeArea()
 
-                if queries.isEmpty {
+                if sessions.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 36))
                             .foregroundColor(.raveTextTertiary)
-                        Text("История запросов пуста")
+                        Text("История диалогов пуста")
                             .font(.subheadline)
                             .foregroundColor(.raveTextSecondary)
+                        Text("Начните чат — он сохранится здесь целиком")
+                            .font(.caption)
+                            .foregroundColor(.raveTextTertiary)
                     }
                 } else {
                     ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: 10) {
-                            ForEach(Array(queries.enumerated()), id: \.offset) { index, item in
+                            ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
                                 Button {
-                                    onSelectQuery?(item.query)
+                                    onSelectSession?(session)
                                     dismiss()
                                 } label: {
                                     HStack(spacing: 12) {
@@ -462,13 +571,28 @@ struct AIHistorySheet: View {
                                         }
 
                                         VStack(alignment: .leading, spacing: 3) {
-                                            Text(item.query)
+                                            Text(session.title)
                                                 .font(.system(size: 14, weight: .semibold))
                                                 .foregroundColor(.raveTextPrimary)
                                                 .lineLimit(2)
                                                 .multilineTextAlignment(.leading)
-                                            if !item.date.isEmpty {
-                                                Text(formatDate(item.date))
+                                            if !session.preview.isEmpty {
+                                                Text(session.preview)
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(.raveTextSecondary)
+                                                    .lineLimit(1)
+                                                    .multilineTextAlignment(.leading)
+                                            }
+                                            HStack(spacing: 6) {
+                                                if !session.date.isEmpty {
+                                                    Text(formatDate(session.date))
+                                                        .font(.system(size: 11))
+                                                        .foregroundColor(.raveTextTertiary)
+                                                }
+                                                Text("·")
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.raveTextTertiary)
+                                                Text("\(session.messageCount) сообщ.")
                                                     .font(.system(size: 11))
                                                     .foregroundColor(.raveTextTertiary)
                                             }
@@ -504,9 +628,9 @@ struct AIHistorySheet: View {
                                 .contextMenu {
                                     Button(role: .destructive) {
                                         _ = withAnimation(.easeOut(duration: 0.25)) {
-                                            queries.remove(at: index)
+                                            sessions.remove(at: index)
                                         }
-                                        saveQueries()
+                                        saveSessions()
                                     } label: {
                                         Label("Удалить", systemImage: "trash")
                                     }
@@ -526,13 +650,13 @@ struct AIHistorySheet: View {
                     Button("Готово") { dismiss() }
                         .foregroundColor(.bioAmber)
                 }
-                if !queries.isEmpty {
+                if !sessions.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             withAnimation(.easeOut(duration: 0.3)) {
-                                queries.removeAll()
+                                sessions.removeAll()
                             }
-                            saveQueries()
+                            saveSessions()
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 14))
@@ -541,22 +665,41 @@ struct AIHistorySheet: View {
                     }
                 }
             }
-            .onAppear { loadQueries() }
+            .onAppear { loadSessions() }
         }
         .preferredColorScheme(.dark)
     }
 
-    private func loadQueries() {
-        let data = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: String]] ?? []
-        queries = data.reversed().compactMap { dict in
-            guard let q = dict["query"] else { return nil }
-            let d = dict["date"] ?? ""
-            return (query: q, date: d)
-        }
+    /// 🔧 v5: Loads sessions from UserDefaults, sorted newest-first.
+    /// Each session is stored as [String: Any] with id/date/title/messages.
+    private func loadSessions() {
+        let data = UserDefaults.standard.array(forKey: allHistoryKey) as? [[String: Any]] ?? []
+        sessions = data.compactMap { dict in
+            guard let id = dict["id"] as? String,
+                  let messagesRaw = dict["messages"] as? [[String: String]] else {
+                return nil
+            }
+            return SavedSession(
+                id: id,
+                title: (dict["title"] as? String) ?? "Диалог",
+                date: (dict["date"] as? String) ?? "",
+                messages: messagesRaw
+            )
+        }.reversed()  // newest first
     }
 
-    private func saveQueries() {
-        let toSave = queries.reversed().map { ["query": $0.query, "date": $0.date] }
+    /// 🔧 v5: Saves the in-memory sessions list back to UserDefaults.
+    /// Called when user deletes a session via context menu.
+    private func saveSessions() {
+        // Reverse back to oldest-first before saving (so suffix() keeps newest).
+        let toSave = sessions.reversed().map { session -> [String: Any] in
+            return [
+                "id": session.id,
+                "date": session.date,
+                "title": session.title,
+                "messages": session.messages,
+            ]
+        }
         UserDefaults.standard.set(toSave, forKey: allHistoryKey)
     }
 

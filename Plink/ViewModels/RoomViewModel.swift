@@ -185,46 +185,43 @@ final class RoomViewModel: WebSocketClientDelegate {
     }
 
     // MARK: - WebSocket Delegate
+    //
+    // 🔧 SWIFT 6: протокол WebSocketClientDelegate теперь @MainActor, поэтому
+    // методы делегата тоже @MainActor. Раньше они были nonisolated с обёрткой
+    // `Task { @MainActor }` — workaround под старый nonisolated протокол.
+    // Теперь обёртки не нужны: RoomViewModel сам @MainActor, методы вызываются
+    // напрямую на main actor.
 
-    nonisolated func webSocketDidConnect(_ client: any WebSocketClientProtocol) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.connectionStatus = .connected
-            self.errorMessage = nil
-            Logger.ws.info("Connected → room \(self.room.id)")
+    func webSocketDidConnect(_ client: any WebSocketClientProtocol) {
+        guard !Task.isCancelled else { return }
+        self.connectionStatus = .connected
+        self.errorMessage = nil
+        Logger.ws.info("Connected → room \(self.room.id)")
 
-            if let mediaItem = self.room.mediaItem, self.syncEngine.currentMediaItem == nil {
-                self.syncEngine.loadMedia(mediaItem)
-            }
-            if self.isHost {
-                self.syncEngine.startStateBroadcast()
-            } else {
-                self.syncEngine.startDriftMonitor()
-            }
+        if let mediaItem = self.room.mediaItem, self.syncEngine.currentMediaItem == nil {
+            self.syncEngine.loadMedia(mediaItem)
+        }
+        if self.isHost {
+            self.syncEngine.startStateBroadcast()
+        } else {
+            self.syncEngine.startDriftMonitor()
         }
     }
 
-    nonisolated func webSocketDidDisconnect(_ client: any WebSocketClientProtocol, reason: String?) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            Logger.ws.error("Disconnected: \(reason ?? "unknown")")
-            // WS сам реконнектится с exponential backoff; не показываем ошибку сразу.
-            if self.connectionStatus != .reconnecting {
-                self.connectionStatus = .reconnecting
-            }
+    func webSocketDidDisconnect(_ client: any WebSocketClientProtocol, reason: String?) {
+        Logger.ws.error("Disconnected: \(reason ?? "unknown")")
+        // WS сам реконнектится с exponential backoff; не показываем ошибку сразу.
+        if self.connectionStatus != .reconnecting {
+            self.connectionStatus = .reconnecting
         }
     }
 
-    nonisolated func webSocket(_ client: any WebSocketClientProtocol, didReceiveMessage message: String) {
-        Task { @MainActor [weak self] in
-            self?.routeInbound(message)
-        }
+    func webSocket(_ client: any WebSocketClientProtocol, didReceiveMessage message: String) {
+        routeInbound(message)
     }
 
-    nonisolated func webSocket(_ client: any WebSocketClientProtocol, didReceiveError error: Error) {
-        Task { @MainActor [weak self] in
-            self?.errorMessage = error.localizedDescription
-        }
+    func webSocket(_ client: any WebSocketClientProtocol, didReceiveError error: Error) {
+        self.errorMessage = error.localizedDescription
     }
 
     // MARK: - Inbound Routing

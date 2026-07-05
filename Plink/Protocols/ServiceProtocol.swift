@@ -5,6 +5,11 @@ import Foundation
 /// изолированы на @MainActor (iOS 17+ @Observable binding) и/или Sendable.
 
 // MARK: - Auth Service Protocol
+/// 🔧 SWIFT 6: marked `@MainActor` because the only implementation (AuthService)
+/// is @MainActor. Without this, the conformance "crosses into main actor-isolated
+/// code" → Swift 6 strict-concurrency error. All call sites already run on
+/// MainActor (UI / @Observable ViewModels), so this matches reality.
+@MainActor
 protocol AuthServiceProtocol: AnyObject, Sendable {
     func signIn(email: String, password: String) async throws -> User
     func signUp(email: String, password: String, username: String) async throws -> User
@@ -35,9 +40,13 @@ protocol RoomServiceProtocol: Sendable {
 }
 
 // MARK: - WebSocket Client Protocol
-/// Сетевой транспорт. Реализация (`WebSocketClient`) изолирована на @MainActor,
-/// но протокол оставлен nonisolated с синхронными fire-and-forget методами:
-/// отправка ставит сообщение в очередь, приём уведомляет через delegate.
+/// Сетевой транспорт. Реализация (`WebSocketClient`) изолирована на @MainActor.
+///
+/// 🔧 SWIFT 6: протокол тоже помечен `@MainActor` чтобы conformance не "crossed"
+/// main-actor isolation. Все call sites (RoomViewModel, SyncEngine, SignalingClient)
+/// сами @MainActor — пометка протокола соответствует реальности и убирает
+/// strict-concurrency ошибку.
+@MainActor
 protocol WebSocketClientProtocol: AnyObject, Sendable {
     var delegate: WebSocketClientDelegate? { get set }
 
@@ -48,6 +57,7 @@ protocol WebSocketClientProtocol: AnyObject, Sendable {
     var isConnected: Bool { get }
 }
 
+@MainActor
 protocol WebSocketClientDelegate: AnyObject {
     func webSocketDidConnect(_ client: any WebSocketClientProtocol)
     func webSocketDidDisconnect(_ client: any WebSocketClientProtocol, reason: String?)

@@ -460,28 +460,24 @@ struct AdCommandPayload: Codable, Sendable {
 }
 
 // MARK: - WebSocketClientDelegate
+//
+// 🔧 SWIFT 6: протокол теперь @MainActor, поэтому обёртки `Task { @MainActor }`
+// и пометки `nonisolated` больше не нужны. RoomSyncManager сам @MainActor,
+// методы делегата вызываются напрямую на main actor.
 extension RoomSyncManager: WebSocketClientDelegate {
-    nonisolated func webSocketDidConnect(_ client: any WebSocketClientProtocol) {
-        Task { @MainActor in
-            connectionStatus = .connected
-        }
+    func webSocketDidConnect(_ client: any WebSocketClientProtocol) {
+        connectionStatus = .connected
     }
 
-    nonisolated func webSocketDidDisconnect(_ client: any WebSocketClientProtocol, reason: String?) {
-        Task { @MainActor in
-            connectionStatus = .reconnecting
-        }
+    func webSocketDidDisconnect(_ client: any WebSocketClientProtocol, reason: String?) {
+        connectionStatus = .reconnecting
     }
 
-    nonisolated func webSocket(_ client: any WebSocketClientProtocol, didReceiveMessage message: String) {
-        Task { @MainActor in
-            handleRawMessage(message)
-        }
+    func webSocket(_ client: any WebSocketClientProtocol, didReceiveMessage message: String) {
+        handleRawMessage(message)
     }
 
-    nonisolated func webSocket(_ client: any WebSocketClientProtocol, didReceiveError error: Error) {
-        Task { @MainActor in
-            connectionStatus = .reconnecting
-        }
+    func webSocket(_ client: any WebSocketClientProtocol, didReceiveError error: Error) {
+        connectionStatus = .reconnecting
     }
 }

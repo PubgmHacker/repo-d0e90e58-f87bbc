@@ -83,9 +83,10 @@ struct RoomView: View {
                     .allowsHitTesting(false)
             }
         }
-        // 🔧 Pack v3: Убран .toolbar(.hidden, for: .tabBar) — вызывал задержку
-        // при возврате из комнаты. NavigationStack автоматически скрывает tabBar
-        // при push.
+        // 🔧 FIX: hide tabbar completely in RoomView — was removed for "delay"
+        // but that caused tabbar to appear in landscape when swiping chat.
+        // User: 'в горизонтальном если свайпать чат = появляется таббар'.
+        .toolbar(.hidden, for: .tabBar)
         .task {
             guard let viewModel else { return }
             await viewModel.joinRoomFlow()

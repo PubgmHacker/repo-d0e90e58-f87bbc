@@ -1,6 +1,9 @@
 // src/routes/media.ts — Pack 3: обновлённый с yt-dlp extraction
 import { extractStream, extractYouTubeStream, extractMetadata } from '../services/streamExtractor.js';
 import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
+import { Readable } from 'stream';
+import { request as httpRequest } from 'http';
+import { request as httpsRequest } from 'https';
 
 const EXTRACT_CACHE_TTL = 3600; // 1 час — прямой URL живёт долго
 
@@ -152,6 +155,100 @@ export default async function mediaRoutes(fastify, _options) {
       reply.send(meta);
     } catch (e: any) {
       reply.status(500).send({ error: 'Metadata failed: ' + e.message });
+    }
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // GET /api/media/youtube-stream?id=VIDEO_ID — Streaming Proxy (v9 July 2026)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // PROBLEM: googlevideo URLs are IP-bound. yt-dlp extracts a URL containing
+  // &ip=<railway_ip>. When AVPlayer on iPhone requests from a different IP,
+  // YouTube returns 403 → AVPlayer fails with -11828.
+  //
+  // SOLUTION: backend acts as a reverse proxy. iPhone requests this endpoint,
+  // backend extracts the googlevideo URL (IP-bound to Railway), then fetches
+  // the video from googlevideo (IP matches → 200 OK), and streams it back
+  // to iPhone. AVPlayer sees a Railway URL, not a googlevideo URL.
+  //
+  // Supports HTTP Range requests for seeking — passes Range header through
+  // to googlevideo and passes Content-Range back to client.
+  //
+  // Cache: extraction results cached 1hr (googlevideo URLs live ~6hrs).
+  // The proxy itself doesn't cache video data (would consume too much RAM).
+  //
+  // Auth: requires JWT (prevents anonymous abuse).
+  // Rate limit: 20 requests/minute (each request = 1 yt-dlp extraction).
+
+  fastify.get('/media/youtube-stream', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+  }, async (request: any, reply: any) => {
+    const { id } = request.query as any;
+    if (!id) return reply.status(400).send({ error: 'Video ID required' });
+
+    // ── 1. Extract googlevideo URL (cached) ──────────────────────────
+    const cacheKey = `yt:stream:${id}`;
+    let streamInfo: any = await cacheGet<any>(cacheKey);
+    if (!streamInfo) {
+      try {
+        streamInfo = await extractYouTubeStream(id);
+        await cacheSet(cacheKey, streamInfo, EXTRACT_CACHE_TTL);
+      } catch (e: any) {
+        console.error('[youtube-stream] extract error', e.message);
+        return reply.status(500).send({ error: 'Extract failed: ' + e.message });
+      }
+    }
+
+    const upstreamUrl = streamInfo.streamURL;
+    if (!upstreamUrl) {
+      return reply.status(500).send({ error: 'No stream URL available' });
+    }
+
+    // ── 2. Fetch from googlevideo (IP-bound to Railway = matches) ─────
+    // Pass through Range header for seeking support.
+    const rangeHeader = request.headers.range;
+    const upstreamHeaders: any = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      'Referer': 'https://www.youtube.com/',
+      'Origin': 'https://www.youtube.com',
+    };
+    if (rangeHeader) {
+      upstreamHeaders['Range'] = rangeHeader;
+    }
+
+    try {
+      const upstreamRes = await fetch(upstreamUrl, { headers: upstreamHeaders, redirect: 'follow' });
+
+      if (!upstreamRes.ok && upstreamRes.status !== 206) {
+        console.error('[youtube-stream] upstream error', upstreamRes.status);
+        return reply.status(502).send({ error: `Upstream returned ${upstreamRes.status}` });
+      }
+
+      // ── 3. Stream upstream response back to client ─────────────────
+      // Pass through Content-Type, Content-Length, Content-Range, Accept-Ranges.
+      reply.code(upstreamRes.status);
+      reply.header('Content-Type', upstreamRes.headers.get('content-type') || 'video/mp4');
+      reply.header('Accept-Ranges', 'bytes');
+      if (upstreamRes.headers.get('content-length')) {
+        reply.header('Content-Length', upstreamRes.headers.get('content-length')!);
+      }
+      if (upstreamRes.headers.get('content-range')) {
+        reply.header('Content-Range', upstreamRes.headers.get('content-range')!);
+      }
+      // Allow AVPlayer to cache the stream
+      reply.header('Cache-Control', 'public, max-age=3600');
+
+      // Pipe the readable stream to Fastify reply
+      if (upstreamRes.body) {
+        const nodeStream = Readable.fromWeb(upstreamRes.body);
+        return reply.send(nodeStream);
+      } else {
+        return reply.send(Buffer.alloc(0));
+      }
+    } catch (e: any) {
+      console.error('[youtube-stream] proxy error', e.message);
+      return reply.status(500).send({ error: 'Stream proxy failed: ' + e.message });
     }
   });
 }

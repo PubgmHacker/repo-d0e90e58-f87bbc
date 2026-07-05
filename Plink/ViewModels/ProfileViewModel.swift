@@ -108,7 +108,7 @@ final class ProfileViewModel {
 
     /// Загружает ранее сохранённую аватарку с диска в shared-кэш.
     func loadAvatarFromDisk() {
-        if let existing = Self.sharedAvatar { return }  // уже загружено
+        if Self.sharedAvatar != nil { return }  // уже загружено
         let url = avatarFileURL
         guard FileManager.default.fileExists(atPath: url.path),
               let data = try? Data(contentsOf: url),

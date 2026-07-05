@@ -91,7 +91,6 @@ struct BioluminescentBackground: View {
             let pulse = 0.5 + 0.35 * sin(time * 0.6 + cloud.phase)
             let opacity = pulse * energy * 0.7
 
-            let center = CGPoint(x: cx, y: cy)
             let rect = CGRect(
                 x: cx - radius,
                 y: cy - radius,

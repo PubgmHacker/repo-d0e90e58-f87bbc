@@ -307,7 +307,10 @@ struct WebVideoView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let urlString = url.absoluteString
-        let isYouTube = urlString.contains("youtube.com/embed/") || urlString.contains("youtu.be/")
+        // 🔧 v14.1: must also match youtube-nocookie.com (v14 changed embed URL domain)
+        let isYouTube = urlString.contains("youtube.com/embed/") || 
+                         urlString.contains("youtube-nocookie.com/embed/") || 
+                         urlString.contains("youtu.be/")
         // 🔧 v12: backend embed proxy URL
         let isBackendPlayer = urlString.contains("plink-backend") && (urlString.contains("youtube-player") || urlString.contains("youtube-embed"))
 

@@ -42,9 +42,13 @@ struct HomeView: View {
     // Оставлен для совместимости со старым вызовом из MainTabView.
     var onProfileTap: () -> Void = {}
 
-    init(viewModel: HomeViewModel, onProfileTap: @escaping () -> Void) {
+    init(viewModel: HomeViewModel, onProfileTap: @escaping () -> Void,
+         onSwitchToAITab: (() -> Void)? = nil,
+         onSwitchToJoinTab: (() -> Void)? = nil) {
         _viewModel = State(initialValue: viewModel)
         self.onProfileTap = onProfileTap
+        self.onSwitchToAITab = onSwitchToAITab
+        self.onSwitchToJoinTab = onSwitchToJoinTab
     }
 
     var body: some View {

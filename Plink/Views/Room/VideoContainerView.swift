@@ -278,6 +278,8 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
+        config.preferences.javaScriptEnabled = true
+        config.websiteDataStore = WKWebsiteDataStore.default()  // 🔧 allow cookies
 
         let userScript = WKUserScript(
             source: Self.syncScript,
@@ -294,15 +296,10 @@ struct WebVideoView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
-        // 🔧 FIX: YouTube IFrame API failed with error 152-4 (embedding restricted).
-        // YouTube blocks IFrame API in WKWebView with loadHTMLString — needs proper
-        // Origin header. Instead, load the embed URL DIRECTLY via URLRequest.
-        // YouTube serves a proper HTML page at /embed/VIDEO_ID that includes
-        // its own player. The page works in WKWebView without custom HTML.
-        //
-        // The earlier error 153 was from AVPlayer (not WebView) — that's fixed
-        // by SyncEngine.loadMedia skipping AVPlayer for webview mode.
-        // The 152-4 error was from IFrame API — switching back to direct URL load.
+        // 🔧 FIX: YouTube checks User-Agent — default WKWebView UA is blocked.
+        // Set iOS Safari UA so YouTube serves the proper embed player.
+        // Without this, YouTube shows "Video unavailable" error 152-4.
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         webView.load(URLRequest(url: url))
 
         return webView

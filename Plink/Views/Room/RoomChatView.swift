@@ -253,11 +253,86 @@ struct RoomChatBubble: View {
     let message: ChatMessage
     var compact: Bool = false
 
+    /// 🔧 Pack v3: ID текущего пользователя — для определения "моё/чужое" сообщение
+    private var currentUserID: String? {
+        // AuthService.shared.currentUserValue?.id — но shared может не быть настроен.
+        // Используем UserDefaults как fallback (id сохраняется при логине).
+        UserDefaults.standard.string(forKey: "plink_current_user_id")
+    }
+
+    /// True если сообщение от текущего пользователя
+    private var isMyMessage: Bool {
+        message.senderID == currentUserID
+    }
+
     private let avatarSize: CGFloat = 28
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            // Аватарка отправителя (крупная, перед ником)
+            if isMyMessage {
+                // Моё сообщение — справа, аватар справа
+                Spacer(minLength: 40)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(message.text)
+                        .font(.system(size: compact ? 14 : 16))
+                        .foregroundColor(.white)
+                        .chatTextShadow()
+                }
+                myAvatar
+            } else {
+                // Чужое сообщение — слева, аватар слева
+                otherAvatar
+                VStack(alignment: .leading, spacing: 2) {
+                    // 🔧 Pack v3: Ник админа — переливающийся красный + [A] префикс + бейдж
+                    HStack(spacing: 4) {
+                        if message.isSenderAdmin {
+                            Text("[A]")
+                                .font(.system(size: compact ? 10 : 11, weight: .heavy))
+                                .foregroundColor(.raveDanger)
+                            Text(message.senderName)
+                                .font(.system(size: compact ? 12 : 13, weight: .bold))
+                                .adminShimmerText()
+                            Image("AdminBadge")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
+                        } else {
+                            Text(message.senderName)
+                                .font(.system(size: compact ? 12 : 13, weight: .bold))
+                                .foregroundColor(.ravePrimary)
+                        }
+                    }
+                    Text(message.text)
+                        .font(.system(size: compact ? 14 : 16))
+                        .foregroundColor(.white)
+                        .chatTextShadow()
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, compact ? 10 : 14)
+        .padding(.vertical, compact ? 6 : 8)
+        .background(
+            isMyMessage
+                ? Color.ravePrimary.opacity(0.15)  // Мои сообщения — cyan tint
+                : Color.white.opacity(0.06)         // Чужие — neutral
+        )
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: compact ? 12 : 14)
+                .stroke(
+                    isMyMessage
+                        ? Color.ravePrimary.opacity(0.2)
+                        : Color.white.opacity(0.08),
+                    lineWidth: 0.5
+                )
+        )
+    }
+
+    // MARK: - Avatars
+
+    private var myAvatar: some View {
+        Group {
             if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -267,51 +342,31 @@ struct RoomChatBubble: View {
                         avatarPlaceholder
                     }
                 }
-                .frame(width: compact ? 22 : avatarSize, height: compact ? 22 : avatarSize)
-                .clipShape(Circle())
             } else {
                 avatarPlaceholder
-                    .frame(width: compact ? 22 : avatarSize, height: compact ? 22 : avatarSize)
             }
+        }
+        .frame(width: compact ? 22 : avatarSize, height: compact ? 22 : avatarSize)
+        .clipShape(Circle())
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                // 🔧 Pack v3: Ник админа — переливающийся красный + [A] префикс + бейдж
-                HStack(spacing: 4) {
-                    if message.isSenderAdmin {
-                        // [A] префикс
-                        Text("[A]")
-                            .font(.system(size: compact ? 10 : 11, weight: .heavy))
-                            .foregroundColor(.raveDanger)
-                        // Ник с переливающимся красным
-                        Text(message.senderName)
-                            .font(.system(size: compact ? 12 : 13, weight: .bold))
-                            .adminShimmerText()
-                        // Бейдж админа (мини иконка)
-                        Image("AdminBadge")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
-                    } else {
-                        Text(message.senderName)
-                            .font(.system(size: compact ? 12 : 13, weight: .bold))
-                            .foregroundColor(.ravePrimary)
+    private var otherAvatar: some View {
+        Group {
+            if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        avatarPlaceholder
                     }
                 }
-                Text(message.text)
-                    .font(.system(size: compact ? 14 : 16))
-                    .foregroundColor(.white)
-                    .chatTextShadow()
+            } else {
+                avatarPlaceholder
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, compact ? 10 : 14)
-        .padding(.vertical, compact ? 6 : 8)
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: compact ? 12 : 14)
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-        )
+        .frame(width: compact ? 22 : avatarSize, height: compact ? 22 : avatarSize)
+        .clipShape(Circle())
     }
 
     /// Fallback-аватарка с инициалами на цветном фоне

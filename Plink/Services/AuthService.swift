@@ -124,6 +124,7 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
         KeychainHelper.delete(for: Keys.tokenExpiry)
         KeychainHelper.delete(for: Keys.refreshToken)
         defaults.removeObject(forKey: Keys.savedUser)
+        defaults.removeObject(forKey: "plink_current_user_id")
 
         authToken = nil
         tokenExpiry = 0
@@ -259,6 +260,8 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
             defaults.set(data, forKey: Keys.savedUser)
         }
         currentUser = user
+        // 🔧 Pack v3: Сохраняем user ID для определения "моё/чужое" сообщение в чате
+        defaults.set(user.id, forKey: "plink_current_user_id")
     }
 
     // 🔧 Pack v3: Fetch fresh user from server

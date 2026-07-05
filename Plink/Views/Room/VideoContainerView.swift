@@ -392,15 +392,17 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v22: Coordinator-based guard — standard SwiftUI lifecycle, no singleton.
-            // WebView created normally inside makeUIView → iOS grants sandbox.
+            // 🔧 v23: Coordinator-based guard — standard SwiftUI lifecycle.
+            // WebView created normally → iOS grants sandbox.
             // Coordinator blocks duplicate loads from WebSocket state changes.
             let videoId = url.lastPathComponent
-            context.coordinator.loadedVideoId = videoId
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
-            print("📺 YouTube v22: standard WKWebView + Coordinator guard (no singleton)")
+            // 🔧 DO NOT set loadedVideoId here — let loadVideoOnce do it.
+            // Setting it here would cause the guard in loadVideoOnce to always
+            // block the load (id == loadedVideoId → return).
+            print("📺 YouTube v23: makeUIView → Coordinator.loadVideoOnce")
             context.coordinator.loadVideoOnce(id: videoId, webView: webView)
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

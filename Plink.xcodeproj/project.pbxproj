@@ -110,6 +110,7 @@
 		53485412AA044C7C877E3C95 /* StyledChatBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23C0592367D4639B61E2D1F /* StyledChatBubble.swift */; };
 		EEA5A576E8ED4B77BD2426AC /* ChatAppearanceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1939DFFB43F34719936C8172 /* ChatAppearanceSheet.swift */; };
 		61975DEF512643018DFA76B1 /* BubbleStylePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633441F3FC24464085D1D9DB /* BubbleStylePickerSheet.swift */; };
+		7D2F037AD0624078AA89344B /* PlinkPlayerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE879C36EA24D77AA699AAA /* PlinkPlayerManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -219,6 +220,7 @@
 		B23C0592367D4639B61E2D1F /* StyledChatBubble.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "StyledChatBubble.swift"; sourceTree = "<group>"; };
 		1939DFFB43F34719936C8172 /* ChatAppearanceSheet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "ChatAppearanceSheet.swift"; sourceTree = "<group>"; };
 		633441F3FC24464085D1D9DB /* BubbleStylePickerSheet.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "BubbleStylePickerSheet.swift"; sourceTree = "<group>"; };
+		FEE879C36EA24D77AA699AAA /* PlinkPlayerManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "PlinkPlayerManager.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -360,6 +362,7 @@
 		90FDFEB95E379F6426DF2417 /* Room */ = {
 			isa = PBXGroup;
 			children = (
+				FEE879C36EA24D77AA699AAA /* PlinkPlayerManager.swift */,
 				B23C0592367D4639B61E2D1F /* StyledChatBubble.swift */,
 				EBF226DF4CBF7C89A3BEDAA9 /* AdPlayerView.swift */,
 				2D9E8E9CB378AC660548C206 /* AmbilightBackground.swift */,
@@ -590,6 +593,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7D2F037AD0624078AA89344B /* PlinkPlayerManager.swift in Sources */,
 				61975DEF512643018DFA76B1 /* BubbleStylePickerSheet.swift in Sources */,
 				EEA5A576E8ED4B77BD2426AC /* ChatAppearanceSheet.swift in Sources */,
 				53485412AA044C7C877E3C95 /* StyledChatBubble.swift in Sources */,

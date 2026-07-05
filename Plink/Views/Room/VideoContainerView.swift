@@ -403,28 +403,56 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v14 (July 2026): YouTube nocookie embed + proper configuration.
+            // 🔧 v15 (July 2026): loadHTMLString with baseURL=plink.app + iframe to nocookie.
             //
-            // Based on analysis of how Rave/Discord Activities work:
-            // 1. youtube-nocookie.com embed URL (weaker bot detection)
-            // 2. origin + widget_referrer params in URL (YouTube requires these)
-            // 3. Persistent cookies (WKWebsiteDataStore.default) — YouTube needs
-            //    CONSENT cookie to skip "Sign in to confirm you're not a bot"
-            // 4. Standard iOS Safari UA (cbr=Safari+Mobile, NOT cbr=Webview)
-            // 5. Clean WKWebView — NO scripts, NO handlers, NO CSS injection
-            //    (YouTube detects injected scripts/handlers → 153)
+            // Based on user's analysis: WKWebView's direct URL load has NO Referer
+            // header (origin is empty). YouTube player JS checks Referer/Origin →
+            // empty → error 153.
             //
-            // All 13 previous versions missed at least ONE of these requirements:
-            //   v1-v7: used youtube.com (not nocookie) + scripts/handlers
-            //   v8-v9: backend extraction (IP-bound / yt-dlp blocked)
-            //   v10.x: default UA (cbr=Webview) or missing origin param
-            //   v11-v12: backend proxy (requests not from client) or IFrame API
-            //   v13: TV UA (not standard mobile browser)
+            // v15 fix: load an HTML string containing an <iframe> to youtube-nocookie.com,
+            // with baseURL set to https://plink.app. This gives the page a REAL origin
+            // (plink.app), so:
+            //   - Referer header = https://plink.app (set natively by iOS)
+            //   - Origin = https://plink.app (from baseURL)
+            //   - iframe to nocookie has proper referrerpolicy + origin params
             //
-            // v14 = ALL requirements met simultaneously for the first time.
+            // CRITICAL: this is DIFFERENT from v6/v7 which used loadHTMLString with
+            // baseURL=youtube.com or youtube-nocookie.com. Those caused bot check
+            // because the origin didn't match a real domain. v15 uses plink.app
+            // as origin — a real domain that YouTube accepts.
+            //
+            // Also: iOS Safari UA + persistent cookies + clean WKWebView (no scripts).
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            print("📺 YouTube v14: nocookie + origin + widget_referrer + Safari UA + persistent cookies + clean WKWebView")
-            webView.load(URLRequest(url: url))
+
+            // Extract video ID from nocookie embed URL
+            let videoId = url.lastPathComponent
+            let iframeHTML = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+                    iframe { width: 100% !important; height: 100% !important; border: none; }
+                </style>
+            </head>
+            <body>
+                <iframe
+                    src="https://www.youtube-nocookie.com/embed/\(videoId)?playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&origin=https://plink.app&widget_referrer=https://plink.app"
+                    width="100%"
+                    height="100%"
+                    frameborder="0"
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowfullscreen
+                    referrerpolicy="strict-origin-when-cross-origin">
+                </iframe>
+            </body>
+            </html>
+            """
+
+            print("📺 YouTube v15: loadHTMLString + baseURL=plink.app + nocookie iframe + origin + referrerpolicy")
+            webView.loadHTMLString(iframeHTML, baseURL: URL(string: "https://plink.app")!)
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))

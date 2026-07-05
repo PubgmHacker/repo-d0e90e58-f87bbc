@@ -1,27 +1,14 @@
-// GET /api/media/youtube-player?id=VIDEO_ID — Hosted YouTube IFrame Player
+// v18: Hosted YouTube player on backend domain — real HTTPS origin.
 //
-// v11 (July 2026): serves a static HTML page that uses YouTube IFrame API.
-// iOS loads this URL via webView.load(URLRequest(url: backendURL)).
+// KEY INSIGHT from user analysis:
+// - loadHTMLString / load(data:) / loadFileURL → all trigger sandbox errors → 153
+// - Only REAL HTTPS URL gives native Origin/Referer headers
+// - Backend serves this page → WKWebView loads via URLRequest → iOS sets
+//   Origin: https://plink-backend... and Referer: https://plink-backend...
+//   natively, no sandbox issues.
 //
-// WHY THIS WORKS (where all previous approaches failed):
-//   - v1-v7: loadHTMLString → null origin → IFrame API postMessage fails (152-4)
-//   - v8-v9: backend extraction → yt-dlp blocked on Railway IP
-//   - v10.x: direct embed URL in WKWebView → YouTube detects WKWebView (153)
-//
-//   v11: hosted HTML page has REAL origin (https://plink-backend...).
-//   IFrame API postMessage works (parent page has real origin).
-//   YouTube's WKWebView detection doesn't run (player JS runs in our
-//   page context, not YouTube's embed page).
-//   No customUserAgent needed (backend serves the page, not YouTube).
-//
-// The HTML page:
-//   1. Loads YouTube IFrame API script
-//   2. Creates a YT.Player with the video ID
-//   3. Player fills 100% of the viewport
-//   4. Autoplay on ready (muted first, then unmute — iOS requires user gesture
-//      for unmuted autoplay, but muted autoplay works)
-//   5. Plink's WKWebView shows this page — YouTube's player runs inside an
-//      iframe, but the PARENT page is our backend (real origin), not WKWebView.
+// Uses YouTube IFrame API with host: 'https://www.youtube-nocookie.com'
+// (weaker bot detection) + origin: window.location.origin (backend domain).
 
 export function youtubePlayerHTML(videoId: string): string {
   return `<!DOCTYPE html>
@@ -29,41 +16,49 @@ export function youtubePlayerHTML(videoId: string): string {
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-        #player { width: 100vw; height: 100vh; }
-        iframe { width: 100% !important; height: 100% !important; border: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
+        #player { width: 100%; height: 100%; }
+        iframe { width: 100% !important; height: 100% !important; border: 0; }
     </style>
 </head>
 <body>
     <div id="player"></div>
-    <script src="https://www.youtube.com/iframe_api"></script>
+
     <script>
+        // Load YouTube IFrame API
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
         var player;
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
+                height: '100%',
+                width: '100%',
                 videoId: '${videoId}',
+                host: 'https://www.youtube-nocookie.com',
                 playerVars: {
                     'playsinline': 1,
+                    'controls': 0,
                     'rel': 0,
                     'modestbranding': 1,
-                    'fs': 0,
-                    'controls': 1,
-                    'iv_load_policy': 3
+                    'iv_load_policy': 3,
+                    'origin': window.location.origin
                 },
                 events: {
-                    'onReady': function(e) {
-                        // Muted autoplay (iOS requires user gesture for unmuted)
+                    'onReady': function(event) {
+                        // Muted autoplay (iOS requirement), unmute after 1s
                         player.mute();
                         player.playVideo();
-                        // Try to unmute after 1 second
                         setTimeout(function() {
                             player.unMute();
                         }, 1000);
+                        console.log("PlinkPlayerReady");
                     },
-                    'onStateChange': function(e) {
+                    'onStateChange': function(event) {
                         // state 0 = ended → seek to 0 to prevent end-screen
-                        if (e.data === 0) {
+                        if (event.data === 0) {
                             player.seekTo(0, true);
                             player.pauseVideo();
                         }

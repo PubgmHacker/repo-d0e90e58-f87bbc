@@ -200,22 +200,28 @@ struct PlinkApp: App {
 
     /// Проверяет сохранённую сессию. Минимальная задержка Splash (≥0.8s) —
     /// чтобы переход был плавным, а не мигал белым при быстром ответе.
+    /// 🔧 Pack v3: Проверяет токен через getFreshToken(), а не просто currentUser.
+    /// Раньше: currentUser != nil → показывали приложение → первый API запрос → 401.
+    /// Теперь: getFreshToken() возвращает nil если токен истёк и refresh не удался → login screen.
     private func checkAuth() {
         Task { [authService, friendManager] in
-            async let userTask = authService.currentUser()
-            async let minDelay: Void = Task { try? await Task.sleep(nanoseconds: 900_000_000); } .value
-
-            let user = await userTask
-            _ = await minDelay
+            // Проверяем токен (getFreshToken рефрешит если истёк)
+            let token = await authService.getFreshToken()
+            let user = await authService.currentUser()
+            let minDelay: Void = Task { try? await Task.sleep(nanoseconds: 900_000_000); }.value
+            _ = minDelay
 
             await MainActor.run {
-                if user != nil {
+                // Токен валиден И пользователь есть → показываем приложение
+                if token != nil && user != nil {
                     bridgeAuthToken()
                     isSignedIn = true
-                    // 🔧 FIX M13: Trigger friends load AFTER auth token is propagated
                     Task { await friendManager.loadAll() }
+                } else {
+                    // Токен истёк/невалиден → очищаем сессию → login screen
+                    Task { try? await authService.signOut() }
+                    isSignedIn = false
                 }
-                // Плавный уход splash (transition opacity)
                 withAnimation(.easeInOut(duration: 0.5)) {
                     launchPhase = .ready
                 }

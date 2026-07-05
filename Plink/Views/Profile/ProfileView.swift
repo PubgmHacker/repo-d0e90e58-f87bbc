@@ -72,7 +72,7 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSettings) {
             if let concreteAuth = viewModel.authService as? AuthService {
-                SettingsView(isPresented: $showSettings, authService: concreteAuth)
+                SettingsView(authService: concreteAuth)
             }
         }
         .sheet(isPresented: $showEditProfile) {

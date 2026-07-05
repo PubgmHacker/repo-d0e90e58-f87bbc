@@ -5,10 +5,8 @@ import SwiftUI
 /// «Настройки» открывает полноэкранный SettingsView (как Apple ID Settings).
 struct MainTabView: View {
     @State private var selectedTab: Tab = .home
-    @State private var showSettings = false
     @EnvironmentObject private var apiClient: APIClient
     let authService: AuthService
-    /// 🔧 NEW: Room invite service for badge count on Rooms tab
     @StateObject private var inviteService = RoomInviteService.shared
 
     enum Tab: Hashable {
@@ -20,76 +18,52 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        ZStack {
-            TabView(selection: tabSelection) {
-                HomeTabContent(
-                    onProfileTap: { showSettings = true },
-                    onSwitchToAITab: {
-                        HapticManager.impact(.light)
-                        withAnimation { selectedTab = .ai }
-                    },
-                    onSwitchToJoinTab: {
-                        HapticManager.impact(.light)
-                        withAnimation { selectedTab = .rooms }
-                    }
-                )
-                    .tabItem {
-                        Label("Главная", systemImage: "house.fill")
-                    }
-                    .tag(Tab.home)
-
-                RoomsTabContent()
-                    .tabItem {
-                        // 🔧 Badge: red count on Rooms icon when invites pending
-                        Label("Комнаты", systemImage: "rectangle.stack.fill")
-                    }
-                    .badge(inviteService.inviteCount > 0 ? inviteService.inviteCount : 0)
-                    .tag(Tab.rooms)
-
-                AIAssistantView()
-                    .tabItem {
-                        Label("ИИ", systemImage: "sparkles")
-                    }
-                    .tag(Tab.ai)
-
-                FriendsTabContent()
-                    .tabItem {
-                        Label("Друзья", systemImage: "person.2.fill")
-                    }
-                    .tag(Tab.friends)
-
-                // Заглушка — контент этой вкладки не показывается,
-                // тап по ней открывает полноэкранные настройки через tabSelection.
-                Color.clear
-                    .tabItem {
-                        Label("Настройки", systemImage: "gearshape.fill")
-                    }
-                    .tag(Tab.settings)
-            }
-            .tint(.ravePrimary)
-            .toolbarBackground(.hidden, for: .tabBar)
-            .toolbarBackground(.hidden, for: .navigationBar)
-        }
-        .fullScreenCover(isPresented: $showSettings) {
-            SettingsView(isPresented: $showSettings, authService: authService)
-                .environmentObject(apiClient)
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSettings)
-    }
-
-    /// Кастомный binding: тап по «Настройки» открывает полноэкранный SettingsView, не меняя вкладку.
-    private var tabSelection: Binding<Tab> {
-        Binding(
-            get: { selectedTab },
-            set: { newTab in
-                if newTab == .settings {
+        TabView(selection: $selectedTab) {
+            HomeTabContent(
+                onProfileTap: { selectedTab = .settings },
+                onSwitchToAITab: {
                     HapticManager.impact(.light)
-                    showSettings = true
-                } else {
-                    selectedTab = newTab
+                    withAnimation { selectedTab = .ai }
+                },
+                onSwitchToJoinTab: {
+                    HapticManager.impact(.light)
+                    selectedTab = .rooms
                 }
-            }
-        )
+            )
+                .tabItem {
+                    Label("Главная", systemImage: "house.fill")
+                }
+                .tag(Tab.home)
+
+            RoomsTabContent()
+                .tabItem {
+                    Label("Комнаты", systemImage: "rectangle.stack.fill")
+                }
+                .badge(inviteService.inviteCount > 0 ? inviteService.inviteCount : 0)
+                .tag(Tab.rooms)
+
+            AIAssistantView()
+                .tabItem {
+                    Label("ИИ", systemImage: "sparkles")
+                }
+                .tag(Tab.ai)
+
+            FriendsTabContent()
+                .tabItem {
+                    Label("Друзья", systemImage: "person.2.fill")
+                }
+                .tag(Tab.friends)
+
+            // 🔧 Pack v3: Settings — отдельная вкладка таббара, не модалка
+            SettingsTabContent(authService: authService)
+                .tabItem {
+                    Label("Настройки", systemImage: "gearshape.fill")
+                }
+                .tag(Tab.settings)
+        }
+        .tint(.ravePrimary)
+        .toolbarBackground(.hidden, for: .tabBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 }
 
@@ -576,6 +550,16 @@ struct HomeTabContent: View {
 }
 
 /// Друзья — список друзей с поиском и кнопкой чата
+// MARK: - Settings Tab Content (отдельная вкладка, не модалка)
+struct SettingsTabContent: View {
+    let authService: AuthService
+
+    var body: some View {
+        SettingsView(authService: authService)
+    }
+}
+
+// MARK: - Friends Tab Content
 struct FriendsTabContent: View {
     @State private var searchText = ""
     @EnvironmentObject private var friendManager: FriendManager

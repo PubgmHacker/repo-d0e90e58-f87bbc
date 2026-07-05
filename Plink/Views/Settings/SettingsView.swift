@@ -20,12 +20,8 @@ import SwiftUI
 //   • Glow на premium-элементах
 
 struct SettingsView: View {
-    @Binding var isPresented: Bool
     @EnvironmentObject private var apiClient: APIClient
-    /// 🔧 AuthService is not ObservableObject — pass via init instead of EnvironmentObject.
-    /// RaveCloneApp injects it directly when constructing SettingsView.
     let authService: AuthService
-    @Environment(\.dismiss) private var dismiss
 
     @State private var profileVM: ProfileViewModel?
     @State private var showFullProfile = false
@@ -33,9 +29,11 @@ struct SettingsView: View {
     @State private var showAdminPanel = false
     @State private var isPremium = false
     @State private var user: User?
-    // 🔧 Navigation destinations for full-screen push (was: .sheet which opened
-    // as overlay). Now uses NavigationLink for proper full-screen push transitions.
     @State private var navigationPath = NavigationPath()
+    @State private var showSignOutConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var deleteReason = "Не пользуюсь приложением"
+    @State private var isDeleting = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -148,7 +146,7 @@ struct SettingsView: View {
 
                         // ── Sign Out ──
                         Button(role: .destructive) {
-                            signOut()
+                            showSignOutConfirm = true
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "arrow.right.square.fill")
@@ -166,6 +164,24 @@ struct SettingsView: View {
                                 RoundedRectangle(cornerRadius: 14)
                                     .stroke(Color.raveDanger.opacity(0.2), lineWidth: 0.5)
                             )
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+
+                        // ── Delete Account ──
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "trash.fill")
+                                    .font(.system(size: 15))
+                                Text("Удалить аккаунт")
+                                    .font(.system(size: 14, weight: .medium))
+                                Spacer()
+                            }
+                            .foregroundColor(.raveDanger.opacity(0.7))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                         }
                         .buttonStyle(.plain)
                         .padding(.horizontal, 16)
@@ -244,6 +260,30 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showAdminPanel) {
             AdminPanelView()
+        }
+        // 🔧 Pack v3: Sign Out confirmation
+        .alert("Выйти из аккаунта?", isPresented: $showSignOutConfirm) {
+            Button("Отмена", role: .cancel) {}
+            Button("Выйти", role: .destructive) {
+                Task {
+                    try? await authService.signOut()
+                }
+            }
+        } message: {
+            Text("Вы уверены, что хотите выйти? Вы сможете войти снова.")
+        }
+        // 🔧 Pack v3: Delete Account confirmation with reason
+        .alert("Удалить аккаунт?", isPresented: $showDeleteConfirm) {
+            Button("Отмена", role: .cancel) {}
+            Button("Удалить навсегда", role: .destructive) {
+                isDeleting = true
+                Task {
+                    try? await authService.deleteAccount()
+                    isDeleting = false
+                }
+            }
+        } message: {
+            Text("Внимание! Это действие необратимо. Все ваши данные (комнаты, история, друзья) будут удалены навсегда.\n\nПричина: \(deleteReason)")
         }
     }
 
@@ -431,24 +471,7 @@ struct SettingsView: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: - Sign Out
-
-    private func signOut() {
-        Task {
-            try? await authService.signOut()
-            await MainActor.run {
-                closeSettings()
-            }
-        }
-    }
-
-    // MARK: - Close
-
-    private func closeSettings() {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-            isPresented = false
-        }
-    }
+    // 🔧 Pack v3: Sign out and delete moved to alert handlers
 }
 
 // MARK: - Localization Helper

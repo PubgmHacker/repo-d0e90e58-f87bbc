@@ -363,6 +363,8 @@ struct RoomChatBubble: View {
                     image.resizable().scaledToFill()
                 case .failure:
                     avatarPlaceholder
+                case .empty:
+                    avatarPlaceholder
                 @unknown default:
                     avatarPlaceholder
                 }

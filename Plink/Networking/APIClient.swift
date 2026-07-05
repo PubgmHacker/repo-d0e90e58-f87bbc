@@ -198,7 +198,12 @@ final class APIClient: ObservableObject, @unchecked Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // 🔧 FIX: only set Content-Type when there's a body. Fastify rejects
+        // empty body with Content-Type: application/json → 400 error.
+        // This affected POST /rooms/:id/leave (no body).
+        if body != nil {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
 
         // 🔧 FIX AUTH BUG: Don't attach stale token to public auth endpoints
         if let token = authToken, !Self.isPublicAuthEndpoint(path) {

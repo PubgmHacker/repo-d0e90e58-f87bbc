@@ -203,7 +203,8 @@ private struct LandscapeChatBubble: View {
             ChatMessage(
                 id: "m2", roomID: "r1", senderID: "u2",
                 senderName: "Jordan", text: "This is 🔥🔥🔥",
-                timestamp: .now, isRead: true
+                timestamp: .now, isRead: true,
+                senderAvatarURL: nil
             ),
         ],
         chatText: .constant(""),

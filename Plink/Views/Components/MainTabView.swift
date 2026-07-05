@@ -155,9 +155,25 @@ struct RoomsTabContent: View {
             }
             .navigationTitle("Комнаты")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $navigateToRoom) { room in
+            // 🔧 FIX v2 (July 2026): replaced `navigationDestination(item:)` with
+            // `.fullScreenCover(item:)`. The old code opened RoomView INSIDE the
+            // NavigationStack of the Комнаты tab — which meant iOS edge-swipe
+            // gestures (used by NavigationStack for "swipe to go back") could
+            // pop RoomView, returning to the tab and re-showing the tabbar.
+            // In landscape, a horizontal swipe was misinterpreted as edge-swipe,
+            // causing 'swipe left → tabbar → orientation reset → room closes'.
+            //
+            // fullScreenCover lifts RoomView OUT of the NavigationStack into a
+            // modal context where:
+            //   1. There is no "swipe to go back" gesture at all
+            //   2. The underlying TabView + tabbar are fully covered
+            //   3. .interactiveDismissDisabled(true) on RoomView blocks swipe-down
+            //      dismissal too
+            // Combined with the AppDelegate orientation lock (see
+            // PlinkAppDelegate), this completely isolates RoomView from system
+            // gestures.
+            .fullScreenCover(item: $navigateToRoom) { room in
                 RoomView(room: room)
-                    .toolbar(.hidden, for: .tabBar)
             }
         }
         .refreshable {
@@ -723,8 +739,17 @@ struct HomeTabContent: View {
                 }
             }
             .navigationDestination(item: $navigateToRoom) { room in
+                // 🔧 FIX v2 (July 2026): Home tab also uses `.fullScreenCover` to
+                // present RoomView (see the .fullScreenCover attached just below
+                // this NavigationStack). We keep an EmptyView placeholder here
+                // so the `navigationDestination(item:)` type-checks — without
+                // it, SwiftUI would warn about an unhandled navigation item.
+                EmptyView()
+            }
+            // 🔧 FIX v2: present RoomView modally. See the matching comment in
+            // RoomsTabContent for the full rationale.
+            .fullScreenCover(item: $navigateToRoom) { room in
                 RoomView(room: room)
-                    .toolbar(.hidden, for: .tabBar)
             }
         }
         .onAppear {

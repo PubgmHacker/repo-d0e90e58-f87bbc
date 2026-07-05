@@ -413,31 +413,41 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v9 (July 2026): REMOVED backend yt-dlp extraction for YouTube.
+            // 🔧 v9 (July 2026): YouTube playback via backend streaming proxy.
             //
-            // v8 tried to extract a direct googlevideo.com mp4 URL via backend
-            // yt-dlp and play it in AVPlayer. Problem: googlevideo URLs are
-            // IP-BOUND — they contain &ip=<backend_ip> (Railway's IP). When
-            // AVPlayer on the iPhone requests the URL from a different IP,
-            // YouTube's CDN returns 403 Forbidden → AVPlayer fails with
-            // code=-11828 "Не удается открыть". This is a fundamental
-            // limitation of yt-dlp extraction in a client-server architecture.
+            // PROBLEM HISTORY (all approaches tried):
+            //   v1-v7: WebView embed → 153, 152-4, bot check (all failed)
+            //   v8: backend yt-dlp extraction + AVPlayer → googlevideo URL is
+            //       IP-bound to Railway → AVPlayer -11828 (IP mismatch)
             //
-            // v9 fix: use WebView mode for YouTube playback (same as Rave).
-            // Keep the embed URL as-is, keep source = .youtube →
-            // effectivePlaybackMode returns .webview → VideoContainerView
-            // loads youtube.com/embed/VIDEO_ID in WKWebView with iOS Safari UA.
-            // YouTube's own player handles playback natively — no IP binding,
-            // no AVPlayer, no extraction needed.
+            // v9 SOLUTION: backend streaming proxy.
+            //   - Instead of giving AVPlayer the googlevideo URL (IP-bound),
+            //     we give it OUR backend URL: /api/media/youtube-stream?id=VIDEO_ID
+            //   - Backend extracts googlevideo URL (IP-bound to Railway = matches),
+            //     fetches the video, and streams it back to iPhone.
+            //   - AVPlayer sees a Railway URL — no IP binding, no 153, no bot check.
+            //   - Range requests pass through for seeking support.
             //
-            // VideoContainerView already has the right code (v8 fix):
-            //   - customUserAgent = iOS Safari UA (matches TLS → no bot check)
-            //   - webView.load(URLRequest(url: url)) (direct URL, no custom HTML)
-            //   - CSS injection hides YouTube's native controls
-            //
-            // This is EXACTLY what Rave does, and Rave's YouTube playback works.
-            let finalStreamURL = contentURL
-            let finalSource = mediaSource  // .youtube → .webview mode
+            // The video ID is extracted from the embed URL (youtube.com/embed/VIDEO_ID).
+            // The proxy URL is: https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
+            // source = .url so effectivePlaybackMode = .directStream → AVPlayer.
+            let finalStreamURL: String
+            let finalSource: MediaItem.MediaSource
+
+            if service == .youtube {
+                // Extract video ID from embed URL
+                let videoId = contentURL.components(separatedBy: "/").last ?? ""
+                let backendBase = "https://plink-backend-production-ef31.up.railway.app/api"
+                finalStreamURL = "\(backendBase)/media/youtube-stream?id=\(videoId)"
+                // 🔧 source = .url → effectivePlaybackMode = .directStream → AVPlayer
+                // (NOT .youtube → .webview, because we want AVPlayer on the proxy URL)
+                finalSource = .url
+                print("🔧 RoomSetupView: YouTube via backend proxy: \(finalStreamURL.prefix(80))")
+            } else {
+                finalStreamURL = contentURL
+                finalSource = mediaSource
+            }
+
             let finalTitle = contentTitle.isEmpty ? name : contentTitle
 
             let mediaItem = MediaItem(

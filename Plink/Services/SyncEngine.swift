@@ -296,6 +296,11 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     func startStateBroadcast() {
         stopStateBroadcast()
         guard isHost else { return }
+        // 🔧 FIX: don't broadcast state for webview mode — there's no AVPlayer
+        // to sync. WebView playback (YouTube embed) handles its own state.
+        // Without this guard, the host floods the WS queue with seek commands
+        // every 2 seconds, even when disconnected (hundreds of messages pile up).
+        guard player != nil else { return }
 
         stateBroadcastTimer = Timer.scheduledTimer(
             withTimeInterval: Constants.stateBroadcastInterval,
@@ -645,8 +650,14 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         isPlaying = false
         currentTime = 0
         duration = 0
+        errorMessage = nil  // 🔧 FIX: clear error message on teardown
         stopDriftMonitor()
         stopStateBroadcast()
+        // 🔧 FIX: clear ALL Combine subscriptions (observeStatus, observeDuration, etc.)
+        // Without this, stale AVPlayerItem observers can fire .failed status and
+        // set errorMessage = "Ошибка настройки видеопроигрывателя" (error 153)
+        // even after we've moved to webview playback mode.
+        cancellables.removeAll()
     }
 
     func cleanup() {

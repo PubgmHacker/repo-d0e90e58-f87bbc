@@ -14,6 +14,28 @@
 // (player JS, CSS) which YouTube doesn't bot-check. Video data comes from
 // googlevideo.com CDN (also not bot-checked).
 
+// v12.1: inject window.safari shim + other WKWebView detection bypasses
+// YouTube's player JS checks window.safari (exists in Safari, NOT in WKWebView).
+// Without this shim, YouTube detects WKWebView → error 153.
+const SAFARI_SHIM = `<script>
+// Shim: make WKWebView look like Safari to YouTube's player JS
+window.safari = {
+  pushNotification: {
+    toString: function() { return '[object SafariRemoteNotification]'; },
+    permission: function() { return 'default'; },
+    requestPermission: function() {},
+  }
+};
+// navigator.vendor: Safari reports 'Apple Computer, Inc.', WKWebView reports ''
+try { Object.defineProperty(navigator, 'vendor', { get: function() { return 'Apple Computer, Inc.'; } }); } catch(e) {}
+// navigator.platform: ensure 'iPhone' (WKWebView might report differently)
+try { Object.defineProperty(navigator, 'platform', { get: function() { return 'iPhone'; } }); } catch(e) {}
+// navigator.maxTouchPoints: Safari on iPhone = 5, WKWebView might report 0
+try { Object.defineProperty(navigator, 'maxTouchPoints', { get: function() { return 5; } }); } catch(e) {}
+// Remove window.webkit.messageHandlers if empty (WKWebView gives empty object, Safari has none)
+try { if (window.webkit && window.webkit.messageHandlers && Object.keys(window.webkit.messageHandlers).length === 0) { delete window.webkit.messageHandlers; } } catch(e) {}
+</script>`;
+
 export async function proxyYouTubeEmbed(videoId: string): Promise<string> {
   const embedUrl = `https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0&modestbranding=1&iv_load_policy=3`;
   
@@ -43,6 +65,11 @@ export async function proxyYouTubeEmbed(videoId: string): Promise<string> {
 
   // Add a base tag to handle any remaining relative URLs
   html = html.replace('<head>', '<head><base href="https://www.youtube.com/">');
+
+  // 🔧 v12.1: inject Safari shim IMMEDIATELY after <head>, BEFORE any YouTube scripts
+  // This runs before YouTube's player JS loads, so when it checks window.safari,
+  // navigator.vendor etc., it finds Safari-like values → no 153.
+  html = html.replace('<head><base ', '<head>' + SAFARI_SHIM + '<base ');
 
   // Add viewport meta for mobile
   if (!html.includes('name="viewport"')) {

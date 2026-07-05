@@ -317,7 +317,13 @@ struct WebVideoView: UIViewRepresentable {
                 loadURL = modifiedURL
             }
         }
-        webView.load(URLRequest(url: loadURL))
+
+        // 🔧 FIX: add Origin header for YouTube embed — YouTube checks this
+        // to allow embedding. Without it, some videos show error 153.
+        var request = URLRequest(url: loadURL)
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Referer")
+        webView.load(request)
 
         return webView
     }

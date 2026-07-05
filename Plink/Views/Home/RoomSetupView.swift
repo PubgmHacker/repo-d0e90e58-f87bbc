@@ -413,37 +413,32 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            let finalStreamURL: String
-            let finalSource: MediaItem.MediaSource
-            let finalTitle: String
-
-            if service == .youtube {
-                do {
-                    let mediaService = MediaService()
-                    let authService = AuthService(api: apiClient)
-                    // 🔧 v8: get fresh token (refreshes if expired) before extraction
-                    let token = await authService.getFreshToken()
-                    mediaService.setAuthToken(token)
-                    print("🔧 RoomSetupView: extracting YouTube direct stream via backend yt-dlp...")
-                    let extracted = try await mediaService.extract(youTubeURL: contentURL)
-                    print("🔧 RoomSetupView: extracted streamURL='\(extracted.streamURL.absoluteString.prefix(80))...'")
-                    finalStreamURL = extracted.streamURL.absoluteString
-                    // 🔧 v8: change source to .url so effectivePlaybackMode returns
-                    // .directStream (AVPlayer) instead of .webview (WKWebView).
-                    // The streamURL is now a direct .mp4 URL, not a YouTube embed.
-                    finalSource = .url
-                    finalTitle = extracted.title.isEmpty ? (contentTitle.isEmpty ? name : contentTitle) : extracted.title
-                } catch {
-                    print("⚠️ RoomSetupView: YouTube extraction failed: \(error.localizedDescription). Falling back to embed URL + WebView mode.")
-                    finalStreamURL = contentURL
-                    finalSource = mediaSource  // .youtube → .webview mode
-                    finalTitle = contentTitle.isEmpty ? name : contentTitle
-                }
-            } else {
-                finalStreamURL = contentURL
-                finalSource = mediaSource
-                finalTitle = contentTitle.isEmpty ? name : contentTitle
-            }
+            // 🔧 v9 (July 2026): REMOVED backend yt-dlp extraction for YouTube.
+            //
+            // v8 tried to extract a direct googlevideo.com mp4 URL via backend
+            // yt-dlp and play it in AVPlayer. Problem: googlevideo URLs are
+            // IP-BOUND — they contain &ip=<backend_ip> (Railway's IP). When
+            // AVPlayer on the iPhone requests the URL from a different IP,
+            // YouTube's CDN returns 403 Forbidden → AVPlayer fails with
+            // code=-11828 "Не удается открыть". This is a fundamental
+            // limitation of yt-dlp extraction in a client-server architecture.
+            //
+            // v9 fix: use WebView mode for YouTube playback (same as Rave).
+            // Keep the embed URL as-is, keep source = .youtube →
+            // effectivePlaybackMode returns .webview → VideoContainerView
+            // loads youtube.com/embed/VIDEO_ID in WKWebView with iOS Safari UA.
+            // YouTube's own player handles playback natively — no IP binding,
+            // no AVPlayer, no extraction needed.
+            //
+            // VideoContainerView already has the right code (v8 fix):
+            //   - customUserAgent = iOS Safari UA (matches TLS → no bot check)
+            //   - webView.load(URLRequest(url: url)) (direct URL, no custom HTML)
+            //   - CSS injection hides YouTube's native controls
+            //
+            // This is EXACTLY what Rave does, and Rave's YouTube playback works.
+            let finalStreamURL = contentURL
+            let finalSource = mediaSource  // .youtube → .webview mode
+            let finalTitle = contentTitle.isEmpty ? name : contentTitle
 
             let mediaItem = MediaItem(
                 id: UUID().uuidString,

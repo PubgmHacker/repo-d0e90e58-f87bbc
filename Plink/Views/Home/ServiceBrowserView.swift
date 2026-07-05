@@ -64,13 +64,9 @@ struct ServiceBrowserView: View {
                         }
                     )
 
-                    // 🔧 REMOVED: green "video detected" banner — user found it confusing.
-                    // Video detection still works internally (sets detectedVideo),
-                    // which is used to pre-fill the title in the alert.
-                    // The bottom "Создать комнату" button is the only CTA now.
-
-                    // Bottom bar with "Create Room" CTA
-                    bottomBar
+                    // 🔧 Pack v3: bottomBar убран — авто-переход через onChange
+                    // Кнопка "Создать комнату" больше не нужна — видео автоматически
+                    // открывает RoomSetupView.
                 }
             }
             .navigationTitle(service.brandName)
@@ -87,23 +83,12 @@ struct ServiceBrowserView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
-            // 🔧 Pack v2: АВТО-переход к RoomSetupView при обнаружении видео.
-            // Раньше: alert "Создать комнату?" → ручное подтверждение.
-            // Теперь: тап на видео в YouTube → видео открылось → сразу
-            // auto-transition к настройкам комнаты (имя, приватность, участники).
-            // Это устраняет лишний шаг и делает UX плавным как в Teleparty.
+            // 🔧 Pack v3: АВТО-переход — мгновенно, без задержки
             .onChange(of: detectedVideo) { _, newVideo in
                 guard let video = newVideo else { return }
-                // Небольшая задержка чтобы WebView успел отрисовать видео
-                // (иначе переход будет резким)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    HapticManager.impact(.medium)
-                    // Сразу вызываем onCreateRoom — parent (RoomCreationView)
-                    // откроет RoomSetupView с этим контентом.
-                    onCreateRoom(video.embedURL, video.title ?? pageTitle)
-                }
+                HapticManager.impact(.medium)
+                onCreateRoom(video.embedURL, video.title ?? pageTitle)
             }
-            // 🔧 Pack v3: alert showCreateConfirm убран — авто-переход работает через onChange
         }
         .preferredColorScheme(.dark)
     }

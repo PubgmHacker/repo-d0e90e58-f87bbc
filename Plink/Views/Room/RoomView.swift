@@ -177,6 +177,7 @@ struct RoomView: View {
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
                 onSend: sendMessage,
+                currentUserID: viewModel.currentUserId,
                 mode: .portrait
             )
             .frame(height: max(chatHeight, 100))
@@ -222,6 +223,7 @@ struct RoomView: View {
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
                 onSend: sendMessage,
+                currentUserID: viewModel.currentUserId,
                 mode: .landscape,
                 isPanelOpen: $showChatPanel
             )
@@ -514,17 +516,23 @@ struct RoomView: View {
         let text = viewModel.chatText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
 
+        // 🔧 Pack v3: Реальные данные отправителя (не "You")
+        let userName = UserDefaults.standard.string(forKey: "plink_current_username") ?? "You"
+        let userRole = UserDefaults.standard.string(forKey: "plink_current_user_role") ?? "USER"
+
         let message = ChatMessage(
             id: UUID().uuidString,
             roomID: room.id,
             senderID: viewModel.currentUserId,
-            senderName: "You",
+            senderName: userName,
             text: text,
             timestamp: Date(),
             isRead: false,
-            senderAvatarURL: nil
+            senderAvatarURL: nil,
+            senderRole: userRole
         )
         syncManager.sendChatMessage(message)
+        viewModel.messages.append(message)
         viewModel.chatText = ""
     }
 

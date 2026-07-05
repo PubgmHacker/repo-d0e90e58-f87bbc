@@ -260,8 +260,10 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
             defaults.set(data, forKey: Keys.savedUser)
         }
         currentUser = user
-        // 🔧 Pack v3: Сохраняем user ID для определения "моё/чужое" сообщение в чате
+        // 🔧 Pack v3: Сохраняем user data для чата (определение "моё/чужое" + админ)
         defaults.set(user.id, forKey: "plink_current_user_id")
+        defaults.set(user.username, forKey: "plink_current_username")
+        defaults.set(user.role ?? "USER", forKey: "plink_current_user_role")
     }
 
     // 🔧 Pack v3: Fetch fresh user from server

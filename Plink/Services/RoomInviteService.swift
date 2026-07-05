@@ -33,7 +33,7 @@ final class RoomInviteService: ObservableObject {
     func acceptInvite(_ invite: RoomInvite) async -> Room? {
         // Join the room via code
         do {
-            let room = try await RoomService(api: APIClient()).joinRoom(code: invite.roomCode, password: nil)
+            let room = try await RoomService(api: APIClient.shared).joinRoom(code: invite.roomCode, password: nil)
             removeInvite(invite)
             return room
         } catch {

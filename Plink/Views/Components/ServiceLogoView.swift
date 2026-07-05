@@ -162,7 +162,7 @@ extension VideoService {
         case .smotrim:      return "https://smotrim.ru/"
         case .kion:         return "https://kion.ru/"
         case .browser:      return "https://www.google.com/"
-        case .customURL:    return ""
+        case .customURL:    return "https://www.google.com/" // 🔧 Pack v3: был "" → URL(string: "")! crash
         }
     }
 }

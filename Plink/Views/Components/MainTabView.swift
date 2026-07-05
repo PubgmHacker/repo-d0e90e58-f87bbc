@@ -62,10 +62,10 @@ struct MainTabView: View {
                 }
                 .tag(Tab.settings)
         }
-        .tint(.ravePrimary)
-        // 🔧 TELEGRAM-STYLE TABBAR: полностью прозрачный с металлик-эффектом
-        // было: .toolbarBackground(.hidden, for: .tabBar) — но iOS всё равно
-        // добавляла свой cyan-tinted glass. Теперь: явный материал + bar appearance.
+        // 🔧 TELEGRAM-STYLE TABBAR: убран .tint(.ravePrimary) — он красил активную
+        // вкладку в cyan (голубой). Теперь активная вкладка = нейтральный белый
+        // (как в Telegram). TabBar полностью прозрачный metallic glass.
+        .tint(.white)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)

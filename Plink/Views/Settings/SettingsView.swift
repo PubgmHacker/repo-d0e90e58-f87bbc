@@ -168,27 +168,13 @@ struct SettingsView: View {
                         }
 
                         // ── Sign Out ──
-                        Button(role: .destructive) {
-                            showSignOutConfirm = true
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "arrow.right.square.fill")
-                                    .font(.system(size: 17))
-                                Text("Выйти из аккаунта")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Spacer()
-                            }
-                            .foregroundColor(.raveDanger)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.raveDanger.opacity(0.2), lineWidth: 0.5)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        // 🔧 v11 (July 2026): extracted to signOutButton computed
+                        // property to fix 'compiler unable to type-check this
+                        // expression in reasonable time' error. The inline Button
+                        // + HStack + 6 modifiers + overlay was too complex for
+                        // SwiftUI's type-checker when combined with the rest of
+                        // the body.
+                        signOutButton
                         .padding(.horizontal, 16)
 
                         // ── Delete Account ──
@@ -357,6 +343,38 @@ struct SettingsView: View {
         case .language:
             LanguagePickerView()
         }
+    }
+
+    // MARK: - Sign Out Button (extracted for type-checker)
+
+    /// 🔧 v11 (July 2026): extracted from the main body to fix
+    /// 'compiler unable to type-check this expression in reasonable time'.
+    /// The inline Button + HStack + 6 modifiers + overlay was too complex
+    /// for SwiftUI's type-checker when combined with the rest of the body.
+    /// Extracting into a computed property gives the compiler a clean
+    /// boundary to type-check independently.
+    private var signOutButton: some View {
+        Button(role: .destructive) {
+            showSignOutConfirm = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.right.square.fill")
+                    .font(.system(size: 17))
+                Text("Выйти из аккаунта")
+                    .font(.system(size: 16, weight: .semibold))
+                Spacer()
+            }
+            .foregroundColor(.raveDanger)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.raveDanger.opacity(0.2), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Profile Card (Apple ID style)

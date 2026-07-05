@@ -11,6 +11,8 @@ protocol AuthServiceProtocol: AnyObject, Sendable {
     func signOut() async throws
     func currentUser() async -> User?
     func deleteAccount() async throws
+    /// 🔧 Pack v3: Synchronous access to current user (for hostName in room creation)
+    var currentUserValue: User? { get }
 }
 
 // MARK: - Room Service Protocol

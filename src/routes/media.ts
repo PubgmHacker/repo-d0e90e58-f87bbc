@@ -1,9 +1,6 @@
 // src/routes/media.ts — Pack 3: обновлённый с yt-dlp extraction
-import { extractStream, extractYouTubeStream, extractMetadata } from '../services/streamExtractor.js';
+import { extractStream, extractYouTubeStream, extractMetadata, UPSTREAM_USER_AGENT } from '../services/streamExtractor.js';
 import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
-import { Readable } from 'stream';
-import { request as httpRequest } from 'http';
-import { request as httpsRequest } from 'https';
 
 const EXTRACT_CACHE_TTL = 3600; // 1 час — прямой URL живёт долго
 
@@ -234,7 +231,7 @@ export default async function mediaRoutes(fastify, _options) {
     // Pass through Range header for seeking support.
     const rangeHeader = request.headers.range;
     const upstreamHeaders: any = {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      'User-Agent': UPSTREAM_USER_AGENT,
       'Referer': 'https://www.youtube.com/',
       'Origin': 'https://www.youtube.com',
     };

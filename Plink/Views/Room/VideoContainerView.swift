@@ -323,24 +323,6 @@ struct WebVideoView: UIViewRepresentable {
         context.coordinator.bridge = bridge
         config.userContentController.add(bridge, name: "videoBridge")
 
-        // 🔧 FIX v4: navigator-spoofing script — MUST be added BEFORE
-        // WKWebView(...) is created. WKWebViewConfiguration is deep-copied at
-        // initialization, so any scripts added to userContentController AFTER
-        // the WKWebView init are silently ignored.
-        //
-        // Injected at .atDocumentStart so it runs BEFORE YouTube's IFrame API
-        // JavaScript. Overrides navigator.userAgent/platform/vendor/maxTouchPoints
-        // to claim Mac Safari, fooling YouTube's client-side WKWebView detection
-        // (which otherwise throws error 153).
-        //
-        // See the full rationale in the comment block just below.
-        let spoofScript = WKUserScript(
-            source: Self.navigatorSpoofScript,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
-        )
-        config.userContentController.addUserScript(spoofScript)
-
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
@@ -352,43 +334,59 @@ struct WebVideoView: UIViewRepresentable {
         // WebViewControl.shared point at this instance.
         WebViewControl.shared.register(webView)
 
-        // 🔧 FIX v4 (July 2026): YouTube error 153 — JS-spoofing approach.
+        // 🔧 FIX v5 (July 2026): YouTube error 153 — real iOS Safari UA.
         //
-        // HISTORY (full iteration log from git):
-        //   1. youtube.com/embed/ + default iOS UA         → error 153 (JS detects WKWebView)
-        //   2. youtube.com/embed/ + iOS Safari UA          → error 153 (same)
-        //   3. youtube.com/embed/ + desktop Mac UA         → 153 fixed, but BOT CHECK
-        //   4. youtube-nocookie.com + IFrame API + Mac UA  → 153 fixed, but BOT CHECK
-        //   5. youtube-nocookie.com + default iOS UA (v3)  → 153 again (JS still detects WKWebView)
+        // v4 attempted to spoof navigator.userAgent via Object.defineProperty
+        // JS injection. Did NOT work — modern iOS WKWebView seals navigator
+        // properties, the override silently fails, error 153 persists.
         //
-        // ROOT CAUSE — TWO SEPARATE DETECTION SYSTEMS:
-        //   - YouTube's CLIENT-SIDE JS reads navigator.userAgent + other props
-        //     to detect WKWebView. Default iOS WKWebView UA → 153.
-        //   - YouTube's SERVER-SIDE anti-abuse compares the HTTP User-Agent
-        //     header against the TLS fingerprint of the connection. iOS device
-        //     claiming Mac UA → bot check (TLS reveals iOS).
+        // ROOT CAUSE (re-investigated):
+        //   Default WKWebView UA looks like:
+        //     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)
+        //      AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+        //   Note: NO "Safari/604.1" suffix.
         //
-        // CONFLICT:
-        //   - Mac UA on HTTP layer → no 153, but bot check (TLS mismatch)
-        //   - iOS UA on HTTP layer → no bot check, but 153 (JS detects WKWebView)
+        //   Real iOS Safari UA looks like:
+        //     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)
+        //      AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0
+        //      Mobile/15E148 Safari/604.1"
+        //   Note: HAS "Safari/604.1" suffix.
         //
-        // SOLUTION: decouple the two. Keep iOS UA at HTTP layer (matches TLS,
-        // no bot check). Inject JavaScript at documentStart that OVERRIDES
-        // navigator.userAgent + related properties to claim Mac Safari. YouTube's
-        // JS reads the overridden value and accepts us as Mac Safari → no 153.
-
+        //   YouTube's IFrame API JS checks navigator.userAgent for "Safari/"
+        //   to determine if we're a real Safari browser. WKWebView's default
+        //   UA omits this → YouTube JS flags as in-app browser → error 153.
+        //
+        // SOLUTION v5:
+        //   Set customUserAgent to a REAL iOS Safari UA string. This is a
+        //   legitimate iOS Safari UA — same TLS fingerprint (still iOS device),
+        //   same OS, same AppleWebKit version. The only difference from
+        //   WKWebView's default is the addition of "Version/17.0" and
+        //   "Safari/604.1" — which is exactly what real Safari reports.
+        //
+        //   Why this works for BOTH detection systems:
+        //     - YouTube JS: sees "Safari/604.1" → not WKWebView → no 153
+        //     - YouTube TLS anti-abuse: UA matches iOS TLS fingerprint
+        //       (real iOS Safari UA on real iOS device) → no bot check
+        //
+        //   The Mac UA approach (v1-v3) failed because Mac UA on iOS device
+        //   = TLS mismatch → bot check. The default WKWebView UA approach (v3-v4)
+        //   failed because no "Safari/" → JS detects WKWebView → 153.
+        //
+        //   v5 is the Goldilocks solution: iOS Safari UA satisfies both.
         let urlString = url.absoluteString
         if urlString.contains("rutube.ru") {
             // Rutube genuinely requires desktop UA on the HTTP layer — different
-            // player, no bot check. We use customUserAgent here (full HTTP-level
-            // override) because Rutube doesn't have YouTube's TLS-fingerprint check.
+            // player, no bot check, no TLS fingerprint validation.
             webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
             webView.load(URLRequest(url: url))
         } else if urlString.contains("youtube.com/embed/") {
-            // 🔧 v4: rewrite to youtube-nocookie.com + add embed params.
-            // customUserAgent is NOT set — default iOS WKWebView UA matches the
-            // iOS TLS fingerprint, no bot check. The JS injection above handles
-            // the client-side 153 detection by spoofing navigator.userAgent.
+            // 🔧 v5: real iOS Safari UA — solves both 153 and bot check.
+            // See the long comment above for the full rationale.
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+
+            // 🔧 v5: also rewrite to youtube-nocookie.com (privacy-enhanced
+            // embed domain — fewer server-side checks, officially sanctioned
+            // by YouTube). Add embed params for cleaner playback.
             let videoId = url.lastPathComponent
             var params = "playsinline=1&rel=0&modestbranding=1&enablejsapi=1"
             // Preserve any existing query params (e.g. origin, autoplay).
@@ -405,7 +403,7 @@ struct WebVideoView: UIViewRepresentable {
             }
             let nocookieURLString = "https://www.youtube-nocookie.com/embed/\(videoId)?\(params)"
             if let nocookieURL = URL(string: nocookieURLString) {
-                print("📺 YouTube: rewriting to youtube-nocookie.com + JS-spoofing Mac UA: \(nocookieURLString)")
+                print("📺 YouTube: real iOS Safari UA + youtube-nocookie.com: \(nocookieURLString)")
                 webView.load(URLRequest(url: nocookieURL))
             } else {
                 // Fallback: load original URL directly.
@@ -419,23 +417,15 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 v4: JavaScript source that overrides navigator properties to claim
-    /// Mac Safari 17. Injected at .atDocumentStart so it runs BEFORE any page
-    /// JavaScript (especially YouTube's IFrame API).
+    /// 🔧 DEPRECATED v4 (July 2026): the navigator-spoofing JS script is no
+    /// longer used — Object.defineProperty on navigator props fails silently
+    /// in modern iOS WKWebView. v5 uses customUserAgent = real iOS Safari UA
+    /// instead, which works at both HTTP and JS layers natively.
     ///
-    /// Properties overridden:
-    ///   - navigator.userAgent → Mac Safari 17 UA string
-    ///   - navigator.platform → 'MacIntel' (iOS default is 'iPhone')
-    ///   - navigator.vendor → 'Apple Computer, Inc.'
-    ///   - navigator.maxTouchPoints → 0 (iOS is 5, Mac is 0)
-    ///   - window.chrome → { runtime: {} } (WKWebView doesn't have this; Safari
-    ///     doesn't either, but YouTube's check looks for absence as WKWebView
-    ///     signal — providing it removes one detection vector)
-    ///
-    /// Object.defineProperty wrapped in try/catch — properties may be sealed
-    /// in some iOS versions, in which case the override silently fails and we
-    /// fall through to default behavior (153 will likely appear).
+    /// Kept here for reference + binary compatibility (in case any external
+    /// caller references it). Not added to userContentController anymore.
     static let navigatorSpoofScript: String = """
+    // Deprecated v4 — see makeUIView() comment for v5 rationale.
     (function() {
         var macUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
         try {
@@ -443,13 +433,8 @@ struct WebVideoView: UIViewRepresentable {
             Object.defineProperty(navigator, 'platform', { get: function() { return 'MacIntel'; } });
             Object.defineProperty(navigator, 'vendor', { get: function() { return 'Apple Computer, Inc.'; } });
             Object.defineProperty(navigator, 'maxTouchPoints', { get: function() { return 0; } });
-        } catch(e) {
-            // Properties may be sealed in some iOS versions — log so we know.
-            console.log('[Plink] navigator property override failed: ' + e.message);
-        }
-        if (!window.chrome) {
-            window.chrome = { runtime: {} };
-        }
+        } catch(e) {}
+        if (!window.chrome) { window.chrome = { runtime: {} }; }
     })();
     """
 

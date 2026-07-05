@@ -388,6 +388,17 @@ struct RoomSetupView: View {
         HapticManager.impact(.medium)
 
         // Build MediaItem from the browsed URL
+        // 🔧 FIX: set proper `source` based on the selected service — was always `.url`.
+        // RoomView uses this to pick playbackMode (YouTube embed URL → WebView,
+        // .mp4/.m3u8 → AVPlayer directStream).
+        let mediaSource: MediaItem.MediaSource = {
+            switch service {
+            case .youtube: return .youtube
+            case .vk, .rutube, .netflix, .disney: return .url
+            case .browser, .customURL: return .url
+            case .kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion: return .url
+            }
+        }()
         let mediaItem = MediaItem(
             id: UUID().uuidString,
             title: contentTitle.isEmpty ? name : contentTitle,
@@ -396,7 +407,7 @@ struct RoomSetupView: View {
             streamURL: contentURL,
             duration: nil,
             mediaType: .video,
-            source: .url
+            source: mediaSource
         )
 
         // 🔧 FIX H1: Actually call the REST API to create the room server-side.

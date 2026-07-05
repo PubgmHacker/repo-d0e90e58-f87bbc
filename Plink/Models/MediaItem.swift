@@ -34,6 +34,43 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
         return title
     }
 
+    /// 🔧 FIX: Determines how this media should be played back.
+    /// - YouTube embed URLs (https://www.youtube.com/embed/...) are HTML pages,
+    ///   AVPlayer can't play them — must use WebView.
+    /// - Direct stream URLs (.mp4, .m3u8, HLS) can be played by AVPlayer.
+    /// - Cinema sites (kinopoisk, ivi, etc.) are HTML pages — WebView.
+    /// - Anything that doesn't look like a direct stream → WebView (safe default).
+    var effectivePlaybackMode: PlaybackMode {
+        let lower = streamURL.lowercased()
+
+        // Direct streamable formats — AVPlayer handles these
+        if lower.hasSuffix(".mp4")
+            || lower.hasSuffix(".m3u8")
+            || lower.contains(".m3u8?")
+            || lower.contains(".mp4?")
+            || lower.hasSuffix(".mov")
+            || lower.hasSuffix(".mkv") {
+            return .directStream
+        }
+
+        // YouTube source — always WebView (embed URL or watch URL, both HTML)
+        if source == .youtube { return .webview }
+
+        // YouTube embed URL pattern (even if source wasn't set to .youtube)
+        if lower.contains("youtube.com/embed/") || lower.contains("youtu.be/") {
+            return .webview
+        }
+
+        // VK/RuTube embed URLs are also HTML pages
+        if lower.contains("vk.com/video_ext") || lower.contains("rutube.ru/play/embed") {
+            return .webview
+        }
+
+        // Default: if URL doesn't end with a known media extension, treat as HTML page
+        // (cinema sites, generic web pages, etc.)
+        return .webview
+    }
+
     var formattedDuration: String? {
         guard let duration else { return nil }
         let hours = Int(duration) / 3600

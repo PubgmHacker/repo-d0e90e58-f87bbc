@@ -50,10 +50,17 @@ final class MediaService {
     // MARK: - Public API
 
     /// Extract a direct stream URL from a YouTube link.
-    /// - Parameter youTubeURL: e.g. "https://youtube.com/watch?v=..."
-    /// - Returns: ExtractedMedia with a playable streamURL
+    /// - Parameter youTubeURL: e.g. "https://youtube.com/watch?v=..." or
+    ///   "https://www.youtube.com/embed/VIDEO_ID"
+    /// - Returns: ExtractedMedia with a playable streamURL (.mp4 direct URL)
+    ///
+    /// 🔧 v8 (July 2026): backend endpoint changed from POST /api/media/extract
+    /// to POST /api/media/extract-url (matches what backend actually exposes).
+    /// Also relaxed validation to accept embed URLs (which is what
+    /// ServiceBrowserView produces) — previously only watch?v= URLs validated.
+    /// Response format aligned with backend's StreamInfo struct.
     func extract(youTubeURL: String) async throws -> ExtractedMedia {
-        // 0. Validate input
+        // 0. Validate input (accept watch / youtu.be / embed / shorts URLs)
         guard isValidYouTubeURL(youTubeURL) else {
             throw MediaError.invalidURL
         }
@@ -65,8 +72,8 @@ final class MediaService {
             return cached
         }
 
-        // 2. Build request
-        let endpoint = apiBaseURL.appendingPathComponent("media/extract")
+        // 2. Build request — POST /api/media/extract-url with {url}
+        let endpoint = apiBaseURL.appendingPathComponent("media/extract-url")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -77,7 +84,16 @@ final class MediaService {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let body = ExtractRequest(url: youTubeURL)
+        // 🔧 v8: backend extractStream expects a watch URL, not embed URL.
+        // Convert embed → watch before sending.
+        let urlToSend: String
+        if youTubeURL.contains("youtube.com/embed/") {
+            urlToSend = "https://www.youtube.com/watch?v=\(videoID)"
+        } else {
+            urlToSend = youTubeURL
+        }
+
+        let body = ExtractRequest(url: urlToSend)
         request.httpBody = try encoder.encode(body)
 
         // 3. Send (with one retry on transient failure)
@@ -89,11 +105,13 @@ final class MediaService {
             data = try await performRequest(request)
         }
 
-        // 4. Decode
+        // 4. Decode — backend returns StreamInfo format:
+        //    {id, title, author, thumbnailURL, streamURL, duration, isLive, extractor, formats?}
         let response = try decoder.decode(ExtractResponse.self, from: data)
 
         // 5. Validate the stream URL is actually usable
-        guard let streamURL = URL(string: response.streamURL) else {
+        guard let streamURL = URL(string: response.streamURL),
+              !response.streamURL.isEmpty else {
             throw MediaError.invalidStreamURL
         }
 
@@ -104,9 +122,9 @@ final class MediaService {
             thumbnailURL: response.thumbnailURL.flatMap(URL.init(string:)),
             streamURL: streamURL,
             duration: response.duration,
-            format: response.format,
-            quality: response.quality,
-            isLive: response.isLive
+            format: response.format ?? "mp4",
+            quality: response.quality ?? "unknown",
+            isLive: response.isLive ?? false
         )
 
         // Cache it
@@ -228,16 +246,17 @@ struct ValidateRequest: Codable {
 struct ExtractResponse: Codable {
     let id: String
     let title: String
-    let artist: String?
+    let author: String?
     let thumbnailURL: String?
     let streamURL: String
     let duration: Double?
-    let format: String
-    let quality: String
-    let isLive: Bool
+    // 🔧 v8: backend StreamInfo doesn't always include these — make optional
+    let format: String?
+    let quality: String?
+    let isLive: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, artist
+        case id, title, author
         case thumbnailURL
         case streamURL, duration, format, quality
         case isLive

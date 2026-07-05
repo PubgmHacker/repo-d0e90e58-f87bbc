@@ -402,23 +402,61 @@ struct RoomSetupView: View {
             case .kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion: return .url
             }
         }()
-        let mediaItem = MediaItem(
-            id: UUID().uuidString,
-            title: contentTitle.isEmpty ? name : contentTitle,
-            artist: nil,
-            thumbnailURL: nil,
-            streamURL: contentURL,
-            duration: nil,
-            mediaType: .video,
-            source: mediaSource
-        )
-        // 🔧 DEBUG: log the constructed mediaItem
-        print("🔍 RoomSetupView.createRoom: mediaItem.streamURL='\(mediaItem.streamURL)', source=\(mediaItem.source.rawValue)")
 
-        // 🔧 FIX H1: Actually call the REST API to create the room server-side.
-        // Was: built a local Room object without persisting → room never appeared
-        // in "Мои комнаты" and guests couldn't join by code.
+        // 🔧 v8 (July 2026): For YouTube, extract a DIRECT mp4 stream URL via
+        // backend yt-dlp BEFORE creating the room. This bypasses WKWebView
+        // entirely — AVPlayer plays the mp4 directly. No more error 153, no
+        // more bot check, no more IFrame API cross-origin issues.
+        //
+        // If extraction fails (yt-dlp can't process this video, network error,
+        // etc.), fall back to the embed URL + WebView mode (which still has
+        // the 153/bot-check issues, but at least the room can be created and
+        // user can retry).
         Task {
+            let finalStreamURL: String
+            let finalSource: MediaItem.MediaSource
+            let finalTitle: String
+
+            if service == .youtube {
+                do {
+                    let mediaService = MediaService()
+                    let authService = AuthService(api: apiClient)
+                    // 🔧 v8: get fresh token (refreshes if expired) before extraction
+                    let token = await authService.getFreshToken()
+                    mediaService.setAuthToken(token)
+                    print("🔧 RoomSetupView: extracting YouTube direct stream via backend yt-dlp...")
+                    let extracted = try await mediaService.extract(youTubeURL: contentURL)
+                    print("🔧 RoomSetupView: extracted streamURL='\(extracted.streamURL.absoluteString.prefix(80))...'")
+                    finalStreamURL = extracted.streamURL.absoluteString
+                    // 🔧 v8: change source to .url so effectivePlaybackMode returns
+                    // .directStream (AVPlayer) instead of .webview (WKWebView).
+                    // The streamURL is now a direct .mp4 URL, not a YouTube embed.
+                    finalSource = .url
+                    finalTitle = extracted.title.isEmpty ? (contentTitle.isEmpty ? name : contentTitle) : extracted.title
+                } catch {
+                    print("⚠️ RoomSetupView: YouTube extraction failed: \(error.localizedDescription). Falling back to embed URL + WebView mode.")
+                    finalStreamURL = contentURL
+                    finalSource = mediaSource  // .youtube → .webview mode
+                    finalTitle = contentTitle.isEmpty ? name : contentTitle
+                }
+            } else {
+                finalStreamURL = contentURL
+                finalSource = mediaSource
+                finalTitle = contentTitle.isEmpty ? name : contentTitle
+            }
+
+            let mediaItem = MediaItem(
+                id: UUID().uuidString,
+                title: finalTitle,
+                artist: nil,
+                thumbnailURL: nil,
+                streamURL: finalStreamURL,
+                duration: nil,
+                mediaType: .video,
+                source: finalSource
+            )
+            print("🔍 RoomSetupView.createRoom: mediaItem.streamURL='\(mediaItem.streamURL.prefix(80))', source=\(mediaItem.source.rawValue)")
+
             do {
                 // 🔧 FIX: save selected theme to PremiumStatusManager so RoomView
                 // can apply chatBackground + playerBorder.

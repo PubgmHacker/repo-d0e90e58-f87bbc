@@ -322,12 +322,8 @@ struct RoomChatBubble: View {
         }
         .padding(.horizontal, compact ? 10 : 14)
         .padding(.vertical, compact ? 6 : 10)
-        // 🔧 FIX: simple background — no telegramGlass, no colored borders
-        .background(
-            isMyMessage
-                ? Color.bioCyan.opacity(0.12)
-                : Color.white.opacity(0.06)
-        )
+        // 🔧 FIX: simple background — same for all messages, no cyan
+        .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 16))
     }
 
@@ -347,7 +343,14 @@ struct RoomChatBubble: View {
 
     @ViewBuilder
     private var avatarView: some View {
-        if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
+        // 🔧 FIX: check local avatar first (ProfileViewModel.sharedAvatar),
+        // then try URL, then fallback to initials.
+        if let localImg = ProfileViewModel.sharedAvatar,
+           message.senderID == (currentUserID ?? UserDefaults.standard.string(forKey: "plink_current_user_id")) {
+            Image(uiImage: localImg)
+                .resizable()
+                .scaledToFill()
+        } else if let avatarURL = message.senderAvatarURL, let url = URL(string: avatarURL) {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):

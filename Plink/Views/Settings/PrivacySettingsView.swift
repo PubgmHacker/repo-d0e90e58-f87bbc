@@ -20,13 +20,12 @@ struct PrivacySettingsView: View {
     @AppStorage("privacy_allow_invites_from") private var allowInvitesFrom = "everyone"
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                BioluminescentBackground(energy: 0.4, dimming: 0)
-                    .ignoresSafeArea()
+        ZStack {
+            BioluminescentBackground(energy: 0.4, dimming: 0)
+                .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
                         // ── Visibility Section ──
                         VStack(alignment: .leading, spacing: 6) {
                             PlinkSectionHeader(text: "Видимость")
@@ -138,17 +137,6 @@ struct PrivacySettingsView: View {
             }
             .navigationTitle("Конфиденциальность")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
-                    }
-                }
-            }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)

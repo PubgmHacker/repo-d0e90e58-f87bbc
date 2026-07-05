@@ -22,13 +22,12 @@ struct NotificationsView: View {
     @AppStorage("notif_do_not_disturb") private var doNotDisturb = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                // Bioluminescent background
-                BioluminescentBackground(energy: 0.4, dimming: 0)
-                    .ignoresSafeArea()
+        ZStack {
+            // Bioluminescent background
+            BioluminescentBackground(energy: 0.4, dimming: 0)
+                .ignoresSafeArea()
 
-                ScrollView {
+            ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         // ── DND banner (top priority) ──
                         if doNotDisturb {
@@ -151,17 +150,6 @@ struct NotificationsView: View {
             }
             .navigationTitle("Уведомления")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
-                    }
-                }
-            }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)

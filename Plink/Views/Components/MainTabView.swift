@@ -65,6 +65,28 @@ struct MainTabView: View {
         .tint(.ravePrimary)
         .toolbarBackground(.hidden, for: .tabBar)
         .toolbarBackground(.hidden, for: .navigationBar)
+        // 🔧 Pack v3: Свайп влево/вправо для переключения вкладок (как в Telegram)
+        .gesture(
+            DragGesture(minimumDistance: 50)
+                .onEnded { value in
+                    let tabs: [Tab] = [.home, .rooms, .ai, .friends, .settings]
+                    guard let currentIndex = tabs.firstIndex(of: selectedTab) else { return }
+                    // Свайп влево → следующая вкладка
+                    if value.translation.width < -50 && currentIndex < tabs.count - 1 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            selectedTab = tabs[currentIndex + 1]
+                        }
+                    }
+                    // Свайп вправо → предыдущая вкладка
+                    if value.translation.width > 50 && currentIndex > 0 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            selectedTab = tabs[currentIndex - 1]
+                        }
+                    }
+                }
+        )
     }
 }
 

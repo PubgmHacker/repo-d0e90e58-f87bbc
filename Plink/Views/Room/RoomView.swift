@@ -172,6 +172,7 @@ struct RoomView: View {
             )
 
             // Чат — оставшееся пространство
+            // 🔧 Pack v3: Свайп вниз по чату = скрыть чат (как Telegram)
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -181,6 +182,19 @@ struct RoomView: View {
             .frame(height: max(chatHeight, 100))
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
+            // Свайп вниз с любой точки чата — скрыть (не закрывать комнату, просто свернуть чат)
+            .gesture(
+                DragGesture(minimumDistance: 40)
+                    .onEnded { value in
+                        // Только вертикальный свайп вниз (с середины тоже работает)
+                        if value.translation.height > 40 && abs(value.translation.width) < 60 {
+                            HapticManager.impact(.light)
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                showChatPanel = false
+                            }
+                        }
+                    }
+            )
         }
         .contentShape(Rectangle())
         // Single tap = toggle controls (только в области видео)

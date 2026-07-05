@@ -44,6 +44,19 @@ final class PlinkSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
 
+        // 🔧 v24.2: ignore sub-resource requests (favicon, css, images)
+        // YouTube's iframe might try to load these through our scheme.
+        // Return empty 200 to prevent network errors.
+        let path = url.path.lowercased()
+        if path.contains("favicon") || path.hasSuffix(".css") || path.hasSuffix(".png")
+            || path.hasSuffix(".ico") || path.hasSuffix(".js") {
+            let response = URLResponse(url: url, mimeType: "text/plain",
+                                       expectedContentLength: 0, textEncodingName: "utf-8")
+            urlSchemeTask.didReceive(response)
+            urlSchemeTask.didFinish()
+            return
+        }
+
         // Parse video ID from URL: plink-media://plink.app/?v=VIDEO_ID
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let videoId = components?.queryItems?.first(where: { $0.name == "v" })?.value ?? ""

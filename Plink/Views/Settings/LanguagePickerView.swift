@@ -45,17 +45,6 @@ struct LanguagePickerView: View {
         }
         .navigationTitle("Язык")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.bioCyan)
-                }
-            }
-        }
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 

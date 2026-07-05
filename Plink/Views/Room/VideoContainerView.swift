@@ -306,22 +306,81 @@ struct WebVideoView: UIViewRepresentable {
     var onTimeUpdate: (TimeInterval) -> Void
 
     func makeUIView(context: Context) -> WKWebView {
+        let urlString = url.absoluteString
+        let isYouTube = urlString.contains("youtube.com/embed/") || urlString.contains("youtu.be/")
+
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
         config.websiteDataStore = WKWebsiteDataStore.default()  // 🔧 allow cookies
 
-        let userScript = WKUserScript(
-            source: Self.syncScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
-        )
-        config.userContentController.addUserScript(userScript)
+        // 🔧 v10.1 (July 2026): for YouTube, use COMPLETELY clean WKWebView.
+        // NO syncScript, NO videoBridge message handler, NO CSS injection.
+        //
+        // YouTube's anti-automation JS checks window.webkit.messageHandlers
+        // for any custom handlers. Our videoBridge handler was being registered
+        // unconditionally → YouTube detected it → error 153.
+        //
+        // Also: syncScript injects JS that queries document.querySelector('video')
+        // into YouTube's iframe (cross-origin) → failed JS execution → detected.
+        //
+        // For YouTube: zero scripts, zero handlers, zero CSS. Just load URL.
+        // This means no play/pause/seek sync for YouTube (acceptable — video
+        // playing > perfect sync). Sync can be re-added later via YouTube
+        // IFrame API postMessage from a SEPARATE wrapper page (not loadHTMLString).
+        if !isYouTube {
+            // Non-YouTube (Rutube, VK, etc.): add sync script + bridge + CSS
+            let userScript = WKUserScript(
+                source: Self.syncScript,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(userScript)
 
-        let bridge = VideoTimeBridge(closure: onTimeUpdate)
-        context.coordinator.bridge = bridge
-        config.userContentController.add(bridge, name: "videoBridge")
+            let bridge = VideoTimeBridge(closure: onTimeUpdate)
+            context.coordinator.bridge = bridge
+            config.userContentController.add(bridge, name: "videoBridge")
+
+            // CSS injection for fullscreen + hide native controls
+            let fullscreenCssScript = WKUserScript(
+                source: """
+                (function() {
+                    var style = document.createElement('style');
+                    style.innerHTML = `
+                        html, body { width: 100% !important; height: 100% !important;
+                                     margin: 0 !important; padding: 0 !important;
+                                     background: #000 !important; overflow: hidden !important; }
+                        iframe, video, #player, #app, .video-frame, .player-container,
+                        .video-player, [class*="player"] {
+                            width: 100% !important; height: 100% !important;
+                            max-width: 100% !important; max-height: 100% !important;
+                            margin: 0 !important; padding: 0 !important;
+                            object-fit: contain !important;
+                        }
+                        video::-webkit-media-controls,
+                        video::-webkit-media-controls-enclosure,
+                        video::-webkit-media-controls-panel {
+                            display: none !important;
+                            pointer-events: none !important;
+                        }
+                        .pl-video-player__controls,
+                        .pl-video-player__progress,
+                        [class*="controls-"],
+                        [class*="player-controls"] {
+                            display: none !important;
+                            pointer-events: none !important;
+                        }
+                    `;
+                    (document.head || document.documentElement).appendChild(style);
+                })();
+                """,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(fullscreenCssScript)
+        }
+        // For YouTube: config stays completely clean — no scripts, no handlers
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
@@ -329,140 +388,18 @@ struct WebVideoView: UIViewRepresentable {
         webView.backgroundColor = .black
 
         // 🔧 Register webView so SyncEngine can send play/pause/seek via JS.
+        // For YouTube this is a no-op (no syncScript to receive commands),
+        // but registering is harmless — it just stores a weak reference.
         WebViewControl.shared.register(webView)
 
-        // 🔧 v9.3 (July 2026): inject CSS that forces Rutube/VK embed players
-        // to fill the entire WebView in landscape mode. Without this, the
-        // embed page renders at 16:9 aspect ratio centered in a larger
-        // container, leaving black bars in landscape fullscreen.
-        //
-        // User reported: 'rutube смог запустить но через их контроллеры, в
-        // горизонтальное положение экран не переводит - не поворачивается'
-        //
-        // The device DOES rotate (OrientationManager.lockToLandscape works),
-        // but Rutube's embed page itself doesn't expand the video to fill
-        // the landscape viewport. This CSS injection makes:
-        //   - body, html, iframe: 100% width + height, no margins
-        //   - common player container IDs/classes: also 100%
-        //   - object-fit: contain so video keeps aspect ratio
-        //   - 🔧 v11 (July 2026): for Rutube, hide native player controls via CSS
-        //     so Plink's ControlsOverlay is the only UI visible. Without this,
-        //     Rutube's own play/pause/seek bar overlaps Plink's controls and
-        //     confuses users (reported: 'контроллеры рутуба где-то болтаются').
-        //     Rutube's player uses standard HTML5 video element controls, so we
-        //     target video::-webkit-media-controls and Rutube-specific wrappers.
-        let fullscreenCssScript = WKUserScript(
-            source: """
-            (function() {
-                var style = document.createElement('style');
-                style.innerHTML = `
-                    html, body { width: 100% !important; height: 100% !important;
-                                 margin: 0 !important; padding: 0 !important;
-                                 background: #000 !important; overflow: hidden !important; }
-                    iframe, video, #player, #app, .video-frame, .player-container,
-                    .video-player, [class*="player"] {
-                        width: 100% !important; height: 100% !important;
-                        max-width: 100% !important; max-height: 100% !important;
-                        margin: 0 !important; padding: 0 !important;
-                        object-fit: contain !important;
-                    }
-                    /* 🔧 v11: hide native HTML5 video controls on Rutube/VK embeds.
-                       We provide our own ControlsOverlay; the native controls
-                       overlap and confuse users. Hiding via ::-webkit-media-controls
-                       works because WKWebView uses WebKit (Safari) engine. */
-                    video::-webkit-media-controls,
-                    video::-webkit-media-controls-enclosure,
-                    video::-webkit-media-controls-panel,
-                    video::-webkit-media-controls-timeline,
-                    video::-webkit-media-controls-current-time-display,
-                    video::-webkit-media-controls-time-remaining-display,
-                    video::-webkit-media-controls-play-button,
-                    video::-webkit-media-controls-volume-slider,
-                    video::-webkit-media-controls-mute-button,
-                    video::-webkit-media-controls-fullscreen-button,
-                    video::-webkit-media-controls-overlay-play-button,
-                    video::-webkit-media-controls-overlay-enclosure {
-                        display: none !important;
-                        opacity: 0 !important;
-                        visibility: hidden !important;
-                        pointer-events: none !important;
-                    }
-                    /* Rutube-specific: hide their custom player UI overlays */
-                    .pl-video-player__controls,
-                    .pl-video-player__progress,
-                    .pl-video-player__toolbar,
-                    [class*="controls-"],
-                    [class*="ControlsPanel"],
-                    [class*="player-controls"] {
-                        display: none !important;
-                        opacity: 0 !important;
-                        visibility: hidden !important;
-                        pointer-events: none !important;
-                    }
-                `;
-                (document.head || document.documentElement).appendChild(style);
-            })();
-            """,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
-        )
-        config.userContentController.addUserScript(fullscreenCssScript)
-
-        // 🔧 FIX v6 (July 2026): YouTube error 153 — custom HTML + IFrame API
-        // + real iOS Safari UA. The ONLY combination that solves BOTH 153 and
-        // bot check.
-        //
-        // FULL ITERATION HISTORY (lesson learned):
-        //   v1: youtube.com + Mac UA + direct URL          → 153 fixed, BOT CHECK
-        //   v2: youtube.com + iOS default UA + direct URL  → 153 (JS detects WKWebView)
-        //   v3: youtube-nocookie.com + iOS default UA      → 153 (same)
-        //   v4: youtube-nocookie.com + JS-spoof Mac UA     → 153 (Object.defineProperty sealed)
-        //   v5: youtube-nocookie.com + iOS Safari UA       → 153 (UA alone insufficient)
-        //
-        // ROOT CAUSE — YouTube's JS uses MULTIPLE detection vectors:
-        //   1. navigator.userAgent (checks for "Safari/" substring)
-        //   2. window.webkit.messageHandlers presence (WKWebView-specific)
-        //   3. Various WebKit-internal property checks
-        //
-        // customUserAgent alone can't bypass #2 and #3.
-        //
-        // V6 SOLUTION — load a CUSTOM HTML page that we control. The page uses
-        // YouTube's IFrame API (`<script src=".../iframe_api">`) to create a
-        // player. Crucially:
-        //   - The IFrame API script loads in OUR page context, not YouTube's.
-        //     YouTube's environment-detection code never runs against our WKWebView.
-        //   - The iframe inside the player loads from youtube.com but YouTube
-        //     trusts the parent page (which uses IFrame API officially).
-        //   - 153 doesn't trigger because we're using the official IFrame API
-        //     embedding pattern that YouTube documents and supports.
-        //
-        // To avoid the bot check (which the previous version of this code had):
-        //   - Use real iOS Safari UA (not Mac UA). Mac UA on iOS device = TLS
-        //     mismatch → bot check. iOS Safari UA on iOS device = TLS matches →
-        //     no bot check.
-        //   - Use youtube-nocookie.com as baseURL for the custom HTML (privacy-
-        //     enhanced domain, officially sanctioned by YouTube, fewer
-        //     server-side checks).
-
-        // 🔧 v10 (July 2026): for YouTube, skip ALL CSS injection + customUserAgent.
-        // This is EXACTLY what Rave does — default UA, no scripts, just load URL.
-        // Previous 153 errors were caused by CSS injection (hiding controls) and
-        // customUserAgent overrides — YouTube's JS detected modifications and blocked.
-        let urlString = url.absoluteString
-        let isYouTube = urlString.contains("youtube.com/embed/") || urlString.contains("youtu.be/")
-
-        if !isYouTube {
-            // Non-YouTube: inject CSS for fullscreen + hide native controls
-            config.userContentController.addUserScript(fullscreenCssScript)
-        }
-
+        // 🔧 Load URL
         if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v10: YouTube — NO customUserAgent, NO CSS injection, NO custom HTML.
-            // Default WKWebView UA + plain URL load. Exactly like Rave.
-            print("📺 YouTube v10: clean WebView (like Rave) — no UA, no CSS, no scripts")
+            // 🔧 v10.1: YouTube — completely clean. No UA, no CSS, no scripts.
+            // Default WKWebView UA + plain URL load. Zero modifications.
+            print("📺 YouTube v10.1: completely clean WKWebView (no scripts, no handlers, no UA)")
             webView.load(URLRequest(url: url))
         } else {
             webView.load(URLRequest(url: url))

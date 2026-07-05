@@ -1,20 +1,13 @@
-// v18: Hosted YouTube player on backend domain — real HTTPS origin.
-//
-// KEY INSIGHT from user analysis:
-// - loadHTMLString / load(data:) / loadFileURL → all trigger sandbox errors → 153
-// - Only REAL HTTPS URL gives native Origin/Referer headers
-// - Backend serves this page → WKWebView loads via URLRequest → iOS sets
-//   Origin: https://plink-backend... and Referer: https://plink-backend...
-//   natively, no sandbox issues.
-//
-// Uses YouTube IFrame API with host: 'https://www.youtube-nocookie.com'
-// (weaker bot detection) + origin: window.location.origin (backend domain).
+// v18.2: No host:nocookie — use default YouTube domain (avoids CSP frame-src issues)
+// + inline CSP meta tag as fallback in case backend headers don't apply
 
 export function youtubePlayerHTML(videoId: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- CSP: allow YouTube scripts + iframes from both youtube.com and youtube-nocookie.com -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src * wss:; frame-src *; child-src *;">
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         #player { width: 100%; height: 100%; }
@@ -37,7 +30,9 @@ export function youtubePlayerHTML(videoId: string): string {
                 height: '100%',
                 width: '100%',
                 videoId: '${videoId}',
-                host: 'https://www.youtube-nocookie.com',
+                // 🔧 v18.2: REMOVED host:'https://www.youtube-nocookie.com'
+                // host:nocookie caused CSP frame-src conflicts. Default host
+                // (youtube.com) works fine when page has real HTTPS origin.
                 playerVars: {
                     'playsinline': 1,
                     'controls': 0,

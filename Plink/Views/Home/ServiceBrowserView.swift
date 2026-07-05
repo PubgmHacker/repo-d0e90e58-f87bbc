@@ -361,45 +361,47 @@ struct ServiceWebView: UIViewRepresentable {
         let contentController = WKUserContentController()
         contentController.add(context.coordinator, name: "plinkURLChange")
 
-        // 🔧 v9.1 (July 2026): inject viewport-fit script for YouTube so the
-        // desktop UI (served because of the Mac UA below) fits the iPhone screen.
-        // YouTube desktop pages assume a 1280px+ viewport and don't include a
-        // mobile-friendly <meta name="viewport"> tag. Without intervention the
-        // page renders at desktop width → user sees only the top-left corner,
-        // has to pinch-zoom manually to see anything.
+        // 🔧 v9.3 (July 2026): REMOVED the viewport-fit script for YouTube.
         //
-        // This script runs at .atDocumentEnd (after DOM is parsed but before
-        // sub-resources finish loading). It:
-        //   1. Forces viewport meta: width=device-width, initial-scale=0.32
-        //      This scales the 1280px desktop layout down to ~410px iPhone width.
-        //   2. Allows user-scalable=yes so user can pinch-zoom in/out freely.
-        //   3. Injects a small CSS rule to prevent horizontal overflow.
+        // v9.1 added a script that injected <meta viewport width=1280
+        // initial-scale=0.32> to scale the desktop YouTube UI down to iPhone
+        // width. That was needed because v9.1 used Mac UA → YouTube served
+        // desktop pages (1280px+ layout).
         //
-        // The scale=0.32 is calibrated for iPhone (390-430pt screens).
-        // On iPad the desktop layout already fits reasonably, so we don't inject.
+        // v9.2 changed UA to iPad → YouTube now redirects to m.youtube.com
+        // (mobile UI). m.youtube.com is ALREADY optimized for iPhone screens:
+        //   - width=device-width viewport (no scaling needed)
+        //   - Touch-friendly tap targets
+        //   - Single-column grid that fits 390-430pt screens
+        //   - Native pinch-to-zoom support
+        //
+        // The old viewport script was BREAKING the mobile UI by forcing
+        // width=1280 + scale=0.32 — making everything tiny on iPhone.
+        // User reported: 'исправь десктоп версию на айфонах = она должна быть
+        // под мобильную интегрирована, иначе слишком большой экран и все
+        // слишком мелко в ютубе'.
+        //
+        // Fix: just don't inject any viewport script. m.youtube.com's own
+        // viewport meta is correct for iPhone. The only CSS we still inject
+        // is overflow-x:hidden as a safety net (via the comment below).
         if initialURL.host?.contains("youtube.com") == true ||
            initialURL.host?.contains("youtu.be") == true {
-            let viewportScript = WKUserScript(
+            let safetyScript = WKUserScript(
                 source: """
                 (function() {
-                    // Remove any existing viewport meta tags YouTube sets
-                    var existing = document.querySelectorAll('meta[name="viewport"]');
-                    existing.forEach(function(m) { m.remove(); });
-                    // Inject our own — scales desktop 1280px layout to fit iPhone
-                    var meta = document.createElement('meta');
-                    meta.name = 'viewport';
-                    meta.content = 'width=1280, initial-scale=0.32, minimum-scale=0.25, maximum-scale=2.0, user-scalable=yes';
-                    document.head.appendChild(meta);
-                    // Prevent horizontal scroll caused by minor overflow
+                    // 🔧 v9.3: only inject overflow-x:hidden as a safety net.
+                    // m.youtube.com's own viewport meta is correct — we don't
+                    // override it. This just prevents minor horizontal scroll
+                    // from layout glitches.
                     var style = document.createElement('style');
-                    style.innerHTML = 'html, body { overflow-x: hidden !important; max-width: 100% !important; } #content, ytd-app { max-width: 100% !important; }';
-                    document.head.appendChild(style);
+                    style.innerHTML = 'html, body { overflow-x: hidden !important; max-width: 100% !important; }';
+                    (document.head || document.documentElement).appendChild(style);
                 })();
                 """,
                 injectionTime: .atDocumentEnd,
                 forMainFrameOnly: true
             )
-            contentController.addUserScript(viewportScript)
+            contentController.addUserScript(safetyScript)
         }
 
         config.userContentController = contentController
@@ -409,26 +411,23 @@ struct ServiceWebView: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
 
-        // 🔧 v9.2 (July 2026): YouTube UA changed from Mac Safari to iPad Safari.
+        // 🔧 v9.2 (July 2026): YouTube UA = iPad Safari.
         //
-        // v9.1 used Mac Safari UA to get the desktop UI. Problem: YouTube's
-        // consent interstitial appeared in WKWebView (no Google cookies →
-        // 'before you continue to YouTube' consent page). User reported:
-        //   'ютуб не открывает = перебрасывает на какое то принятие куки данных'
+        // iPad UA makes YouTube redirect to m.youtube.com (mobile UI 2026):
+        //   1. Modern redesign — large thumbnails, grid, filter chips
+        //   2. NO consent interstitial (mobile/touch UA bypasses EU consent)
+        //   3. Already fits iPhone screen — no viewport scaling needed
+        //   4. Touch-friendly tap targets
         //
-        // Root cause: Mac UA on a non-Mac IP (TLS reveals mobile carrier IP)
-        // triggers Google's EU consent flow. WKWebView has no Google session
-        // cookies, so the consent can't be auto-accepted.
+        // Mac UA was tried in v9.1 but caused:
+        //   - Consent interstitial (no Google cookies in WKWebView)
+        //   - Desktop layout too wide for iPhone (needed scale=0.32 hack)
         //
-        // v9.2 fix: use iPad Safari UA instead. YouTube redirects to
-        // m.youtube.com which:
-        //   1. Has a modern 2026 redesign (large thumbnails, grid, filter chips)
-        //   2. Does NOT trigger consent interstitial for mobile/touch UA
-        //   3. Already fits iPhone screen — no viewport injection needed
+        // Default WKWebView UA was tried before v9.1 but YouTube served the
+        // OLD 2018 m.youtube.com layout (small thumbnails, list view).
         //
-        // We keep the viewport-fit script as a no-op safety net (it removes
-        // existing viewport metas and adds overflow-x:hidden, which is also
-        // useful on m.youtube.com to prevent minor horizontal scroll).
+        // iPad UA is the Goldilocks: modern mobile UI, no consent, fits
+        // iPhone screen natively.
         if initialURL.host?.contains("youtube.com") == true ||
            initialURL.host?.contains("youtu.be") == true {
             webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

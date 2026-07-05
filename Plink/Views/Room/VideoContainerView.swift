@@ -308,46 +308,27 @@ struct WebVideoView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let urlString = url.absoluteString
         let isYouTube = urlString.contains("youtube.com/embed/") || urlString.contains("youtu.be/")
+        // 🔧 v11: backend hosted IFrame player URL
+        let isBackendPlayer = urlString.contains("plink-backend") && urlString.contains("youtube-player")
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
 
-        // 🔧 v10.2: for YouTube, use NON-PERSISTENT data store.
-        //
-        // Root cause of persistent 153: ServiceBrowserView loads m.youtube.com
-        // with iPad UA, setting cookies. Playback WebView inherits those cookies
-        // via WKWebsiteDataStore.default() (shared) but uses DEFAULT WKWebView UA.
-        // YouTube sees: "cookies set by iPad UA, but request from WKWebView UA"
-        // → UA/cookie mismatch → error 153.
-        //
-        // Rave doesn't have this problem because it has no ServiceBrowserView —
-        // no pre-browsing phase with different UA.
-        //
-        // Fix: nonPersistent() creates a fresh, isolated session with NO cookies
-        // from the browsing phase. YouTube sees a clean first-time visitor.
-        if isYouTube {
+        // 🔧 v11: for YouTube (both direct embed AND backend player), use
+        // completely clean WKWebView — no scripts, no handlers, no CSS.
+        // The backend player page has its OWN IFrame API JS — it doesn't
+        // need our syncScript or videoBridge.
+        let isYouTubeLike = isYouTube || isBackendPlayer
+
+        if isYouTubeLike {
             config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
         } else {
             config.websiteDataStore = WKWebsiteDataStore.default()
         }
 
-        // 🔧 v10.1 (July 2026): for YouTube, use COMPLETELY clean WKWebView.
-        // NO syncScript, NO videoBridge message handler, NO CSS injection.
-        //
-        // YouTube's anti-automation JS checks window.webkit.messageHandlers
-        // for any custom handlers. Our videoBridge handler was being registered
-        // unconditionally → YouTube detected it → error 153.
-        //
-        // Also: syncScript injects JS that queries document.querySelector('video')
-        // into YouTube's iframe (cross-origin) → failed JS execution → detected.
-        //
-        // For YouTube: zero scripts, zero handlers, zero CSS. Just load URL.
-        // This means no play/pause/seek sync for YouTube (acceptable — video
-        // playing > perfect sync). Sync can be re-added later via YouTube
-        // IFrame API postMessage from a SEPARATE wrapper page (not loadHTMLString).
-        if !isYouTube {
+        if !isYouTubeLike {
             // Non-YouTube (Rutube, VK, etc.): add sync script + bridge + CSS
             let userScript = WKUserScript(
                 source: Self.syncScript,
@@ -360,7 +341,6 @@ struct WebVideoView: UIViewRepresentable {
             context.coordinator.bridge = bridge
             config.userContentController.add(bridge, name: "videoBridge")
 
-            // CSS injection for fullscreen + hide native controls
             let fullscreenCssScript = WKUserScript(
                 source: """
                 (function() {
@@ -398,42 +378,28 @@ struct WebVideoView: UIViewRepresentable {
             )
             config.userContentController.addUserScript(fullscreenCssScript)
         }
-        // For YouTube: config stays completely clean — no scripts, no handlers
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
 
-        // 🔧 Register webView so SyncEngine can send play/pause/seek via JS.
-        // For YouTube this is a no-op (no syncScript to receive commands),
-        // but registering is harmless — it just stores a weak reference.
         WebViewControl.shared.register(webView)
 
         // 🔧 Load URL
-        if urlString.contains("rutube.ru") {
+        if isBackendPlayer {
+            // 🔧 v11: backend hosted IFrame player — clean WebView, no UA override.
+            // The page is served by our backend (real origin), so IFrame API
+            // postMessage works. YouTube's player runs inside an iframe loaded
+            // from youtube.com — YouTube's WKWebView detection doesn't apply
+            // because the PARENT page is our backend, not a WKWebView embed.
+            print("📺 YouTube v11: backend hosted IFrame player")
+            webView.load(URLRequest(url: url))
+        } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v10.3: YouTube — clean WKWebView + iOS Safari UA.
-            //
-            // DISCOVERY: YouTube's SERVER-SIDE detection classifies the request
-            // based on User-Agent:
-            //   WKWebView default UA (no "Safari/") → cbr=Webview → error 153
-            //   iOS Safari UA (with "Safari/604.1") → cbr=Safari+Mobile → works
-            //
-            // Previous v10/v10.1/v10.2 used default WKWebView UA → YouTube saw
-            // cbr=Webview → 153. The fix is to set customUserAgent to real iOS
-            // Safari UA so YouTube classifies as cbr=Safari+Mobile.
-            //
-            // This was tried before (v5, v8) but ALWAYS with scripts/handlers/CSS
-            // injection — which YouTube's JS also detected. v10.3 combines:
-            //   - iOS Safari UA (cbr=Safari+Mobile, not cbr=Webview)
-            //   - NO scripts, NO handlers, NO CSS (v10.1 clean)
-            //   - nonPersistent data store (v10.2, clean cookies)
-            // This combination has NEVER been tried before.
-            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            print("📺 YouTube v10.3: clean WKWebView + iOS Safari UA (cbr=Safari+Mobile)")
+            // Direct YouTube embed (fallback — shouldn't be used in v11)
             webView.load(URLRequest(url: url))
         } else {
             webView.load(URLRequest(url: url))

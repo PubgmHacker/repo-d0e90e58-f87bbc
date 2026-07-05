@@ -21,6 +21,7 @@
 		1123123147BAA4FE37A2DBB2 /* VoiceChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D333E130D807F2A3D5BBA273 /* VoiceChatService.swift */; };
 		1180C0376C7297F465C03D90 /* ReactionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE56C13BE17795D98F5208A4 /* ReactionOverlayView.swift */; };
 		12226B2D7E22DCB80D5CE504 /* OrientationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4788A753344D8F34B3BA20B /* OrientationManager.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* MutexBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A6978879605140 /* MutexBox.swift */; };
 		1C0927741E7A9521267839CA /* SyncEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A727EA11229845200DFDAA44 /* SyncEvents.swift */; };
 		1C1F7C8BF7A796CD761C963A /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0E3DC19CB90244478609D96 /* User.swift */; };
 		1D702408EFA59569DEE08857 /* RoomViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6CBA84BF1C120B2481FFA6 /* RoomViewModel.swift */; };
@@ -189,6 +190,7 @@
 		D1C984B2337BB934ED4256F5 /* FriendProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendProfileView.swift; sourceTree = "<group>"; };
 		D333E130D807F2A3D5BBA273 /* VoiceChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceChatService.swift; sourceTree = "<group>"; };
 		D4788A753344D8F34B3BA20B /* OrientationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationManager.swift; sourceTree = "<group>"; };
+		F1E2D3C4B5A6978879605140 /* MutexBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MutexBox.swift; sourceTree = "<group>"; };
 		D5899AF478F7C18BFF4FDAB1 /* YouTubeSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeSearchView.swift; sourceTree = "<group>"; };
 		DB48F005391EE0B84AA92C14 /* SignalingMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalingMessage.swift; sourceTree = "<group>"; };
 		E1669EBF203B777892BF5E96 /* LocalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationManager.swift; sourceTree = "<group>"; };
@@ -496,6 +498,7 @@
 				48A3578F5D2B3738875F2068 /* KeychainHelper.swift */,
 				9B0356A22B70C600C0A0CB68 /* Logger.swift */,
 				D4788A753344D8F34B3BA20B /* OrientationManager.swift */,
+				F1E2D3C4B5A6978879605140 /* MutexBox.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -616,6 +619,7 @@
 				A82BE8B764C1866ECAD718E5 /* Message.swift in Sources */,
 				E461ADDB37133818682381DF /* NotificationsView.swift in Sources */,
 				12226B2D7E22DCB80D5CE504 /* OrientationManager.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* MutexBox.swift in Sources */,
 				C15D6744714F6B6DE8ECC4D1 /* ParticipantBadge.swift in Sources */,
 				565D0C516F44D37F5EDE3A07 /* ParticipantListView.swift in Sources */,
 				ADEB04C033E26D3EDB92DB1C /* PaywallView.swift in Sources */,

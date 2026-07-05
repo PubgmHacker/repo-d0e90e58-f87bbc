@@ -36,14 +36,20 @@ final class ProfileViewModel {
     /// 🔧 FIX: Подписка на смену аватара другим инстансом (например, когда юзер
     /// меняет фото в ProfileView — SettingsView тоже должен обновиться немедленно).
     ///
-    /// 🔧 SWIFT 6 strict mode: `nonisolated(unsafe)` required for mutable var.
-    /// `nonisolated` alone is rejected ("cannot be applied to mutable stored
-    /// properties"). The Swift 5 warning "has no effect" was misleading.
-    /// We keep `nonisolated(unsafe)` — it's the explicit opt-out for mutable
-    /// state accessed from nonisolated deinit. The observer token is only
-    /// mutated in init (main actor) and removed in nonisolated deinit.
-    /// NotificationCenter.removeObserver is internally thread-safe.
-    nonisolated(unsafe) private var avatarObserver: NSObjectProtocol?
+    /// 🔧 SWIFT 6: stored in `MutexBox` (let Sendable wrapper). Computed accessor
+    /// is `nonisolated` — works without `unsafe` because it's computed. Avoids
+    /// the contradictory Swift 6 warnings:
+    ///   - `nonisolated(unsafe)` → "has no effect, consider using nonisolated"
+    ///   - `nonisolated` (on mutable stored var) → "cannot be applied to mutable
+    ///     stored properties"
+    /// The observer token is mutated only in init (main actor) and removed in
+    /// nonisolated deinit. NotificationCenter.removeObserver is internally
+    /// thread-safe; MutexBox adds explicit synchronization on top.
+    private let avatarObserverBox = MutexBox<NSObjectProtocol?>(nil)
+    nonisolated private var avatarObserver: NSObjectProtocol? {
+        get { avatarObserverBox.value }
+        set { avatarObserverBox.value = newValue }
+    }
 
     // История просмотров (Блок 2)
     var history: [WatchHistoryItem] {

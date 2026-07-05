@@ -225,6 +225,17 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         guard isHost else { return }
         let clamped = max(0, min(time, duration))
 
+        // 🔧 FIX: for webview mode, there's no AVPlayer to seek. Just update
+        // currentTime and broadcast — no need for AVPlayer seek + timeout.
+        // Without this guard, seek() tries player?.seek() which returns nil
+        // (player is nil in webview mode), then the 2s timeout fires every
+        // time, flooding the console with "Seek timeout — broadcasting anyway".
+        if player == nil {
+            currentTime = clamped
+            broadcastSyncCommand(.seek, mediaTime: clamped)
+            return
+        }
+
         let handler: @Sendable (Bool) -> Void = { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in

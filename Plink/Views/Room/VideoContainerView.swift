@@ -322,24 +322,16 @@ struct WebVideoView: UIViewRepresentable {
         // need our syncScript or videoBridge.
         let isYouTubeLike = isYouTube || isBackendPlayer
 
-        // 🔧 v11.3: for backend YouTube player, use PERSISTENT (shared) data store.
-        //
-        // v10.2 used nonPersistent() to avoid cookie/UA mismatch. But now
-        // with v11.2 (iOS Safari UA on backend player), the iframe to
-        // youtube.com/embed/ needs CONSENT cookies — which were set by
-        // ServiceBrowserView when the user browsed m.youtube.com.
-        //
-        // nonPersistent() = no cookies at all → YouTube shows "Sign in to
-        // confirm you're not a bot" (no CONSENT cookie).
-        // default() = shared cookies → iframe gets CONSENT cookie from
-        // browsing phase → no bot check.
+        // 🔧 v14: for YouTube, use PERSISTENT (shared) data store.
+        // YouTube needs CONSENT cookie to skip "Sign in to confirm you're not a bot".
+        // nonPersistent() clears all cookies → bot check. default() keeps them.
         if isYouTube && !isBackendPlayer {
-            // Direct YouTube embed (legacy): keep nonPersistent to avoid
-            // cookie/UA mismatch (ServiceBrowserView used iPad UA).
-            config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+            // 🔧 v14: YouTube nocookie embed needs persistent cookies for CONSENT.
+            // Previous v10.2 used nonPersistent() which caused bot check.
+            config.websiteDataStore = WKWebsiteDataStore.default()
+        } else if isBackendPlayer {
+            config.websiteDataStore = WKWebsiteDataStore.default()
         } else {
-            // Backend player + Rutube + others: use shared (persistent) store.
-            // Backend player iframe needs CONSENT cookies from browsing phase.
             config.websiteDataStore = WKWebsiteDataStore.default()
         }
 
@@ -408,26 +400,27 @@ struct WebVideoView: UIViewRepresentable {
             print("📺 YouTube v12: backend embed proxy")
             webView.load(URLRequest(url: url))
         } else if isYouTube {
-            // 🔧 v13 (July 2026): Smart TV UA — YouTube doesn't block TV devices.
+            // 🔧 v14 (July 2026): YouTube nocookie embed + proper configuration.
             //
-            // ROOT CAUSE of persistent 153 across ALL 12 previous versions:
-            // YouTube's player JS checks runtime properties that can't be shimmed:
-            //   - Function.prototype.toString() on native functions (different in WKWebView)
-            //   - window object structure
-            //   - Error.stack trace patterns
-            // No amount of UA/cookie/script/CSS/proxy manipulation can bypass these.
+            // Based on analysis of how Rave/Discord Activities work:
+            // 1. youtube-nocookie.com embed URL (weaker bot detection)
+            // 2. origin + widget_referrer params in URL (YouTube requires these)
+            // 3. Persistent cookies (WKWebsiteDataStore.default) — YouTube needs
+            //    CONSENT cookie to skip "Sign in to confirm you're not a bot"
+            // 4. Standard iOS Safari UA (cbr=Safari+Mobile, NOT cbr=Webview)
+            // 5. Clean WKWebView — NO scripts, NO handlers, NO CSS injection
+            //    (YouTube detects injected scripts/handlers → 153)
             //
-            // v13 SOLUTION: Smart TV UA (Samsung Tizen). YouTube serves a TV-optimized
-            // player for TV UAs that doesn't run WKWebView detection checks (TVs use
-            // webview engines too). This is the simplest approach — just change UA.
+            // All 13 previous versions missed at least ONE of these requirements:
+            //   v1-v7: used youtube.com (not nocookie) + scripts/handlers
+            //   v8-v9: backend extraction (IP-bound / yt-dlp blocked)
+            //   v10.x: default UA (cbr=Webview) or missing origin param
+            //   v11-v12: backend proxy (requests not from client) or IFrame API
+            //   v13: TV UA (not standard mobile browser)
             //
-            // We load the embed URL DIRECTLY (not through backend proxy) because:
-            //   - Backend proxy doesn't help (153 is runtime, not network)
-            //   - Direct load means YouTube's player config is generated for the
-            //     iPhone's IP (correct), not Railway's IP
-            //   - TV UA → YouTube serves TV player → no WKWebView checks → no 153
-            webView.customUserAgent = "Mozilla/5.0 (SMART-TV; LINUX; Tizen 7.0) AppleWebKit/537.36 (KHTML, like Gecko) 94.0.4606.31/7.0 TV Safari/537.36"
-            print("📺 YouTube v13: Smart TV UA (Tizen) — TV player, no WKWebView detection")
+            // v14 = ALL requirements met simultaneously for the first time.
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+            print("📺 YouTube v14: nocookie + origin + widget_referrer + Safari UA + persistent cookies + clean WKWebView")
             webView.load(URLRequest(url: url))
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

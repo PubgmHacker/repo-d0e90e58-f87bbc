@@ -63,7 +63,12 @@ struct MainTabView: View {
                 .tag(Tab.settings)
         }
         .tint(.ravePrimary)
-        .toolbarBackground(.hidden, for: .tabBar)
+        // 🔧 TELEGRAM-STYLE TABBAR: полностью прозрачный с металлик-эффектом
+        // было: .toolbarBackground(.hidden, for: .tabBar) — но iOS всё равно
+        // добавляла свой cyan-tinted glass. Теперь: явный материал + bar appearance.
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(.dark, for: .tabBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         // 🔧 Pack v3: Свайп влево/вправо для переключения вкладок
         // Только горизонтальные свайпы (|width| > |height| * 2), минимум 100px
@@ -205,8 +210,8 @@ struct RoomsTabContent: View {
 
     // MARK: - Sub-Tab Bar
     //
-    // 🔧 RESTORED: glassmorphic capsule buttons (was Apple-style underline).
-    // User asked to bring back the previous beautiful glass design + larger font.
+    // 🔧 TELEGRAM-STYLE: прозрачный glass container с металлик-обводкой.
+    // Убран cyan/emerald gradient border — теперь чёрная metallic.
     private var subTabBar: some View {
         HStack(spacing: 8) {
             ForEach(RoomSubTab.allCases) { tab in
@@ -215,31 +220,7 @@ struct RoomsTabContent: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(
-            // 🔧 Glass container — translucent material + subtle gradient border
-            RoundedRectangle(cornerRadius: 22)
-                .fill(.ultraThinMaterial)
-                .background(
-                    RoundedRectangle(cornerRadius: 22)
-                        .fill(Color.bioObsidian.opacity(0.5))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.bioCyan.opacity(0.25),
-                                    Color.bioEmerald.opacity(0.1),
-                                    Color.white.opacity(0.04)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.5
-                        )
-                )
-                .shadow(color: Color.bioCyan.opacity(0.08), radius: 12, y: 4)
-        )
+        .telegramGlass(cornerRadius: 22, borderColor: .black.opacity(0.4))
         .padding(.horizontal, 12)
         .padding(.top, 6)
     }
@@ -257,15 +238,15 @@ struct RoomsTabContent: View {
         } label: {
             HStack(spacing: 4) {
                 Text(tab.icon)
-                    .font(.system(size: 13))  // 🔧 FIX: was 15 — обрезало "Запросы"
+                    .font(.system(size: 13))
                 Text(tab.rawValue)
-                    .font(.system(size: 12, weight: isActive ? .bold : .semibold))  // 🔧 FIX: was 14
+                    .font(.system(size: 12, weight: isActive ? .bold : .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)  // 🔧 FIX: was 0.7 — позволяет сжиматься сильнее
+                    .minimumScaleFactor(0.6)
 
                 if showBadge {
                     Text("\(inviteService.inviteCount)")
-                        .font(.system(size: 9, weight: .heavy).monospacedDigit())  // 🔧 FIX: was 10
+                        .font(.system(size: 9, weight: .heavy).monospacedDigit())
                         .foregroundColor(.white)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
@@ -273,35 +254,15 @@ struct RoomsTabContent: View {
                         .clipShape(Capsule())
                 }
             }
-            .foregroundColor(isActive ? .white : .raveTextSecondary)
-            .padding(.horizontal, 10)  // 🔧 FIX: was 14 — компактнее
-            .padding(.vertical, 9)     // 🔧 FIX: was 10
-            .background(
-                Group {
-                    if isActive {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.raveGradient)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: [Color.white.opacity(0.3), Color.bioEmerald.opacity(0.2)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 0.5
-                                    )
-                            )
-                            .shadow(color: Color.bioCyan.opacity(0.35), radius: 8, y: 2)
-                    } else {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.white.opacity(0.04))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
-                            )
-                    }
-                }
+            .foregroundColor(isActive ? .raveTextPrimary : .raveTextSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            // 🔧 TELEGRAM-GLASS: убран cyan gradient + glow. Теперь прозрачное
+            // стекло с металлик-обводкой для ВСЕХ состояний (active/inactive).
+            // Active отличается только белым текстом (был white-on-cyan).
+            .telegramGlass(
+                cornerRadius: 14,
+                borderColor: isActive ? .black.opacity(0.6) : .black.opacity(0.4)
             )
         }
         .buttonStyle(.plain)

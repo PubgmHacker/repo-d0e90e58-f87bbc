@@ -38,8 +38,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
-                // Биолюминесцентный фон
-                BioluminescentBackground(energy: 0.45, dimming: 0)
+                // 🔧 SETTINGS: B&W монохромная палитра (per user request)
+                BioluminescentBackground(energy: 0.5, dimming: 0, palette: .mono)
                     .ignoresSafeArea()
 
                 ScrollView {

@@ -85,7 +85,7 @@ struct JoinRoomView: View {
                                         TextField("ABC123", text: $roomCode)
                                             .font(.system(size: 18, weight: .bold, design: .monospaced))
                                             .foregroundColor(.raveTextPrimary)
-                                            .multilineTextAlignment(.center)
+                                            .multilineTextAlignment(.leading)  // 🔧 FIX: было .center — код был по центру, пароль слева = некрасиво. Теперь оба слева.
                                             .autocapitalization(.allCharacters)
                                             .disableAutocorrection(true)
                                             .onChange(of: roomCode) { _, newValue in
@@ -163,6 +163,7 @@ struct JoinRoomView: View {
 
     @ViewBuilder
     private func tabButton(_ tab: JoinTab) -> some View {
+        let isSelected = selectedTab == tab
         Button {
             HapticManager.impact(.light)
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -178,21 +179,14 @@ struct JoinRoomView: View {
                     .font(.system(size: 10))
                     .foregroundColor(.raveTextTertiary)
             }
-            .foregroundColor(selectedTab == tab ? .white : .raveTextSecondary)
+            .foregroundColor(isSelected ? .raveTextPrimary : .raveTextSecondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(
-                selectedTab == tab
-                    ? AnyShapeStyle(Color.raveGradient)
-                    : AnyShapeStyle(.ultraThinMaterial)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(
-                        selectedTab == tab ? Color.clear : Color.white.opacity(0.06),
-                        lineWidth: 0.5
-                    )
+            // 🔧 TELEGRAM-GLASS: убран cyan raveGradient. Теперь прозрачное стекло
+            // с металлик-обводкой. Active отличается только белым текстом.
+            .telegramGlass(
+                cornerRadius: 14,
+                borderColor: isSelected ? .black.opacity(0.6) : .black.opacity(0.4)
             )
         }
         .buttonStyle(.plain)
@@ -219,9 +213,9 @@ struct JoinRoomView: View {
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(Color.raveGradient)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .ravePrimary.opacity(0.4), radius: 12, y: 4)
+            // 🔧 TELEGRAM-GLASS: убран cyan raveGradient + glow. Теперь прозрачное
+            // стекло с металлик-обводкой. Текст белый = контраст на тёмном стекле.
+            .telegramGlass(cornerRadius: 16, borderColor: .black.opacity(0.5))
         }
         .buttonStyle(.plain)
         .disabled(!canJoin || isJoining)

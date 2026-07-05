@@ -27,7 +27,11 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground()
+            // 🔧 PROFILE: own ocean palette (cyan/emerald/amber — distinct from tabs)
+            // was: AnimatedGradientBackground() — теперь BioluminescentBackground
+            // для консистентности с другими вкладками + лучшая видимость орбов.
+            BioluminescentBackground(energy: 0.75, dimming: 0, palette: .ocean)
+                .ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 24) {
@@ -127,17 +131,17 @@ struct ProfileView: View {
 
     private var profileHeader: some View {
         VStack(spacing: 0) {
-            // ─── COVER (VK-style) ───
+            // ─── COVER (VK-style, lower height) ───
+            // 🔧 VK-STYLE: 150pt (was 180) — VK uses ~140-160pt cover.
+            // Lower = avatar sits closer to top, more elegant.
             ZStack(alignment: .bottomTrailing) {
-                // Cover image or default gradient
                 if let coverImage = viewModel.coverImage {
                     Image(uiImage: coverImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 180)
+                        .frame(height: 150)
                         .clipped()
                 } else {
-                    // Default gradient cover (cyan→emerald→teal)
                     LinearGradient(
                         colors: [
                             Color.bioCyan.opacity(0.6),
@@ -147,27 +151,25 @@ struct ProfileView: View {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
-                    .frame(height: 180)
+                    .frame(height: 150)
                     .overlay(
                         RadialGradient(
                             colors: [Color.white.opacity(0.15), .clear],
                             center: .center,
                             startRadius: 0,
-                            endRadius: 200
+                            endRadius: 180
                         )
                     )
                 }
 
-                // Bottom gradient fade into background
                 LinearGradient(
                     colors: [.clear, Color.bioObsidian.opacity(0.9)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 60)
+                .frame(height: 50)
                 .frame(maxHeight: .infinity, alignment: .bottom)
 
-                // Camera button for cover (bottom-right)
                 Button {
                     showCoverPicker = true
                 } label: {
@@ -186,23 +188,24 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
                 .padding(12)
             }
-            .frame(height: 180)
+            .frame(height: 150)
             .clipped()
             .overlay(
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
 
             // ─── AVATAR (overlapping cover, VK-style) ───
+            // 🔧 VK-STYLE: 100pt avatar + 6px ring = 112pt total (was 120+12=132)
+            // Smaller avatar = more elegant, matches VK proportions.
             ZStack {
-                // White ring background to separate avatar from cover
                 Circle()
                     .fill(Color.bioObsidian)
-                    .frame(width: 132, height: 132)  // 120 avatar + 6px ring each side
+                    .frame(width: 112, height: 112)
                 Circle()
                     .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                    .frame(width: 132, height: 132)
+                    .frame(width: 112, height: 112)
 
                 Button { showPhotoPicker = true } label: {
                     ZStack(alignment: .bottomTrailing) {
@@ -210,14 +213,13 @@ struct ProfileView: View {
                             image: viewModel.avatarImage,
                             imageURL: viewModel.avatarURL,
                             username: viewModel.displayName,
-                            size: 120,
+                            size: 100,
                             isPremium: isPremium,
                             isAdmin: viewModel.user?.isAdmin ?? false
                         )
 
-                        // Camera button for avatar
                         Image(systemName: "camera.circle.fill")
-                            .font(.system(size: 28))
+                            .font(.system(size: 26))
                             .foregroundColor(.white)
                             .background(Circle().fill(Color.ravePrimary))
                             .clipShape(Circle())
@@ -226,8 +228,8 @@ struct ProfileView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .offset(y: -60)  // 🔧 VK-style: avatar overlaps cover
-            .padding(.bottom, -50)  // compensate offset
+            .offset(y: -50)  // 🔧 VK-style: avatar overlaps cover (was -60)
+            .padding(.bottom, -40)  // compensate (was -50)
 
             // ─── NAME + EMAIL ───
             VStack(spacing: 4) {
@@ -259,13 +261,11 @@ struct ProfileView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(Color.raveGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .shadow(color: .ravePrimary.opacity(0.3), radius: 10, y: 4)
+                // 🔧 TELEGRAM-GLASS: убран cyan raveGradient + glow.
+                .telegramGlass(cornerRadius: 14, borderColor: .black.opacity(0.5))
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
-            .glowPulse(color: Color.ravePrimary, minRadius: 8, maxRadius: 16, minOpacity: 0.15, maxOpacity: 0.35, period: 2.8)
         }
     }
 

@@ -210,33 +210,29 @@ struct HomeView: View {
 
             Spacer()
 
-            // Аватарка (tap → экран профиля, НЕ настройки)
+            // Аватарка (tap → экран профиля) — telegram-glass без cyan glow
             Button {
                 showProfile = true
             } label: {
-                Circle()
-                    .fill(Color.raveGlass)
+                Image(systemName: "person.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.raveTextPrimary)
                     .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.ravePrimary)
-                    )
-                    .glassCard(cornerRadius: 22, opacity: 0.06)
+                    .telegramGlass(cornerRadius: 22)
             }
-            .buttonStyle(PremiumButtonStyle(glowColor: .ravePrimary))
+            .buttonStyle(.plain)
 
-            // Join по коду
+            // Join по коду — telegram-glass без cyan glow
             Button {
                 showJoinSheet = true
             } label: {
                 Image(systemName: "link")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.raveAccent)
+                    .foregroundColor(.raveTextPrimary)
                     .frame(width: 44, height: 44)
-                    .glassCard(cornerRadius: 22, opacity: 0.06)
+                    .telegramGlass(cornerRadius: 22)
             }
-            .buttonStyle(PremiumButtonStyle(glowColor: .raveAccent))
+            .buttonStyle(.plain)
         }
         .opacity(appeared ? 1 : 0)
     }

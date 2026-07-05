@@ -591,7 +591,7 @@ final class VideoTimeBridge: NSObject, WKScriptMessageHandler {
     ///   - https://www.youtube.com/embed/VIDEO_ID
     ///   - https://www.youtube-nocookie.com/embed/VIDEO_ID
     ///   - https://www.youtube.com/shorts/VIDEO_ID
-    private static func extractYouTubeVideoID(from url: URL) -> String? {
+    static func extractYouTubeVideoID(from url: URL) -> String? {
         let urlString = url.absoluteString
         let host = url.host?.lowercased() ?? ""
         guard host.contains("youtube.com") || host.contains("youtu.be") || host.contains("youtube-nocookie.com") else {

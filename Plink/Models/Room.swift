@@ -20,12 +20,21 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     /// 🔧 NEW: True if room has a password set
     var isLocked: Bool { password != nil && !(password?.isEmpty ?? true) }
 
+    /// 🔧 Pack v3: Prisma _count (когда бэкенд отдаёт include: { _count: { select: { participants: true } } })
+    /// вместо массива participants. Экономит трафик — отдаёт только количество.
+    var _count: RoomCount?
+
     var participantCount: Int {
-        participants.count
+        // 🔧 Pack v3: Бэкенд отдаёт _count.participants (Prisma include),
+        // а не массив participants. Поддерживаем оба варианта.
+        if !participants.isEmpty {
+            return participants.count
+        }
+        return _count?.participants ?? 0
     }
 
     var isFull: Bool {
-        participants.count >= maxParticipants
+        participantCount >= maxParticipants
     }
 
     /// 🔧 FIX M8: Was a dead computed property that always returned false.
@@ -65,9 +74,10 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         hostID = try c.decode(String.self, forKey: .hostID)
-        hostName = try c.decode(String.self, forKey: .hostName)
+        hostName = try c.decodeIfPresent(String.self, forKey: .hostName) ?? "Unknown"
         code = try c.decode(String.self, forKey: .code)
-        participants = try c.decode([UserPreview].self, forKey: .participants)
+        // 🔧 Pack v3: participants может отсутствовать (бэкенд не всегда отдаёт массив)
+        participants = try c.decodeIfPresent([UserPreview].self, forKey: .participants) ?? []
         mediaItem = try c.decodeIfPresent(MediaItem.self, forKey: .mediaItem)
         isActive = try c.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
         maxParticipants = try c.decodeIfPresent(Int.self, forKey: .maxParticipants) ?? 10
@@ -83,6 +93,8 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         default: privacy = .publicRoom
         }
         password = try c.decodeIfPresent(String.self, forKey: .password)
+        // 🔧 Pack v3: _count (Prisma include) — опциональное
+        _count = try c.decodeIfPresent(RoomCount.self, forKey: ._count)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -149,7 +161,13 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
         case id, name, hostID, hostName, code
         case participants, mediaItem, isActive
         case maxParticipants, hostIsPremium, createdAt, privacy, password
+        case _count
     }
+}
+
+// MARK: - Room Count (Prisma _count include)
+struct RoomCount: Codable, Sendable, Hashable {
+    let participants: Int
 }
 
 // MARK: - Create Room Request

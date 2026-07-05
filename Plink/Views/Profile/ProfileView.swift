@@ -592,8 +592,9 @@ struct EditProfileSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // 🔧 EDIT PROFILE: own ocean palette (cyan/emerald — premium feel)
-                BioluminescentBackground(energy: 0.7, dimming: 0, palette: .ocean)
+                // 🔧 EDIT PROFILE: тёмный минималистичный фон — не яркий ocean.
+                // deep dark blue → black, спокойный, без ярких орбов.
+                BioluminescentBackground(energy: 0.35, dimming: 0, palette: .abyss)
                     .ignoresSafeArea()
 
                 ScrollView {
@@ -755,9 +756,16 @@ struct EditProfileSheet: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
-                            // 🔧 TELEGRAM-GLASS: убран cyan→emerald gradient + glow.
-                            // Now neutral glass with metallic border.
-                            .telegramGlass(cornerRadius: 14, borderColor: .black.opacity(0.5))
+                            // 🔧 FIX: visible gradient button — not transparent glass
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.bioCyan, Color.bioEmerald],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .shadow(color: Color.bioCyan.opacity(0.4), radius: 8, y: 3)
                         }
                         .disabled(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
                         .opacity(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving ? 0.5 : 1)

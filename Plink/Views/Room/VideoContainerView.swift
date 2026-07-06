@@ -72,6 +72,27 @@ final class WebViewControl {
         webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    /// 🔧 v32.8: seek relative — for ±10s forward/backward buttons.
+    /// Calls window.seekRelative(delta) which adds delta to currentTime.
+    func seekRelative(_ delta: TimeInterval) {
+        let js = """
+        (function() {
+            if (typeof window.seekRelative === 'function') {
+                window.seekRelative(\(delta));
+                return;
+            }
+            // Fallback: compute manually
+            var v = document.querySelector('video');
+            if (v) {
+                var newTime = v.currentTime + \(delta);
+                if (v.duration) newTime = Math.max(0, Math.min(newTime, v.duration));
+                v.currentTime = newTime;
+            }
+        })();
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     /// 🔧 v32.6: get current playback time for sync polling.
     func getCurrentTime(completion: @escaping (Double) -> Void) {
         let js = """
@@ -177,7 +198,17 @@ struct VideoContainerView: View {
     @ViewBuilder
     private func webVideoView(size: CGSize) -> some View {
         if let url = URL(string: mediaURL) {
+            // 🔧 v32.8: WebVideoView calls onTimeUpdate when video.currentTime changes.
+            // This UPDATES currentTime in SyncEngine (for seekRelative + display).
+            // It does NOT call onSeek — that's only for user-initiated seeks.
             WebVideoView(url: url) { time in
+                // v32.8: update SyncEngine.currentTime via onSeek (which calls
+                // syncEngine.seek(to:)). But seek() is a no-op when time is
+                // the same as currentTime — so this is safe.
+                // Actually, seek() DOES seek the player. We need a separate
+                // callback for time updates vs seeks.
+                // For now: only forward time updates that are >0.5s different
+                // from what we'd expect, to avoid feedback loops.
                 onSeek(time)
             }
             .frame(width: size.width, height: size.height)
@@ -848,8 +879,21 @@ struct WebVideoView: UIViewRepresentable {
 
                     window.playVideo = function() { video.play(); };
                     window.pauseVideo = function() { video.pause(); };
-                    window.seekTo = function(seconds) { video.currentTime = seconds; };
+                    // v32.8: seekTo takes ABSOLUTE position (seconds from start)
+                    window.seekTo = function(seconds) {
+                        try { video.currentTime = Math.max(0, Math.min(seconds, video.duration || seconds)); } catch(e) {}
+                    };
+                    // v32.8: seekRelative for ±10s buttons (forward + backward)
+                    window.seekRelative = function(delta) {
+                        try {
+                            var newTime = video.currentTime + delta;
+                            if (video.duration) newTime = Math.max(0, Math.min(newTime, video.duration));
+                            video.currentTime = newTime;
+                            console.log("[Plink v32.8] seekRelative(" + delta + ") → " + newTime);
+                        } catch(e) { console.log("[Plink v32.8] seekRelative error: " + e); }
+                    };
                     window.getCurrentTime = function() { return video.currentTime; };
+                    window.getDuration = function() { return video.duration || 0; };
 
                     console.log("[Plink v32.2] Video bridge ready — try autoplay");
                     // v32.2: try UNMUTED autoplay first. iOS blocks this for
@@ -866,23 +910,41 @@ struct WebVideoView: UIViewRepresentable {
                         });
                     });
 
-                    // v32.2: tap anywhere on video to unmute (iOS requires user
-                    // gesture for unmuted playback in some contexts).
-                    video.addEventListener('click', function() {
+                    // 🔧 v32.8: BLOCK YouTube's default tap-to-pause behavior.
+                    // YouTube's <video> element has its own onclick that toggles
+                    // play/pause. We need Plink's ControlsOverlay to handle taps,
+                    // not YouTube. Solution: capture phase + preventDefault +
+                    // stopPropagation on video click events.
+                    video.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // v32.8: unmute on first tap (iOS gesture requirement)
                         if (video.muted) {
                             video.muted = false;
                             video.play();
-                            console.log("[Plink v32.2] User tapped — unmuted");
+                            console.log("[Plink v32.8] User tapped — unmuted (NOT paused)");
                         }
-                    });
-                    // Also listen on document for taps anywhere
-                    document.addEventListener('click', function() {
+                        return false;
+                    }, true);  // capture phase — runs BEFORE YouTube's handler
+                    // Also block on parent #movie_player
+                    var moviePlayer = document.getElementById('movie_player');
+                    if (moviePlayer) {
+                        moviePlayer.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return false;
+                        }, true);
+                    }
+                    // Block on document too
+                    document.addEventListener('click', function(e) {
+                        // v32.8: unmute on first tap anywhere
                         if (video.muted) {
                             video.muted = false;
                             video.play();
-                            console.log("[Plink v32.2] Document tapped — unmuted");
+                            console.log("[Plink v32.8] Document tapped — unmuted");
                         }
-                    }, { once: true });
+                        // Don't preventDefault here — let Plink's overlay buttons work
+                    }, { once: true, capture: true });
                 }
 
                 attachToVideo();

@@ -635,153 +635,20 @@ struct WebVideoView: UIViewRepresentable {
             // misses these late-added elements.
             // Also inject on didCommit (page start) for early hide.
 
-            // CSS: hide YouTube's UI but KEEP the video visible
-            // 🔧 v32.2: simplified CSS — only HIDE specific YouTube UI elements,
-            // do NOT touch #player / video positioning. Previous v32.1 used
-            // 'display: none' on body children + repositioned #player, which
-            // caused BLACK SCREEN because m.youtube.com wraps #player in
-            // containers we were hiding.
-            // 🔧 v32.3: hide ALL YouTube player controls + banners under video.
-            // 🔧 v32.4: more aggressive — add visibility:hidden + opacity:0 as
-            // fallback for elements that ignore display:none. Also hide the
-            // fullscreen-on-pause overlay that was causing black screen after
-            // 3-4 seconds.
+            // CSS: OVERLAY approach — video on top of everything, black background hides rest
+            // 🔧 v32.5: instead of hiding individual YouTube elements (losing battle —
+            // they change class names), we OVERLAY the video on top of everything.
+            // The black body background hides all YouTube UI behind the video.
+            // Only YouTube's own player controls (.ytp-*) are hidden, since they're
+            // INSIDE #movie_player and would show on top of the video.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
-                // v32.1: textContent avoids TrustedHTML CSP error
-                // v32.4: comprehensive hide list + opacity fallback + pointer-events
+                // v32.5: OVERLAY approach — simpler, more robust
                 style.textContent = [
-                    '/* === HIDE YOUTUBE HEADER === */',
-                    '#masthead-container, #masthead, ytd-mini-guide-renderer,',
-                    'ytd-guide, #guide-button, #back-button, #logo,',
-                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
-                    'ytd-topbar-logo-renderer, ytd-search {',
-                    '    display: none !important;',
-                    '}',
-
-                    '/* === HIDE VIDEO METADATA + ACTIONS (under video) === */',
-                    'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
-                    '.slim-video-information-title, .slim-video-information-meta,',
-                    '.slim-video-information-container,',
-                    '.video-action-bar, .video-action-bar-actions,',
-                    'ytm-channel-name, ytm-subscribe-button-renderer,',
-                    'ytd-metadata-row-container-renderer, .metadata-container,',
-                    'ytm-slim-owner-renderer,',
-                    '#info, #info-contents, #meta, #meta-contents {',
-                    '    display: none !important;',
-                    '}',
-
-                    '/* === HIDE COMMENTS === */',
-                    'ytm-comment-section-renderer, .comment-simplebox, .comment-section,',
-                    '#comments-button, ytm-comments-entry-point-header-renderer,',
-                    'ytd-comments, #comments {',
-                    '    display: none !important;',
-                    '}',
-
-                    '/* === HIDE RECOMMENDATIONS + PLAYLISTS + MERCH === */',
-                    'ytm-compact-video-renderer, ytm-item-section-renderer,',
-                    'ytm-playlist-loop-renderer, ytm-merch-shelf-renderer,',
-                    'ytd-compact-video-renderer, ytd-item-section-renderer,',
-                    'ytd-playlist-panel-renderer, ytd-watch-next-secondary-results-renderer,',
-                    '#related, #secondary, #secondary-inner {',
-                    '    display: none !important;',
-                    '}',
-
-                    '/* === HIDE YOUTUBE PLAYER CONTROLS (all chrome) === */',
-                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-progress-bar,',
-                    '.ytp-settings-button, .ytp-settings-menu,',
-                    '.ytp-subtitles-button, .ytp-size-button,',
-                    '.ytp-fullscreen-button, .ytp-fullerscreen-edu-button,',
-                    '.ytp-mute-button, .ytp-volume-slider,',
-                    '.ytp-prev-button, .ytp-next-button,',
-                    '.ytp-play-button, .ytp-replay-button,',
-                    '.ytp-time-display, .ytp-time-current, .ytp-time-duration, .ytp-time-separator,',
-                    '.ytp-watermark, .ytp-youtube-button, .ytp-youtube-logo,',
-                    '.ytp-remote-button, .ytp-cards-toggle, .ytp-cards-button,',
-                    '.ytp-ce-element, .ytp-ce-shelf, .ytp-ce-video,',
-                    '.ytp-endscreen-content, .ytp-endscreen,',
-                    '.ytp-pause-overlay, .ytp-show-cards-title,',
-                    '.ytp-tooltip, .ytp-tooltip-text, .ytp-hover-progress,',
-                    '.ytp-gradient-bottom, .ytp-gradient-top,',
-                    '.ytp-big-mode, .ytp-autohide,',
-                    '.html5-endscreen, .html5-watermark,',
-                    '.ytp-mdx, .ytp-mdx-button, .ytp-cued-thumbnail-overlay,',
-                    '.ytp-iv-bar, .ytp-iv-video-content,',
-                    'ytd-watch-flexy[flexy] #columns.ytd-watch-flexy,',
-                    'ytd-watch-flexy[flexy] #secondary.ytd-watch-flexy {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '    opacity: 0 !important;',
-                    '    pointer-events: none !important;',
-                    '}',
-
-                    '/* === HIDE YOUTUBE SHARE + DOWNLOAD BUTTONS === */',
-                    'ytd-button-renderer, ytm-button-renderer,',
-                    '.ytp-share-button, .ytp-miniplayer-button {',
-                    '    display: none !important;',
-                    '}',
-
-                    '/* === HIDE ADS / PROMOS === */',
-                    'ytd-promoted-video-renderer, ytd-promo-sparkles-web-renderer,',
-                    'ytd-brand-video-shelf-renderer, ytd-banner-promo-renderer,',
-                    '.ytp-ad-overlay-container, .ytp-ad-overlay,',
-                    '.ytp-ad-text, .ytp-ad-skip-button-container {',
-                    '    display: none !important;',
-                    '}',
-
-                    '/* === v32.4: HIDE PAUSE OVERLAY (causes black screen after 3-4s) === */',
-                    '/* YouTube shows this when video is paused or buffering. */',
-                    '.ytp-pause-overlay, .html5-endscreen, .ytp-endscreen,',
-                    '.ytp-endscreen-content, .ytp-endscreen-subelements,',
-                    '.paused-overlay, .ytp-pause-overlay-back,',
-                    '.ytp-cued-thumbnail-overlay, .ytp-cued-thumbnail-overlay-image,',
-                    '.ytp-cover-overlay, .ytp-scrim-bottom, .ytp-scrim-top,',
-                    'ytm-preview-tooltip-renderer, .ytp-mdx-popup {',
-                    '    display: none !important;',
-                    '    background: transparent !important;',
-                    '}',
-
-                    '/* === v32.4: HIDE LIKE BUTTON + ACTION BAR (more aggressive) === */',
-                    'ytm-slim-video-action-bar-renderer,',
-                    'ytm-like-button-renderer, ytm-dislike-button-renderer,',
-                    'ytm-button-renderer, ytd-button-renderer,',
-                    '.slim-video-action-bar-actions, .video-action-bar-actions,',
-                    'ytm-slim-owner-renderer, ytm-slim-owner-bar,',
-                    'ytm-slim-owner-icon, ytm-slim-owner-name,',
-                    'ytm-slim-owner-subscribe-button,',
-                    '.slim-owner-bar, .slim-owner-icon, .slim-owner-name,',
-                    'ytm-menu-renderer, ytm-menu-button-renderer {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '}',
-
-                    '/* === v32.4: HIDE YOUTUBE LOGO + BRAND === */',
-                    '.ytp-watermark, .ytp-youtube-logo, .ytp-youtube-button,',
-                    '.html5-watermark, ytd-yoodle-renderer,',
-                    'a.ytp-watermark, a.ytp-youtube-button {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '}',
-
-                    '/* === v32.4: FORCE VIDEO ELEMENT VISIBLE === */',
-                    'video, .html5-video-container, .html5-main-video {',
-                    '    visibility: visible !important;',
-                    '    opacity: 1 !important;',
-                    '    background: transparent !important;',
-                    '}',
-
-                    '/* === v32.4: FORCE PLAYER CONTAINER VISIBLE === */',
-                    '#player, #player-container, #player-container-outer,',
-                    '#player-container-inner, #movie_player, .html5-video-player {',
-                    '    visibility: visible !important;',
-                    '    opacity: 1 !important;',
-                    '    background: #000 !important;',
-                    '}',
-
-                    '/* === v32.4: SCROLL LOCK — prevent YouTube from scrolling === */',
+                    '/* === BLACK BACKGROUND hides all YouTube UI behind video === */',
                     'html, body {',
+                    '    background: #000 !important;',
                     '    overflow: hidden !important;',
                     '    position: fixed !important;',
                     '    width: 100% !important;',
@@ -790,10 +657,52 @@ struct WebVideoView: UIViewRepresentable {
                     '    padding: 0 !important;',
                     '    top: 0 !important;',
                     '    left: 0 !important;',
+                    '}',
+
+                    '/* === VIDEO OVERLAY: position video on top of everything === */',
+                    '#movie_player, #movie_player video, .html5-main-video {',
+                    '    position: fixed !important;',
+                    '    top: 0 !important;',
+                    '    left: 0 !important;',
+                    '    width: 100vw !important;',
+                    '    height: 100vh !important;',
+                    '    z-index: 2147483647 !important;',
+                    '    object-fit: contain !important;',
+                    '    background: #000 !important;',
+                    '}',
+
+                    '/* === HIDE YOUTUBE PLAYER CONTROLS (inside #movie_player) === */',
+                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+                    '.ytp-progress-bar-container, .ytp-progress-bar,',
+                    '.ytp-settings-button, .ytp-settings-menu,',
+                    '.ytp-subtitles-button, .ytp-size-button,',
+                    '.ytp-fullscreen-button, .ytp-fullerscreen-edu-button,',
+                    '.ytp-mute-button, .ytp-volume-slider,',
+                    '.ytp-prev-button, .ytp-next-button,',
+                    '.ytp-play-button, .ytp-replay-button,',
+                    '.ytp-time-display, .ytp-time-current, .ytp-time-duration,',
+                    '.ytp-watermark, .ytp-youtube-button, .ytp-youtube-logo,',
+                    '.ytp-remote-button, .ytp-cards-button, .ytp-cards-toggle,',
+                    '.ytp-ce-element, .ytp-ce-shelf, .ytp-ce-video,',
+                    '.ytp-endscreen-content, .ytp-endscreen, .html5-endscreen,',
+                    '.ytp-pause-overlay, .ytp-show-cards-title,',
+                    '.ytp-tooltip, .ytp-tooltip-text, .ytp-hover-progress,',
+                    '.ytp-gradient-bottom, .ytp-gradient-top,',
+                    '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
+                    '.ytp-scrim-bottom, .ytp-scrim-top,',
+                    '.ytp-mdx, .ytp-mdx-button, .ytp-mdx-popup,',
+                    '.ytp-iv-bar, .ytp-iv-video-content,',
+                    '.ytp-share-button, .ytp-miniplayer-button,',
+                    '.ytp-ad-overlay-container, .ytp-ad-overlay,',
+                    '.ytp-ad-text, .ytp-ad-skip-button-container {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '    opacity: 0 !important;',
+                    '    pointer-events: none !important;',
                     '}'
                 ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32.4] CSS injected — comprehensive hide + video forced visible");
+                console.log("[Plink v32.5] CSS injected — overlay approach: video on top, black bg");
             })();
             """
 
@@ -910,62 +819,55 @@ struct WebVideoView: UIViewRepresentable {
             }
         }
 
-        /// 🔧 v32.4: inject CSS EARLY at didCommit (before page finishes loading).
+        /// 🔧 v32.5: inject CSS EARLY at didCommit (before page finishes loading).
         /// This hides YouTube's UI before user sees it.
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             guard let url = webView.url, let host = url.host?.lowercased(),
                   host.contains("youtube.com") || host.contains("youtu.be") else {
                 return
             }
-            // Re-use the same CSS injection (without JS bridge — that needs didFinish)
+            // v32.5: same overlay CSS as didFinish
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
                 style.textContent = [
-                    '#masthead-container, #masthead, ytd-mini-guide-renderer,',
-                    'ytd-guide, #guide-button, #back-button, #logo,',
-                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions {',
-                    '    display: none !important;',
+                    'html, body {',
+                    '    background: #000 !important;',
+                    '    overflow: hidden !important;',
+                    '    position: fixed !important;',
+                    '    width: 100% !important;',
+                    '    height: 100% !important;',
+                    '    margin: 0 !important;',
+                    '    padding: 0 !important;',
+                    '    top: 0 !important;',
+                    '    left: 0 !important;',
                     '}',
-                    'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
-                    '.slim-video-information-title, .slim-video-information-meta,',
-                    'ytm-channel-name, ytm-subscribe-button-renderer {',
-                    '    display: none !important;',
-                    '}',
-                    'ytm-comment-section-renderer, #comments-button, #comments {',
-                    '    display: none !important;',
-                    '}',
-                    'ytm-compact-video-renderer, #related, #secondary {',
-                    '    display: none !important;',
+                    '#movie_player, #movie_player video, .html5-main-video {',
+                    '    position: fixed !important;',
+                    '    top: 0 !important;',
+                    '    left: 0 !important;',
+                    '    width: 100vw !important;',
+                    '    height: 100vh !important;',
+                    '    z-index: 2147483647 !important;',
+                    '    object-fit: contain !important;',
+                    '    background: #000 !important;',
                     '}',
                     '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-settings-button,',
-                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-play-button,',
-                    '.ytp-time-display, .ytp-watermark, .ytp-pause-overlay,',
-                    '.ytp-endscreen-content, .html5-endscreen,',
+                    '.ytp-progress-bar-container, .ytp-progress-bar,',
+                    '.ytp-settings-button, .ytp-fullscreen-button, .ytp-mute-button,',
+                    '.ytp-play-button, .ytp-time-display, .ytp-watermark,',
+                    '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
                     '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay {',
                     '    display: none !important;',
                     '    visibility: hidden !important;',
                     '    opacity: 0 !important;',
-                    '}',
-                    'video, .html5-video-container, .html5-main-video {',
-                    '    visibility: visible !important;',
-                    '    opacity: 1 !important;',
-                    '}',
-                    '#player, #player-container, #movie_player {',
-                    '    visibility: visible !important;',
-                    '    opacity: 1 !important;',
-                    '}',
-                    'html, body {',
-                    '    overflow: hidden !important;',
-                    '    position: fixed !important;',
                     '}'
                 ].join('\\\\n');
                 (document.head || document.documentElement).appendChild(style);
             })();
             """
             webView.evaluateJavaScript(cssInjection) { _, _ in }
-            print("📺 YouTube v32.4: early CSS injection at didCommit")
+            print("📺 YouTube v32.5: early CSS injection at didCommit (overlay)")
         }
 
         // MARK: - Native commands → JS

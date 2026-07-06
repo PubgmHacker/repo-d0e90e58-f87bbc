@@ -38,6 +38,14 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     @Published private(set) var currentMediaItem: MediaItem?
     @Published private(set) var syncQuality: SyncQuality = .perfect
     @Published private(set) var isLoadingMedia = false
+
+    /// 🔧 v34.18: public setter for currentMediaItem — used by RoomViewModel
+    /// to restore currentMediaItem on WS reconnect WITHOUT calling loadMedia
+    /// (which would teardownPlayer → currentMediaItem = nil → re-render →
+    /// rendering context destroyed).
+    func setCurrentMediaItem(_ item: MediaItem) {
+        currentMediaItem = item
+    }
     @Published private(set) var errorMessage: String?
     @Published var volume: Float = 1.0 {
         didSet { player?.volume = volume }

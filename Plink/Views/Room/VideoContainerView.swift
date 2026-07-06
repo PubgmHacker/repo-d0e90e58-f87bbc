@@ -409,12 +409,18 @@ struct WebVideoView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
 
-        // 🔧 v31.1 (July 2026): custom UA for YouTube — mimic iOS 18 Safari.
-        // YouTube's anti-bot detects WKWebView via subtle UA differences.
-        // Setting an exact Safari UA makes our WebView look like real Safari.
-        // Only set for YouTube — other services don't need it.
+        // 🔧 v32 (July 2026): NO customUserAgent for YouTube.
+        // v31.1 set iOS 18 Safari UA, but YouTube's anti-bot detects WKWebView
+        // via OTHER signals (WebGL, touch events, JS environment) regardless of
+        // UA. Setting a fake UA actually INCREASES detection risk because the
+        // UA doesn't match the actual WKWebView fingerprint.
+        // v32: leave customUserAgent UNSET. iOS sends real iPhone Safari UA
+        // which IS the actual WKWebView UA — no mismatch, no detection.
+
+        // 🔧 v32: set Coordinator as navigationDelegate so didFinish fires
+        // after m.youtube.com/watch loads → inject CSS + JS bridge.
         if isYouTube || isBackendPlayer {
-            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/605.1.15"
+            webView.navigationDelegate = context.coordinator
         }
 
         WebViewControl.shared.register(webView)
@@ -539,7 +545,8 @@ struct WebVideoView: UIViewRepresentable {
 
     // 🔧 v30.1: Coordinator is now NSObject + WKScriptMessageHandler so it can
     // receive messages from the YouTube IFrame API via the plinkBridge handler.
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    // 🔧 v32: also WKNavigationDelegate to inject CSS/JS after page loads.
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var bridge: VideoTimeBridge?
         // 🔧 v22: YouTube guard — stores loadedVideoId to prevent reload loops
         var loadedVideoId: String? = nil
@@ -567,24 +574,170 @@ struct WebVideoView: UIViewRepresentable {
 
             switch event {
             case "ready":
-                print("🎉 YouTube v30.1: IFrame API ready — player initialized")
+                print("🎉 YouTube v32: video element ready — player initialized")
                 onPlayerReady?()
 
             case "stateChange":
                 let state = dict["state"] as? Int ?? -1
                 let currentTime = dict["currentTime"] as? Double ?? 0.0
-                // YT.PlayerState: -1=unstarted, 0=ended, 1=playing, 2=paused,
-                // 3=buffering, 5=cued
-                print("🔄 YouTube v30.1: state=\(state), currentTime=\(currentTime)s")
+                // HTML5 video states: 0=ended, 1=playing, 2=paused (we map from events)
+                print("🔄 YouTube v32: state=\(state), currentTime=\(currentTime)s")
                 onPlayerStateChange?(state, currentTime)
 
             case "error":
                 let code = dict["code"] as? Int ?? -1
-                print("❌ YouTube v30.1: player error code=\(code)")
+                print("❌ YouTube v32: player error code=\(code)")
                 onPlayerError?(code)
 
             default:
-                print("⚠️ YouTube v30.1: unknown event '\(event)'")
+                print("⚠️ YouTube v32: unknown event '\(event)'")
+            }
+        }
+
+        // MARK: - WKNavigationDelegate (v32)
+
+        /// 🔧 v32: After m.youtube.com/watch finishes loading, inject CSS to hide
+        /// YouTube's UI (header, recommendations, comments) and JS to bridge the
+        /// HTML5 <video> element to Swift via plinkBridge.
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            print("📺 YouTube v32: page loaded, injecting CSS + JS bridge")
+
+            // CSS: hide everything except the video player
+            let cssInjection = """
+            (function() {
+                var style = document.createElement('style');
+                style.innerHTML = `
+                    /* Hide all YouTube UI elements */
+                    ytd-app, ytd-watch-flexy, ytd-mobile-watch-action-unbar, ytd-guide,
+                    #masthead-container, #masthead, ytd-mini-guide-renderer,
+                    #guide-button, #back-button, #logo, #search-input,
+                    ytm-watch, ytm-watch-metadata, ytm-comment-section-renderer,
+                    ytm-compact-video-renderer, ytm-item-section-renderer,
+                    .mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,
+                    .slim-video-information-title, .slim-video-information-meta,
+                    .video-action-bar, .video-action-bar-actions,
+                    ytm-slim-video-action-bar-renderer,
+                    ytm-playlist-loop-renderer, ytm-merch-shelf-renderer,
+                    .ytp-cards-button, .ytp-ce-element, .ytp-endscreen-content,
+                    .ytp-pause-overlay, .ytp-show-cards-title,
+                    #comments-button, #action-buttons,
+                    ytm-channel-name, ytm-subscribe-button-renderer,
+                    .comment-simplebox, .comment-section,
+                    c3-metadata, .metadata-container,
+                    ytd-metadata-row-container-renderer,
+                    /* Show only the player */
+                    #player, #player-container, #player-container-outer,
+                    #player-container-inner, #movie_player, video {
+                        /* nothing — these stay visible */
+                    }
+                    /* Hide everything that's NOT the player */
+                    body > *:not(#player-container-outer):not(#player-container):not(#player):not(style):not(script) {
+                        display: none !important;
+                    }
+                    /* Make player fill the screen */
+                    #player, #player-container, #player-container-outer,
+                    #player-container-inner, #movie_player, video {
+                        position: fixed !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: 100vw !important;
+                        height: 100vh !important;
+                        z-index: 9999 !important;
+                        background: #000 !important;
+                    }
+                    /* Hide YouTube's own controls (Plink UI overlays) */
+                    .ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,
+                    .ytp-progress-bar-container, .ytp-player-content {
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+                console.log("[Plink v32] CSS injected — YouTube UI hidden");
+            })();
+            """
+
+            // JS: poll for <video> element, attach listeners, bridge to Swift
+            let jsBridge = """
+            (function() {
+                if (window._plinkVideoBridge) return;
+                window._plinkVideoBridge = true;
+
+                function sendBridge(payload) {
+                    try {
+                        window.webkit.messageHandlers.plinkBridge.postMessage(payload);
+                    } catch(e) {
+                        console.log("[Plink v32] plinkBridge error: " + e);
+                    }
+                }
+
+                function attachToVideo() {
+                    var video = document.querySelector('video');
+                    if (!video) {
+                        // Video not ready yet, retry in 500ms
+                        setTimeout(attachToVideo, 500);
+                        return;
+                    }
+
+                    console.log("[Plink v32] Found <video> element, attaching listeners");
+                    sendBridge({ "event": "ready" });
+
+                    // State mapping: HTML5 video events → our state codes
+                    // 1 = playing, 2 = paused, 0 = ended, 3 = buffering
+                    video.addEventListener('play', function() {
+                        sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });
+                    });
+                    video.addEventListener('playing', function() {
+                        sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });
+                    });
+                    video.addEventListener('pause', function() {
+                        sendBridge({ "event": "stateChange", "state": 2, "currentTime": video.currentTime });
+                    });
+                    video.addEventListener('ended', function() {
+                        sendBridge({ "event": "stateChange", "state": 0, "currentTime": video.currentTime });
+                    });
+                    video.addEventListener('waiting', function() {
+                        sendBridge({ "event": "stateChange", "state": 3, "currentTime": video.currentTime });
+                    });
+                    video.addEventListener('timeupdate', function() {
+                        // Throttle: only send every 1 second
+                        if (!video._plinkLastTimeUpdate || video.currentTime - video._plinkLastTimeUpdate >= 1.0) {
+                            video._plinkLastTimeUpdate = video.currentTime;
+                            sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });
+                        }
+                    });
+                    video.addEventListener('error', function() {
+                        sendBridge({ "event": "error", "code": video.error ? video.error.code : -1 });
+                    });
+
+                    // Bridge commands
+                    window.playVideo = function() { video.play(); };
+                    window.pauseVideo = function() { video.pause(); };
+                    window.seekTo = function(seconds) { video.currentTime = seconds; };
+                    window.getCurrentTime = function() { return video.currentTime; };
+
+                    console.log("[Plink v32] Video bridge ready — try autoplay");
+                    // Try to autoplay (muted, since iOS blocks unmuted autoplay)
+                    video.muted = true;
+                    video.play().catch(function(e) {
+                        console.log("[Plink v32] Autoplay blocked: " + e);
+                    });
+                }
+
+                // Start polling for video element
+                attachToVideo();
+            })();
+            """
+
+            webView.evaluateJavaScript(cssInjection) { _, error in
+                if let error = error {
+                    print("⚠️ YouTube v32: CSS injection error: \(error)")
+                }
+            }
+            webView.evaluateJavaScript(jsBridge) { _, error in
+                if let error = error {
+                    print("⚠️ YouTube v32: JS bridge injection error: \(error)")
+                }
             }
         }
 
@@ -622,28 +775,48 @@ struct WebVideoView: UIViewRepresentable {
             guard id != loadedVideoId else { return }
             self.loadedVideoId = id
 
-            // 🔧 v30 (July 2026): loadHTMLString with baseURL = https://plink.app
+            // 🔧 v32 (July 2026): Load FULL m.youtube.com/watch page directly.
             //
-            // Why we abandoned plink-media:// custom scheme (v24-v29.1):
-            //   iOS networking stack treated plink-media:// as a non-HTTPS origin.
-            //   When the iframe inside tried to load youtube-nocookie.com (HTTPS),
-            //   iOS panicked with "nw_connection_copy_protocol_metadata_internal
-            //   on unconnected nw_connection" → DownloadFailed → YouTube 153.
+            // WHY (production scalability):
+            //   v30-v31 used IFrame API embeds (youtube.com/embed/ID). This has
+            //   FUNDAMENTAL scaling problems:
+            //     1. Rate limit per IP/device — after ~20 requests, YouTube
+            //        returns error 150 for commercial videos (VEVO, music)
+            //     2. Embedding restrictions — video owner can disable embedding
+            //        in YouTube Studio → error 150/101 (Cartoon Network, etc.)
+            //     3. Anti-bot detection — IFrame API patterns are fingerprinted
             //
-            // Why loadHTMLString with HTTPS baseURL works:
-            //   - Page origin becomes https://plink.app (real HTTPS origin)
-            //   - iframe to youtube-nocookie.com is now same-protocol (HTTPS→HTTPS)
-            //   - YouTube sees Origin: https://plink.app → legitimate
-            //   - IFrame API initializes properly → no 153
+            //   For an app with 100+ users each making requests, IFrame API
+            //   DOES NOT SCALE. Every user hits rate limits.
             //
-            // HTML file is bundled in Resources/youtube_player.html.
-            // Placeholder %VIDEO_ID% is replaced with the actual video ID.
-
-            guard let htmlURL = Bundle.main.url(forResource: "youtube_player", withExtension: "html"),
-                  let htmlContent = try? String(contentsOf: htmlURL, encoding: .utf8) else {
-                print("❌ v30: youtube_player.html not found in app bundle")
+            // v32 SOLUTION — load the FULL youtube.com/watch page:
+            //   - YouTube doesn't check embedding permissions for their own pages
+            //   - Plays ALL videos (even embedding-restricted like Gumball)
+            //   - Rate limit is per user session, not per app IP
+            //   - This is what Rave and similar co-watch apps do
+            //   - User confirmed: "earlier via web youtube search, Gumball played"
+            //     — that was the full youtube.com/watch page
+            //
+            // UI hiding: after page loads, inject CSS to hide YouTube's UI
+            // (header, recommendations, comments) — keep only the video element.
+            // JS bridge: poll for <video> element, attach listeners, bridge
+            // play/pause/seek/time to Swift via plinkBridge.
+            //
+            // Native UA: NO customUserAgent. iOS sends real iPhone Safari UA.
+            // This is the most trusted UA for YouTube's anti-bot.
+            let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
+            let watchURLString = "https://m.youtube.com/watch?v=\(cleanVideoId)"
+            guard let watchURL = URL(string: watchURLString) else {
+                print("❌ v32: invalid URL for videoId='\(cleanVideoId)'")
                 return
             }
+
+            print("📺 YouTube v32: loading FULL page m.youtube.com/watch?v=\(cleanVideoId) (scalable, no IFrame API)")
+            DispatchQueue.main.async {
+                let request = URLRequest(url: watchURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30.0)
+                webView.load(request)
+            }
+        }
 
             // 🔧 v29.1: sanitize video ID (defense in depth — same logic as
             // PlinkSchemeHandler.sanitizeVideoId, but inlined here for v30).

@@ -700,10 +700,13 @@ struct WebVideoView: UIViewRepresentable {
             // The black body background hides all YouTube UI behind the video.
             // Only YouTube's own player controls (.ytp-*) are hidden, since they're
             // INSIDE #movie_player and would show on top of the video.
+            // 🔧 v32.7: also hide topbar/header elements that appear in corners
+            // (YouTube logo top-left, search + 3-dot menu top-right). These are
+            // NOT inside #movie_player so v32.5 overlay didn't cover them.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
-                // v32.5: OVERLAY approach — simpler, more robust
+                // v32.5: OVERLAY approach + v32.7 topbar hide
                 style.textContent = [
                     '/* === BLACK BACKGROUND hides all YouTube UI behind video === */',
                     'html, body {',
@@ -730,6 +733,36 @@ struct WebVideoView: UIViewRepresentable {
                     '    background: #000 !important;',
                     '}',
 
+                    '/* === v32.7: HIDE TOPBAR (YouTube logo top-left, search + 3-dot menu top-right) === */',
+                    '#masthead-container, #masthead, ytd-masthead,',
+                    'ytd-topbar-logo-renderer, #logo, #logo-icon,',
+                    'ytd-search, #search-form, #search-input, #search-icon-legacy,',
+                    '#end, #buttons, ytd-topbar-menu-button-renderer,',
+                    'yt-icon-button[aria-label*="Search"], yt-icon-button[aria-label*="search"],',
+                    'button[aria-label*="Search"], button[aria-label*="search"],',
+                    '#guide-button, ytd-topbar-menu-button-renderer,',
+                    'yt-icon-button.yt-spec-icon-button,',
+                    'tp-yt-paper-icon-button,',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                    '.mobile-topbar-search-button, .mobile-topbar-menu-button,',
+                    'ytm-search-button, ytm-menu-button,',
+                    'ytm-topbar, ytm-topbar-renderer,',
+                    '#top-bar-button-container, .topbar-buttons,',
+                    '.ytd-mobile-topbar-renderer, ytd-mobile-topbar-renderer {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '    opacity: 0 !important;',
+                    '    pointer-events: none !important;',
+                    '}',
+
+                    '/* === v32.7: HIDE YOUTUBE LOGO INSIDE PLAYER === */',
+                    '.ytp-watermark, .ytp-youtube-logo, .ytp-youtube-button,',
+                    'a.ytp-watermark, a.ytp-youtube-button, .html5-watermark,',
+                    '.ytp-watermark-text, ytd-yoodle-renderer {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '}',
+
                     '/* === HIDE YOUTUBE PLAYER CONTROLS (inside #movie_player) === */',
                     '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
                     '.ytp-progress-bar-container, .ytp-progress-bar,',
@@ -740,7 +773,6 @@ struct WebVideoView: UIViewRepresentable {
                     '.ytp-prev-button, .ytp-next-button,',
                     '.ytp-play-button, .ytp-replay-button,',
                     '.ytp-time-display, .ytp-time-current, .ytp-time-duration,',
-                    '.ytp-watermark, .ytp-youtube-button, .ytp-youtube-logo,',
                     '.ytp-remote-button, .ytp-cards-button, .ytp-cards-toggle,',
                     '.ytp-ce-element, .ytp-ce-shelf, .ytp-ce-video,',
                     '.ytp-endscreen-content, .ytp-endscreen, .html5-endscreen,',
@@ -761,7 +793,7 @@ struct WebVideoView: UIViewRepresentable {
                     '}'
                 ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32.5] CSS injected — overlay approach: video on top, black bg");
+                console.log("[Plink v32.7] CSS injected — overlay + topbar/logo hide");
             })();
             """
 
@@ -878,14 +910,14 @@ struct WebVideoView: UIViewRepresentable {
             }
         }
 
-        /// 🔧 v32.5: inject CSS EARLY at didCommit (before page finishes loading).
+        /// 🔧 v32.7: inject CSS EARLY at didCommit (before page finishes loading).
         /// This hides YouTube's UI before user sees it.
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             guard let url = webView.url, let host = url.host?.lowercased(),
                   host.contains("youtube.com") || host.contains("youtu.be") else {
                 return
             }
-            // v32.5: same overlay CSS as didFinish
+            // v32.7: same overlay + topbar CSS as didFinish
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
@@ -911,11 +943,27 @@ struct WebVideoView: UIViewRepresentable {
                     '    object-fit: contain !important;',
                     '    background: #000 !important;',
                     '}',
+                    '#masthead-container, #masthead, ytd-masthead,',
+                    'ytd-topbar-logo-renderer, #logo, #logo-icon,',
+                    'ytd-search, #search-form, #search-input,',
+                    '#end, #buttons, ytd-topbar-menu-button-renderer,',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                    'ytm-topbar, ytm-topbar-renderer,',
+                    'ytd-mobile-topbar-renderer {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '    opacity: 0 !important;',
+                    '}',
+                    '.ytp-watermark, .ytp-youtube-logo, .ytp-youtube-button,',
+                    '.html5-watermark {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '}',
                     '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-progress-bar,',
-                    '.ytp-settings-button, .ytp-fullscreen-button, .ytp-mute-button,',
-                    '.ytp-play-button, .ytp-time-display, .ytp-watermark,',
-                    '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
+                    '.ytp-progress-bar-container, .ytp-settings-button,',
+                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-play-button,',
+                    '.ytp-time-display, .ytp-pause-overlay,',
+                    '.ytp-endscreen-content, .html5-endscreen,',
                     '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay {',
                     '    display: none !important;',
                     '    visibility: hidden !important;',
@@ -926,7 +974,7 @@ struct WebVideoView: UIViewRepresentable {
             })();
             """
             webView.evaluateJavaScript(cssInjection) { _, _ in }
-            print("📺 YouTube v32.5: early CSS injection at didCommit (overlay)")
+            print("📺 YouTube v32.7: early CSS injection at didCommit (overlay + topbar)")
         }
 
         // MARK: - Native commands → JS

@@ -7,6 +7,14 @@ import WebKit
 // 🔧 NEW: SyncEngine calls WebViewControl.shared.play()/pause()/seek() when
 // in webview mode (player == nil). This singleton holds a weak reference to
 // the active WKWebView and evaluates JavaScript to control the YouTube player.
+//
+// 🔧 v32.6 (July 2026): updated for v32 architecture. v30-v31 used IFrame API
+// with global `player` variable (player.playVideo()). v32 loads full m.youtube.com
+// page and defines global functions window.playVideo/pauseVideo/seekTo that
+// operate on the HTML5 <video> element directly.
+//
+// v32.6 also adds fallback: if window.playVideo is not yet defined (video
+// element not found yet), directly query for <video> and call play/pause.
 @MainActor
 final class WebViewControl {
     static let shared = WebViewControl()
@@ -21,16 +29,67 @@ final class WebViewControl {
     }
 
     func play() {
-        webView?.evaluateJavaScript("if(typeof player!=='undefined'&&player.playVideo){player.playVideo();} else {document.getElementById('player').contentWindow.postMessage('{\"event\":\"command\",\"func\":\"playVideo\",\"args\":[]}','*');}", completionHandler: nil)
+        // v32.6: try window.playVideo() first (defined by v32 JS bridge).
+        // Fallback: find <video> element directly and call play().
+        let js = """
+        (function() {
+            if (typeof window.playVideo === 'function') {
+                window.playVideo();
+                return;
+            }
+            var v = document.querySelector('video');
+            if (v) v.play();
+        })();
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
     func pause() {
-        webView?.evaluateJavaScript("if(typeof player!=='undefined'&&player.pauseVideo){player.pauseVideo();} else {document.getElementById('player').contentWindow.postMessage('{\"event\":\"command\",\"func\":\"pauseVideo\",\"args\":[]}','*');}", completionHandler: nil)
+        let js = """
+        (function() {
+            if (typeof window.pauseVideo === 'function') {
+                window.pauseVideo();
+                return;
+            }
+            var v = document.querySelector('video');
+            if (v) v.pause();
+        })();
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
     func seek(to time: TimeInterval) {
-        let js = "if(typeof player!=='undefined'&&player.seekTo){player.seekTo(\(time),true);}"
+        let js = """
+        (function() {
+            if (typeof window.seekTo === 'function') {
+                window.seekTo(\(time));
+                return;
+            }
+            var v = document.querySelector('video');
+            if (v) v.currentTime = \(time);
+        })();
+        """
         webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// 🔧 v32.6: get current playback time for sync polling.
+    func getCurrentTime(completion: @escaping (Double) -> Void) {
+        let js = """
+        (function() {
+            if (typeof window.getCurrentTime === 'function') {
+                return window.getCurrentTime();
+            }
+            var v = document.querySelector('video');
+            return v ? v.currentTime : 0;
+        })();
+        """
+        webView?.evaluateJavaScript(js, completionHandler: { result, _ in
+            if let time = result as? Double {
+                completion(time)
+            } else {
+                completion(0)
+            }
+        })
     }
 }
 

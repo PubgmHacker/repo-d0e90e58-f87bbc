@@ -23,7 +23,14 @@ extension Notification.Name {
 @MainActor
 final class WebViewControl {
     static let shared = WebViewControl()
-    private weak var webView: WKWebView?
+    /// 🔧 v34: STRONG reference to WKWebView (was: weak).
+    /// When device rotates, SwiftUI switches between portraitLayout and
+    /// landscapeLayout — different view trees. The old WKWebView gets
+    /// deallocated (no strong ref) → new makeUIView creates a new WKWebView
+    /// → video resets to beginning.
+    /// With strong ref, the WebView persists across layout changes.
+    /// Cleared in unregister() when room closes.
+    var webView: WKWebView?
     /// 🔧 v32.10: callback for time updates from WebView (NOT seeks).
     /// Wired up by RoomViewModel to call syncEngine.updateCurrentTimeFromWebView().
     var onTimeUpdate: ((TimeInterval) -> Void)?
@@ -491,6 +498,28 @@ struct WebVideoView: UIViewRepresentable {
                          urlString.contains("youtu.be/")
         // 🔧 v12: backend embed proxy URL
         let isBackendPlayer = urlString.contains("plink-backend") && (urlString.contains("youtube-player") || urlString.contains("youtube-embed"))
+
+        // 🔧 v34: REUSE existing WebView if available (fullscreen rotation fix).
+        // When device rotates, SwiftUI switches portraitLayout ↔ landscapeLayout.
+        // These are different view trees → SwiftUI calls makeUIView again.
+        // Without this check, a NEW WKWebView is created → video resets.
+        // With this check, we return the EXISTING WebView from WebViewControl.
+        // The video keeps playing because the WKWebView process is the same.
+        if let existing = WebViewControl.shared.webView {
+            print("📺 v34: reusing existing WKWebView (fullscreen rotation — no reset)")
+            // Re-register coordinator as navigationDelegate (may have been lost)
+            if isYouTube || isBackendPlayer {
+                existing.navigationDelegate = context.coordinator
+            }
+            // Re-register coordinator as plinkBridge handler
+            // (WKUserContentController handlers may need re-adding)
+            // Actually, the config is part of the WebView — handlers persist.
+            // Just make sure coordinator.webView points to the existing one.
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = existing
+            }
+            return existing
+        }
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true

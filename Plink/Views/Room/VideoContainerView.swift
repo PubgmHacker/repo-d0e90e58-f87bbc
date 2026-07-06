@@ -632,11 +632,24 @@ struct WebVideoView: UIViewRepresentable {
             let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
             let finalHTML = htmlContent.replacingOccurrences(of: "%VIDEO_ID%", with: cleanVideoId)
 
-            // 🔧 v30: baseURL = https://plink.app gives the page a real HTTPS origin.
-            // This is the key difference from v24's plink-media:// approach.
-            let baseURL = URL(string: "https://plink.app")!
+            // 🔧 v30.2 (July 2026): baseURL = https://www.youtube.com
+            //
+            // v30 used https://plink.app — YouTube saw this as a cross-origin embed
+            // (page origin = plink.app, iframe origin = youtube.com) and triggered
+            // anti-bot checks → error code 150 + "Sign in to confirm you're not a bot".
+            //
+            // v30.2 uses https://www.youtube.com as baseURL. Now:
+            //   - Page origin = https://www.youtube.com (from baseURL)
+            //   - IFrame API script loads same-origin (youtube.com → youtube.com)
+            //   - IFrame src = youtube.com/embed/... (same-origin)
+            //   - Sec-Fetch-Site header = 'same-origin' → YouTube trusts the request
+            //   - origin param in playerVars = https://www.youtube.com (matches)
+            //
+            // This is the same trick Rave uses: pretend to BE youtube.com, not a
+            // third-party site embedding youtube.com.
+            let baseURL = URL(string: "https://www.youtube.com")!
 
-            print("📺 YouTube v30: loadHTMLString with baseURL=https://plink.app, videoId='\(cleanVideoId)'")
+            print("📺 YouTube v30.2: loadHTMLString with baseURL=https://www.youtube.com, videoId='\(cleanVideoId)'")
             DispatchQueue.main.async {
                 webView.loadHTMLString(finalHTML, baseURL: baseURL)
             }

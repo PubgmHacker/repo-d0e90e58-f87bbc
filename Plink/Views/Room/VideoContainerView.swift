@@ -813,18 +813,21 @@ struct WebVideoView: UIViewRepresentable {
         /// 🔧 v32: After m.youtube.com/watch finishes loading, inject CSS to hide
         /// YouTube's UI (header, recommendations, comments) and JS to bridge the
         /// HTML5 <video> element to Swift via plinkBridge.
-        /// 🔧 v32.1: also block navigation to accounts.google.com (bot check redirect).
+        /// 🔧 v32.1: block navigation to google.com (bot check redirect).
+        /// 🔧 v34.11: also block www.google.com (not just accounts.google.com).
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            // 🔧 v32.1: Block redirect to accounts.google.com (bot check).
-            // YouTube redirects here when it wants the user to "Sign in to confirm
-            // you're not a bot". If we block this redirect, YouTube's player keeps
-            // playing the video (since the player already started before the redirect).
             if let url = navigationAction.request.url {
                 let host = url.host?.lowercased() ?? ""
-                if host.contains("accounts.google.com") || host.contains("google.com/signin") {
-                    print("🚫 YouTube v32.1: blocked redirect to \(host) (bot check)")
+                // 🔧 v34.11: Block ALL google.com redirects EXCEPT youtube.com.
+                // YouTube redirects to:
+                //   - accounts.google.com/signin (bot check)
+                //   - www.google.com/some/path (consent / bot check variant)
+                // Both break video playback. Block them all.
+                if (host.contains("google.com") && !host.contains("youtube.com") && !host.contains("youtu.be")) ||
+                   host.contains("accounts.google.com") {
+                    print("🚫 YouTube v34.11: blocked redirect to \(host) (bot check)")
                     decisionHandler(.cancel)
                     return
                 }

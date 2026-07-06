@@ -231,7 +231,7 @@ final class RoomViewModel: WebSocketClientDelegate {
             if WebViewControl.shared.loadedVideoId != nil {
                 Logger.ws.info("🔍 SKIP loadMedia — WebView already has video loaded (v34.16)")
                 // Still set currentMediaItem so RoomView renders video section
-                self.syncEngine.currentMediaItem = mediaItem
+                self.syncEngine.setCurrentMediaItem(mediaItem)
             } else {
                 Logger.ws.info("🔍 Calling syncEngine.loadMedia...")
                 self.syncEngine.loadMedia(mediaItem)

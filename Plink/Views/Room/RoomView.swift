@@ -58,29 +58,16 @@ struct RoomView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // 🔧 v34.1: Layout depends on BOTH device geometry AND isFullscreenMode.
             let isLandscape = geo.size.width > geo.size.height || isFullscreenMode
 
             ZStack {
-                // ── 1. Ambilight фон (весь экран) ────────────────────
                 AmbilightBackground()
 
                 if let viewModel {
-                    // ── 2. VIDEO SECTION (COMMON — persists across rotation) ──
-                    // 🔧 v34.3: Video is OUTSIDE the layout switch so WebVideoView
-                    // is NOT recreated when switching portrait ↔ landscape.
-                    // The video frame changes, but the underlying WKWebView persists.
-                    videoSectionPersistent(
-                        viewModel: viewModel,
-                        geo: geo,
-                        isLandscape: isLandscape
-                    )
-
-                    // ── 3. CHAT + CONTROLS (layout-specific) ──────────────
                     if isLandscape {
-                        landscapeChatOverlay(viewModel: viewModel, geo: geo)
+                        landscapeLayout(viewModel: viewModel, geo: geo)
                     } else {
-                        portraitChatAndControls(viewModel: viewModel, geo: geo)
+                        portraitLayout(viewModel: viewModel, geo: geo)
                     }
                 } else {
                     ProgressView(loc.string(.roomConnecting))
@@ -88,7 +75,6 @@ struct RoomView: View {
                         .onAppear { setupViewModel() }
                 }
 
-                // ── 4. SpriteKit реакции ──────────────────────────────
                 ReactionSpriteOverlay(reactionTrigger: $reactionTrigger)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
@@ -167,23 +153,24 @@ struct RoomView: View {
         }
     }
 
-    // MARK: - Portrait Layout (chat + controls only — video is separate)
+    // MARK: - Portrait Layout
 
     @ViewBuilder
-    private func portraitChatAndControls(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {
+    private func portraitLayout(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {
         let screenWidth = geo.size.width
         let videoWidth = screenWidth
         let videoHeight = videoWidth * 9.0 / 16.0
         let chatHeight = geo.size.height - videoHeight - 8
-        // 🔧 PREMIUM THEME: chat background gradient from selected room theme
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
         VStack(spacing: 0) {
-            // 🔧 v34.3: video is rendered separately in videoSectionPersistent.
-            // Here we just reserve space for it.
-            Spacer().frame(height: videoHeight)
+            videoSection(
+                viewModel: viewModel,
+                videoWidth: videoWidth,
+                videoHeight: videoHeight,
+                isFullscreen: false
+            )
 
-            // Чат — оставшееся пространство
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -192,7 +179,6 @@ struct RoomView: View {
                 mode: .portrait
             )
             .frame(height: max(chatHeight, 100))
-            // 🔧 PREMIUM THEME: apply chat background gradient
             .background(
                 Group {
                     if roomTheme.hasPlayerBorder {
@@ -210,12 +196,18 @@ struct RoomView: View {
         )
     }
 
-    // MARK: - Landscape Layout (chat overlay only — video is separate)
+    // MARK: - Landscape Layout
 
     @ViewBuilder
-    private func landscapeChatOverlay(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {
+    private func landscapeLayout(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {
         ZStack {
-            // Чат выезжает справа поверх
+            videoSection(
+                viewModel: viewModel,
+                videoWidth: geo.size.width,
+                videoHeight: geo.size.height,
+                isFullscreen: true
+            )
+
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -226,7 +218,6 @@ struct RoomView: View {
             )
             .ignoresSafeArea()
 
-            // Кнопка вызова чата (когда свёрнут)
             if !showChatPanel {
                 VStack {
                     Spacer()
@@ -253,23 +244,18 @@ struct RoomView: View {
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { handleDoubleTap() }
         )
-        // 🔧 FIX CHAT SWIPE: higher minimumDistance (80) to avoid conflicts with
-        // iOS edge swipe gestures (which trigger tabbar). Only horizontal swipes.
         .simultaneousGesture(
             DragGesture(minimumDistance: 80)
                 .onEnded { value in
                     let horizontal = value.translation.width
                     let vertical = value.translation.height
-                    // Only handle clearly horizontal swipes (|h| > |v| * 2)
                     guard abs(horizontal) > abs(vertical) * 2 else { return }
-                    // Свайп справа-налево (←) — открыть чат
                     if !showChatPanel && horizontal < -80 {
                         HapticManager.impact(.light)
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                             showChatPanel = true
                         }
                     }
-                    // Свайп слева-направо (→) — закрыть чат
                     else if showChatPanel && horizontal > 80 {
                         HapticManager.impact(.light)
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -278,185 +264,6 @@ struct RoomView: View {
                     }
                 }
         )
-    }
-
-    // MARK: - Video Section Persistent (v34.3)
-    /// 🔧 v34.3: Video section that PERSISTS across portrait ↔ landscape switch.
-    /// This is OUTSIDE the layout if/else so WebVideoView is NOT recreated.
-    @ViewBuilder
-    private func videoSectionPersistent(
-        viewModel: RoomViewModel,
-        geo: GeometryProxy,
-        isLandscape: Bool
-    ) -> some View {
-        let videoWidth: CGFloat = isLandscape ? geo.size.width : geo.size.width
-        let videoHeight: CGFloat = isLandscape ? geo.size.height : (geo.size.width * 9.0 / 16.0)
-
-        ZStack {
-            // Видео контейнер
-            if let mediaItem = viewModel.syncEngine.currentMediaItem,
-               !mediaItem.streamURL.isEmpty {
-
-                VideoContainerView(
-                    mediaURL: mediaItem.streamURL,
-                    playbackMode: mediaItem.effectivePlaybackMode,
-                    isPlaying: viewModel.syncEngine.isPlaying,
-                    currentTime: viewModel.syncEngine.currentTime,
-                    duration: viewModel.syncEngine.duration,
-                    isFullscreen: isLandscape,
-                    onTogglePlay: { viewModel.syncEngine.togglePlayPause() },
-                    onSeek: { pos in viewModel.syncEngine.seek(to: pos) }
-                )
-                .frame(width: videoWidth, height: videoHeight)
-            } else {
-                videoPlaceholder
-            }
-
-            // 🔧 v32.9: TRANSPARENT TAP LAYER
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    WebViewControl.shared.unmute()
-                    toggleControls()
-                }
-                .allowsHitTesting(true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // 🔧 OUR controls overlay
-            ControlsOverlay(
-                isPlaying: viewModel.syncEngine.isPlaying,
-                currentTime: viewModel.syncEngine.currentTime,
-                duration: viewModel.syncEngine.duration,
-                participantCount: viewModel.room.participantCount,
-                roomName: viewModel.room.name,
-                isFullscreen: isLandscape,
-                onTogglePlay: {
-                    HapticManager.impact(.light)
-                    viewModel.syncEngine.togglePlayPause()
-                    resetControlsTimer()
-                },
-                onSeek: { pos in
-                    viewModel.syncEngine.seek(to: pos)
-                    resetControlsTimer()
-                },
-                onSeekRelative: { delta in
-                    viewModel.syncEngine.seekRelative(delta)
-                    resetControlsTimer()
-                },
-                onClose: {
-                    if isLandscape {
-                        exitFullscreen()
-                    } else {
-                        Task {
-                            await voiceChat?.endCall()
-                            await viewModel.cleanupFlow()
-                        }
-                        dismiss()
-                    }
-                },
-                onShowParticipants: {
-                    showParticipants = true
-                },
-                onToggleFullscreen: {
-                    HapticManager.impact(.light)
-                    if isFullscreenMode {
-                        exitFullscreen()
-                    } else {
-                        enterFullscreen()
-                    }
-                },
-                isVisible: $showControls
-            )
-
-            // 🔧 v32.13: COMPLETION SCREEN
-            if isVideoEnded {
-                ZStack {
-                    Color.black.opacity(0.85)
-                        .ignoresSafeArea()
-
-                    VStack(spacing: 20) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 56))
-                            .foregroundColor(.bioEmerald)
-
-                        Text("Видео завершено")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-
-                        HStack(spacing: 16) {
-                            Button {
-                                HapticManager.impact(.medium)
-                                viewModel.syncEngine.seek(to: 0)
-                                WebViewControl.shared.play()
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    isVideoEnded = false
-                                }
-                            } label: {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "arrow.counterclockwise")
-                                        .font(.system(size: 22))
-                                    Text("Сначала")
-                                        .font(.system(size: 13, weight: .medium))
-                                }
-                                .foregroundColor(.white)
-                                .frame(width: 100, height: 70)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                            }
-
-                            Button {
-                                HapticManager.impact(.medium)
-                                Task {
-                                    await voiceChat?.endCall()
-                                    await viewModel.cleanupFlow()
-                                }
-                                dismiss()
-                            } label: {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 22))
-                                    Text("Выйти")
-                                        .font(.system(size: 13, weight: .medium))
-                                }
-                                .foregroundColor(.white)
-                                .frame(width: 100, height: 70)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                            }
-                        }
-                    }
-                }
-                .transition(.opacity)
-                .zIndex(100)
-            }
-
-            // 🔧 GLASS CONTROLS: Mic, share buttons
-            if let voiceChat {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button {
-                            HapticManager.impact(.light)
-                            shareSheetPresented = true
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(.white)
-                                .frame(width: 32, height: 32)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                        }
-                    }
-                    Spacer()
-                }
-                .padding(.trailing, 16)
-                .padding(.top, 8)
-                .opacity(showControls ? 1.0 : 0.35)
-            }
-        }
-        .frame(width: videoWidth, height: videoHeight, alignment: .top)
-        .clipped()
-        .animation(.easeInOut(duration: 0.3), value: isLandscape)
     }
 
     // MARK: - Video Section (видео + оверлеи)

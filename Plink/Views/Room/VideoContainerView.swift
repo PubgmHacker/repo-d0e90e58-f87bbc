@@ -205,11 +205,8 @@ struct VideoContainerView: View {
     @State private var isYouTubeReady = false
 
     var body: some View {
-        // 🔧 v34.5: GeometryReader returns the ACTUAL frame from parent.
-        // Parent (videoSectionPersistent) sets .frame(width:, height:) on us.
-        // GeometryReader respects that and gives us the correct size.
         GeometryReader { geo in
-            let videoSize = CGSize(width: geo.size.width, height: geo.size.height)
+            let videoSize = computeVideoSize(container: geo.size)
 
             ZStack {
                 Color.black.opacity(0.3)
@@ -221,7 +218,6 @@ struct VideoContainerView: View {
                     webVideoView(size: videoSize)
                 }
 
-                // 🔧 v32.12: BLACK LOADING OVERLAY — hides YouTube UI flash.
                 if playbackMode == .webview && !isYouTubeReady {
                     Color.black
                         .overlay(
@@ -239,6 +235,15 @@ struct VideoContainerView: View {
                 isYouTubeReady = true
             }
         }
+    }
+
+    // MARK: - Size Calculation
+
+    private func computeVideoSize(container: CGSize) -> CGSize {
+        if isFullscreen { return container }
+        let width = container.width
+        let height = width * 9.0 / 16.0
+        return CGSize(width: width, height: height)
     }
 
     // MARK: - Direct Stream (AVPlayer)

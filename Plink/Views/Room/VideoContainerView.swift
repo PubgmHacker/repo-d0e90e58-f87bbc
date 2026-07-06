@@ -205,34 +205,34 @@ struct VideoContainerView: View {
     @State private var isYouTubeReady = false
 
     var body: some View {
-        // 🔧 v34.4: removed GeometryReader — was conflicting with parent's .frame()
-        // and causing WebVideoView to get wrong size.
-        // Now uses the size from parent directly.
-        let videoSize = isFullscreen ?
-            CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height) :
-            CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width * 9.0 / 16.0)
+        // 🔧 v34.5: GeometryReader returns the ACTUAL frame from parent.
+        // Parent (videoSectionPersistent) sets .frame(width:, height:) on us.
+        // GeometryReader respects that and gives us the correct size.
+        GeometryReader { geo in
+            let videoSize = CGSize(width: geo.size.width, height: geo.size.height)
 
-        ZStack {
-            Color.black.opacity(0.3)
+            ZStack {
+                Color.black.opacity(0.3)
 
-            switch playbackMode {
-            case .directStream:
-                directStreamView(size: videoSize)
-            case .webview:
-                webVideoView(size: videoSize)
+                switch playbackMode {
+                case .directStream:
+                    directStreamView(size: videoSize)
+                case .webview:
+                    webVideoView(size: videoSize)
+                }
+
+                // 🔧 v32.12: BLACK LOADING OVERLAY — hides YouTube UI flash.
+                if playbackMode == .webview && !isYouTubeReady {
+                    Color.black
+                        .overlay(
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(1.2)
+                        )
+                        .transition(.opacity)
+                }
             }
-
-            // 🔧 v32.12: BLACK LOADING OVERLAY — hides YouTube UI flash.
-            if playbackMode == .webview && !isYouTubeReady {
-                Color.black
-                    .ignoresSafeArea()
-                    .overlay(
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(1.2)
-                    )
-                    .transition(.opacity)
-            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {

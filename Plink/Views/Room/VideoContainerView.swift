@@ -55,6 +55,12 @@ final class WebViewControl {
         onPlayerReady?()
     }
 
+    /// 🔧 v32.13: handle video ended event — shows completion screen.
+    var onPlayerEnded: (() -> Void)?
+    func handlePlayerEnded() {
+        onPlayerEnded?()
+    }
+
     /// 🔧 v32.11: unmute video. iOS blocks unmuted autoplay without user gesture.
     /// This must be called from a user gesture handler (tap) to work.
     /// Calls video.muted = false; video.play() via evaluateJavaScript.
@@ -759,6 +765,10 @@ struct WebVideoView: UIViewRepresentable {
                 let currentTime = dict["currentTime"] as? Double ?? 0.0
                 // HTML5 video states: 0=ended, 1=playing, 2=paused (we map from events)
                 print("🔄 YouTube v32: state=\(state), currentTime=\(currentTime)s")
+                // v32.13: notify ended
+                if state == 0 {
+                    WebViewControl.shared.handlePlayerEnded()
+                }
                 onPlayerStateChange?(state, currentTime)
 
             case "error":
@@ -1030,19 +1040,61 @@ struct WebVideoView: UIViewRepresentable {
                     // after 30-60s (ad overlay, pause overlay, buffering).
                     // Periodically check: if video is paused but should be playing,
                     // resume it. Also keep it unmuted.
+                    // 🔧 v32.13: also track last known good position — if video
+                    // resets to 0 unexpectedly, restore it.
+                    var lastGoodPosition = 0;
+                    var lastPositionUpdate = Date.now();
+
+                    video.addEventListener('timeupdate', function() {
+                        // Track last position where video was actually playing
+                        if (!video.paused && video.currentTime > 0) {
+                            lastGoodPosition = video.currentTime;
+                            lastPositionUpdate = Date.now();
+                        }
+                    });
+
                     setInterval(function() {
+                        // v32.13: detect reset to 0 while video should be playing
+                        // (YouTube sometimes reloads the video from start)
+                        if (video.currentTime === 0 && lastGoodPosition > 5 &&
+                            (Date.now() - lastPositionUpdate) < 10000) {
+                            console.log("[Plink v32.13] Video reset detected, restoring to " + lastGoodPosition + "s");
+                            video.currentTime = lastGoodPosition;
+                            video.play().catch(function() {});
+                            return;
+                        }
+
                         if (video.paused && video.currentTime > 0 && video.currentTime < (video.duration || Infinity) - 1) {
-                            console.log("[Plink v32.12] Video auto-paused, resuming");
+                            console.log("[Plink v32.13] Video auto-paused, resuming");
                             video.play().catch(function(e) {
-                                console.log("[Plink v32.12] Resume failed: " + e);
+                                console.log("[Plink v32.13] Resume failed: " + e);
                             });
                         }
                         // Also re-unmute if YouTube muted us
                         if (video.muted) {
                             video.muted = false;
-                            console.log("[Plink v32.12] Video auto-muted, unmuting");
+                            console.log("[Plink v32.13] Video auto-muted, unmuting");
                         }
-                    }, 3000);  // check every 3 seconds
+
+                        // v32.13: aggressively hide any ad/overlay elements that
+                        // may have appeared. YouTube injects these dynamically.
+                        var overlays = document.querySelectorAll(
+                            '.ytp-ad-overlay-container, .ytp-ad-overlay, .ytp-ad-text, ' +
+                            '.ytp-ad-skip-button-container, .ytp-pause-overlay, ' +
+                            '.ytp-endscreen-content, .ytp-endscreen, .html5-endscreen, ' +
+                            '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay, ' +
+                            '.ytp-scrim-bottom, .ytp-scrim-top, .ytp-mdx-popup, ' +
+                            '.ytp-pause-overlay-back, .paused-overlay, ' +
+                            'ytd-ad-slot-renderer, ytd-promoted-video-renderer, ' +
+                            'ytd-promo-sparkles-web-renderer, .ytd-banner-promo-renderer'
+                        );
+                        overlays.forEach(function(el) {
+                            el.style.display = 'none';
+                            el.style.visibility = 'hidden';
+                            el.style.opacity = '0';
+                            el.style.pointerEvents = 'none';
+                        });
+                    }, 2000);  // check every 2 seconds (faster)
                     // Also block on parent #movie_player
                     var moviePlayer = document.getElementById('movie_player');
                     if (moviePlayer) {

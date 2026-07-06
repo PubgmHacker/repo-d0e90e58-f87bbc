@@ -42,6 +42,8 @@ struct RoomView: View {
     /// с авторотацией в ландшафт. ВАЖНО: используется ТОЛЬКО для управления
     /// ориентацией устройства, а НЕ для выбора layout (layout зависит от геометрии).
     @State private var isFullscreenMode = false
+    /// 🔧 v32.13: video ended — shows completion screen with replay/exit buttons.
+    @State private var isVideoEnded = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -379,6 +381,70 @@ struct RoomView: View {
                 isVisible: $showControls
             )
 
+            // 🔧 v32.13: COMPLETION SCREEN — shown when video ends (state=0).
+            // Overlay with replay + exit buttons.
+            if isVideoEnded {
+                ZStack {
+                    Color.black.opacity(0.85)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 20) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 56))
+                            .foregroundColor(.bioEmerald)
+
+                        Text("Видео завершено")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+
+                        HStack(spacing: 16) {
+                            Button {
+                                HapticManager.impact(.medium)
+                                // Replay from start
+                                viewModel.syncEngine.seek(to: 0)
+                                WebViewControl.shared.play()
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    isVideoEnded = false
+                                }
+                            } label: {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 22))
+                                    Text("Сначала")
+                                        .font(.system(size: 13, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                                .frame(width: 100, height: 70)
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+
+                            Button {
+                                HapticManager.impact(.medium)
+                                Task {
+                                    await voiceChat?.endCall()
+                                    await viewModel.cleanupFlow()
+                                }
+                                dismiss()
+                            } label: {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 22))
+                                    Text("Выйти")
+                                        .font(.system(size: 13, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                                .frame(width: 100, height: 70)
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
+
             // 🔧 GLASS CONTROLS: Mic, share buttons — always visible in landscape,
             // dimmed (0.35) when controls hidden, brightened (1.0) when controls visible.
             if let voiceChat {
@@ -617,6 +683,18 @@ struct RoomView: View {
             // user gesture — user will need to tap once to unmute).
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WebViewControl.shared.unmute()
+            }
+            // v32.13: reset ended state when new video loads
+            DispatchQueue.main.async {
+                isVideoEnded = false
+            }
+        }
+        // 🔧 v32.13: wire player ended event — shows completion screen.
+        WebViewControl.shared.onPlayerEnded = {
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isVideoEnded = true
+                }
             }
         }
 

@@ -205,58 +205,40 @@ struct VideoContainerView: View {
     @State private var isYouTubeReady = false
 
     var body: some View {
-        GeometryReader { geo in
-            let videoSize = computeVideoSize(container: geo.size)
+        // 🔧 v34.4: removed GeometryReader — was conflicting with parent's .frame()
+        // and causing WebVideoView to get wrong size.
+        // Now uses the size from parent directly.
+        let videoSize = isFullscreen ?
+            CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height) :
+            CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width * 9.0 / 16.0)
 
-            ZStack {
-                Color.black.opacity(0.3)
+        ZStack {
+            Color.black.opacity(0.3)
 
-                switch playbackMode {
-                case .directStream:
-                    directStreamView(size: videoSize)
-                case .webview:
-                    webVideoView(size: videoSize)
-                }
-
-                // 🔧 v32.12: BLACK LOADING OVERLAY — hides YouTube UI flash.
-                // Covers WebView until plinkBridge 'ready' event fires.
-                // This prevents user from seeing YouTube's raw player + unmute
-                // button for 3 seconds before CSS injection takes effect.
-                if playbackMode == .webview && !isYouTubeReady {
-                    Color.black
-                        .ignoresSafeArea()
-                        .overlay(
-                            ProgressView()
-                                .tint(.white)
-                                .scaleEffect(1.2)
-                        )
-                        .transition(.opacity)
-                }
+            switch playbackMode {
+            case .directStream:
+                directStreamView(size: videoSize)
+            case .webview:
+                webVideoView(size: videoSize)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isYouTubeReady = true
-                }
+
+            // 🔧 v32.12: BLACK LOADING OVERLAY — hides YouTube UI flash.
+            if playbackMode == .webview && !isYouTubeReady {
+                Color.black
+                    .ignoresSafeArea()
+                    .overlay(
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.2)
+                    )
+                    .transition(.opacity)
             }
         }
-    }
-
-    // MARK: - Size Calculation
-
-    /// Вычисляет размер видео 16:9 в зависимости от контейнера.
-    /// Портрет: вписываем по ширине (70%), высота = width * 9/16.
-    /// Ландшафт: вписываем по высоте (100%), ширина = height * 16/9.
-    private func computeVideoSize(container: CGSize) -> CGSize {
-        if isFullscreen {
-            // Ландшафт: видео на весь экран
-            return container
+        .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isYouTubeReady = true
+            }
         }
-
-        // Портрет: 16:9 по ширине контейнера
-        let width = container.width
-        let height = width * 9.0 / 16.0
-        return CGSize(width: width, height: height)
     }
 
     // MARK: - Direct Stream (AVPlayer)

@@ -225,9 +225,18 @@ final class RoomViewModel: WebSocketClientDelegate {
         Logger.ws.info("🔍 syncEngine.currentMediaItem == nil: \(self.syncEngine.currentMediaItem == nil)")
 
         if let mediaItem = self.room.mediaItem, self.syncEngine.currentMediaItem == nil {
-            Logger.ws.info("🔍 Calling syncEngine.loadMedia...")
-            self.syncEngine.loadMedia(mediaItem)
-            Logger.ws.info("🔍 After loadMedia, currentMediaItem == nil: \(self.syncEngine.currentMediaItem == nil)")
+            // 🔧 v34.16: DON'T reload if WebView already has video loaded!
+            // WS reconnects on fullscreen toggle → loadMedia → VideoContainerView
+            // re-render → rendering context destroyed → black screen.
+            if WebViewControl.shared.loadedVideoId != nil {
+                Logger.ws.info("🔍 SKIP loadMedia — WebView already has video loaded (v34.16)")
+                // Still set currentMediaItem so RoomView renders video section
+                self.syncEngine.currentMediaItem = mediaItem
+            } else {
+                Logger.ws.info("🔍 Calling syncEngine.loadMedia...")
+                self.syncEngine.loadMedia(mediaItem)
+                Logger.ws.info("🔍 After loadMedia, currentMediaItem == nil: \(self.syncEngine.currentMediaItem == nil)")
+            }
         } else {
             Logger.ws.warn("🔍 SKIP loadMedia: mediaItem=\(mediaItemExists), currentMediaItem nil=\(self.syncEngine.currentMediaItem == nil)")
         }

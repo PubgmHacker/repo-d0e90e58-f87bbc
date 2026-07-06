@@ -465,26 +465,25 @@ struct RoomSetupView: View {
                     }
                     return
                 }
-                // 🔧 v30.3 (July 2026): switched from youtube-nocookie.com → youtube.com
-                // and removed widget_referrer. Why:
-                //   - v30.2 uses baseURL=https://www.youtube.com in loadHTMLString
-                //   - IFrame API inside loads from www.youtube.com/iframe_api
-                //   - If streamURL points to youtube-nocookie.com, the WebView may
-                //     ALSO try to load that URL → mixed origin → DownloadFailed
-                //   - widget_referrer=https://plink.app caused origin mismatch
-                //     with new baseURL=https://www.youtube.com → error 152
-                // Now everything is consistent: youtube.com everywhere.
+                // 🔧 v31.1 (July 2026): cleaned ALL origin/widget_referrer params from streamURL.
+                // The streamURL is now a MINIMAL youtube.com/embed/ID?playsinline=1&rel=0 URL.
+                // Origin is set DYNAMICALLY in youtube_player.html via window.location.origin,
+                // which reads the baseURL passed to WKWebView.loadHTMLString.
+                //
+                // Previous v30.3 had origin=https://www.youtube.com hardcoded here, but
+                // Swift was loading HTML with baseURL=https://plink.app → mismatch →
+                // YouTube saw this as referrer spoofing → error 150.
+                //
+                // Now streamURL is just for IDENTIFICATION (extract videoId later),
+                // and the actual embed URL is constructed inside youtube_player.html.
                 var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
                 embedComponents.queryItems = [
                     URLQueryItem(name: "playsinline", value: "1"),
                     URLQueryItem(name: "rel", value: "0"),
-                    URLQueryItem(name: "modestbranding", value: "1"),
-                    URLQueryItem(name: "iv_load_policy", value: "3"),
-                    URLQueryItem(name: "origin", value: "https://www.youtube.com"),
                 ]
                 finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
                 finalSource = .youtube
-                print("🔧 RoomSetupView v30.3: YouTube embed URL='\(finalStreamURL)', videoId='\(videoId)'")
+                print("🔧 RoomSetupView v31.1: YouTube streamURL='\(finalStreamURL)' (minimal, origin will be set dynamically in JS), videoId='\(videoId)'")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

@@ -328,6 +328,16 @@ struct WebVideoView: UIViewRepresentable {
         // is the REAL isolation mechanism.
         config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
+        // 🔧 v31.1 (July 2026): allowUniversalAccessFromFileURLs — bypass CORS
+        // for loadHTMLString with HTTPS baseURL. Without this, the iframe
+        // inside the local HTML cannot make HTTPS requests to youtube.com
+        // because iOS treats the page as 'file://' origin despite the baseURL.
+        // This is a known Apple private API — App Store accepts it (Rave uses
+        // the same trick, plus many WebView-based apps).
+        // 'allowFileAccessFromFileURLs' is the XHR/fetch equivalent.
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
         // 🔧 v30 (July 2026): REMOVED setURLSchemeHandler(plink-media://).
         // Custom scheme caused "nw_connection_copy_protocol_metadata_internal
         // on unconnected nw_connection" → DownloadFailed → 153.
@@ -398,6 +408,14 @@ struct WebVideoView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
         webView.backgroundColor = .black
+
+        // 🔧 v31.1 (July 2026): custom UA for YouTube — mimic iOS 18 Safari.
+        // YouTube's anti-bot detects WKWebView via subtle UA differences.
+        // Setting an exact Safari UA makes our WebView look like real Safari.
+        // Only set for YouTube — other services don't need it.
+        if isYouTube || isBackendPlayer {
+            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/605.1.15"
+        }
 
         WebViewControl.shared.register(webView)
 

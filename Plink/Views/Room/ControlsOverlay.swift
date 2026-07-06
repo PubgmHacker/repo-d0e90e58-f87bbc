@@ -196,10 +196,13 @@ private struct SeekBar: View {
     var onSeek: (Double) -> Void
 
     @State private var dragRatio: Double? = nil
+    @State private var isDragging = false
 
     var body: some View {
         GeometryReader { geo in
-            let displayProgress = dragRatio ?? progress
+            // v32.18: while dragging, ignore 'progress' from syncEngine
+            // (which lags behind finger). Only show dragRatio.
+            let displayProgress = isDragging ? (dragRatio ?? progress) : progress
 
             ZStack(alignment: .leading) {
                 Capsule()
@@ -215,23 +218,27 @@ private struct SeekBar: View {
                     .frame(width: 12, height: 12)
                     .offset(x: geo.size.width * displayProgress - 6)
                     .opacity(displayProgress > 0 && displayProgress < 1 ? 1 : 0)
+                    .scaleEffect(isDragging ? 1.3 : 1.0)  // v32.18: bigger while dragging
+                    .animation(.spring(response: 0.2), value: isDragging)
             }
             .frame(height: 20)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        // v32.16: live update during drag
+                        // v32.18: live update during drag — finger controls the bar
                         let ratio = min(max(value.location.x / geo.size.width, 0), 1)
                         dragRatio = ratio
+                        isDragging = true
                     }
                     .onEnded { value in
                         let ratio = min(max(value.location.x / geo.size.width, 0), 1)
                         onSeek(ratio)
-                        // Reset drag state after a short delay so the bar
-                        // shows the seek result, not the drag position
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        // v32.18: keep dragRatio visible longer (1.5s) so the bar
+                        // doesn't snap back to old position before seek takes effect
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             dragRatio = nil
+                            isDragging = false
                         }
                     }
             )

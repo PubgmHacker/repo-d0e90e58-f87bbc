@@ -314,31 +314,22 @@ struct RoomView: View {
             }
 
             // 🔧 v32.9: TRANSPARENT TAP LAYER — catches taps that WKWebView
-            // would otherwise swallow. When showControls=false, this layer
-            // catches the tap and shows controls. When showControls=true,
-            // it's disabled (allowsHitTesting=false) so taps reach the
-            // ControlsOverlay buttons below.
+            // would otherwise swallow. Sits BELOW ControlsOverlay so when
+            // controls are visible, overlay buttons get taps first.
+            // When controls hidden (allowsHitTesting=false on overlay),
+            // taps pass through to this layer.
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if !showControls {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            showControls = true
-                        }
-                        resetControlsTimer()
-                    } else {
-                        // Tapped on video area while controls visible —
-                        // hide controls (unless tapping a button)
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            showControls = false
-                        }
-                    }
+                    toggleControls()
                 }
-                .allowsHitTesting(true)  // always catch taps on video area
+                .allowsHitTesting(true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // 🔧 OUR controls overlay — ALWAYS visible (YouTube controls are hidden
-            // via controls=0 in embed HTML, so only Plink controls show).
+            // 🔧 OUR controls overlay — sits ABOVE transparent tap layer.
+            // .allowsHitTesting(isVisible) means:
+            //   - controls visible → buttons catch taps
+            //   - controls hidden → taps pass through to transparent layer below
             ControlsOverlay(
                 isPlaying: viewModel.syncEngine.isPlaying,
                 currentTime: viewModel.syncEngine.currentTime,
@@ -601,6 +592,12 @@ struct RoomView: View {
             userID: currentUserId,
             isHost: isHost
         )
+
+        // 🔧 v32.10: wire WebView time updates to SyncEngine.currentTime.
+        // This updates the seek bar + time display without triggering seeks.
+        WebViewControl.shared.onTimeUpdate = { time in
+            syncEngine.updateCurrentTimeFromWebView(time)
+        }
 
         let vm = RoomViewModel(
             room: room,

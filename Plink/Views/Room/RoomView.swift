@@ -64,11 +64,13 @@ struct RoomView: View {
                 AmbilightBackground()
 
                 if let viewModel {
-                    if isLandscape {
-                        landscapeLayout(viewModel: viewModel, geo: geo)
-                    } else {
-                        portraitLayout(viewModel: viewModel, geo: geo)
-                    }
+                    // 🔧 v34.12: SINGLE layout tree — no if/else switch.
+                    // SwiftUI was tearing down portraitLayout → creating landscapeLayout
+                    // → WKWebView moved between view hierarchies → WebContent rendering
+                    // context destroyed → video black screen (audio still playing).
+                    // Now ONE VStack adapts: portrait = video top + chat bottom,
+                    // landscape = video fullscreen + chat overlay.
+                    unifiedLayout(viewModel: viewModel, geo: geo, isLandscape: isLandscape)
                 } else {
                     ProgressView(loc.string(.roomConnecting))
                         .tint(.ravePrimary)
@@ -156,7 +158,105 @@ struct RoomView: View {
         }
     }
 
-    // MARK: - Portrait Layout
+    // MARK: - Unified Layout (v34.12) — single view tree, no if/else switch
+
+    @ViewBuilder
+    private func unifiedLayout(viewModel: RoomViewModel, geo: GeometryProxy, isLandscape: Bool) -> some View {
+        let videoWidth = geo.size.width
+        let videoHeight: CGFloat = isLandscape ? geo.size.height : (geo.size.width * 9.0 / 16.0)
+        let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
+
+        ZStack(alignment: .top) {
+            // Video section — ALWAYS rendered, NEVER torn down
+            videoSection(
+                viewModel: viewModel,
+                videoWidth: videoWidth,
+                videoHeight: videoHeight,
+                isFullscreen: isLandscape
+            )
+            .frame(width: videoWidth, height: videoHeight)
+
+            // Chat — positioned differently based on orientation
+            if isLandscape {
+                // Landscape: chat overlays on top of video (right side)
+                RoomChatView(
+                    messages: syncManager?.chatMessages ?? viewModel.messages,
+                    chatText: chatTextBinding,
+                    onSend: sendMessage,
+                    currentUserID: viewModel.currentUserId,
+                    mode: .landscape,
+                    isPanelOpen: $showChatPanel
+                )
+                .ignoresSafeArea()
+
+                if !showChatPanel {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    showChatPanel = true
+                                }
+                            } label: {
+                                Image(systemName: "bubble.left.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                            }
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 24)
+                        }
+                    }
+                }
+            } else {
+                // Portrait: chat below video
+                RoomChatView(
+                    messages: syncManager?.chatMessages ?? viewModel.messages,
+                    chatText: chatTextBinding,
+                    onSend: sendMessage,
+                    currentUserID: viewModel.currentUserId,
+                    mode: .portrait
+                )
+                .frame(height: max(geo.size.height - videoHeight - 8, 100))
+                .background(
+                    Group {
+                        if roomTheme.hasPlayerBorder { roomTheme.chatBackground } else { Color.clear }
+                    }
+                )
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+                .offset(y: videoHeight)
+            }
+        }
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { handleDoubleTap() }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 80)
+                .onEnded { value in
+                    guard isLandscape else { return }
+                    let horizontal = value.translation.width
+                    let vertical = value.translation.height
+                    guard abs(horizontal) > abs(vertical) * 2 else { return }
+                    if !showChatPanel && horizontal < -80 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showChatPanel = true
+                        }
+                    } else if showChatPanel && horizontal > 80 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showChatPanel = false
+                        }
+                    }
+                }
+        )
+    }
+
+    // MARK: - Portrait Layout (legacy — not used, kept for reference)
 
     @ViewBuilder
     private func portraitLayout(viewModel: RoomViewModel, geo: GeometryProxy) -> some View {

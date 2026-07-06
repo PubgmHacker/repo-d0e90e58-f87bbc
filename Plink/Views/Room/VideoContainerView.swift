@@ -19,6 +19,9 @@ import WebKit
 final class WebViewControl {
     static let shared = WebViewControl()
     private weak var webView: WKWebView?
+    /// 🔧 v32.10: callback for time updates from WebView (NOT seeks).
+    /// Wired up by RoomViewModel to call syncEngine.updateCurrentTimeFromWebView().
+    var onTimeUpdate: ((TimeInterval) -> Void)?
 
     func register(_ webView: WKWebView) {
         self.webView = webView
@@ -26,6 +29,12 @@ final class WebViewControl {
 
     func unregister() {
         self.webView = nil
+    }
+
+    /// 🔧 v32.10: handle time updates from <video> element.
+    /// Calls onTimeUpdate callback — does NOT seek the player.
+    func handleTimeUpdate(_ time: TimeInterval) {
+        onTimeUpdate?(time)
     }
 
     func play() {
@@ -198,18 +207,20 @@ struct VideoContainerView: View {
     @ViewBuilder
     private func webVideoView(size: CGSize) -> some View {
         if let url = URL(string: mediaURL) {
-            // 🔧 v32.8: WebVideoView calls onTimeUpdate when video.currentTime changes.
-            // This UPDATES currentTime in SyncEngine (for seekRelative + display).
-            // It does NOT call onSeek — that's only for user-initiated seeks.
+            // 🔧 v32.10: WebVideoView calls onTimeUpdate when video.currentTime changes.
+            // We forward this to a NEW method updateCurrentTimeFromWebView() that
+            // ONLY updates the published currentTime — does NOT seek the player.
+            // This prevents the feedback loop where timeupdate → seek → timeupdate.
+            // onSeek is now ONLY called for user-initiated seeks (seek bar, ±10s).
             WebVideoView(url: url) { time in
-                // v32.8: update SyncEngine.currentTime via onSeek (which calls
-                // syncEngine.seek(to:)). But seek() is a no-op when time is
-                // the same as currentTime — so this is safe.
-                // Actually, seek() DOES seek the player. We need a separate
-                // callback for time updates vs seeks.
-                // For now: only forward time updates that are >0.5s different
-                // from what we'd expect, to avoid feedback loops.
-                onSeek(time)
+                // v32.10: update currentTime without seeking
+                // We can't call syncEngine directly from here, so we use onSeek
+                // but with a flag. Actually, the parent (RoomView) passes
+                // onSeek as { pos in syncEngine.seek(to: pos) }. We need a
+                // different callback for time updates.
+                // For now, we'll use a static flag on WebViewControl to indicate
+                // "this is a time update, not a seek".
+                WebViewControl.shared.handleTimeUpdate(time)
             }
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 12))
@@ -801,6 +812,10 @@ struct WebVideoView: UIViewRepresentable {
                     '.ytp-subtitles-button, .ytp-size-button,',
                     '.ytp-fullscreen-button, .ytp-fullerscreen-edu-button,',
                     '.ytp-mute-button, .ytp-volume-slider,',
+                    '.ytp-unmute-button, .ytp-unmute,',
+                    '.ytp-mute-custom, .ytp-unmute-custom,',
+                    'button[aria-label*="Unmute"], button[aria-label*="Mute"],',
+                    'button[aria-label*="unmute"], button[aria-label*="mute"],',
                     '.ytp-prev-button, .ytp-next-button,',
                     '.ytp-play-button, .ytp-replay-button,',
                     '.ytp-time-display, .ytp-time-current, .ytp-time-duration,',
@@ -1023,8 +1038,9 @@ struct WebVideoView: UIViewRepresentable {
                     '}',
                     '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
                     '.ytp-progress-bar-container, .ytp-settings-button,',
-                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-play-button,',
-                    '.ytp-time-display, .ytp-pause-overlay,',
+                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-unmute-button,',
+                    'button[aria-label*="mute"], button[aria-label*="Mute"],',
+                    '.ytp-play-button, .ytp-time-display, .ytp-pause-overlay,',
                     '.ytp-endscreen-content, .html5-endscreen,',
                     '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay {',
                     '    display: none !important;',

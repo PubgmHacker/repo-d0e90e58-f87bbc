@@ -331,6 +331,21 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         seek(to: currentTime + delta)
     }
 
+    /// 🔧 v32.10 (July 2026): Update currentTime from WebView timeupdate events.
+    /// This does NOT seek — it only updates the published currentTime property
+    /// so the UI (seek bar, time display) reflects actual playback position.
+    /// Without this, seekRelative(+10) would seek to (0 + 10) = 10s instead of
+    /// (currentTime + 10), because currentTime was never updated from WebView.
+    func updateCurrentTimeFromWebView(_ time: TimeInterval) {
+        // Only update if difference is small (< 5s) — large jumps indicate
+        // the video actually seeked (user-initiated), not natural playback.
+        // This prevents feedback loops where our own seek triggers timeupdate
+        // which triggers another seek.
+        if abs(time - currentTime) < 5.0 {
+            currentTime = time
+        }
+    }
+
     // MARK: - Late Joiner Support
 
     /// 🔧 FIX 1.1: Late joiner must request current state from host immediately.

@@ -2,6 +2,11 @@ import SwiftUI
 import AVKit
 import WebKit
 
+// 🔧 v32.12: Notification when YouTube player is ready (hides loading overlay).
+extension Notification.Name {
+    static let youtubePlayerReady = Notification.Name("PlinkYouTubePlayerReady")
+}
+
 // MARK: - WebViewControl (singleton for JS bridge to WKWebView)
 //
 // 🔧 NEW: SyncEngine calls WebViewControl.shared.play()/pause()/seek() when
@@ -42,6 +47,12 @@ final class WebViewControl {
     var onDurationUpdate: ((TimeInterval) -> Void)?
     func handleDurationUpdate(_ duration: TimeInterval) {
         onDurationUpdate?(duration)
+    }
+
+    /// 🔧 v32.12: handle player ready event — used to hide loading overlay.
+    var onPlayerReady: (() -> Void)?
+    func handlePlayerReady() {
+        onPlayerReady?()
     }
 
     /// 🔧 v32.11: unmute video. iOS blocks unmuted autoplay without user gesture.
@@ -168,6 +179,10 @@ struct VideoContainerView: View {
     var onTogglePlay: () -> Void
     var onSeek: (TimeInterval) -> Void
 
+    // 🔧 v32.12: loading overlay state — hides YouTube UI flash on startup.
+    // Set to false when plinkBridge receives 'ready' event from JS.
+    @State private var isYouTubeReady = false
+
     var body: some View {
         GeometryReader { geo in
             let videoSize = computeVideoSize(container: geo.size)
@@ -181,8 +196,28 @@ struct VideoContainerView: View {
                 case .webview:
                     webVideoView(size: videoSize)
                 }
+
+                // 🔧 v32.12: BLACK LOADING OVERLAY — hides YouTube UI flash.
+                // Covers WebView until plinkBridge 'ready' event fires.
+                // This prevents user from seeing YouTube's raw player + unmute
+                // button for 3 seconds before CSS injection takes effect.
+                if playbackMode == .webview && !isYouTubeReady {
+                    Color.black
+                        .ignoresSafeArea()
+                        .overlay(
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(1.2)
+                        )
+                        .transition(.opacity)
+                }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isYouTubeReady = true
+                }
+            }
         }
     }
 
@@ -707,6 +742,9 @@ struct WebVideoView: UIViewRepresentable {
                 if duration > 0 {
                     WebViewControl.shared.handleDurationUpdate(duration)
                 }
+                // v32.12: notify WebViewControl that player is ready —
+                // this hides the loading overlay in VideoContainerView.
+                WebViewControl.shared.handlePlayerReady()
                 onPlayerReady?()
 
             case "durationChange":
@@ -987,6 +1025,24 @@ struct WebVideoView: UIViewRepresentable {
                         }
                         return false;
                     }, true);  // capture phase — runs BEFORE YouTube's handler
+
+                    // 🔧 v32.12: KEEP VIDEO PLAYING — YouTube sometimes auto-pauses
+                    // after 30-60s (ad overlay, pause overlay, buffering).
+                    // Periodically check: if video is paused but should be playing,
+                    // resume it. Also keep it unmuted.
+                    setInterval(function() {
+                        if (video.paused && video.currentTime > 0 && video.currentTime < (video.duration || Infinity) - 1) {
+                            console.log("[Plink v32.12] Video auto-paused, resuming");
+                            video.play().catch(function(e) {
+                                console.log("[Plink v32.12] Resume failed: " + e);
+                            });
+                        }
+                        // Also re-unmute if YouTube muted us
+                        if (video.muted) {
+                            video.muted = false;
+                            console.log("[Plink v32.12] Video auto-muted, unmuting");
+                        }
+                    }, 3000);  // check every 3 seconds
                     // Also block on parent #movie_player
                     var moviePlayer = document.getElementById('movie_player');
                     if (moviePlayer) {

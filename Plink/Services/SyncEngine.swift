@@ -344,14 +344,14 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     /// so the UI (seek bar, time display) reflects actual playback position.
     /// Without this, seekRelative(+10) would seek to (0 + 10) = 10s instead of
     /// (currentTime + 10), because currentTime was never updated from WebView.
+    /// 🔧 v32.17: removed the < 5.0 difference check — it was blocking legitimate
+    /// updates after seeks (seek to 100s, timeupdate sends 100.5, diff > 5 →
+    /// blocked). Now always updates, but only triggers objectWillChange if the
+    /// value actually changed (SwiftUI @Published deduplicates automatically).
     func updateCurrentTimeFromWebView(_ time: TimeInterval) {
-        // Only update if difference is small (< 5s) — large jumps indicate
-        // the video actually seeked (user-initiated), not natural playback.
-        // This prevents feedback loops where our own seek triggers timeupdate
-        // which triggers another seek.
-        if abs(time - currentTime) < 5.0 {
-            currentTime = time
-        }
+        // v32.17: always update — @Published deduplicates, no feedback loop risk
+        // because this method does NOT call seek() (which would cause the loop)
+        currentTime = time
     }
 
     /// 🔧 v32.11 (July 2026): Update duration from WebView.

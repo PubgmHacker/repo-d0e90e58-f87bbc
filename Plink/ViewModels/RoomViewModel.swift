@@ -146,8 +146,16 @@ final class RoomViewModel: WebSocketClientDelegate {
         Logger.ws.info("Сессия восстановлена — ресинхронизация")
         connectionStatus = .connected
 
+        // 🔧 v34.14: DON'T reload media if WebView already has it loaded!
+        // WS reconnects on fullscreen toggle → loadMedia → VideoContainerView
+        // re-render → WKWebView re-attached → rendering context destroyed.
+        // Check WebViewControl.shared.loadedVideoId — if set, video is already playing.
         if syncEngine.currentMediaItem == nil, let mediaItem = room.mediaItem {
-            syncEngine.loadMedia(mediaItem)
+            if WebViewControl.shared.loadedVideoId == nil {
+                syncEngine.loadMedia(mediaItem)
+            } else {
+                Logger.ws.info("🔍 SKIP loadMedia — WebView already has video loaded")
+            }
         }
 
         if !isHost {

@@ -149,7 +149,7 @@ struct RoomView: View {
         }
     }
 
-    // MARK: - Unified Layout (v34.12) — single view tree, no if/else switch
+    // MARK: - Unified Layout (v34.14) — single view tree, no if/else switch
 
     @ViewBuilder
     private func unifiedLayout(viewModel: RoomViewModel, geo: GeometryProxy, isLandscape: Bool) -> some View {
@@ -157,19 +157,16 @@ struct RoomView: View {
         let videoHeight: CGFloat = isLandscape ? geo.size.height : (geo.size.width * 9.0 / 16.0)
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
-        ZStack(alignment: .top) {
-            // Video section — ALWAYS rendered, NEVER torn down
-            videoSection(
-                viewModel: viewModel,
-                videoWidth: videoWidth,
-                videoHeight: videoHeight,
-                isFullscreen: isLandscape
-            )
-            .frame(width: videoWidth, height: videoHeight)
+        if isLandscape {
+            // Landscape: video fullscreen + chat overlay
+            ZStack {
+                videoSection(
+                    viewModel: viewModel,
+                    videoWidth: videoWidth,
+                    videoHeight: videoHeight,
+                    isFullscreen: true
+                )
 
-            // Chat — positioned differently based on orientation
-            if isLandscape {
-                // Landscape: chat overlays on top of video (right side)
                 RoomChatView(
                     messages: syncManager?.chatMessages ?? viewModel.messages,
                     chatText: chatTextBinding,
@@ -202,8 +199,17 @@ struct RoomView: View {
                         }
                     }
                 }
-            } else {
-                // Portrait: chat below video
+            }
+        } else {
+            // Portrait: VStack — video on top, chat below (no offset hacks)
+            VStack(spacing: 0) {
+                videoSection(
+                    viewModel: viewModel,
+                    videoWidth: videoWidth,
+                    videoHeight: videoHeight,
+                    isFullscreen: false
+                )
+
                 RoomChatView(
                     messages: syncManager?.chatMessages ?? viewModel.messages,
                     chatText: chatTextBinding,
@@ -219,7 +225,6 @@ struct RoomView: View {
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
-                .offset(y: videoHeight)
             }
         }
         .simultaneousGesture(

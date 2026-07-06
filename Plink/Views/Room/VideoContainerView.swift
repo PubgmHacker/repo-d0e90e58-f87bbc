@@ -629,56 +629,52 @@ struct WebVideoView: UIViewRepresentable {
 
             print("📺 YouTube v32.1: page loaded (\(host)), injecting CSS + JS bridge")
 
-            // CSS: hide everything except the video player
-            // 🔧 v32.1: use textContent instead of innerHTML — YouTube's CSP
-            // requires TrustedHTML for innerHTML assignments (TypeError:
-            // "This assignment requires a TrustedHTML"). textContent is not
-            // subject to TrustedHTML requirement.
+            // CSS: hide YouTube's UI but KEEP the video visible
+            // 🔧 v32.2: simplified CSS — only HIDE specific YouTube UI elements,
+            // do NOT touch #player / video positioning. Previous v32.1 used
+            // 'display: none' on body children + repositioned #player, which
+            // caused BLACK SCREEN because m.youtube.com wraps #player in
+            // containers we were hiding.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
                 // v32.1: textContent avoids TrustedHTML CSP error
+                // v32.2: only hide specific UI elements, don't touch player
                 style.textContent = [
-                    'ytd-app, ytd-watch-flexy, ytd-mobile-watch-action-unbar, ytd-guide,',
+                    '/* Hide YouTube header */',
                     '#masthead-container, #masthead, ytd-mini-guide-renderer,',
-                    '#guide-button, #back-button, #logo, #search-input,',
-                    'ytm-watch, ytm-watch-metadata, ytm-comment-section-renderer,',
-                    'ytm-compact-video-renderer, ytm-item-section-renderer,',
-                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                    'ytd-guide, #guide-button, #back-button, #logo,',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions {',
+                    '    display: none !important;',
+                    '}',
+                    '/* Hide video metadata + actions */',
+                    'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
                     '.slim-video-information-title, .slim-video-information-meta,',
                     '.video-action-bar, .video-action-bar-actions,',
-                    'ytm-slim-video-action-bar-renderer,',
-                    'ytm-playlist-loop-renderer, ytm-merch-shelf-renderer,',
-                    '.ytp-cards-button, .ytp-ce-element, .ytp-endscreen-content,',
-                    '.ytp-pause-overlay, .ytp-show-cards-title,',
-                    '#comments-button, #action-buttons,',
                     'ytm-channel-name, ytm-subscribe-button-renderer,',
-                    '.comment-simplebox, .comment-section,',
-                    'c3-metadata, .metadata-container,',
-                    'ytd-metadata-row-container-renderer {',
+                    'ytd-metadata-row-container-renderer, .metadata-container {',
                     '    display: none !important;',
                     '}',
-                    'body > *:not(#player-container-outer):not(#player-container):not(#player):not(style):not(script) {',
+                    '/* Hide comments */',
+                    'ytm-comment-section-renderer, .comment-simplebox, .comment-section,',
+                    '#comments-button {',
                     '    display: none !important;',
                     '}',
-                    '#player, #player-container, #player-container-outer,',
-                    '#player-container-inner, #movie_player, video {',
-                    '    position: fixed !important;',
-                    '    top: 0 !important;',
-                    '    left: 0 !important;',
-                    '    width: 100vw !important;',
-                    '    height: 100vh !important;',
-                    '    z-index: 9999 !important;',
-                    '    background: #000 !important;',
+                    '/* Hide recommendations */',
+                    'ytm-compact-video-renderer, ytm-item-section-renderer,',
+                    'ytm-playlist-loop-renderer, ytm-merch-shelf-renderer {',
+                    '    display: none !important;',
                     '}',
-                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-player-content {',
-                    '    opacity: 0 !important;',
-                    '    pointer-events: none !important;',
-                    '}'
+                    '/* Hide YouTube player overlays (cards, endscreen, pause overlay) */',
+                    '.ytp-cards-button, .ytp-ce-element, .ytp-endscreen-content,',
+                    '.ytp-pause-overlay, .ytp-show-cards-title {',
+                    '    display: none !important;',
+                    '}',
+                    '/* DO NOT touch #player, #movie_player, or video elements */',
+                    '/* Let YouTube handle video positioning naturally */'
                 ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32.1] CSS injected — YouTube UI hidden");
+                console.log("[Plink v32.2] CSS injected — UI hidden, video visible");
             })();
             """
 
@@ -736,11 +732,38 @@ struct WebVideoView: UIViewRepresentable {
                     window.seekTo = function(seconds) { video.currentTime = seconds; };
                     window.getCurrentTime = function() { return video.currentTime; };
 
-                    console.log("[Plink v32.1] Video bridge ready — try autoplay");
-                    video.muted = true;
-                    video.play().catch(function(e) {
-                        console.log("[Plink v32.1] Autoplay blocked: " + e);
+                    console.log("[Plink v32.2] Video bridge ready — try autoplay");
+                    // v32.2: try UNMUTED autoplay first. iOS blocks this for
+                    // WKWebView in some cases but allows it in others (depending
+                    // on user gesture history). If it fails, fall back to muted.
+                    video.muted = false;
+                    video.play().then(function() {
+                        console.log("[Plink v32.2] Unmuted autoplay succeeded!");
+                    }).catch(function(e) {
+                        console.log("[Plink v32.2] Unmuted autoplay blocked, trying muted: " + e);
+                        video.muted = true;
+                        video.play().catch(function(e2) {
+                            console.log("[Plink v32.2] Muted autoplay also blocked: " + e2);
+                        });
                     });
+
+                    // v32.2: tap anywhere on video to unmute (iOS requires user
+                    // gesture for unmuted playback in some contexts).
+                    video.addEventListener('click', function() {
+                        if (video.muted) {
+                            video.muted = false;
+                            video.play();
+                            console.log("[Plink v32.2] User tapped — unmuted");
+                        }
+                    });
+                    // Also listen on document for taps anywhere
+                    document.addEventListener('click', function() {
+                        if (video.muted) {
+                            video.muted = false;
+                            video.play();
+                            console.log("[Plink v32.2] Document tapped — unmuted");
+                        }
+                    }, { once: true });
                 }
 
                 attachToVideo();

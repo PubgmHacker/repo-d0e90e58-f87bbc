@@ -517,22 +517,21 @@ struct RoomView: View {
     // MARK: - Fullscreen (YouTube-style)
 
     private func enterFullscreen() {
+        print("📱 enterFullscreen: isFullscreenMode = true")
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = true
             showControls = true
         }
-        // 🔧 FIX v2: lock to landscape at AppDelegate level so device rotation
-        // events outside our control can't switch back to portrait mid-video.
         OrientationManager.shared.lockToLandscape()
         resetControlsTimer()
     }
 
     private func exitFullscreen() {
+        print("📱 exitFullscreen: isFullscreenMode = false")
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = false
             showControls = true
         }
-        // 🔧 FIX v2: lock back to portrait.
         OrientationManager.shared.lockToPortrait()
         resetControlsTimer()
     }

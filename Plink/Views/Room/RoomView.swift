@@ -318,9 +318,13 @@ struct RoomView: View {
             // controls are visible, overlay buttons get taps first.
             // When controls hidden (allowsHitTesting=false on overlay),
             // taps pass through to this layer.
+            // 🔧 v32.11: first tap also unmutes video (iOS requires user gesture
+            // for unmuted playback — WKWebView blocks unmuted autoplay).
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    // v32.11: unmute on every tap (no-op if already unmuted)
+                    WebViewControl.shared.unmute()
                     toggleControls()
                 }
                 .allowsHitTesting(true)
@@ -597,6 +601,11 @@ struct RoomView: View {
         // This updates the seek bar + time display without triggering seeks.
         WebViewControl.shared.onTimeUpdate = { time in
             syncEngine.updateCurrentTimeFromWebView(time)
+        }
+        // 🔧 v32.11: wire WebView duration updates to SyncEngine.duration.
+        // Without this, seek() clamps to min(time, 0) = 0 → always seeks to start.
+        WebViewControl.shared.onDurationUpdate = { duration in
+            syncEngine.updateDurationFromWebView(duration)
         }
 
         let vm = RoomViewModel(

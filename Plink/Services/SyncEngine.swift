@@ -293,7 +293,15 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     func seek(to time: TimeInterval) {
         guard isHost else { return }
-        let clamped = max(0, min(time, duration))
+        // 🔧 v32.11: in webview mode, duration is often 0 (never set from AVPlayer).
+        // min(time, 0) = 0 → seek always goes to start. Fix: only clamp to duration
+        // if duration > 0. In webview mode, video.duration is handled by JS.
+        let clamped: TimeInterval
+        if duration > 0 {
+            clamped = max(0, min(time, duration))
+        } else {
+            clamped = max(0, time)  // don't clamp upper bound if duration unknown
+        }
 
         // 🔧 FIX: for webview mode, there's no AVPlayer to seek. Just update
         // currentTime, send JS seek to YouTube player, and broadcast.
@@ -344,6 +352,16 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         if abs(time - currentTime) < 5.0 {
             currentTime = time
         }
+    }
+
+    /// 🔧 v32.11 (July 2026): Update duration from WebView.
+    /// In webview mode, AVPlayer is nil → duration never set from AVPlayer
+    /// observers. Without this, seek() clamps to min(time, 0) = 0 → always
+    /// seeks to start. This method sets duration from HTML5 video.duration.
+    func updateDurationFromWebView(_ duration: TimeInterval) {
+        guard duration > 0 else { return }
+        self.duration = duration
+        Logger.sync.info("📏 Duration updated from WebView: \(duration)s")
     }
 
     // MARK: - Late Joiner Support

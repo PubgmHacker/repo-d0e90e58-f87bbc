@@ -14,8 +14,9 @@ struct ServiceSelectionView: View {
     /// 🔧 LEGACY: Called for browser/customURL (no content browsing needed).
     var onSelect: (VideoService) -> Void
     /// 🔧 NEW: Called when user picks content in a service browser.
-    /// Passes: service, content URL, content title → parent opens RoomSetupView.
-    var onContentSelected: (VideoService, String, String) -> Void = { _, _, _ in }
+    /// Passes: service, content URL, content title, thumbnailURL → parent opens RoomSetupView.
+    /// 🔧 v33: added thumbnailURL — needed to show cover in "Смотрят сейчас" + history.
+    var onContentSelected: (VideoService, String, String, String?) -> Void = { _, _, _, _ in }
 
     @State private var appeared = false
     @State private var selectedCategory: ServiceCategory?
@@ -134,10 +135,10 @@ struct ServiceSelectionView: View {
         // 🔧 v28: YouTube opens YouTubeSearchView (native API search).
         // Bypasses YouTube's WKWebView bot check entirely.
         .sheet(isPresented: $showYouTubeSearch) {
-            YouTubeSearchView { contentURL, contentTitle in
+            YouTubeSearchView { contentURL, contentTitle, thumbnailURL in
                 showYouTubeSearch = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    onContentSelected(.youtube, contentURL, contentTitle)
+                    onContentSelected(.youtube, contentURL, contentTitle, thumbnailURL)
                 }
             }
         }
@@ -153,7 +154,7 @@ struct ServiceSelectionView: View {
                 // 🔧 DEBUG: log what we're about to pass
                 print("🔍 ServiceSelectionView: closing browser, will call onContentSelected with contentURL='\(contentURL)'")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    onContentSelected(service, contentURL, contentTitle)
+                    onContentSelected(service, contentURL, contentTitle, nil)
                 }
             }
         }

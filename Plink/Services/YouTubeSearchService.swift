@@ -69,6 +69,45 @@ final class YouTubeSearchService {
             throw SearchError.serverError(http.statusCode, errBody?.error)
         }
     }
+
+    // MARK: - Trending (v33)
+
+    /// 🔧 v33: Получить популярные/трендовые видео для экрана поиска.
+    /// Вызывается при открытии YouTubeSearchView — показывает контент сразу,
+    /// до того как пользователь введёт запрос.
+    func trending(regionCode: String = "RU", maxResults: Int = 20) async throws -> [YouTubeSearchResult] {
+        var components = URLComponents(url: apiBaseURL.appendingPathComponent("media/trending"),
+                                       resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "regionCode", value: regionCode),
+            URLQueryItem(name: "maxResults", value: String(maxResults))
+        ]
+
+        guard let url = components.url else {
+            throw SearchError.invalidQuery
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw SearchError.invalidResponse
+        }
+
+        switch http.statusCode {
+        case 200...299:
+            let payload = try decoder.decode(SearchResponse.self, from: data)
+            return payload.results
+        case 429:
+            throw SearchError.rateLimited
+        default:
+            let errBody = try? decoder.decode(ErrorBody.self, from: data)
+            throw SearchError.serverError(http.statusCode, errBody?.error)
+        }
+    }
 }
 
 // MARK: - Models

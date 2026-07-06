@@ -17,6 +17,9 @@ struct RoomSetupView: View {
     let service: VideoService
     let contentURL: String
     let contentTitle: String
+    /// 🔧 v33: thumbnail URL from YouTube search — used in MediaItem so
+    /// "Смотрят сейчас" + history show cover instead of gradient placeholder.
+    let thumbnailURL: String?
     var onRoomCreated: (Room) -> Void
 
     /// 🔧 FIX H1: RoomService for REST API room creation
@@ -491,11 +494,30 @@ struct RoomSetupView: View {
 
             let finalTitle = contentTitle.isEmpty ? name : contentTitle
 
+            // 🔧 v33: determine thumbnail URL.
+            // Priority: 1) thumbnailURL from YouTube search, 2) YouTube fallback by video ID,
+            // 3) nil (non-YouTube services — gradient placeholder will show).
+            let finalThumbnailURL: String?
+            if let thumb = thumbnailURL, !thumb.isEmpty {
+                finalThumbnailURL = thumb
+            } else if service == .youtube {
+                // Fallback: YouTube provides thumbnails at predictable URLs
+                let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? ""
+                if !videoId.isEmpty {
+                    finalThumbnailURL = "https://img.youtube.com/vi/\(videoId)/hqdefault.jpg"
+                } else {
+                    finalThumbnailURL = nil
+                }
+            } else {
+                finalThumbnailURL = nil
+            }
+            print("🖼️ RoomSetupView v33: thumbnailURL = \(finalThumbnailURL ?? "nil")")
+
             let mediaItem = MediaItem(
                 id: UUID().uuidString,
                 title: finalTitle,
                 artist: nil,
-                thumbnailURL: nil,
+                thumbnailURL: finalThumbnailURL,
                 streamURL: finalStreamURL,
                 duration: nil,
                 mediaType: .video,

@@ -989,7 +989,8 @@ struct WebVideoView: UIViewRepresentable {
                         sendBridge({ "event": "stateChange", "state": 3, "currentTime": video.currentTime });
                     });
                     video.addEventListener('timeupdate', function() {
-                        if (!video._plinkLastTimeUpdate || video.currentTime - video._plinkLastTimeUpdate >= 1.0) {
+                        // v32.17: send every 0.5s for smoother seek bar
+                        if (!video._plinkLastTimeUpdate || video.currentTime - video._plinkLastTimeUpdate >= 0.5) {
                             video._plinkLastTimeUpdate = video.currentTime;
                             sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });
                         }

@@ -20,96 +20,38 @@
 </head>
 <body>
     <!--
-      🔧 v30.1 (July 2026): YouTube IFrame API player with plinkBridge.
-      Loaded via WKWebView.loadHTMLString(_, baseURL: https://plink.app).
+      🔧 v31 (July 2026): Plain <iframe> embed (NOT IFrame API).
+      Reason: IFrame API gave error 150 (embedding restricted) for videos
+      like Gumball that ARE NOT actually embedding-restricted (they played
+      fine when WKWebView navigated to m.youtube.com/watch).
 
-      Protocol (window.webkit.messageHandlers.plinkBridge.postMessage):
-        { event: "ready" }                                  — player ready
-        { event: "stateChange", state: INT, currentTime: N } — state change
-        { event: "error", code: INT }                        — player error
+      Insight: a plain <iframe src="youtube.com/embed/ID"> is treated
+      differently by YouTube than the IFrame API. The IFrame API does
+      strict permission checks; the plain iframe just loads the player
+      page directly. This is the same pattern used by countless websites
+      that embed YouTube videos.
 
-      Commands (callable from Swift via evaluateJavaScript):
-        playVideo()   — resume playback
-        pauseVideo()  — pause
-        seekTo(N)     — seek to N seconds
-        getCurrentTime() → returns Double
+      The <video> element inside the iframe will be created by YouTube's
+      own player.js — we just observe state changes via postMessage from
+      a tiny observer script.
+
+      NOTE: %VIDEO_ID% placeholder is replaced at runtime.
     -->
-    <div id="player"></div>
+    <iframe
+        id="player"
+        src="https://www.youtube.com/embed/%VIDEO_ID%?playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&autoplay=1&mute=1&enablejsapi=1"
+        allow="autoplay; encrypted-media; fullscreen"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allowfullscreen>
+    </iframe>
 
     <script>
-        // 🔧 v30.1: Official YouTube IFrame API script.
-        // Per YouTube docs: https://www.youtube.com/iframe_api
-        var tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        var firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        // 🔧 v31: Observer script — polls the iframe's player state via
+        // YouTube's postMessage API. The iframe exposes YT.Player events
+        // via window.postMessage with JSON payloads starting with 'ytPlayer'.
+        var lastState = -2;
+        var lastTime = -1;
 
-        var player;
-        var VIDEO_ID = "%VIDEO_ID%";
-
-        // Called automatically by the IFrame API when ready
-        window.onYouTubeIframeAPIReady = function() {
-            console.log("[Plink] YouTube IFrame API ready, creating player for videoId=" + VIDEO_ID);
-            console.log("[Plink] window.location.origin = " + window.location.origin);
-            player = new YT.Player('player', {
-                height: '100%',
-                width: '100%',
-                videoId: VIDEO_ID,
-                playerVars: {
-                    'playsinline': 1,
-                    'controls': 0,            // hide native controls — Plink UI overlays
-                    'rel': 0,
-                    'modestbranding': 1,
-                    'iv_load_policy': 3,
-                    // 🔧 v30.4 (July 2026): DYNAMIC origin — uses window.location.origin
-                    // which is set by the baseURL passed to WKWebView.loadHTMLString.
-                    // This eliminates ANY possibility of origin mismatch between
-                    // the document host and the origin playerVar (was causing error 152).
-                    // Whatever baseURL Swift sets, JS reads it dynamically — perfect sync.
-                    'origin': window.location.origin,
-                    'enablejsapi': 1
-                },
-                events: {
-                    'onReady': onPlayerReady,
-                    'onError': onPlayerError,
-                    'onStateChange': onPlayerStateChange
-                }
-            });
-        };
-
-        function onPlayerReady(event) {
-            console.log("[Plink] Player ready — calling playVideo()");
-            // iOS blocks unmuted autoplay. Mute first, then play.
-            event.target.mute();
-            event.target.playVideo();
-
-            // Notify Swift that player is ready
-            sendBridge({ "event": "ready" });
-        }
-
-        function onPlayerError(event) {
-            // Error codes: 2=invalid param, 5=HTML5 error, 100=not found,
-            // 101/150=embedding disabled. 153 is iOS-specific (config error).
-            console.error("[Plink] Player error code: " + event.data);
-            sendBridge({ "event": "error", "code": event.data });
-        }
-
-        function onPlayerStateChange(event) {
-            // YT.PlayerState: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
-            console.log("[Plink] Player state: " + event.data);
-
-            var currentTime = 0;
-            if (player && player.getCurrentTime) {
-                currentTime = player.getCurrentTime();
-            }
-            sendBridge({
-                "event": "stateChange",
-                "state": event.data,
-                "currentTime": currentTime
-            });
-        }
-
-        // 🔧 Helper: send message to Swift via plinkBridge
         function sendBridge(payload) {
             try {
                 window.webkit.messageHandlers.plinkBridge.postMessage(payload);
@@ -118,18 +60,77 @@
             }
         }
 
-        // 🔧 v30.1: Commands callable from Swift via webView.evaluateJavaScript
+        // Listen for YouTube's postMessage events from the iframe
+        window.addEventListener("message", function(event) {
+            try {
+                if (typeof event.data === "string" && event.data.startsWith("{")) {
+                    var data = JSON.parse(event.data);
+                    // YouTube IFrame postMessage format varies — handle both
+                    if (data.event === "onReady") {
+                        console.log("[Plink] Player ready (via postMessage)");
+                        sendBridge({ "event": "ready" });
+                    }
+                    if (data.event === "onStateChange") {
+                        console.log("[Plink] Player state: " + data.info);
+                        sendBridge({ "event": "stateChange", "state": data.info });
+                    }
+                    if (data.event === "onError") {
+                        console.log("[Plink] Player error: " + data.info);
+                        sendBridge({ "event": "error", "code": data.info });
+                    }
+                }
+            } catch(e) {
+                // Ignore non-JSON messages
+            }
+        });
+
+        // 🔧 v31: Fallback polling — some YouTube embeds don't post messages
+        // unless explicitly told to. We try to access the iframe's player
+        // via the IFrame API (which we load here too for control purposes).
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        var ytPlayer;
+        window.onYouTubeIframeAPIReady = function() {
+            console.log("[Plink] IFrame API ready, attaching to existing iframe");
+            ytPlayer = new YT.Player('player', {
+                events: {
+                    'onReady': function(event) {
+                        console.log("[Plink] Player ready (via IFrame API)");
+                        sendBridge({ "event": "ready" });
+                    },
+                    'onStateChange': function(event) {
+                        var currentTime = 0;
+                        try { currentTime = ytPlayer.getCurrentTime() || 0; } catch(e) {}
+                        console.log("[Plink] State: " + event.data + ", time: " + currentTime);
+                        sendBridge({
+                            "event": "stateChange",
+                            "state": event.data,
+                            "currentTime": currentTime
+                        });
+                    },
+                    'onError': function(event) {
+                        console.log("[Plink] Error: " + event.data);
+                        sendBridge({ "event": "error", "code": event.data });
+                    }
+                }
+            });
+        };
+
+        // 🔧 v31: Bridge commands (callable from Swift via evaluateJavaScript)
         window.playVideo = function() {
-            if (player) player.playVideo();
+            if (ytPlayer) ytPlayer.playVideo();
         };
         window.pauseVideo = function() {
-            if (player) player.pauseVideo();
+            if (ytPlayer) ytPlayer.pauseVideo();
         };
         window.seekTo = function(seconds) {
-            if (player) player.seekTo(seconds, true);
+            if (ytPlayer) ytPlayer.seekTo(seconds, true);
         };
         window.getCurrentTime = function() {
-            return player ? player.getCurrentTime() : 0;
+            return ytPlayer ? ytPlayer.getCurrentTime() : 0;
         };
     </script>
 </body>

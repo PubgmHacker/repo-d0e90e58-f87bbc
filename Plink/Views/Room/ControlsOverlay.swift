@@ -23,6 +23,14 @@ struct ControlsOverlay: View {
 
     @Binding var isVisible: Bool
 
+    /// 🔧 v32.20: drag state moved HERE (parent) instead of inside SeekBar.
+    /// When currentTime updates every 0.5s, ControlsOverlay re-renders →
+    /// SeekBar is recreated → its @State dragRatio/isDragging RESET to nil/false.
+    /// This caused seek bar to snap back during drag. Moving state to parent
+    /// preserves it across re-renders.
+    @State private var seekDragRatio: Double? = nil
+    @State private var seekIsDragging = false
+
     var body: some View {
         ZStack {
             // Subtle gradient for readability (very light)
@@ -129,6 +137,8 @@ struct ControlsOverlay: View {
 
             SeekBar(
                 progress: duration > 0 ? currentTime / duration : 0,
+                dragRatio: $seekDragRatio,
+                isDragging: $seekIsDragging,
                 onSeek: { ratio in onSeek(ratio * duration) }
             )
 
@@ -193,16 +203,17 @@ struct GlassButtonStyle: ButtonStyle {
 // MARK: - Seek Bar
 private struct SeekBar: View {
     let progress: Double
+    /// 🔧 v32.20: drag state owned by PARENT (ControlsOverlay) via Binding.
+    /// This prevents state reset when currentTime updates re-render SeekBar.
+    @Binding var dragRatio: Double?
+    @Binding var isDragging: Bool
     var onSeek: (Double) -> Void
-
-    @State private var dragRatio: Double? = nil
-    @State private var isDragging = false
 
     var body: some View {
         GeometryReader { geo in
-            // v32.18: while dragging, ignore 'progress' from syncEngine
-            // (which lags behind finger). Only show dragRatio.
-            let displayProgress = isDragging ? (dragRatio ?? progress) : progress
+            // v32.20: while dragging OR within 1.5s after drag ended,
+            // show dragRatio (finger position). Otherwise show progress.
+            let displayProgress = (isDragging || dragRatio != nil) ? (dragRatio ?? progress) : progress
 
             ZStack(alignment: .leading) {
                 Capsule()
@@ -218,7 +229,7 @@ private struct SeekBar: View {
                     .frame(width: 12, height: 12)
                     .offset(x: geo.size.width * displayProgress - 6)
                     .opacity(displayProgress > 0 && displayProgress < 1 ? 1 : 0)
-                    .scaleEffect(isDragging ? 1.3 : 1.0)  // v32.18: bigger while dragging
+                    .scaleEffect(isDragging ? 1.3 : 1.0)
                     .animation(.spring(response: 0.2), value: isDragging)
             }
             .frame(height: 20)
@@ -226,19 +237,18 @@ private struct SeekBar: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        // v32.18: live update during drag — finger controls the bar
                         let ratio = min(max(value.location.x / geo.size.width, 0), 1)
                         dragRatio = ratio
                         isDragging = true
                     }
                     .onEnded { value in
                         let ratio = min(max(value.location.x / geo.size.width, 0), 1)
+                        dragRatio = ratio  // keep position visible
                         onSeek(ratio)
-                        // v32.18: keep dragRatio visible longer (1.5s) so the bar
-                        // doesn't snap back to old position before seek takes effect
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        isDragging = false
+                        // v32.20: clear dragRatio after 2s so progress takes over
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                             dragRatio = nil
-                            isDragging = false
                         }
                     }
             )

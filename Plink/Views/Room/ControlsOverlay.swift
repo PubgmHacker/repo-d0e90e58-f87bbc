@@ -195,8 +195,12 @@ private struct SeekBar: View {
     let progress: Double
     var onSeek: (Double) -> Void
 
+    @State private var dragRatio: Double? = nil
+
     var body: some View {
         GeometryReader { geo in
+            let displayProgress = dragRatio ?? progress
+
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(Color.white.opacity(0.2))
@@ -204,21 +208,31 @@ private struct SeekBar: View {
 
                 Capsule()
                     .fill(Color.white.opacity(0.8))
-                    .frame(width: geo.size.width * progress, height: 3)
+                    .frame(width: geo.size.width * displayProgress, height: 3)
 
                 Circle()
                     .fill(Color.white)
                     .frame(width: 12, height: 12)
-                    .offset(x: geo.size.width * progress - 6)
-                    .opacity(progress > 0 && progress < 1 ? 1 : 0)
+                    .offset(x: geo.size.width * displayProgress - 6)
+                    .opacity(displayProgress > 0 && displayProgress < 1 ? 1 : 0)
             }
             .frame(height: 20)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        // v32.16: live update during drag
+                        let ratio = min(max(value.location.x / geo.size.width, 0), 1)
+                        dragRatio = ratio
+                    }
                     .onEnded { value in
                         let ratio = min(max(value.location.x / geo.size.width, 0), 1)
                         onSeek(ratio)
+                        // Reset drag state after a short delay so the bar
+                        // shows the seek result, not the drag position
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dragRatio = nil
+                        }
                     }
             )
         }

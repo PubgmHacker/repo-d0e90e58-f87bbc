@@ -64,17 +64,25 @@ final class WebViewControl {
     /// 🔧 v32.11: unmute video. iOS blocks unmuted autoplay without user gesture.
     /// This must be called from a user gesture handler (tap) to work.
     /// Calls video.muted = false; video.play() via evaluateJavaScript.
+    /// 🔧 v32.16: don't call video.play() if user paused — unmute should ONLY
+    /// unmute, not resume playback. Otherwise tapping the screen while paused
+    /// would resume the video (bug).
     func unmute() {
         let js = """
         (function() {
             var v = document.querySelector('video');
             if (v) {
                 v.muted = false;
-                v.play().then(function() {
-                    console.log('[Plink v32.11] Unmuted successfully');
-                }).catch(function(e) {
-                    console.log('[Plink v32.11] Unmute play failed: ' + e);
-                });
+                // v32.16: only play if user hasn't paused
+                if (!window._plinkUserPaused) {
+                    v.play().then(function() {
+                        console.log('[Plink v32.16] Unmuted + playing');
+                    }).catch(function(e) {
+                        console.log('[Plink v32.16] Unmute play failed: ' + e);
+                    });
+                } else {
+                    console.log('[Plink v32.16] Unmuted (user paused, not resuming)');
+                }
             }
         })();
         """
@@ -1072,7 +1080,14 @@ struct WebVideoView: UIViewRepresentable {
 
                     setInterval(function() {
                         // v32.15: don't auto-resume if user explicitly paused
-                        if (window._plinkUserPaused) return;
+                        if (window._plinkUserPaused) {
+                            // v32.16: but still re-unmute if needed (user paused
+                            // doesn't mean user muted)
+                            if (video.muted) {
+                                video.muted = false;
+                            }
+                            return;
+                        }
 
                         // v32.13: detect reset to 0 while video should be playing
                         // (YouTube sometimes reloads the video from start)
@@ -1094,10 +1109,11 @@ struct WebVideoView: UIViewRepresentable {
                                 console.log("[Plink v32.13] Resume failed: " + e);
                             });
                         }
-                        // Also re-unmute if YouTube muted us
+                        // v32.16: re-unmute if YouTube muted us — check more
+                        // frequently to prevent audio dropouts
                         if (video.muted) {
                             video.muted = false;
-                            console.log("[Plink v32.13] Video auto-muted, unmuting");
+                            console.log("[Plink v32.16] Video auto-muted, unmuting");
                         }
 
                         // v32.13: aggressively hide any ad/overlay elements that
@@ -1118,7 +1134,7 @@ struct WebVideoView: UIViewRepresentable {
                             el.style.opacity = '0';
                             el.style.pointerEvents = 'none';
                         });
-                    }, 2000);  // check every 2 seconds (faster)
+                    }, 1000);  // v32.16: check every 1 second (faster mute detection)
                     // Also block on parent #movie_player
                     var moviePlayer = document.getElementById('movie_player');
                     if (moviePlayer) {

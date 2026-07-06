@@ -465,19 +465,26 @@ struct RoomSetupView: View {
                     }
                     return
                 }
-                // Build embed URL using URLComponents so query params are properly encoded
-                var embedComponents = URLComponents(string: "https://www.youtube-nocookie.com/embed/\(videoId)")!
+                // 🔧 v30.3 (July 2026): switched from youtube-nocookie.com → youtube.com
+                // and removed widget_referrer. Why:
+                //   - v30.2 uses baseURL=https://www.youtube.com in loadHTMLString
+                //   - IFrame API inside loads from www.youtube.com/iframe_api
+                //   - If streamURL points to youtube-nocookie.com, the WebView may
+                //     ALSO try to load that URL → mixed origin → DownloadFailed
+                //   - widget_referrer=https://plink.app caused origin mismatch
+                //     with new baseURL=https://www.youtube.com → error 152
+                // Now everything is consistent: youtube.com everywhere.
+                var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
                 embedComponents.queryItems = [
                     URLQueryItem(name: "playsinline", value: "1"),
                     URLQueryItem(name: "rel", value: "0"),
                     URLQueryItem(name: "modestbranding", value: "1"),
                     URLQueryItem(name: "iv_load_policy", value: "3"),
-                    URLQueryItem(name: "origin", value: "https://plink.app"),
-                    URLQueryItem(name: "widget_referrer", value: "https://plink.app"),
+                    URLQueryItem(name: "origin", value: "https://www.youtube.com"),
                 ]
-                finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube-nocookie.com/embed/\(videoId)"
+                finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
                 finalSource = .youtube
-                print("🔧 RoomSetupView v29: YouTube embed URL='\(finalStreamURL)', videoId='\(videoId)'")
+                print("🔧 RoomSetupView v30.3: YouTube embed URL='\(finalStreamURL)', videoId='\(videoId)'")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

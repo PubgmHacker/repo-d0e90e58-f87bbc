@@ -818,36 +818,6 @@ struct WebVideoView: UIViewRepresentable {
             }
         }
 
-            // 🔧 v29.1: sanitize video ID (defense in depth — same logic as
-            // PlinkSchemeHandler.sanitizeVideoId, but inlined here for v30).
-            let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
-            let finalHTML = htmlContent.replacingOccurrences(of: "%VIDEO_ID%", with: cleanVideoId)
-
-            // 🔧 v30.4 (July 2026): baseURL = https://plink.app + dynamic origin in JS
-            //
-            // v30.2 used https://www.youtube.com as baseURL but JS had hardcoded
-            // origin='https://www.youtube.com'. v30.3 tried youtube.com everywhere
-            // but streamURL still had widget_referrer=plink.app → mismatch → error 152.
-            //
-            // v30.4 final approach:
-            //   - Swift baseURL = https://plink.app (legitimate app domain)
-            //   - JS origin = window.location.origin (READS baseURL dynamically)
-            //   - streamURL = youtube.com/embed/... (no widget_referrer, no nocookie)
-            // Now there's NO possibility of mismatch — JS reads the actual page origin.
-            //
-            // Why plink.app instead of youtube.com:
-            //   - youtube.com as baseURL for non-youtube.com HTML triggered CORS
-            //     issues with the IFrame API script loader → 152.
-            //   - plink.app is OUR domain, we control it, and YouTube IFrame API
-            //     accepts ANY origin as long as it matches between page and playerVar.
-            let baseURL = URL(string: "https://plink.app")!
-
-            print("📺 YouTube v30.4: loadHTMLString with baseURL=https://plink.app, videoId='\(cleanVideoId)' (origin will be dynamic in JS)")
-            DispatchQueue.main.async {
-                webView.loadHTMLString(finalHTML, baseURL: baseURL)
-            }
-        }
-
         /// 🔧 v30: same sanitizer logic as PlinkSchemeHandler.sanitizeVideoId,
         /// inlined here so Coordinator doesn't depend on PlinkSchemeHandler
         /// (which is now legacy / unused in v30).

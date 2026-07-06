@@ -423,11 +423,10 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     func startStateBroadcast() {
         stopStateBroadcast()
         guard isHost else { return }
-        // 🔧 FIX: don't broadcast state for webview mode — there's no AVPlayer
-        // to sync. WebView playback (YouTube embed) handles its own state.
-        // Without this guard, the host floods the WS queue with seek commands
-        // every 2 seconds, even when disconnected (hundreds of messages pile up).
-        guard player != nil else { return }
+        // 🔧 v34: ENABLE state broadcast for webview mode too — needed for sync.
+        // Previously disabled because there's no AVPlayer, but now WebViewControl
+        // provides currentTime via updateCurrentTimeFromWebView().
+        // Without state broadcast, non-host participants drift indefinitely.
 
         stateBroadcastTimer = Timer.scheduledTimer(
             withTimeInterval: Constants.stateBroadcastInterval,
@@ -542,6 +541,18 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
         Logger.sync.info("▶️ PLAY  host@\(fmt(eventMediaTime))s → seek to \(fmt(compensatedTarget))s (+\(compensationMs)ms latency, RTT \(Int(estimatedRTT*1000))ms)")
 
+        // 🔧 v34: WEBVIEW mode — control YouTube player via JS bridge
+        if player == nil {
+            isPlaying = true
+            // Seek to compensated position first, then play
+            if abs(currentTime - compensatedTarget) > 1.0 {
+                WebViewControl.shared.seek(to: compensatedTarget)
+                currentTime = compensatedTarget
+            }
+            WebViewControl.shared.play()
+            return
+        }
+
         // 🔧 FAST PATH: If we're already playing and within tolerance, do nothing
         // (avoids stutter on rapid play/pause toggles)
         if isPlaying && abs(currentTime - compensatedTarget) < Constants.seekTolerance {
@@ -576,6 +587,14 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         recordSyncPoint(mediaTime: eventMediaTime, isPlaying: false, serverTime: message.timestamp)
 
         Logger.sync.info("⏸️ PAUSE at \(fmt(eventMediaTime))s")
+
+        // 🔧 v34: WEBVIEW mode — pause YouTube player via JS bridge
+        if player == nil {
+            isPlaying = false
+            currentTime = eventMediaTime
+            WebViewControl.shared.pause()
+            return
+        }
 
         // 🔧 IMMEDIATE pause — no waiting for seek completion
         player?.pause()
@@ -629,6 +648,14 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
         recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
         Logger.sync.info("⏩ SEEK  host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s [\(isStatePulse ? "pulse" : "real-seek")]")
+
+        // 🔧 v34: WEBVIEW mode — seek YouTube player via JS bridge
+        if player == nil {
+            currentTime = compensatedTarget
+            seekLockUntil = Date().addingTimeInterval(1.5)
+            WebViewControl.shared.seek(to: compensatedTarget)
+            return
+        }
 
         let wasPlaying = isPlaying
         seekSilently(to: compensatedTarget, preserveRate: wasPlaying)

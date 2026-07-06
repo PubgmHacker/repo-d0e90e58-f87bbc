@@ -116,7 +116,8 @@ struct RoomView: View {
         .onChange(of: scenePhase) { _, newPhase in
             // КЛЮЧЕВОЙ ФИКС: при возврате из background принудительно сбрасываем
             // ориентацию и fullscreen-режим, иначе чат растягивается.
-            if newPhase == .active {
+            // 🔧 v34.2: DON'T reset if user is in fullscreen mode — would exit fullscreen
+            if newPhase == .active && !isFullscreenMode {
                 resetToPortrait()
             }
         }
@@ -377,7 +378,8 @@ struct RoomView: View {
                 },
                 onToggleFullscreen: {
                     HapticManager.impact(.light)
-                    if isFullscreen {
+                    // 🔧 v34.2: check isFullscreenMode (state), not isFullscreen (param)
+                    if isFullscreenMode {
                         exitFullscreen()
                     } else {
                         enterFullscreen()
@@ -531,6 +533,8 @@ struct RoomView: View {
     /// level via OrientationManager.lockToPortrait(). This prevents system edge-swipe
     /// gestures and accidental device rotations from interfering with the chat layout.
     private func resetToPortrait() {
+        // 🔧 v34.2: don't reset if user is in fullscreen mode
+        guard !isFullscreenMode else { return }
         isFullscreenMode = false
         showChatPanel = true
         showEmojiPicker = false

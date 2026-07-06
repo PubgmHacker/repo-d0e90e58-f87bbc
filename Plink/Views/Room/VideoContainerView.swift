@@ -23,14 +23,12 @@ extension Notification.Name {
 @MainActor
 final class WebViewControl {
     static let shared = WebViewControl()
-    /// 🔧 v34: STRONG reference to WKWebView (was: weak).
-    /// When device rotates, SwiftUI switches between portraitLayout and
-    /// landscapeLayout — different view trees. The old WKWebView gets
-    /// deallocated (no strong ref) → new makeUIView creates a new WKWebView
-    /// → video resets to beginning.
-    /// With strong ref, the WebView persists across layout changes.
-    /// Cleared in unregister() when room closes.
     var webView: WKWebView?
+    /// 🔧 v34.8: store loadedVideoId HERE (singleton) instead of Coordinator.
+    /// When SwiftUI switches portraitLayout ↔ landscapeLayout, it creates a
+    /// NEW Coordinator → loadedVideoId was nil → loadVideoOnce reloaded video.
+    /// With singleton storage, loadedVideoId persists across Coordinator changes.
+    var loadedVideoId: String?
     /// 🔧 v32.10: callback for time updates from WebView (NOT seeks).
     /// Wired up by RoomViewModel to call syncEngine.updateCurrentTimeFromWebView().
     var onTimeUpdate: ((TimeInterval) -> Void)?
@@ -41,6 +39,7 @@ final class WebViewControl {
 
     func unregister() {
         self.webView = nil
+        self.loadedVideoId = nil
     }
 
     /// 🔧 v32.10: handle time updates from <video> element.
@@ -1295,10 +1294,19 @@ struct WebVideoView: UIViewRepresentable {
         }
 
         /// Load YouTube video exactly once. Blocks duplicate calls from SwiftUI state changes.
+        /// 🔧 v34.8: uses WebViewControl.shared.loadedVideoId (singleton) instead of
+        /// self.loadedVideoId (Coordinator instance). When SwiftUI switches portrait ↔
+        /// landscape, it creates a NEW Coordinator → old loadedVideoId was nil → reload.
+        /// With singleton, loadedVideoId persists across Coordinator recreation.
         func loadVideoOnce(id: String, webView: WKWebView) {
             guard !id.isEmpty else { return }
-            guard id != loadedVideoId else { return }
-            self.loadedVideoId = id
+            // v34.8: check SINGLETON loadedVideoId, not self.loadedVideoId
+            guard id != WebViewControl.shared.loadedVideoId else {
+                print("📺 v34.8: video already loaded (\(id)) — skipping reload")
+                return
+            }
+            WebViewControl.shared.loadedVideoId = id
+            self.loadedVideoId = id  // also keep local copy for compatibility
 
             // 🔧 v32 (July 2026): Load FULL m.youtube.com/watch page directly.
             //

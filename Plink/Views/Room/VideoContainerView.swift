@@ -599,61 +599,86 @@ struct WebVideoView: UIViewRepresentable {
         /// 🔧 v32: After m.youtube.com/watch finishes loading, inject CSS to hide
         /// YouTube's UI (header, recommendations, comments) and JS to bridge the
         /// HTML5 <video> element to Swift via plinkBridge.
+        /// 🔧 v32.1: also block navigation to accounts.google.com (bot check redirect).
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            // 🔧 v32.1: Block redirect to accounts.google.com (bot check).
+            // YouTube redirects here when it wants the user to "Sign in to confirm
+            // you're not a bot". If we block this redirect, YouTube's player keeps
+            // playing the video (since the player already started before the redirect).
+            if let url = navigationAction.request.url {
+                let host = url.host?.lowercased() ?? ""
+                if host.contains("accounts.google.com") || host.contains("google.com/signin") {
+                    print("🚫 YouTube v32.1: blocked redirect to \(host) (bot check)")
+                    decisionHandler(.cancel)
+                    return
+                }
+            }
+            decisionHandler(.allow)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            print("📺 YouTube v32: page loaded, injecting CSS + JS bridge")
+            // 🔧 v32.1: only inject on youtube.com pages, not on google.com (which
+            // we now block anyway, but be defensive).
+            guard let url = webView.url, let host = url.host?.lowercased(),
+                  host.contains("youtube.com") || host.contains("youtu.be") else {
+                print("⚠️ YouTube v32.1: skipped injection on non-youtube page: \(webView.url?.host ?? "nil")")
+                return
+            }
+
+            print("📺 YouTube v32.1: page loaded (\(host)), injecting CSS + JS bridge")
 
             // CSS: hide everything except the video player
+            // 🔧 v32.1: use textContent instead of innerHTML — YouTube's CSP
+            // requires TrustedHTML for innerHTML assignments (TypeError:
+            // "This assignment requires a TrustedHTML"). textContent is not
+            // subject to TrustedHTML requirement.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
-                style.innerHTML = `
-                    /* Hide all YouTube UI elements */
-                    ytd-app, ytd-watch-flexy, ytd-mobile-watch-action-unbar, ytd-guide,
-                    #masthead-container, #masthead, ytd-mini-guide-renderer,
-                    #guide-button, #back-button, #logo, #search-input,
-                    ytm-watch, ytm-watch-metadata, ytm-comment-section-renderer,
-                    ytm-compact-video-renderer, ytm-item-section-renderer,
-                    .mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,
-                    .slim-video-information-title, .slim-video-information-meta,
-                    .video-action-bar, .video-action-bar-actions,
-                    ytm-slim-video-action-bar-renderer,
-                    ytm-playlist-loop-renderer, ytm-merch-shelf-renderer,
-                    .ytp-cards-button, .ytp-ce-element, .ytp-endscreen-content,
-                    .ytp-pause-overlay, .ytp-show-cards-title,
-                    #comments-button, #action-buttons,
-                    ytm-channel-name, ytm-subscribe-button-renderer,
-                    .comment-simplebox, .comment-section,
-                    c3-metadata, .metadata-container,
-                    ytd-metadata-row-container-renderer,
-                    /* Show only the player */
-                    #player, #player-container, #player-container-outer,
-                    #player-container-inner, #movie_player, video {
-                        /* nothing — these stay visible */
-                    }
-                    /* Hide everything that's NOT the player */
-                    body > *:not(#player-container-outer):not(#player-container):not(#player):not(style):not(script) {
-                        display: none !important;
-                    }
-                    /* Make player fill the screen */
-                    #player, #player-container, #player-container-outer,
-                    #player-container-inner, #movie_player, video {
-                        position: fixed !important;
-                        top: 0 !important;
-                        left: 0 !important;
-                        width: 100vw !important;
-                        height: 100vh !important;
-                        z-index: 9999 !important;
-                        background: #000 !important;
-                    }
-                    /* Hide YouTube's own controls (Plink UI overlays) */
-                    .ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,
-                    .ytp-progress-bar-container, .ytp-player-content {
-                        opacity: 0 !important;
-                        pointer-events: none !important;
-                    }
-                `;
+                // v32.1: textContent avoids TrustedHTML CSP error
+                style.textContent = [
+                    'ytd-app, ytd-watch-flexy, ytd-mobile-watch-action-unbar, ytd-guide,',
+                    '#masthead-container, #masthead, ytd-mini-guide-renderer,',
+                    '#guide-button, #back-button, #logo, #search-input,',
+                    'ytm-watch, ytm-watch-metadata, ytm-comment-section-renderer,',
+                    'ytm-compact-video-renderer, ytm-item-section-renderer,',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                    '.slim-video-information-title, .slim-video-information-meta,',
+                    '.video-action-bar, .video-action-bar-actions,',
+                    'ytm-slim-video-action-bar-renderer,',
+                    'ytm-playlist-loop-renderer, ytm-merch-shelf-renderer,',
+                    '.ytp-cards-button, .ytp-ce-element, .ytp-endscreen-content,',
+                    '.ytp-pause-overlay, .ytp-show-cards-title,',
+                    '#comments-button, #action-buttons,',
+                    'ytm-channel-name, ytm-subscribe-button-renderer,',
+                    '.comment-simplebox, .comment-section,',
+                    'c3-metadata, .metadata-container,',
+                    'ytd-metadata-row-container-renderer {',
+                    '    display: none !important;',
+                    '}',
+                    'body > *:not(#player-container-outer):not(#player-container):not(#player):not(style):not(script) {',
+                    '    display: none !important;',
+                    '}',
+                    '#player, #player-container, #player-container-outer,',
+                    '#player-container-inner, #movie_player, video {',
+                    '    position: fixed !important;',
+                    '    top: 0 !important;',
+                    '    left: 0 !important;',
+                    '    width: 100vw !important;',
+                    '    height: 100vh !important;',
+                    '    z-index: 9999 !important;',
+                    '    background: #000 !important;',
+                    '}',
+                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+                    '.ytp-progress-bar-container, .ytp-player-content {',
+                    '    opacity: 0 !important;',
+                    '    pointer-events: none !important;',
+                    '}'
+                ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32] CSS injected — YouTube UI hidden");
+                console.log("[Plink v32.1] CSS injected — YouTube UI hidden");
             })();
             """
 
@@ -667,23 +692,20 @@ struct WebVideoView: UIViewRepresentable {
                     try {
                         window.webkit.messageHandlers.plinkBridge.postMessage(payload);
                     } catch(e) {
-                        console.log("[Plink v32] plinkBridge error: " + e);
+                        console.log("[Plink v32.1] plinkBridge error: " + e);
                     }
                 }
 
                 function attachToVideo() {
                     var video = document.querySelector('video');
                     if (!video) {
-                        // Video not ready yet, retry in 500ms
                         setTimeout(attachToVideo, 500);
                         return;
                     }
 
-                    console.log("[Plink v32] Found <video> element, attaching listeners");
+                    console.log("[Plink v32.1] Found <video> element, attaching listeners");
                     sendBridge({ "event": "ready" });
 
-                    // State mapping: HTML5 video events → our state codes
-                    // 1 = playing, 2 = paused, 0 = ended, 3 = buffering
                     video.addEventListener('play', function() {
                         sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });
                     });
@@ -700,7 +722,6 @@ struct WebVideoView: UIViewRepresentable {
                         sendBridge({ "event": "stateChange", "state": 3, "currentTime": video.currentTime });
                     });
                     video.addEventListener('timeupdate', function() {
-                        // Throttle: only send every 1 second
                         if (!video._plinkLastTimeUpdate || video.currentTime - video._plinkLastTimeUpdate >= 1.0) {
                             video._plinkLastTimeUpdate = video.currentTime;
                             sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });
@@ -710,33 +731,30 @@ struct WebVideoView: UIViewRepresentable {
                         sendBridge({ "event": "error", "code": video.error ? video.error.code : -1 });
                     });
 
-                    // Bridge commands
                     window.playVideo = function() { video.play(); };
                     window.pauseVideo = function() { video.pause(); };
                     window.seekTo = function(seconds) { video.currentTime = seconds; };
                     window.getCurrentTime = function() { return video.currentTime; };
 
-                    console.log("[Plink v32] Video bridge ready — try autoplay");
-                    // Try to autoplay (muted, since iOS blocks unmuted autoplay)
+                    console.log("[Plink v32.1] Video bridge ready — try autoplay");
                     video.muted = true;
                     video.play().catch(function(e) {
-                        console.log("[Plink v32] Autoplay blocked: " + e);
+                        console.log("[Plink v32.1] Autoplay blocked: " + e);
                     });
                 }
 
-                // Start polling for video element
                 attachToVideo();
             })();
             """
 
             webView.evaluateJavaScript(cssInjection) { _, error in
                 if let error = error {
-                    print("⚠️ YouTube v32: CSS injection error: \(error)")
+                    print("⚠️ YouTube v32.1: CSS injection error: \(error)")
                 }
             }
             webView.evaluateJavaScript(jsBridge) { _, error in
                 if let error = error {
-                    print("⚠️ YouTube v32: JS bridge injection error: \(error)")
+                    print("⚠️ YouTube v32.1: JS bridge injection error: \(error)")
                 }
             }
         }

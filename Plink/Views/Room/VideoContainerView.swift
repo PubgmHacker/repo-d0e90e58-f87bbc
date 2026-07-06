@@ -635,46 +635,94 @@ struct WebVideoView: UIViewRepresentable {
             // 'display: none' on body children + repositioned #player, which
             // caused BLACK SCREEN because m.youtube.com wraps #player in
             // containers we were hiding.
+            // 🔧 v32.3: hide ALL YouTube player controls + banners under video.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
                 // v32.1: textContent avoids TrustedHTML CSP error
-                // v32.2: only hide specific UI elements, don't touch player
+                // v32.3: comprehensive hide list for ALL YouTube chrome + banners
                 style.textContent = [
-                    '/* Hide YouTube header */',
+                    '/* === HIDE YOUTUBE HEADER === */',
                     '#masthead-container, #masthead, ytd-mini-guide-renderer,',
                     'ytd-guide, #guide-button, #back-button, #logo,',
-                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions {',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                    'ytd-topbar-logo-renderer, ytd-search {',
                     '    display: none !important;',
                     '}',
-                    '/* Hide video metadata + actions */',
+
+                    '/* === HIDE VIDEO METADATA + ACTIONS (under video) === */',
                     'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
                     '.slim-video-information-title, .slim-video-information-meta,',
+                    '.slim-video-information-container,',
                     '.video-action-bar, .video-action-bar-actions,',
                     'ytm-channel-name, ytm-subscribe-button-renderer,',
-                    'ytd-metadata-row-container-renderer, .metadata-container {',
+                    'ytd-metadata-row-container-renderer, .metadata-container,',
+                    'ytm-slim-owner-renderer, ytm-slim-video-action-bar-renderer,',
+                    '#info, #info-contents, #meta, #meta-contents {',
                     '    display: none !important;',
                     '}',
-                    '/* Hide comments */',
+
+                    '/* === HIDE COMMENTS === */',
                     'ytm-comment-section-renderer, .comment-simplebox, .comment-section,',
-                    '#comments-button {',
+                    '#comments-button, ytm-comments-entry-point-header-renderer,',
+                    'ytd-comments, #comments {',
                     '    display: none !important;',
                     '}',
-                    '/* Hide recommendations */',
+
+                    '/* === HIDE RECOMMENDATIONS + PLAYLISTS + MERCH === */',
                     'ytm-compact-video-renderer, ytm-item-section-renderer,',
-                    'ytm-playlist-loop-renderer, ytm-merch-shelf-renderer {',
+                    'ytm-playlist-loop-renderer, ytm-merch-shelf-renderer,',
+                    'ytd-compact-video-renderer, ytd-item-section-renderer,',
+                    'ytd-playlist-panel-renderer, ytd-watch-next-secondary-results-renderer,',
+                    '#related, #secondary, #secondary-inner {',
                     '    display: none !important;',
                     '}',
-                    '/* Hide YouTube player overlays (cards, endscreen, pause overlay) */',
-                    '.ytp-cards-button, .ytp-ce-element, .ytp-endscreen-content,',
-                    '.ytp-pause-overlay, .ytp-show-cards-title {',
+
+                    '/* === HIDE YOUTUBE PLAYER CONTROLS (all chrome) === */',
+                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+                    '.ytp-progress-bar-container, .ytp-progress-bar,',
+                    '.ytp-settings-button, .ytp-settings-menu,',
+                    '.ytp-subtitles-button, .ytp-size-button,',
+                    '.ytp-fullscreen-button, .ytp-fullerscreen-edu-button,',
+                    '.ytp-mute-button, .ytp-volume-slider,',
+                    '.ytp-prev-button, .ytp-next-button,',
+                    '.ytp-play-button, .ytp-replay-button,',
+                    '.ytp-time-display, .ytp-time-current, .ytp-time-duration, .ytp-time-separator,',
+                    '.ytp-watermark, .ytp-youtube-button, .ytp-youtube-logo,',
+                    '.ytp-remote-button, .ytp-cards-toggle, .ytp-cards-button,',
+                    '.ytp-ce-element, .ytp-ce-shelf, .ytp-ce-video,',
+                    '.ytp-endscreen-content, .ytp-endscreen,',
+                    '.ytp-pause-overlay, .ytp-show-cards-title,',
+                    '.ytp-tooltip, .ytp-tooltip-text, .ytp-hover-progress,',
+                    '.ytp-gradient-bottom, .ytp-gradient-top,',
+                    '.ytp-big-mode, .ytp-autohide,',
+                    '.html5-endscreen, .html5-watermark,',
+                    '.ytp-mdx, .ytp-mdx-button, .ytp-cued-thumbnail-overlay,',
+                    '.ytp-iv-bar, .ytp-iv-video-content,',
+                    'ytd-watch-flexy[flexy] #columns.ytd-watch-flexy,',
+                    'ytd-watch-flexy[flexy] #secondary.ytd-watch-flexy {',
                     '    display: none !important;',
                     '}',
-                    '/* DO NOT touch #player, #movie_player, or video elements */',
+
+                    '/* === HIDE YOUTUBE SHARE + DOWNLOAD BUTTONS === */',
+                    'ytd-button-renderer, ytm-button-renderer,',
+                    '.ytp-share-button, .ytp-miniplayer-button {',
+                    '    display: none !important;',
+                    '}',
+
+                    '/* === HIDE ADS / PROMOS (just in case) === */',
+                    'ytd-promoted-video-renderer, ytd-promo-sparkles-web-renderer,',
+                    'ytd-brand-video-shelf-renderer, ytd-banner-promo-renderer,',
+                    '.ytp-ad-overlay-container, .ytp-ad-overlay,',
+                    '.ytp-ad-text, .ytp-ad-skip-button-container {',
+                    '    display: none !important;',
+                    '}',
+
+                    '/* === DO NOT touch #player, #movie_player, or video elements === */',
                     '/* Let YouTube handle video positioning naturally */'
                 ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32.2] CSS injected — UI hidden, video visible");
+                console.log("[Plink v32.3] CSS injected — all YouTube chrome + banners hidden");
             })();
             """
 

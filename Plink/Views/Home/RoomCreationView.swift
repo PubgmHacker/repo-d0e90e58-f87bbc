@@ -31,11 +31,13 @@ struct RoomCreationView: View {
 
     /// 🔧 NEW: Configuration struct for RoomSetupView — передаётся через
     /// .fullScreenCover(item:) чтобы избежать SwiftUI @State race condition.
+    /// 🔧 v33: added thumbnailURL — needed to show cover in "Смотрят сейчас" + history.
     struct RoomSetupConfig: Identifiable {
         let id = UUID()
         let service: VideoService
         let contentURL: String
         let contentTitle: String
+        let thumbnailURL: String?
     }
 
     // Ошибки валидации
@@ -60,16 +62,18 @@ struct RoomCreationView: View {
                             currentStep = .details
                         }
                     },
-                    onContentSelected: { service, contentURL, contentTitle in
+                    onContentSelected: { service, contentURL, contentTitle, thumbnailURL in
                         // 🔧 FIX: используем .fullScreenCover(item:) с RoomSetupConfig.
                         // SwiftUI bug: .fullScreenCover(isPresented:) захватывает @State
                         // значения при создании closure, а не при срабатывании.
                         // Через item: значения передаются напрямую как параметр closure.
-                        print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)'")
+                        // 🔧 v33: forward thumbnailURL to RoomSetupView.
+                        print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)', thumbnailURL='\(thumbnailURL ?? "nil")'")
                         roomSetupConfig = RoomSetupConfig(
                             service: service,
                             contentURL: contentURL,
-                            contentTitle: contentTitle
+                            contentTitle: contentTitle,
+                            thumbnailURL: thumbnailURL
                         )
                     }
                 )
@@ -96,6 +100,7 @@ struct RoomCreationView: View {
                 service: config.service,
                 contentURL: config.contentURL,
                 contentTitle: config.contentTitle,
+                thumbnailURL: config.thumbnailURL,
                 onRoomCreated: { room in
                     roomSetupConfig = nil
                     onRoomCreated(room)

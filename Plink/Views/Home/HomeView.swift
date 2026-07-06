@@ -693,16 +693,42 @@ private struct LiveCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Постер
             ZStack(alignment: .topLeading) {
-                Color(hex: 0x0A0A0A)
+                // 🔧 v33: thumbnail from mediaItem (YouTube cover etc.)
+                // Falls back to gradient if no thumbnailURL.
+                if let thumbURL = room.mediaItem?.thumbnailURL,
+                   let url = URL(string: thumbURL) {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            // Loading / failed — gradient placeholder
+                            LinearGradient(
+                                colors: [
+                                    Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
+                                    Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
+                                    .black
+                                ],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                        }
+                    }
                     .frame(width: 280, height: 158)
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
+                            Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
+                            .black
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                    .frame(width: 280, height: 158)
+                }
 
+                // Dark overlay for readability of badges
                 LinearGradient(
-                    colors: [
-                        Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
-                        Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
-                        .black
-                    ],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
+                    colors: [.black.opacity(0.3), .clear, .black.opacity(0.4)],
+                    startPoint: .top, endPoint: .bottom
                 )
                 .frame(width: 280, height: 158)
 
@@ -794,14 +820,30 @@ private struct RecommendationCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Постер
             ZStack(alignment: .bottom) {
-                Color(hex: 0x0A0A0A)
+                // 🔧 v33: thumbnail from mediaItem (YouTube cover etc.)
+                // Falls back to gradient if no thumbnailURL.
+                if let thumbURL = room.mediaItem?.thumbnailURL,
+                   let url = URL(string: thumbURL) {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            LinearGradient(
+                                colors: [gradientColors[0], gradientColors[1], .black],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        }
+                    }
+                } else {
+                    LinearGradient(
+                        colors: [gradientColors[0], gradientColors[1], .black],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                }
 
+                // Dark gradient overlay for badge readability
                 LinearGradient(
-                    colors: [
-                        gradientColors[0],
-                        gradientColors[1],
-                        .black
-                    ],
+                    colors: [.black.opacity(0.3), .clear, .black.opacity(0.5)],
                     startPoint: .top, endPoint: .bottom
                 )
 

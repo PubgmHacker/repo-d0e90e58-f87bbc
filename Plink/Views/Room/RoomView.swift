@@ -149,21 +149,21 @@ struct RoomView: View {
         }
     }
 
-    // MARK: - Unified Layout (v34.19) — SAME view tree for both orientations
+    // MARK: - Unified Layout (v34.20) — ZERO view tree changes on fullscreen
 
     @ViewBuilder
     private func unifiedLayout(viewModel: RoomViewModel, geo: GeometryProxy, isLandscape: Bool) -> some View {
         let videoWidth = geo.size.width
         let videoHeight: CGFloat = isLandscape ? geo.size.height : (geo.size.width * 9.0 / 16.0)
-        let chatHeight: CGFloat = max(geo.size.height - (isLandscape ? 0 : videoHeight) - 8, 0)
+        let chatHeight: CGFloat = max(geo.size.height - videoHeight - 8, 0)
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
-        // 🔧 v34.19: SAME VStack for BOTH orientations. Only frame heights change.
-        // SwiftUI does NOT tear down videoSection when isLandscape changes —
-        // it just updates the frame. WKWebView stays in its superview →
-        // rendering context preserved!
+        // 🔧 v34.20: NO if/else ANYWHERE. Same view tree ALWAYS.
+        // Even 'if !isLandscape' inside VStack changes the view tree →
+        // SwiftUI re-layout → WKWebView rendering context destroyed.
+        // Now: chat is ALWAYS in view tree, hidden via frame(height: 0) + opacity(0).
         VStack(spacing: 0) {
-            // Video — ALWAYS first child, ALWAYS same position
+            // Video — ALWAYS first child
             videoSection(
                 viewModel: viewModel,
                 videoWidth: videoWidth,
@@ -172,64 +172,62 @@ struct RoomView: View {
             )
             .frame(height: videoHeight)
 
-            // Chat — ALWAYS second child. Height 0 in landscape (hidden),
-            // full height in portrait. View tree NEVER changes.
-            if !isLandscape {
+            // Portrait chat — ALWAYS in view tree, hidden in landscape
+            RoomChatView(
+                messages: syncManager?.chatMessages ?? viewModel.messages,
+                chatText: chatTextBinding,
+                onSend: sendMessage,
+                currentUserID: viewModel.currentUserId,
+                mode: .portrait
+            )
+            .frame(height: isLandscape ? 0 : chatHeight)
+            .opacity(isLandscape ? 0 : 1)
+            .background(
+                Group {
+                    if roomTheme.hasPlayerBorder { roomTheme.chatBackground } else { Color.clear }
+                }
+            )
+            .padding(.horizontal, isLandscape ? 0 : 8)
+            .padding(.bottom, isLandscape ? 0 : 8)
+        }
+        // Landscape chat overlay — ALWAYS in view tree, hidden in portrait
+        .overlay {
+            ZStack {
                 RoomChatView(
                     messages: syncManager?.chatMessages ?? viewModel.messages,
                     chatText: chatTextBinding,
                     onSend: sendMessage,
                     currentUserID: viewModel.currentUserId,
-                    mode: .portrait
+                    mode: .landscape,
+                    isPanelOpen: $showChatPanel
                 )
-                .frame(height: chatHeight)
-                .background(
-                    Group {
-                        if roomTheme.hasPlayerBorder { roomTheme.chatBackground } else { Color.clear }
-                    }
-                )
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-            }
-        }
-        // Landscape chat overlay — SEPARATE from VStack, doesn't affect video
-        .overlay {
-            if isLandscape {
-                ZStack {
-                    RoomChatView(
-                        messages: syncManager?.chatMessages ?? viewModel.messages,
-                        chatText: chatTextBinding,
-                        onSend: sendMessage,
-                        currentUserID: viewModel.currentUserId,
-                        mode: .landscape,
-                        isPanelOpen: $showChatPanel
-                    )
-                    .ignoresSafeArea()
+                .ignoresSafeArea()
 
-                    if !showChatPanel {
-                        VStack {
+                if !showChatPanel {
+                    VStack {
+                        Spacer()
+                        HStack {
                             Spacer()
-                            HStack {
-                                Spacer()
-                                Button {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                        showChatPanel = true
-                                    }
-                                } label: {
-                                    Image(systemName: "bubble.left.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                        .frame(width: 40, height: 40)
-                                        .background(.ultraThinMaterial)
-                                        .clipShape(Circle())
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    showChatPanel = true
                                 }
-                                .padding(.trailing, 16)
-                                .padding(.bottom, 24)
+                            } label: {
+                                Image(systemName: "bubble.left.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
                             }
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 24)
                         }
                     }
                 }
             }
+            .opacity(isLandscape ? 1 : 0)
+            .allowsHitTesting(isLandscape)
         }
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { handleDoubleTap() }

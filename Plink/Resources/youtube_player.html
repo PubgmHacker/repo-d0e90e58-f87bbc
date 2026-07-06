@@ -60,8 +60,12 @@
                     'rel': 0,
                     'modestbranding': 1,
                     'iv_load_policy': 3,
-                    'origin': 'https://plink.app',
-                    'widget_referrer': 'https://plink.app',
+                    // 🔧 v30.2 (July 2026): origin = https://www.youtube.com
+                    // MUST match the baseURL passed to loadHTMLString in Swift.
+                    // When page origin == iframe origin == youtube.com, YouTube
+                    // sees this as a same-origin request (Sec-Fetch-Site: same-origin)
+                    // and skips the anti-bot check that was returning code 150.
+                    'origin': 'https://www.youtube.com',
                     'enablejsapi': 1
                 },
                 events: {

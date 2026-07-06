@@ -632,24 +632,26 @@ struct WebVideoView: UIViewRepresentable {
             let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
             let finalHTML = htmlContent.replacingOccurrences(of: "%VIDEO_ID%", with: cleanVideoId)
 
-            // 🔧 v30.2 (July 2026): baseURL = https://www.youtube.com
+            // 🔧 v30.4 (July 2026): baseURL = https://plink.app + dynamic origin in JS
             //
-            // v30 used https://plink.app — YouTube saw this as a cross-origin embed
-            // (page origin = plink.app, iframe origin = youtube.com) and triggered
-            // anti-bot checks → error code 150 + "Sign in to confirm you're not a bot".
+            // v30.2 used https://www.youtube.com as baseURL but JS had hardcoded
+            // origin='https://www.youtube.com'. v30.3 tried youtube.com everywhere
+            // but streamURL still had widget_referrer=plink.app → mismatch → error 152.
             //
-            // v30.2 uses https://www.youtube.com as baseURL. Now:
-            //   - Page origin = https://www.youtube.com (from baseURL)
-            //   - IFrame API script loads same-origin (youtube.com → youtube.com)
-            //   - IFrame src = youtube.com/embed/... (same-origin)
-            //   - Sec-Fetch-Site header = 'same-origin' → YouTube trusts the request
-            //   - origin param in playerVars = https://www.youtube.com (matches)
+            // v30.4 final approach:
+            //   - Swift baseURL = https://plink.app (legitimate app domain)
+            //   - JS origin = window.location.origin (READS baseURL dynamically)
+            //   - streamURL = youtube.com/embed/... (no widget_referrer, no nocookie)
+            // Now there's NO possibility of mismatch — JS reads the actual page origin.
             //
-            // This is the same trick Rave uses: pretend to BE youtube.com, not a
-            // third-party site embedding youtube.com.
-            let baseURL = URL(string: "https://www.youtube.com")!
+            // Why plink.app instead of youtube.com:
+            //   - youtube.com as baseURL for non-youtube.com HTML triggered CORS
+            //     issues with the IFrame API script loader → 152.
+            //   - plink.app is OUR domain, we control it, and YouTube IFrame API
+            //     accepts ANY origin as long as it matches between page and playerVar.
+            let baseURL = URL(string: "https://plink.app")!
 
-            print("📺 YouTube v30.2: loadHTMLString with baseURL=https://www.youtube.com, videoId='\(cleanVideoId)'")
+            print("📺 YouTube v30.4: loadHTMLString with baseURL=https://plink.app, videoId='\(cleanVideoId)' (origin will be dynamic in JS)")
             DispatchQueue.main.async {
                 webView.loadHTMLString(finalHTML, baseURL: baseURL)
             }

@@ -50,6 +50,7 @@
         // Called automatically by the IFrame API when ready
         window.onYouTubeIframeAPIReady = function() {
             console.log("[Plink] YouTube IFrame API ready, creating player for videoId=" + VIDEO_ID);
+            console.log("[Plink] window.location.origin = " + window.location.origin);
             player = new YT.Player('player', {
                 height: '100%',
                 width: '100%',
@@ -60,12 +61,12 @@
                     'rel': 0,
                     'modestbranding': 1,
                     'iv_load_policy': 3,
-                    // 🔧 v30.2 (July 2026): origin = https://www.youtube.com
-                    // MUST match the baseURL passed to loadHTMLString in Swift.
-                    // When page origin == iframe origin == youtube.com, YouTube
-                    // sees this as a same-origin request (Sec-Fetch-Site: same-origin)
-                    // and skips the anti-bot check that was returning code 150.
-                    'origin': 'https://www.youtube.com',
+                    // 🔧 v30.4 (July 2026): DYNAMIC origin — uses window.location.origin
+                    // which is set by the baseURL passed to WKWebView.loadHTMLString.
+                    // This eliminates ANY possibility of origin mismatch between
+                    // the document host and the origin playerVar (was causing error 152).
+                    // Whatever baseURL Swift sets, JS reads it dynamically — perfect sync.
+                    'origin': window.location.origin,
                     'enablejsapi': 1
                 },
                 events: {

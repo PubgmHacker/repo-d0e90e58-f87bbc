@@ -307,6 +307,7 @@ struct RoomView: View {
                     onTogglePlay: { viewModel.syncEngine.togglePlayPause() },
                     onSeek: { pos in viewModel.syncEngine.seek(to: pos) }
                 )
+                .frame(width: videoWidth, height: videoHeight)
             } else {
                 videoPlaceholder
             }
@@ -453,8 +454,8 @@ struct RoomView: View {
                 .opacity(showControls ? 1.0 : 0.35)
             }
         }
-        .frame(width: videoWidth, height: videoHeight)
-        .clipShape(RoundedRectangle(cornerRadius: isLandscape ? 0 : 16))
+        .frame(width: videoWidth, height: videoHeight, alignment: .top)
+        .clipped()
         .animation(.easeInOut(duration: 0.3), value: isLandscape)
     }
 

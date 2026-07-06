@@ -121,8 +121,13 @@ struct RoomView: View {
             OrientationManager.shared.unlockOrientation()
             OrientationManager.shared.forcePortrait()
 
-            // 🔧 v34: release the persistent WKWebView so next room gets a fresh one
-            WebViewControl.shared.unregister()
+            // 🔧 v34.9: DO NOT call unregister() here!
+            // onDisappear fires when switching portraitLayout ↔ landscapeLayout
+            // (SwiftUI tears down the old view tree). If we unregister here,
+            // loadedVideoId is cleared → next loadVideoOnce passes guard →
+            // video RELOADS from scratch!
+            // Instead, unregister is called in the explicit dismiss/cleanup paths.
+            // WebViewControl.shared.unregister()  ← REMOVED
 
             guard let viewModel else { return }
             syncManager?.disconnect()
@@ -135,6 +140,9 @@ struct RoomView: View {
             Task {
                 await voiceChat?.endCall()
                 await viewModel.cleanupFlow()
+                // 🔧 v34.9: unregister WebView HERE (actual room exit)
+                // NOT in onDisappear (which fires on layout switch)
+                WebViewControl.shared.unregister()
             }
         }
         .navigationBarBackButtonHidden(true)

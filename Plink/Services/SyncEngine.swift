@@ -117,6 +117,19 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     // MARK: - Load Media
 
     func loadMedia(_ item: MediaItem) {
+        // 🔧 v34.15: GUARD — don't reload the same media item!
+        // WS reconnects on fullscreen toggle → calls loadMedia with the SAME item
+        // → teardownPlayer sets currentMediaItem = nil → VideoContainerView re-renders
+        // → WKWebView re-attached → rendering context destroyed → black screen.
+        // If the same item is already loaded AND WebView already has it, skip entirely.
+        if let existing = currentMediaItem,
+           existing.id == item.id,
+           existing.streamURL == item.streamURL,
+           WebViewControl.shared.loadedVideoId != nil {
+            Logger.sync.info("🔍 loadMedia: SAME item already loaded — skipping (prevents rendering destroy)")
+            return
+        }
+
         teardownPlayer()
         isLoadingMedia = true
         errorMessage = nil

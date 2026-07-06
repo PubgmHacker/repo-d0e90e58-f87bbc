@@ -629,6 +629,12 @@ struct WebVideoView: UIViewRepresentable {
 
             print("📺 YouTube v32.1: page loaded (\(host)), injecting CSS + JS bridge")
 
+            // 🔧 v32.4: re-inject CSS every 2 seconds for 10 seconds.
+            // YouTube dynamically adds elements (especially action bar, like button,
+            // pause overlay) after initial page load. Single injection at didFinish
+            // misses these late-added elements.
+            // Also inject on didCommit (page start) for early hide.
+
             // CSS: hide YouTube's UI but KEEP the video visible
             // 🔧 v32.2: simplified CSS — only HIDE specific YouTube UI elements,
             // do NOT touch #player / video positioning. Previous v32.1 used
@@ -636,11 +642,15 @@ struct WebVideoView: UIViewRepresentable {
             // caused BLACK SCREEN because m.youtube.com wraps #player in
             // containers we were hiding.
             // 🔧 v32.3: hide ALL YouTube player controls + banners under video.
+            // 🔧 v32.4: more aggressive — add visibility:hidden + opacity:0 as
+            // fallback for elements that ignore display:none. Also hide the
+            // fullscreen-on-pause overlay that was causing black screen after
+            // 3-4 seconds.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
                 // v32.1: textContent avoids TrustedHTML CSP error
-                // v32.3: comprehensive hide list for ALL YouTube chrome + banners
+                // v32.4: comprehensive hide list + opacity fallback + pointer-events
                 style.textContent = [
                     '/* === HIDE YOUTUBE HEADER === */',
                     '#masthead-container, #masthead, ytd-mini-guide-renderer,',
@@ -657,7 +667,7 @@ struct WebVideoView: UIViewRepresentable {
                     '.video-action-bar, .video-action-bar-actions,',
                     'ytm-channel-name, ytm-subscribe-button-renderer,',
                     'ytd-metadata-row-container-renderer, .metadata-container,',
-                    'ytm-slim-owner-renderer, ytm-slim-video-action-bar-renderer,',
+                    'ytm-slim-owner-renderer,',
                     '#info, #info-contents, #meta, #meta-contents {',
                     '    display: none !important;',
                     '}',
@@ -702,6 +712,9 @@ struct WebVideoView: UIViewRepresentable {
                     'ytd-watch-flexy[flexy] #columns.ytd-watch-flexy,',
                     'ytd-watch-flexy[flexy] #secondary.ytd-watch-flexy {',
                     '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '    opacity: 0 !important;',
+                    '    pointer-events: none !important;',
                     '}',
 
                     '/* === HIDE YOUTUBE SHARE + DOWNLOAD BUTTONS === */',
@@ -710,7 +723,7 @@ struct WebVideoView: UIViewRepresentable {
                     '    display: none !important;',
                     '}',
 
-                    '/* === HIDE ADS / PROMOS (just in case) === */',
+                    '/* === HIDE ADS / PROMOS === */',
                     'ytd-promoted-video-renderer, ytd-promo-sparkles-web-renderer,',
                     'ytd-brand-video-shelf-renderer, ytd-banner-promo-renderer,',
                     '.ytp-ad-overlay-container, .ytp-ad-overlay,',
@@ -718,11 +731,69 @@ struct WebVideoView: UIViewRepresentable {
                     '    display: none !important;',
                     '}',
 
-                    '/* === DO NOT touch #player, #movie_player, or video elements === */',
-                    '/* Let YouTube handle video positioning naturally */'
+                    '/* === v32.4: HIDE PAUSE OVERLAY (causes black screen after 3-4s) === */',
+                    '/* YouTube shows this when video is paused or buffering. */',
+                    '.ytp-pause-overlay, .html5-endscreen, .ytp-endscreen,',
+                    '.ytp-endscreen-content, .ytp-endscreen-subelements,',
+                    '.paused-overlay, .ytp-pause-overlay-back,',
+                    '.ytp-cued-thumbnail-overlay, .ytp-cued-thumbnail-overlay-image,',
+                    '.ytp-cover-overlay, .ytp-scrim-bottom, .ytp-scrim-top,',
+                    'ytm-preview-tooltip-renderer, .ytp-mdx-popup {',
+                    '    display: none !important;',
+                    '    background: transparent !important;',
+                    '}',
+
+                    '/* === v32.4: HIDE LIKE BUTTON + ACTION BAR (more aggressive) === */',
+                    'ytm-slim-video-action-bar-renderer,',
+                    'ytm-like-button-renderer, ytm-dislike-button-renderer,',
+                    'ytm-button-renderer, ytd-button-renderer,',
+                    '.slim-video-action-bar-actions, .video-action-bar-actions,',
+                    'ytm-slim-owner-renderer, ytm-slim-owner-bar,',
+                    'ytm-slim-owner-icon, ytm-slim-owner-name,',
+                    'ytm-slim-owner-subscribe-button,',
+                    '.slim-owner-bar, .slim-owner-icon, .slim-owner-name,',
+                    'ytm-menu-renderer, ytm-menu-button-renderer {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '}',
+
+                    '/* === v32.4: HIDE YOUTUBE LOGO + BRAND === */',
+                    '.ytp-watermark, .ytp-youtube-logo, .ytp-youtube-button,',
+                    '.html5-watermark, ytd-yoodle-renderer,',
+                    'a.ytp-watermark, a.ytp-youtube-button {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '}',
+
+                    '/* === v32.4: FORCE VIDEO ELEMENT VISIBLE === */',
+                    'video, .html5-video-container, .html5-main-video {',
+                    '    visibility: visible !important;',
+                    '    opacity: 1 !important;',
+                    '    background: transparent !important;',
+                    '}',
+
+                    '/* === v32.4: FORCE PLAYER CONTAINER VISIBLE === */',
+                    '#player, #player-container, #player-container-outer,',
+                    '#player-container-inner, #movie_player, .html5-video-player {',
+                    '    visibility: visible !important;',
+                    '    opacity: 1 !important;',
+                    '    background: #000 !important;',
+                    '}',
+
+                    '/* === v32.4: SCROLL LOCK — prevent YouTube from scrolling === */',
+                    'html, body {',
+                    '    overflow: hidden !important;',
+                    '    position: fixed !important;',
+                    '    width: 100% !important;',
+                    '    height: 100% !important;',
+                    '    margin: 0 !important;',
+                    '    padding: 0 !important;',
+                    '    top: 0 !important;',
+                    '    left: 0 !important;',
+                    '}'
                 ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32.3] CSS injected — all YouTube chrome + banners hidden");
+                console.log("[Plink v32.4] CSS injected — comprehensive hide + video forced visible");
             })();
             """
 
@@ -828,6 +899,73 @@ struct WebVideoView: UIViewRepresentable {
                     print("⚠️ YouTube v32.1: JS bridge injection error: \(error)")
                 }
             }
+
+            // 🔧 v32.4: re-inject CSS every 2 seconds for 10 seconds (5 times).
+            // YouTube adds elements dynamically after page load — single injection
+            // misses late-added like button, action bar, pause overlay.
+            for i in 1...5 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i * 2)) {
+                    webView.evaluateJavaScript(cssInjection) { _, _ in }
+                }
+            }
+        }
+
+        /// 🔧 v32.4: inject CSS EARLY at didCommit (before page finishes loading).
+        /// This hides YouTube's UI before user sees it.
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            guard let url = webView.url, let host = url.host?.lowercased(),
+                  host.contains("youtube.com") || host.contains("youtu.be") else {
+                return
+            }
+            // Re-use the same CSS injection (without JS bridge — that needs didFinish)
+            let cssInjection = """
+            (function() {
+                var style = document.createElement('style');
+                style.textContent = [
+                    '#masthead-container, #masthead, ytd-mini-guide-renderer,',
+                    'ytd-guide, #guide-button, #back-button, #logo,',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions {',
+                    '    display: none !important;',
+                    '}',
+                    'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
+                    '.slim-video-information-title, .slim-video-information-meta,',
+                    'ytm-channel-name, ytm-subscribe-button-renderer {',
+                    '    display: none !important;',
+                    '}',
+                    'ytm-comment-section-renderer, #comments-button, #comments {',
+                    '    display: none !important;',
+                    '}',
+                    'ytm-compact-video-renderer, #related, #secondary {',
+                    '    display: none !important;',
+                    '}',
+                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+                    '.ytp-progress-bar-container, .ytp-settings-button,',
+                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-play-button,',
+                    '.ytp-time-display, .ytp-watermark, .ytp-pause-overlay,',
+                    '.ytp-endscreen-content, .html5-endscreen,',
+                    '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay {',
+                    '    display: none !important;',
+                    '    visibility: hidden !important;',
+                    '    opacity: 0 !important;',
+                    '}',
+                    'video, .html5-video-container, .html5-main-video {',
+                    '    visibility: visible !important;',
+                    '    opacity: 1 !important;',
+                    '}',
+                    '#player, #player-container, #movie_player {',
+                    '    visibility: visible !important;',
+                    '    opacity: 1 !important;',
+                    '}',
+                    'html, body {',
+                    '    overflow: hidden !important;',
+                    '    position: fixed !important;',
+                    '}'
+                ].join('\\\\n');
+                (document.head || document.documentElement).appendChild(style);
+            })();
+            """
+            webView.evaluateJavaScript(cssInjection) { _, _ in }
+            print("📺 YouTube v32.4: early CSS injection at didCommit")
         }
 
         // MARK: - Native commands → JS

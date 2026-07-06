@@ -16,6 +16,14 @@
             height: 100%;
             border: 0;
         }
+        /* 🔧 v31.2: CSS for fallback (when iframe redirects to full youtube.com/watch).
+           Hides YouTube's UI elements, keeping only the video element.
+           These selectors only affect the iframe content when it's loaded from
+           youtube.com/watch (not from youtube.com/embed/...). */
+        #player[src*="watch"] {
+            width: 100vw !important;
+            height: 100vh !important;
+        }
     </style>
 </head>
 <body>
@@ -112,8 +120,34 @@
                         });
                     },
                     'onError': function(event) {
-                        console.log("[Plink] Error: " + event.data);
+                        console.log("[Plink] Player error: " + event.data);
                         sendBridge({ "event": "error", "code": event.data });
+
+                        // 🔧 v31.2 (July 2026): Fallback for embedding-restricted videos.
+                        // Codes 101/150 = video owner disabled embedding. Since the
+                        // embed is blocked, redirect the iframe to the FULL mobile
+                        // watch page. YouTube allows playback of these videos on
+                        // their own pages (no embedding restriction check) — same
+                        // trick Rave uses.
+                        //
+                        // We replace the iframe src with youtube.com/watch?v=ID which
+                        // loads the full YouTube page inside the iframe. CSS in this
+                        // HTML hides YouTube's UI, keeping only the video element.
+                        if (event.data === 101 || event.data === 150) {
+                            console.log("[Plink] Embedding restricted (code=" + event.data + "), falling back to full mobile page");
+                            var fallbackUrl = "https://www.youtube.com/watch?v=" + VIDEO_ID + "&app=desktop";
+                            try {
+                                // Replace the iframe src — this navigates the iframe
+                                // to the full YouTube watch page.
+                                var iframe = document.getElementById('player');
+                                if (iframe) {
+                                    iframe.src = fallbackUrl;
+                                    console.log("[Plink] Fallback: iframe.src = " + fallbackUrl);
+                                }
+                            } catch(e) {
+                                console.log("[Plink] Fallback error: " + e);
+                            }
+                        }
                     }
                 }
             });

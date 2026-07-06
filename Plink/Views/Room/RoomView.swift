@@ -125,6 +125,9 @@ struct RoomView: View {
             OrientationManager.shared.unlockOrientation()
             OrientationManager.shared.forcePortrait()
 
+            // 🔧 v34: release the persistent WKWebView so next room gets a fresh one
+            WebViewControl.shared.unregister()
+
             guard let viewModel else { return }
             syncManager?.disconnect()
 

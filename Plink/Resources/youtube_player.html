@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #player {
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+    </style>
+</head>
+<body>
+    <!--
+      🔧 v30 (July 2026): YouTube IFrame API player.
+      This file is loaded via WKWebView.loadHTMLString(_, baseURL: https://plink.app).
+      The baseURL gives the page a real HTTPS origin, so YouTube's IFrame API
+      sees Origin: https://plink.app — a legitimate origin (not WKWebView-detected).
+
+      The %VIDEO_ID% placeholder is replaced at runtime by VideoContainerView.
+
+      Using IFrame API (not plain <iframe src=...>) for:
+        - Proper player initialization
+        - JS bridge for play/pause/seek sync
+        - Error handling
+    -->
+    <div id="player"></div>
+
+    <script>
+        // 🔧 v30: YouTube IFrame API — official, supported by YouTube.
+        // The API script is loaded from youtube.com, but it runs in OUR
+        // page context (with origin = https://plink.app via baseURL).
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        var player;
+        var VIDEO_ID = "%VIDEO_ID%";
+
+        // Called automatically by the IFrame API when ready
+        window.onYouTubeIframeAPIReady = function() {
+            console.log("[Plink] YouTube IFrame API ready, creating player for videoId=" + VIDEO_ID);
+            player = new YT.Player('player', {
+                videoId: VIDEO_ID,
+                playerVars: {
+                    'playsinline': 1,
+                    'rel': 0,
+                    'modestbranding': 1,
+                    'iv_load_policy': 3,
+                    'origin': 'https://plink.app',
+                    'widget_referrer': 'https://plink.app',
+                    'enablejsapi': 1
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onError': onPlayerError,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        };
+
+        function onPlayerReady(event) {
+            console.log("[Plink] Player ready — calling playVideo()");
+            // Don't autoplay with sound — iOS blocks unmuted autoplay.
+            // User must tap play. Just MUTE + play so video starts visually.
+            event.target.mute();
+            event.target.playVideo();
+
+            // Notify Swift that player is ready
+            try {
+                window.webkit.messageHandlers.videoBridge.postMessage("ready");
+            } catch(e) {
+                console.log("[Plink] videoBridge not available: " + e);
+            }
+        }
+
+        function onPlayerError(event) {
+            // Error codes: 2=invalid param, 5=HTML5 error, 100=not found,
+            // 101/150=embedding disabled. 153 is iOS-specific (config error).
+            console.error("[Plink] Player error code: " + event.data);
+            try {
+                window.webkit.messageHandlers.videoBridge.postMessage("error:" + event.data);
+            } catch(e) {}
+        }
+
+        function onPlayerStateChange(event) {
+            // YT.PlayerState: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
+            console.log("[Plink] Player state: " + event.data);
+
+            // Report current time on state changes
+            if (player && player.getCurrentTime) {
+                var t = player.getCurrentTime();
+                try {
+                    window.webkit.messageHandlers.videoBridge.postMessage(t);
+                } catch(e) {}
+            }
+        }
+
+        // 🔧 Bridge methods callable from Swift via webView.evaluateJavaScript
+        window.plinkPlay = function() { if (player) player.playVideo(); };
+        window.plinkPause = function() { if (player) player.pauseVideo(); };
+        window.plinkSeek = function(seconds) { if (player) player.seekTo(seconds, true); };
+        window.plinkGetCurrentTime = function() { return player ? player.getCurrentTime() : 0; };
+    </script>
+</body>
+</html>

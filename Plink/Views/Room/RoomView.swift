@@ -200,6 +200,28 @@ struct RoomView: View {
                     }
                 }
             }
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded { handleDoubleTap() }
+            )
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 80)
+                    .onEnded { value in
+                        let horizontal = value.translation.width
+                        let vertical = value.translation.height
+                        guard abs(horizontal) > abs(vertical) * 2 else { return }
+                        if !showChatPanel && horizontal < -80 {
+                            HapticManager.impact(.light)
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                showChatPanel = true
+                            }
+                        } else if showChatPanel && horizontal > 80 {
+                            HapticManager.impact(.light)
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                showChatPanel = false
+                            }
+                        }
+                    }
+            )
         } else {
             // Portrait: VStack — video on top, chat below (no offset hacks)
             VStack(spacing: 0) {
@@ -226,30 +248,10 @@ struct RoomView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded { handleDoubleTap() }
+            )
         }
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded { handleDoubleTap() }
-        )
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 80)
-                .onEnded { value in
-                    guard isLandscape else { return }
-                    let horizontal = value.translation.width
-                    let vertical = value.translation.height
-                    guard abs(horizontal) > abs(vertical) * 2 else { return }
-                    if !showChatPanel && horizontal < -80 {
-                        HapticManager.impact(.light)
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            showChatPanel = true
-                        }
-                    } else if showChatPanel && horizontal > 80 {
-                        HapticManager.impact(.light)
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            showChatPanel = false
-                        }
-                    }
-                }
-        )
     }
 
     // MARK: - Portrait Layout (legacy — not used, kept for reference)

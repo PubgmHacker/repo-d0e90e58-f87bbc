@@ -134,7 +134,13 @@ final class WebSocketClient: ObservableObject, WebSocketClientProtocol, @uncheck
     // MARK: - Auth Token
 
     /// Set the JWT token before connecting. Updates live connection's auth context.
+    /// 🔧 v34.17: DON'T reconnect if token is the SAME — prevents WS reconnect
+    /// cascade on fullscreen toggle (which triggers auth refresh).
     func setAuthToken(_ token: String?) {
+        // v34.17: skip if token hasn't changed
+        if self.authToken == token {
+            return
+        }
         self.authToken = token
         // If already connected with a stale/expiring token, reconnect.
         if isConnected && token != nil {

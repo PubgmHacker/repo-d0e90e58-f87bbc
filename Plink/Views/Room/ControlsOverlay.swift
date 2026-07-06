@@ -26,6 +26,10 @@ struct ControlsOverlay: View {
     var body: some View {
         ZStack {
             // Subtle gradient for readability (very light)
+            // 🔧 v32.11: allowsHitTesting(false) — gradient must NOT catch taps.
+            // Otherwise when controls are visible, tapping between buttons hits
+            // the gradient instead of passing through to the transparent tap layer
+            // below (which toggles showControls).
             LinearGradient(
                 colors: [
                     .black.opacity(0.3),
@@ -36,6 +40,7 @@ struct ControlsOverlay: View {
                 endPoint: .bottom
             )
             .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(false)
 
             VStack {
                 topBar

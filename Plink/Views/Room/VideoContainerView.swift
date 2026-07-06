@@ -37,6 +37,33 @@ final class WebViewControl {
         onTimeUpdate?(time)
     }
 
+    /// 🔧 v32.11: handle duration updates from <video> element.
+    /// Calls onDurationUpdate callback — updates SyncEngine.duration.
+    var onDurationUpdate: ((TimeInterval) -> Void)?
+    func handleDurationUpdate(_ duration: TimeInterval) {
+        onDurationUpdate?(duration)
+    }
+
+    /// 🔧 v32.11: unmute video. iOS blocks unmuted autoplay without user gesture.
+    /// This must be called from a user gesture handler (tap) to work.
+    /// Calls video.muted = false; video.play() via evaluateJavaScript.
+    func unmute() {
+        let js = """
+        (function() {
+            var v = document.querySelector('video');
+            if (v) {
+                v.muted = false;
+                v.play().then(function() {
+                    console.log('[Plink v32.11] Unmuted successfully');
+                }).catch(function(e) {
+                    console.log('[Plink v32.11] Unmute play failed: ' + e);
+                });
+            }
+        })();
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     func play() {
         // v32.6: try window.playVideo() first (defined by v32 JS bridge).
         // Fallback: find <video> element directly and call play().
@@ -675,8 +702,19 @@ struct WebVideoView: UIViewRepresentable {
 
             switch event {
             case "ready":
-                print("🎉 YouTube v32: video element ready — player initialized")
+                let duration = dict["duration"] as? Double ?? 0.0
+                print("🎉 YouTube v32: video element ready — player initialized, duration=\(duration)s")
+                if duration > 0 {
+                    WebViewControl.shared.handleDurationUpdate(duration)
+                }
                 onPlayerReady?()
+
+            case "durationChange":
+                let duration = dict["duration"] as? Double ?? 0.0
+                print("📏 YouTube v32: duration changed to \(duration)s")
+                if duration > 0 {
+                    WebViewControl.shared.handleDurationUpdate(duration)
+                }
 
             case "stateChange":
                 let state = dict["state"] as? Int ?? -1
@@ -865,7 +903,15 @@ struct WebVideoView: UIViewRepresentable {
                     }
 
                     console.log("[Plink v32.1] Found <video> element, attaching listeners");
-                    sendBridge({ "event": "ready" });
+                    sendBridge({ "event": "ready", "duration": video.duration || 0 });
+
+                    // v32.11: send duration when metadata loads
+                    video.addEventListener('loadedmetadata', function() {
+                        sendBridge({ "event": "durationChange", "duration": video.duration || 0 });
+                    });
+                    video.addEventListener('durationchange', function() {
+                        sendBridge({ "event": "durationChange", "duration": video.duration || 0 });
+                    });
 
                     video.addEventListener('play', function() {
                         sendBridge({ "event": "stateChange", "state": 1, "currentTime": video.currentTime });

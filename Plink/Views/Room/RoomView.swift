@@ -198,8 +198,8 @@ struct RoomView: View {
             // внутри RoomChatView.
         }
         .contentShape(Rectangle())
-        // Single tap = toggle controls (только в области видео)
-        .onTapGesture { toggleControls() }
+        // 🔧 v32.9: tap handling moved inside videoSection (transparent tap layer)
+        // to catch taps that WKWebView would otherwise swallow.
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { handleDoubleTap() }
         )
@@ -254,7 +254,7 @@ struct RoomView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { toggleControls() }
+        // 🔧 v32.9: tap handling moved inside videoSection (transparent tap layer)
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { handleDoubleTap() }
         )
@@ -312,6 +312,30 @@ struct RoomView: View {
             } else {
                 videoPlaceholder
             }
+
+            // 🔧 v32.9: TRANSPARENT TAP LAYER — catches taps that WKWebView
+            // would otherwise swallow. When showControls=false, this layer
+            // catches the tap and shows controls. When showControls=true,
+            // it's disabled (allowsHitTesting=false) so taps reach the
+            // ControlsOverlay buttons below.
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !showControls {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showControls = true
+                        }
+                        resetControlsTimer()
+                    } else {
+                        // Tapped on video area while controls visible —
+                        // hide controls (unless tapping a button)
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showControls = false
+                        }
+                    }
+                }
+                .allowsHitTesting(true)  // always catch taps on video area
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // 🔧 OUR controls overlay — ALWAYS visible (YouTube controls are hidden
             // via controls=0 in embed HTML, so only Plink controls show).

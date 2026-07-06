@@ -328,10 +328,11 @@ struct WebVideoView: UIViewRepresentable {
         // is the REAL isolation mechanism.
         config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
-        // 🔧 v24: register custom URL scheme handler — serves YouTube player
-        // HTML from memory. No network → no sandbox → no ATS → no DownloadFailed.
-        // URL: plink-media://plink.app/?v=VIDEO_ID (host = plink.app, not localhost)
-        config.setURLSchemeHandler(PlinkSchemeHandler(), forURLScheme: "plink-media")
+        // 🔧 v30 (July 2026): REMOVED setURLSchemeHandler(plink-media://).
+        // Custom scheme caused "nw_connection_copy_protocol_metadata_internal
+        // on unconnected nw_connection" → DownloadFailed → 153.
+        // Now using loadHTMLString with baseURL: https://plink.app.
+        // See Coordinator.loadVideoOnce for the new loading logic.
 
         let isYouTubeLike = isYouTube || isBackendPlayer
 
@@ -523,18 +524,72 @@ struct WebVideoView: UIViewRepresentable {
             guard id != loadedVideoId else { return }
             self.loadedVideoId = id
 
-            // 🔧 v24: custom URL scheme — plink-media://plink.app/?v=VIDEO_ID
-            // PlinkSchemeHandler intercepts this and serves HTML from memory.
-            // No network → no sandbox → no ATS → no DownloadFailed.
-            // Host is plink.app (not localhost) → YouTube sees legitimate domain.
-            let playerURLString = "plink-media://plink.app/?v=\(id)"
-            guard let url = URL(string: playerURLString) else { return }
+            // 🔧 v30 (July 2026): loadHTMLString with baseURL = https://plink.app
+            //
+            // Why we abandoned plink-media:// custom scheme (v24-v29.1):
+            //   iOS networking stack treated plink-media:// as a non-HTTPS origin.
+            //   When the iframe inside tried to load youtube-nocookie.com (HTTPS),
+            //   iOS panicked with "nw_connection_copy_protocol_metadata_internal
+            //   on unconnected nw_connection" → DownloadFailed → YouTube 153.
+            //
+            // Why loadHTMLString with HTTPS baseURL works:
+            //   - Page origin becomes https://plink.app (real HTTPS origin)
+            //   - iframe to youtube-nocookie.com is now same-protocol (HTTPS→HTTPS)
+            //   - YouTube sees Origin: https://plink.app → legitimate
+            //   - IFrame API initializes properly → no 153
+            //
+            // HTML file is bundled in Resources/youtube_player.html.
+            // Placeholder %VIDEO_ID% is replaced with the actual video ID.
 
-            print("📺 YouTube v24: loading via plink-media:// scheme handler (no network, no sandbox)")
-            let request = URLRequest(url: url)
-            DispatchQueue.main.async {
-                webView.load(request)
+            guard let htmlURL = Bundle.main.url(forResource: "youtube_player", withExtension: "html"),
+                  let htmlContent = try? String(contentsOf: htmlURL, encoding: .utf8) else {
+                print("❌ v30: youtube_player.html not found in app bundle")
+                return
             }
+
+            // 🔧 v29.1: sanitize video ID (defense in depth — same logic as
+            // PlinkSchemeHandler.sanitizeVideoId, but inlined here for v30).
+            let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
+            let finalHTML = htmlContent.replacingOccurrences(of: "%VIDEO_ID%", with: cleanVideoId)
+
+            // 🔧 v30: baseURL = https://plink.app gives the page a real HTTPS origin.
+            // This is the key difference from v24's plink-media:// approach.
+            let baseURL = URL(string: "https://plink.app")!
+
+            print("📺 YouTube v30: loadHTMLString with baseURL=https://plink.app, videoId='\(cleanVideoId)'")
+            DispatchQueue.main.async {
+                webView.loadHTMLString(finalHTML, baseURL: baseURL)
+            }
+        }
+
+        /// 🔧 v30: same sanitizer logic as PlinkSchemeHandler.sanitizeVideoId,
+        /// inlined here so Coordinator doesn't depend on PlinkSchemeHandler
+        /// (which is now legacy / unused in v30).
+        static func sanitizeVideoIdForBundle(_ raw: String) -> String {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return "" }
+
+            // Strip anything after ? or & or /
+            var id = trimmed
+            if let cut = id.firstIndex(where: { $0 == "?" || $0 == "&" || $0 == "/" }) {
+                id = String(id[..<cut])
+            }
+
+            // If contains "v=" extract after it
+            if let vStart = id.range(of: "v=") {
+                id = String(id[vStart.upperBound...])
+            }
+            // If contains "embed/" extract after it
+            if let embedRange = id.range(of: "embed/") {
+                id = String(id[embedRange.upperBound...])
+            }
+
+            // Final validation: 11 chars, [A-Za-z0-9_-]
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+            if id.count == 11, id.unicodeScalars.allSatisfy({ allowed.contains($0) }) {
+                return id
+            }
+            return id  // best effort
         }
     }
 

@@ -149,89 +149,32 @@ struct RoomView: View {
         }
     }
 
-    // MARK: - Unified Layout (v34.14) — single view tree, no if/else switch
+    // MARK: - Unified Layout (v34.19) — SAME view tree for both orientations
 
     @ViewBuilder
     private func unifiedLayout(viewModel: RoomViewModel, geo: GeometryProxy, isLandscape: Bool) -> some View {
         let videoWidth = geo.size.width
         let videoHeight: CGFloat = isLandscape ? geo.size.height : (geo.size.width * 9.0 / 16.0)
+        let chatHeight: CGFloat = max(geo.size.height - (isLandscape ? 0 : videoHeight) - 8, 0)
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
-        if isLandscape {
-            // Landscape: video fullscreen + chat overlay
-            ZStack {
-                videoSection(
-                    viewModel: viewModel,
-                    videoWidth: videoWidth,
-                    videoHeight: videoHeight,
-                    isFullscreen: true
-                )
-
-                RoomChatView(
-                    messages: syncManager?.chatMessages ?? viewModel.messages,
-                    chatText: chatTextBinding,
-                    onSend: sendMessage,
-                    currentUserID: viewModel.currentUserId,
-                    mode: .landscape,
-                    isPanelOpen: $showChatPanel
-                )
-                .ignoresSafeArea()
-
-                if !showChatPanel {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Button {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    showChatPanel = true
-                                }
-                            } label: {
-                                Image(systemName: "bubble.left.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white)
-                                    .frame(width: 40, height: 40)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                            }
-                            .padding(.trailing, 16)
-                            .padding(.bottom, 24)
-                        }
-                    }
-                }
-            }
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded { handleDoubleTap() }
+        // 🔧 v34.19: SAME VStack for BOTH orientations. Only frame heights change.
+        // SwiftUI does NOT tear down videoSection when isLandscape changes —
+        // it just updates the frame. WKWebView stays in its superview →
+        // rendering context preserved!
+        VStack(spacing: 0) {
+            // Video — ALWAYS first child, ALWAYS same position
+            videoSection(
+                viewModel: viewModel,
+                videoWidth: videoWidth,
+                videoHeight: videoHeight,
+                isFullscreen: isLandscape
             )
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 80)
-                    .onEnded { value in
-                        let horizontal = value.translation.width
-                        let vertical = value.translation.height
-                        guard abs(horizontal) > abs(vertical) * 2 else { return }
-                        if !showChatPanel && horizontal < -80 {
-                            HapticManager.impact(.light)
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                showChatPanel = true
-                            }
-                        } else if showChatPanel && horizontal > 80 {
-                            HapticManager.impact(.light)
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                showChatPanel = false
-                            }
-                        }
-                    }
-            )
-        } else {
-            // Portrait: VStack — video on top, chat below (no offset hacks)
-            VStack(spacing: 0) {
-                videoSection(
-                    viewModel: viewModel,
-                    videoWidth: videoWidth,
-                    videoHeight: videoHeight,
-                    isFullscreen: false
-                )
+            .frame(height: videoHeight)
 
+            // Chat — ALWAYS second child. Height 0 in landscape (hidden),
+            // full height in portrait. View tree NEVER changes.
+            if !isLandscape {
                 RoomChatView(
                     messages: syncManager?.chatMessages ?? viewModel.messages,
                     chatText: chatTextBinding,
@@ -239,7 +182,7 @@ struct RoomView: View {
                     currentUserID: viewModel.currentUserId,
                     mode: .portrait
                 )
-                .frame(height: max(geo.size.height - videoHeight - 8, 100))
+                .frame(height: chatHeight)
                 .background(
                     Group {
                         if roomTheme.hasPlayerBorder { roomTheme.chatBackground } else { Color.clear }
@@ -248,10 +191,69 @@ struct RoomView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded { handleDoubleTap() }
-            )
         }
+        // Landscape chat overlay — SEPARATE from VStack, doesn't affect video
+        .overlay {
+            if isLandscape {
+                ZStack {
+                    RoomChatView(
+                        messages: syncManager?.chatMessages ?? viewModel.messages,
+                        chatText: chatTextBinding,
+                        onSend: sendMessage,
+                        currentUserID: viewModel.currentUserId,
+                        mode: .landscape,
+                        isPanelOpen: $showChatPanel
+                    )
+                    .ignoresSafeArea()
+
+                    if !showChatPanel {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Button {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        showChatPanel = true
+                                    }
+                                } label: {
+                                    Image(systemName: "bubble.left.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
+                                }
+                                .padding(.trailing, 16)
+                                .padding(.bottom, 24)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { handleDoubleTap() }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 80)
+                .onEnded { value in
+                    guard isLandscape else { return }
+                    let horizontal = value.translation.width
+                    let vertical = value.translation.height
+                    guard abs(horizontal) > abs(vertical) * 2 else { return }
+                    if !showChatPanel && horizontal < -80 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showChatPanel = true
+                        }
+                    } else if showChatPanel && horizontal > 80 {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showChatPanel = false
+                        }
+                    }
+                }
+        )
     }
 
     // MARK: - Portrait Layout (legacy — not used, kept for reference)

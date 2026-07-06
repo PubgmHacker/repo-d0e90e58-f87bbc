@@ -990,11 +990,24 @@ struct WebVideoView: UIViewRepresentable {
                         sendBridge({ "event": "error", "code": video.error ? video.error.code : -1 });
                     });
 
-                    window.playVideo = function() { video.play(); };
-                    window.pauseVideo = function() { video.pause(); };
+                    window.playVideo = function() {
+                        window._plinkUserPaused = false;  // v32.15: user resumed
+                        video.play();
+                    };
+                    window.pauseVideo = function() {
+                        window._plinkUserPaused = true;  // v32.15: user paused — don't auto-resume
+                        video.pause();
+                    };
                     // v32.8: seekTo takes ABSOLUTE position (seconds from start)
                     window.seekTo = function(seconds) {
-                        try { video.currentTime = Math.max(0, Math.min(seconds, video.duration || seconds)); } catch(e) {}
+                        try {
+                            var target = Math.max(0, Math.min(seconds, video.duration || seconds));
+                            video.currentTime = target;
+                            // v32.15: update lastGoodPosition so watchdog doesn't think
+                            // this was a reset
+                            lastGoodPosition = target;
+                            lastPositionUpdate = Date.now();
+                        } catch(e) {}
                     };
                     // v32.8: seekRelative for ±10s buttons (forward + backward)
                     window.seekRelative = function(delta) {
@@ -1058,9 +1071,16 @@ struct WebVideoView: UIViewRepresentable {
                     });
 
                     setInterval(function() {
+                        // v32.15: don't auto-resume if user explicitly paused
+                        if (window._plinkUserPaused) return;
+
                         // v32.13: detect reset to 0 while video should be playing
                         // (YouTube sometimes reloads the video from start)
+                        // v32.15: but NOT if we're near the end — that's a legit
+                        // end-of-video state, not a reset
+                        var nearEnd = video.duration && video.currentTime >= video.duration - 2;
                         if (video.currentTime === 0 && lastGoodPosition > 5 &&
+                            !nearEnd &&
                             (Date.now() - lastPositionUpdate) < 10000) {
                             console.log("[Plink v32.13] Video reset detected, restoring to " + lastGoodPosition + "s");
                             video.currentTime = lastGoodPosition;

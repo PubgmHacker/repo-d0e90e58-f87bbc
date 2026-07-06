@@ -58,9 +58,11 @@ struct RoomView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Layout полностью зависит от фактической геометрии, а не от isFullscreenMode.
-            // Это устраняет баг растягивания чата при возврате из background.
-            let isLandscape = geo.size.width > geo.size.height
+            // 🔧 v34.1: Layout depends on BOTH device geometry AND isFullscreenMode.
+            // isFullscreenMode is set by the fullscreen button — immediately switches
+            // to landscape layout without waiting for device rotation.
+            // isLandscape (geo) is a fallback for when user physically rotates device.
+            let isLandscape = geo.size.width > geo.size.height || isFullscreenMode
 
             ZStack {
                 // ── 1. Ambilight фон (весь экран) ────────────────────

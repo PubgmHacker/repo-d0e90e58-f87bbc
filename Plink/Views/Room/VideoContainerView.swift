@@ -387,6 +387,13 @@ struct WebVideoView: UIViewRepresentable {
             config.userContentController.addUserScript(fullscreenCssScript)
         }
 
+        // 🔧 v30.1: For YouTube — register plinkBridge so the IFrame API
+        // can post messages back to Swift (ready / stateChange / error).
+        // The Coordinator itself is the WKScriptMessageHandler.
+        if isYouTubeLike {
+            config.userContentController.add(context.coordinator, name: "plinkBridge")
+        }
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
@@ -512,11 +519,84 @@ struct WebVideoView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    final class Coordinator {
+    // 🔧 v30.1: Coordinator is now NSObject + WKScriptMessageHandler so it can
+    // receive messages from the YouTube IFrame API via the plinkBridge handler.
+    final class Coordinator: NSObject, WKScriptMessageHandler {
         var bridge: VideoTimeBridge?
-        // 🔧 v22: YouTube guard — stores loaded videoId to prevent reload loops
+        // 🔧 v22: YouTube guard — stores loadedVideoId to prevent reload loops
         var loadedVideoId: String? = nil
         weak var webView: WKWebView?
+
+        // 🔧 v30.1: optional callback — invoked when player state changes.
+        // Wired up by RoomViewModel/SyncEngine to broadcast play/pause/seek
+        // to other participants in the room via WebSocket.
+        var onPlayerStateChange: ((Int, Double) -> Void)?
+        var onPlayerReady: (() -> Void)?
+        var onPlayerError: ((Int) -> Void)?
+
+        // MARK: - JS Bridge Handler
+
+        /// Called by window.webkit.messageHandlers.plinkBridge.postMessage(...) from the
+        /// YouTube IFrame API running inside the WKWebView. Protocol:
+        ///   { event: "ready" }                                  — player ready
+        ///   { event: "stateChange", state: Int, currentTime: N } — state change
+        ///   { event: "error", code: Int }                        — player error
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "plinkBridge",
+                  let dict = message.body as? [String: Any],
+                  let event = dict["event"] as? String else { return }
+
+            switch event {
+            case "ready":
+                print("🎉 YouTube v30.1: IFrame API ready — player initialized")
+                onPlayerReady?()
+
+            case "stateChange":
+                let state = dict["state"] as? Int ?? -1
+                let currentTime = dict["currentTime"] as? Double ?? 0.0
+                // YT.PlayerState: -1=unstarted, 0=ended, 1=playing, 2=paused,
+                // 3=buffering, 5=cued
+                print("🔄 YouTube v30.1: state=\(state), currentTime=\(currentTime)s")
+                onPlayerStateChange?(state, currentTime)
+
+            case "error":
+                let code = dict["code"] as? Int ?? -1
+                print("❌ YouTube v30.1: player error code=\(code)")
+                onPlayerError?(code)
+
+            default:
+                print("⚠️ YouTube v30.1: unknown event '\(event)'")
+            }
+        }
+
+        // MARK: - Native commands → JS
+
+        /// Resume playback (called from Swift UI play button)
+        func play() {
+            webView?.evaluateJavaScript("playVideo();", completionHandler: nil)
+        }
+
+        /// Pause playback (called from Swift UI pause button)
+        func pause() {
+            webView?.evaluateJavaScript("pauseVideo();", completionHandler: nil)
+        }
+
+        /// Seek to position in seconds (called from Swift UI scrub bar)
+        func seek(to seconds: Double) {
+            webView?.evaluateJavaScript("seekTo(\(seconds));", completionHandler: nil)
+        }
+
+        /// Get current playback time (for sync polling)
+        func getCurrentTime(completion: @escaping (Double) -> Void) {
+            webView?.evaluateJavaScript("getCurrentTime();", completionHandler: { result, _ in
+                if let time = result as? Double {
+                    completion(time)
+                } else {
+                    completion(0)
+                }
+            })
+        }
 
         /// Load YouTube video exactly once. Blocks duplicate calls from SwiftUI state changes.
         func loadVideoOnce(id: String, webView: WKWebView) {

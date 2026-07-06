@@ -117,30 +117,21 @@ struct RoomView: View {
             }
         }
         .onDisappear {
-            // 🔧 FIX v2 (July 2026): release the AppDelegate orientation lock so the
-            // rest of the app can rotate freely. forcePortrait() alone is not enough
-            // — the lock stays active and would constrain other screens.
+            // 🔧 v34.13: onDisappear fires on EVERY layout switch (fullscreen toggle).
+            // Previously it disconnected WS → reconnect → loadMedia → VideoContainerView
+            // re-render → WebContent rendering context destroyed → black screen.
+            // NOW: onDisappear does NOTHING except save position. All cleanup
+            // (WS disconnect, voiceChat endCall, cleanupFlow, unregister) happens
+            // ONLY in explicit close/exit button handlers.
             OrientationManager.shared.unlockOrientation()
             OrientationManager.shared.forcePortrait()
 
-            // 🔧 v34.10: DO NOT call unregister() OR cleanupFlow() here!
-            // onDisappear fires when switching portraitLayout ↔ landscapeLayout.
-            // The async Task below would eventually call unregister() which
-            // clears loadedVideoId → video reloads when WS reconnects.
-            // cleanupFlow + unregister are now ONLY called from explicit
-            // close/exit button handlers (onClose in ControlsOverlay).
-
             guard let viewModel else { return }
-            syncManager?.disconnect()
 
-            // Авто-пауза + сохранение позиции (через UserDefaults)
+            // Save position
             let position = viewModel.syncEngine.currentTime
             let roomID = room.id
             UserDefaults.standard.set(position, forKey: "room_position_\(roomID)")
-
-            // 🔧 v34.10: voiceChat.endCall + cleanupFlow moved to explicit
-            // close handlers. onDisappear should NOT do async cleanup that
-            // clears WebView state — it fires on every layout switch!
         }
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -442,10 +433,11 @@ struct RoomView: View {
                     if isFullscreen {
                         exitFullscreen()
                     } else {
+                        // 🔧 v34.13: ALL cleanup happens HERE (actual room exit)
+                        syncManager?.disconnect()
                         Task {
                             await voiceChat?.endCall()
                             await viewModel.cleanupFlow()
-                            // 🔧 v34.10: unregister WebView on ACTUAL room exit
                             WebViewControl.shared.unregister()
                         }
                         dismiss()
@@ -506,10 +498,11 @@ struct RoomView: View {
 
                             Button {
                                 HapticManager.impact(.medium)
+                                // 🔧 v34.13: ALL cleanup happens HERE (actual room exit)
+                                syncManager?.disconnect()
                                 Task {
                                     await voiceChat?.endCall()
                                     await viewModel.cleanupFlow()
-                                    // 🔧 v34.10: unregister WebView on ACTUAL room exit
                                     WebViewControl.shared.unregister()
                                 }
                                 dismiss()

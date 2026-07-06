@@ -121,13 +121,12 @@ struct RoomView: View {
             OrientationManager.shared.unlockOrientation()
             OrientationManager.shared.forcePortrait()
 
-            // 🔧 v34.9: DO NOT call unregister() here!
-            // onDisappear fires when switching portraitLayout ↔ landscapeLayout
-            // (SwiftUI tears down the old view tree). If we unregister here,
-            // loadedVideoId is cleared → next loadVideoOnce passes guard →
-            // video RELOADS from scratch!
-            // Instead, unregister is called in the explicit dismiss/cleanup paths.
-            // WebViewControl.shared.unregister()  ← REMOVED
+            // 🔧 v34.10: DO NOT call unregister() OR cleanupFlow() here!
+            // onDisappear fires when switching portraitLayout ↔ landscapeLayout.
+            // The async Task below would eventually call unregister() which
+            // clears loadedVideoId → video reloads when WS reconnects.
+            // cleanupFlow + unregister are now ONLY called from explicit
+            // close/exit button handlers (onClose in ControlsOverlay).
 
             guard let viewModel else { return }
             syncManager?.disconnect()
@@ -137,13 +136,9 @@ struct RoomView: View {
             let roomID = room.id
             UserDefaults.standard.set(position, forKey: "room_position_\(roomID)")
 
-            Task {
-                await voiceChat?.endCall()
-                await viewModel.cleanupFlow()
-                // 🔧 v34.9: unregister WebView HERE (actual room exit)
-                // NOT in onDisappear (which fires on layout switch)
-                WebViewControl.shared.unregister()
-            }
+            // 🔧 v34.10: voiceChat.endCall + cleanupFlow moved to explicit
+            // close handlers. onDisappear should NOT do async cleanup that
+            // clears WebView state — it fires on every layout switch!
         }
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -350,6 +345,8 @@ struct RoomView: View {
                         Task {
                             await voiceChat?.endCall()
                             await viewModel.cleanupFlow()
+                            // 🔧 v34.10: unregister WebView on ACTUAL room exit
+                            WebViewControl.shared.unregister()
                         }
                         dismiss()
                     }
@@ -412,6 +409,8 @@ struct RoomView: View {
                                 Task {
                                     await voiceChat?.endCall()
                                     await viewModel.cleanupFlow()
+                                    // 🔧 v34.10: unregister WebView on ACTUAL room exit
+                                    WebViewControl.shared.unregister()
                                 }
                                 dismiss()
                             } label: {

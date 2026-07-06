@@ -765,6 +765,10 @@ struct WebVideoView: UIViewRepresentable {
                 let currentTime = dict["currentTime"] as? Double ?? 0.0
                 // HTML5 video states: 0=ended, 1=playing, 2=paused (we map from events)
                 print("🔄 YouTube v32: state=\(state), currentTime=\(currentTime)s")
+                // v32.14: forward currentTime to WebViewControl so SyncEngine
+                // can update seek bar + time display in real time.
+                // This is called on every timeupdate (throttled to 1s in JS).
+                WebViewControl.shared.handleTimeUpdate(currentTime)
                 // v32.13: notify ended
                 if state == 0 {
                     WebViewControl.shared.handlePlayerEnded()

@@ -303,6 +303,11 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             clamped = max(0, time)  // don't clamp upper bound if duration unknown
         }
 
+        // 🔧 v32.19: set seek lock — block WebView timeupdate for 1.5s so
+        // seek bar shows the new position immediately (YouTube seek is async,
+        // timeupdate sends old position for ~0.5s before seek takes effect)
+        seekLockUntil = Date().addingTimeInterval(1.5)
+
         // 🔧 FIX: for webview mode, there's no AVPlayer to seek. Just update
         // currentTime, send JS seek to YouTube player, and broadcast.
         if player == nil {
@@ -348,9 +353,17 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     /// updates after seeks (seek to 100s, timeupdate sends 100.5, diff > 5 →
     /// blocked). Now always updates, but only triggers objectWillChange if the
     /// value actually changed (SwiftUI @Published deduplicates automatically).
+    /// 🔧 v32.19: added seekLock — after user seek, block WebView timeupdate
+    /// for 1.5s so the seek bar shows the new position immediately instead of
+    /// lagging back to old position (YouTube seek is async).
+    private var seekLockUntil: Date = .distantPast
+
     func updateCurrentTimeFromWebView(_ time: TimeInterval) {
-        // v32.17: always update — @Published deduplicates, no feedback loop risk
-        // because this method does NOT call seek() (which would cause the loop)
+        // v32.19: if we're within 1.5s of a user seek, ignore WebView updates
+        // (they send old position before seek takes effect)
+        if Date() < seekLockUntil {
+            return
+        }
         currentTime = time
     }
 
@@ -361,7 +374,7 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     func updateDurationFromWebView(_ duration: TimeInterval) {
         guard duration > 0 else { return }
         self.duration = duration
-        Logger.sync.info("📏 Duration updated from WebView: \(duration)s")
+        print("📏 SyncEngine v32.19: duration = \(duration)s")
     }
 
     // MARK: - Late Joiner Support

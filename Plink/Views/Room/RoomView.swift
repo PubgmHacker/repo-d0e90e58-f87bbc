@@ -108,20 +108,14 @@ struct RoomView: View {
             }
         }
         .onAppear {
-            // 🔧 v35.4: ONLY reset orientation on FIRST appear.
-            // SwiftUI fires onAppear again when isFullscreenMode changes
-            // (withAnimation batches the state → onAppear sees OLD value).
-            // hasRoomAppeared prevents re-entrant resetToPortrait.
-            guard !hasRoomAppeared else { return }
-            hasRoomAppeared = true
-            resetToPortrait()
+            // 🔧 v35.5: NO resetToPortrait here — it fires on re-entrant
+            // onAppear during fullscreen toggle and cancels lockToLandscape.
+            // Orientation is locked in setupViewModel (portrait) and unlocked
+            // only in explicit room-exit handlers.
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                if !isFullscreenMode {
-                    resetToPortrait()
-                }
-            }
+            // 🔧 v35.5: NO resetToPortrait on scenePhase change.
+            // This was firing during lockToLandscape() → cancelling it.
         }
         .onDisappear {
             // 🔧 v35.3: ONLY save position. NO orientation reset here.

@@ -149,21 +149,29 @@ struct RoomView: View {
         }
     }
 
-    // MARK: - Unified Layout (v34.20) — ZERO view tree changes on fullscreen
+    // MARK: - Unified Layout (v34.21) — TRULY IMMUTABLE view tree
+    //
+    // 🔧 v34.19 had a subtle bug: `if !isLandscape { RoomChatView... }` changed
+    // the number of VStack children when toggling fullscreen. SwiftUI assigned
+    // new identity to the remaining videoSection child → UIViewRepresentable
+    // got makeUIView again → WKWebView moved to new superview → rendering
+    // context destroyed → video reset.
+    //
+    // v34.21 FIX: Chat is ALWAYS in the VStack, height 0 in landscape.
+    // View tree structure NEVER changes — only frame heights do.
 
     @ViewBuilder
     private func unifiedLayout(viewModel: RoomViewModel, geo: GeometryProxy, isLandscape: Bool) -> some View {
         let videoWidth = geo.size.width
         let videoHeight: CGFloat = isLandscape ? geo.size.height : (geo.size.width * 9.0 / 16.0)
-        let chatHeight: CGFloat = max(geo.size.height - videoHeight - 8, 0)
+        let chatHeight: CGFloat = isLandscape ? 0 : max(geo.size.height - videoHeight - 8, 0)
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
-        // 🔧 v34.20: NO if/else ANYWHERE. Same view tree ALWAYS.
-        // Even 'if !isLandscape' inside VStack changes the view tree →
-        // SwiftUI re-layout → WKWebView rendering context destroyed.
-        // Now: chat is ALWAYS in view tree, hidden via frame(height: 0) + opacity(0).
+        // 🔧 v34.21: TRULY immutable VStack — same 2 children always.
+        // SwiftUI diff sees: child[0] = videoSection (unchanged), child[1] = chat (unchanged).
+        // Only frame heights change → no identity change → WKWebView stays put.
         VStack(spacing: 0) {
-            // Video — ALWAYS first child
+            // Video — ALWAYS first child, ALWAYS same position
             videoSection(
                 viewModel: viewModel,
                 videoWidth: videoWidth,
@@ -172,7 +180,8 @@ struct RoomView: View {
             )
             .frame(height: videoHeight)
 
-            // Portrait chat — ALWAYS in view tree, hidden in landscape
+            // Chat — ALWAYS second child. Height 0 in landscape (hidden),
+            // full height in portrait. View tree NEVER changes — no `if` block.
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -180,48 +189,49 @@ struct RoomView: View {
                 currentUserID: viewModel.currentUserId,
                 mode: .portrait
             )
-            .frame(height: isLandscape ? 0 : chatHeight)
-            .opacity(isLandscape ? 0 : 1)
+            .frame(height: chatHeight)
             .background(
                 Group {
                     if roomTheme.hasPlayerBorder { roomTheme.chatBackground } else { Color.clear }
                 }
             )
-            .padding(.horizontal, isLandscape ? 0 : 8)
-            .padding(.bottom, isLandscape ? 0 : 8)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+            .clipped()  // clips chat content when height is 0 in landscape
         }
-        // Landscape chat overlay — ALWAYS in view tree, hidden in portrait
+        // Landscape chat overlay — ALWAYS present, hidden via opacity in portrait
         .overlay {
             ZStack {
-                RoomChatView(
-                    messages: syncManager?.chatMessages ?? viewModel.messages,
-                    chatText: chatTextBinding,
-                    onSend: sendMessage,
-                    currentUserID: viewModel.currentUserId,
-                    mode: .landscape,
-                    isPanelOpen: $showChatPanel
-                )
-                .ignoresSafeArea()
+                    RoomChatView(
+                        messages: syncManager?.chatMessages ?? viewModel.messages,
+                        chatText: chatTextBinding,
+                        onSend: sendMessage,
+                        currentUserID: viewModel.currentUserId,
+                        mode: .landscape,
+                        isPanelOpen: $showChatPanel
+                    )
+                    .ignoresSafeArea()
 
-                if !showChatPanel {
-                    VStack {
-                        Spacer()
-                        HStack {
+                    if !showChatPanel {
+                        VStack {
                             Spacer()
-                            Button {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    showChatPanel = true
+                            HStack {
+                                Spacer()
+                                Button {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        showChatPanel = true
+                                    }
+                                } label: {
+                                    Image(systemName: "bubble.left.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
                                 }
-                            } label: {
-                                Image(systemName: "bubble.left.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white)
-                                    .frame(width: 40, height: 40)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
+                                .padding(.trailing, 16)
+                                .padding(.bottom, 24)
                             }
-                            .padding(.trailing, 16)
-                            .padding(.bottom, 24)
                         }
                     }
                 }

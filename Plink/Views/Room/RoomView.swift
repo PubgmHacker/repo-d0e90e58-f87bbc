@@ -631,6 +631,16 @@ struct RoomView: View {
         }
         OrientationManager.shared.lockToLandscape()
         resetControlsTimer()
+        // 🔧 FULLSCREEN FIX: force video element to recalculate size after rotation.
+        // Multiple retries because rotation + layout settle over ~0.5-0.8s.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            WebViewControl.shared.triggerResize()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            WebViewControl.shared.triggerResize()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            WebViewControl.shared.triggerResize()
+        }
     }
 
     private func exitFullscreen() {
@@ -641,6 +651,13 @@ struct RoomView: View {
         }
         OrientationManager.shared.lockToPortrait()
         resetControlsTimer()
+        // 🔧 FULLSCREEN FIX: force video to recalculate size after rotating back to portrait
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            WebViewControl.shared.triggerResize()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            WebViewControl.shared.triggerResize()
+        }
     }
 
     private func resetControlsTimer() {

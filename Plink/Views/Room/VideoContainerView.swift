@@ -1221,70 +1221,45 @@ struct WebVideoView: UIViewRepresentable {
             // misses these late-added elements.
             // Also inject on didCommit (page start) for early hide.
 
-            // 🔧 v35.6: Detect if this is embed mode (loadHTMLString) or
-            // m.youtube.com fallback. Embed needs simple CSS; fallback needs
-            // FULL CSS to hide all YouTube UI (logo, controls, topbar, etc.)
-            let isEmbedMode = webView.url?.host?.contains("www.youtube.com") == true &&
-                             !webView.url?.path.contains("/watch") ?? true
-
-            let cssInjection: String
-            if isEmbedMode {
-                // Simple CSS for IFrame API embed
-                cssInjection = """
-                (function() {
-                    var style = document.createElement('style');
-                    style.textContent = [
-                        'html, body { background: #000 !important; overflow: hidden !important;',
-                        '  width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; }',
-                        'iframe { width: 100% !important; height: 100% !important; border: none !important; }',
-                        'video { position: fixed !important; top: 0 !important; left: 0 !important;',
-                        '  width: 100% !important; height: 100% !important; z-index: 999999 !important;',
-                        '  object-fit: contain !important; background: #000 !important; }'
-                    ].join('\\\\n');
-                    (document.head || document.documentElement).appendChild(style);
-                    console.log("[Plink v35.6] CSS injected (embed mode)");
-                })();
-                """
-            } else {
-                // FULL CSS for m.youtube.com fallback — hide ALL YouTube UI
-                cssInjection = """
-                (function() {
-                    var style = document.createElement('style');
-                    style.textContent = [
-                        'html, body { background: #000 !important; overflow: hidden !important;',
-                        '  position: fixed !important; width: 100% !important; height: 100% !important;',
-                        '  margin: 0 !important; padding: 0 !important; top: 0 !important; left: 0 !important; }',
-                        '#masthead-container, #masthead, ytd-masthead, ytd-mini-guide-renderer,',
-                        'ytd-guide, #guide-button, #back-button, #logo,',
-                        '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
-                        'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
-                        '.slim-video-information-title, .slim-video-information-meta,',
-                        'ytm-channel-name, ytm-subscribe-button-renderer,',
-                        'ytm-comment-section-renderer, #comments-button, ytd-comments, #comments,',
-                        'ytm-compact-video-renderer, ytm-item-section-renderer, #related, #secondary,',
-                        '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                        '.ytp-progress-bar-container, .ytp-settings-button,',
-                        '.ytp-fullscreen-button, .ytp-mute-button, .ytp-unmute-button,',
-                        '.ytp-play-button, .ytp-time-display, .ytp-watermark,',
-                        '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
-                        '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
-                        'button[aria-label*=\"mute\"], button[aria-label*=\"Mute\"],',
-                        'button[aria-label*=\"unmute\"], button[aria-label*=\"Unmute\"],',
-                        'ytd-topbar-logo-renderer, ytd-search, #search-form, #search-input,',
-                        '#end, #buttons, ytd-topbar-menu-button-renderer,',
-                        'ytm-topbar, ytm-topbar-renderer, ytd-mobile-topbar-renderer {',
-                        '  display: none !important; visibility: hidden !important; opacity: 0 !important;',
-                        '  pointer-events: none !important; }',
-                        '#movie_player, #movie_player video, .html5-main-video {',
-                        '  position: fixed !important; top: 0 !important; left: 0 !important;',
-                        '  width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important;',
-                        '  object-fit: contain !important; background: #000 !important; }'
-                    ].join('\\\\n');
-                    (document.head || document.documentElement).appendChild(style);
-                    console.log("[Plink v35.6] CSS injected (m.youtube.com fallback — FULL hide)");
-                })();
-                """
-            }
+            // 🔧 v36: ALWAYS use FULL CSS — we load m.youtube.com directly now.
+            // Hide ALL YouTube UI, show only video on top of everything.
+            let cssInjection = """
+            (function() {
+                var style = document.createElement('style');
+                style.textContent = [
+                    'html, body { background: #000 !important; overflow: hidden !important;',
+                    '  position: fixed !important; width: 100% !important; height: 100% !important;',
+                    '  margin: 0 !important; padding: 0 !important; top: 0 !important; left: 0 !important; }',
+                    '#masthead-container, #masthead, ytd-masthead, ytd-mini-guide-renderer,',
+                    'ytd-guide, #guide-button, #back-button, #logo,',
+                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                    'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
+                    '.slim-video-information-title, .slim-video-information-meta,',
+                    'ytm-channel-name, ytm-subscribe-button-renderer,',
+                    'ytm-comment-section-renderer, #comments-button, ytd-comments, #comments,',
+                    'ytm-compact-video-renderer, ytm-item-section-renderer, #related, #secondary,',
+                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+                    '.ytp-progress-bar-container, .ytp-settings-button,',
+                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-unmute-button,',
+                    '.ytp-play-button, .ytp-time-display, .ytp-watermark,',
+                    '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
+                    '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
+                    'button[aria-label*=\"mute\"], button[aria-label*=\"Mute\"],',
+                    'button[aria-label*=\"unmute\"], button[aria-label*=\"Unmute\"],',
+                    'ytd-topbar-logo-renderer, ytd-search, #search-form, #search-input,',
+                    '#end, #buttons, ytd-topbar-menu-button-renderer,',
+                    'ytm-topbar, ytm-topbar-renderer, ytd-mobile-topbar-renderer {',
+                    '  display: none !important; visibility: hidden !important; opacity: 0 !important;',
+                    '  pointer-events: none !important; }',
+                    '#movie_player, #movie_player video, .html5-main-video {',
+                    '  position: fixed !important; top: 0 !important; left: 0 !important;',
+                    '  width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important;',
+                    '  object-fit: contain !important; background: #000 !important; }'
+                ].join('\\\\n');
+                (document.head || document.documentElement).appendChild(style);
+                console.log("[Plink v36] CSS injected (m.youtube.com direct — FULL hide)");
+            })();
+            """
 
             // JS: poll for <video> element, attach listeners, bridge to Swift
             let jsBridge = """
@@ -1604,36 +1579,28 @@ struct WebVideoView: UIViewRepresentable {
         }
 
         /// Load YouTube video exactly once. Blocks duplicate calls from SwiftUI state changes.
-        /// 🔧 v34.8: uses WebViewControl.shared.loadedVideoId (singleton) instead of
-        /// self.loadedVideoId (Coordinator instance). When SwiftUI switches portrait ↔
-        /// landscape, it creates a NEW Coordinator → old loadedVideoId was nil → reload.
-        /// With singleton, loadedVideoId persists across Coordinator recreation.
-        ///
-        /// 🔧 v35: loadHTMLString with IFrame API + baseURL: https://www.youtube.com
-        /// This bypasses error 153 because the IFrame API script runs in OUR page
-        /// context. The baseURL tells YouTube's origin check that we're from youtube.com.
+        /// 🔧 v36: DIRECT m.youtube.com loading — skip IFrame API (error 152).
+        /// Load the REAL m.youtube.com/watch page, hide ALL YouTube UI via CSS,
+        /// overlay Plink controls. YouTube handles video natively including
+        /// swipe-down gesture in landscape.
         func loadVideoOnce(id: String, webView: WKWebView) {
             guard !id.isEmpty else { return }
-            // v34.8: check SINGLETON loadedVideoId, not self.loadedVideoId
             guard id != WebViewControl.shared.loadedVideoId else {
-                print("📺 v35: video already loaded (\(id)) — skipping reload")
+                print("📺 v36: video already loaded (\(id)) — skipping reload")
                 return
             }
             WebViewControl.shared.loadedVideoId = id
-            self.loadedVideoId = id  // also keep local copy for compatibility
-            WebViewControl.shared.didFallbackToFullPage = false  // reset fallback flag
+            self.loadedVideoId = id
+            WebViewControl.shared.didFallbackToFullPage = true  // skip IFrame API fallback
 
             let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
+            let watchURLString = "https://m.youtube.com/watch?v=\(cleanVideoId)"
+            guard let watchURL = URL(string: watchURLString) else { return }
 
-            // 🔧 v35: loadHTMLString with YouTube IFrame API + baseURL youtube.com
-            // This is the "Headless" approach: IFrame API runs in our HTML context,
-            // bypasses error 153 (origin spoofing). play/pause/seek via JS bridge.
-            let htmlString = WebVideoView.youtubeEmbedHTML(videoId: cleanVideoId)
-            let baseURL = URL(string: "https://www.youtube.com")!
-
-            print("📺 YouTube v35: loading IFrame API via loadHTMLString, videoId='\(cleanVideoId)'")
+            print("📺 YouTube v36: loading m.youtube.com/watch?v=\(cleanVideoId) (direct, no IFrame API)")
             DispatchQueue.main.async {
-                webView.loadHTMLString(htmlString, baseURL: baseURL)
+                let request = URLRequest(url: watchURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30.0)
+                webView.load(request)
             }
         }
 

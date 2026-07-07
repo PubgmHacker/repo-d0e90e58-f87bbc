@@ -778,28 +778,26 @@ struct RoomView: View {
             syncEngine.updateDurationFromWebView(duration)
         }
         // 🔧 v32.12: wire player ready event — hides loading overlay.
-        // Triggered when plinkBridge receives 'ready' from JS.
         WebViewControl.shared.onPlayerReady = {
-            // Hide loading overlay — video is ready, CSS has been applied
-            // Post notification to update VideoContainerView's isYouTubeReady
             NotificationCenter.default.post(name: .youtubePlayerReady, object: nil)
-            // v32.12: try to unmute + play immediately (may fail on iOS without
-            // user gesture — user will need to tap once to unmute).
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WebViewControl.shared.unmute()
             }
-            // v32.13: reset ended state when new video loads
             DispatchQueue.main.async {
                 isVideoEnded = false
             }
         }
-        // 🔧 v32.13: wire player ended event — shows completion screen.
+        // 🔧 v32.13: wire player ended event
         WebViewControl.shared.onPlayerEnded = {
             DispatchQueue.main.async {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isVideoEnded = true
                 }
             }
+        }
+        // 🔧 v35.6: wire play state change → SyncEngine.isPlaying
+        WebViewControl.shared.onPlayStateChange = { playing in
+            syncEngine.setIsPlaying(playing)
         }
 
         let vm = RoomViewModel(

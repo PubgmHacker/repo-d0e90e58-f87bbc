@@ -39,12 +39,15 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     @Published private(set) var syncQuality: SyncQuality = .perfect
     @Published private(set) var isLoadingMedia = false
 
-    /// 🔧 v34.18: public setter for currentMediaItem — used by RoomViewModel
-    /// to restore currentMediaItem on WS reconnect WITHOUT calling loadMedia
-    /// (which would teardownPlayer → currentMediaItem = nil → re-render →
-    /// rendering context destroyed).
+    /// 🔧 v34.18: public setter for currentMediaItem
     func setCurrentMediaItem(_ item: MediaItem) {
         currentMediaItem = item
+    }
+
+    /// 🔧 v35.6: public setter for isPlaying — updated from YouTube IFrame API
+    /// state changes so ControlsOverlay shows correct play/pause icon.
+    func setIsPlaying(_ playing: Bool) {
+        isPlaying = playing
     }
     @Published private(set) var errorMessage: String?
     @Published var volume: Float = 1.0 {

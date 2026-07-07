@@ -72,6 +72,13 @@ final class WebViewControl {
         onPlayerEnded?()
     }
 
+    /// 🔧 v35.6: handle play state change from YouTube IFrame API.
+    /// Updates SyncEngine.isPlaying so ControlsOverlay shows correct icon.
+    var onPlayStateChange: ((Bool) -> Void)?
+    func handlePlayStateChange(_ isPlaying: Bool) {
+        onPlayStateChange?(isPlaying)
+    }
+
     /// 🔧 v32.11: unmute video. iOS blocks unmuted autoplay without user gesture.
     /// This must be called from a user gesture handler (tap) to work.
     /// Calls video.muted = false; video.play() via evaluateJavaScript.
@@ -1114,13 +1121,18 @@ struct WebVideoView: UIViewRepresentable {
             case "stateChange":
                 let state = dict["state"] as? Int ?? -1
                 let currentTime = dict["currentTime"] as? Double ?? 0.0
-                // HTML5 video states: 0=ended, 1=playing, 2=paused (we map from events)
                 print("🔄 YouTube v32: state=\(state), currentTime=\(currentTime)s")
-                // v32.14: forward currentTime to WebViewControl so SyncEngine
-                // can update seek bar + time display in real time.
-                // This is called on every timeupdate (throttled to 1s in JS).
                 WebViewControl.shared.handleTimeUpdate(currentTime)
-                // v32.13: notify ended
+
+                // 🔧 v35.6: Update isPlaying state so ControlsOverlay shows
+                // correct play/pause icon.
+                // YT states: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
+                if state == 1 {
+                    WebViewControl.shared.handlePlayStateChange(true)
+                } else if state == 2 || state == 0 {
+                    WebViewControl.shared.handlePlayStateChange(false)
+                }
+
                 if state == 0 {
                     WebViewControl.shared.handlePlayerEnded()
                 }
@@ -1209,44 +1221,70 @@ struct WebVideoView: UIViewRepresentable {
             // misses these late-added elements.
             // Also inject on didCommit (page start) for early hide.
 
-            // CSS: OVERLAY approach — video on top of everything, black background hides rest
-            // 🔧 v32.5: instead of hiding individual YouTube elements (losing battle —
-            // they change class names), we OVERLAY the video on top of everything.
-            // The black body background hides all YouTube UI behind the video.
-            // Only YouTube's own player controls (.ytp-*) are hidden, since they're
-            // INSIDE #movie_player and would show on top of the video.
-            // 🔧 v32.7: also hide topbar/header elements that appear in corners
-            // (YouTube logo top-left, search + 3-dot menu top-right). These are
-            // NOT inside #movie_player so v32.5 overlay didn't cover them.
-            // 🔧 v34.30: Simple CSS for embed — just black bg, video fills screen.
-            // No need for MutationObserver or nuclear CSS — embed is already clean.
-            let cssInjection = """
-            (function() {
-                var style = document.createElement('style');
-                style.textContent = [
-                    'html, body {',
-                    '    background: #000 !important;',
-                    '    overflow: hidden !important;',
-                    '    width: 100% !important; height: 100% !important;',
-                    '    margin: 0 !important; padding: 0 !important;',
-                    '}',
-                    'iframe {',
-                    '    width: 100% !important; height: 100% !important;',
-                    '    border: none !important;',
-                    '}',
-                    'video {',
-                    '    position: fixed !important;',
-                    '    top: 0 !important; left: 0 !important;',
-                    '    width: 100% !important; height: 100% !important;',
-                    '    z-index: 999999 !important;',
-                    '    object-fit: contain !important;',
-                    '    background: #000 !important;',
-                    '}'
-                ].join('\\\\n');
-                (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v34.30] CSS injected (embed mode)");
-            })();
-            """
+            // 🔧 v35.6: Detect if this is embed mode (loadHTMLString) or
+            // m.youtube.com fallback. Embed needs simple CSS; fallback needs
+            // FULL CSS to hide all YouTube UI (logo, controls, topbar, etc.)
+            let isEmbedMode = webView.url?.host?.contains("www.youtube.com") == true &&
+                             !webView.url?.path.contains("/watch") ?? true
+
+            let cssInjection: String
+            if isEmbedMode {
+                // Simple CSS for IFrame API embed
+                cssInjection = """
+                (function() {
+                    var style = document.createElement('style');
+                    style.textContent = [
+                        'html, body { background: #000 !important; overflow: hidden !important;',
+                        '  width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; }',
+                        'iframe { width: 100% !important; height: 100% !important; border: none !important; }',
+                        'video { position: fixed !important; top: 0 !important; left: 0 !important;',
+                        '  width: 100% !important; height: 100% !important; z-index: 999999 !important;',
+                        '  object-fit: contain !important; background: #000 !important; }'
+                    ].join('\\\\n');
+                    (document.head || document.documentElement).appendChild(style);
+                    console.log("[Plink v35.6] CSS injected (embed mode)");
+                })();
+                """
+            } else {
+                // FULL CSS for m.youtube.com fallback — hide ALL YouTube UI
+                cssInjection = """
+                (function() {
+                    var style = document.createElement('style');
+                    style.textContent = [
+                        'html, body { background: #000 !important; overflow: hidden !important;',
+                        '  position: fixed !important; width: 100% !important; height: 100% !important;',
+                        '  margin: 0 !important; padding: 0 !important; top: 0 !important; left: 0 !important; }',
+                        '#masthead-container, #masthead, ytd-masthead, ytd-mini-guide-renderer,',
+                        'ytd-guide, #guide-button, #back-button, #logo,',
+                        '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+                        'ytm-watch-metadata, ytm-slim-video-action-bar-renderer,',
+                        '.slim-video-information-title, .slim-video-information-meta,',
+                        'ytm-channel-name, ytm-subscribe-button-renderer,',
+                        'ytm-comment-section-renderer, #comments-button, ytd-comments, #comments,',
+                        'ytm-compact-video-renderer, ytm-item-section-renderer, #related, #secondary,',
+                        '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+                        '.ytp-progress-bar-container, .ytp-settings-button,',
+                        '.ytp-fullscreen-button, .ytp-mute-button, .ytp-unmute-button,',
+                        '.ytp-play-button, .ytp-time-display, .ytp-watermark,',
+                        '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
+                        '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
+                        'button[aria-label*=\"mute\"], button[aria-label*=\"Mute\"],',
+                        'button[aria-label*=\"unmute\"], button[aria-label*=\"Unmute\"],',
+                        'ytd-topbar-logo-renderer, ytd-search, #search-form, #search-input,',
+                        '#end, #buttons, ytd-topbar-menu-button-renderer,',
+                        'ytm-topbar, ytm-topbar-renderer, ytd-mobile-topbar-renderer {',
+                        '  display: none !important; visibility: hidden !important; opacity: 0 !important;',
+                        '  pointer-events: none !important; }',
+                        '#movie_player, #movie_player video, .html5-main-video {',
+                        '  position: fixed !important; top: 0 !important; left: 0 !important;',
+                        '  width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important;',
+                        '  object-fit: contain !important; background: #000 !important; }'
+                    ].join('\\\\n');
+                    (document.head || document.documentElement).appendChild(style);
+                    console.log("[Plink v35.6] CSS injected (m.youtube.com fallback — FULL hide)");
+                })();
+                """
+            }
 
             // JS: poll for <video> element, attach listeners, bridge to Swift
             let jsBridge = """

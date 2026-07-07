@@ -202,36 +202,35 @@ struct RoomView: View {
         // Landscape chat overlay — ALWAYS present, hidden via opacity in portrait
         .overlay {
             ZStack {
-                    RoomChatView(
-                        messages: syncManager?.chatMessages ?? viewModel.messages,
-                        chatText: chatTextBinding,
-                        onSend: sendMessage,
-                        currentUserID: viewModel.currentUserId,
-                        mode: .landscape,
-                        isPanelOpen: $showChatPanel
-                    )
-                    .ignoresSafeArea()
+                RoomChatView(
+                    messages: syncManager?.chatMessages ?? viewModel.messages,
+                    chatText: chatTextBinding,
+                    onSend: sendMessage,
+                    currentUserID: viewModel.currentUserId,
+                    mode: .landscape,
+                    isPanelOpen: $showChatPanel
+                )
+                .ignoresSafeArea()
 
-                    if !showChatPanel {
-                        VStack {
+                if !showChatPanel {
+                    VStack {
+                        Spacer()
+                        HStack {
                             Spacer()
-                            HStack {
-                                Spacer()
-                                Button {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                        showChatPanel = true
-                                    }
-                                } label: {
-                                    Image(systemName: "bubble.left.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                        .frame(width: 40, height: 40)
-                                        .background(.ultraThinMaterial)
-                                        .clipShape(Circle())
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    showChatPanel = true
                                 }
-                                .padding(.trailing, 16)
-                                .padding(.bottom, 24)
+                            } label: {
+                                Image(systemName: "bubble.left.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
                             }
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 24)
                         }
                     }
                 }

@@ -825,8 +825,7 @@ struct WebVideoView: UIViewRepresentable {
                             'fs': 0,
                             'controls': 0,
                             'disablekb': 1,
-                            'iv_load_policy': 3,
-                            'origin': 'https://www.youtube.com'
+                            'iv_load_policy': 3
                         },
                         events: {
                             'onReady': function(e) {

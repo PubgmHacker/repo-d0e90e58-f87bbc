@@ -106,34 +106,21 @@ struct RoomView: View {
             }
         }
         .onAppear {
-            // 🔧 v34.25: guard against re-entrant onAppear during fullscreen toggle.
-            // SwiftUI fires onAppear when the view tree re-evaluates after rotation.
-            // Without this guard, lockToPortrait() fires AFTER enterFullscreen()'s
-            // lockToLandscape() → orientation flips back → video resets.
+            // 🔧 v35.3: guard against re-entrant onAppear during fullscreen toggle.
             guard !isFullscreenMode else { return }
             resetToPortrait()
-            OrientationManager.shared.lockToPortrait()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            print("📱📱 scenePhase changed to: \(newPhase), isFullscreenMode: \(isFullscreenMode)")
             if newPhase == .active {
-                // 🔧 v35: Lifecycle management moved to Coordinator (NotificationCenter).
-                // scenePhase still handles orientation reset only.
                 if !isFullscreenMode {
                     resetToPortrait()
                 }
             }
         }
         .onDisappear {
-            print("📱📱📱 onDisappear FIRED — isFullscreenMode: \(isFullscreenMode)")
-            // 🔧 v34.13+22: onDisappear fires on EVERY layout switch (fullscreen toggle).
-            // Do NOT reset orientation here — it cancels the fullscreen landscape lock!
-            // Orientation unlock + forcePortrait now live in the actual room-exit handlers
-            // (onClose non-fullscreen, video-ended exit button).
-            // Only save position here.
+            // 🔧 v35.3: ONLY save position. NO orientation reset here.
+            // Orientation unlock + forcePortrait live in room-exit handlers.
             guard let viewModel else { return }
-
-            // Save position
             let position = viewModel.syncEngine.currentTime
             let roomID = room.id
             UserDefaults.standard.set(position, forKey: "room_position_\(roomID)")

@@ -95,6 +95,35 @@ final class WebViewControl {
         webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    /// 🔧 FULLSCREEN FIX: Force YouTube <video> to recalculate its size after
+    /// device rotation. CSS uses `100vw`/`100vh` which don't update in WKWebView
+    /// after orientation change — video stays at portrait dimensions → black screen
+    /// with audio only. This sets explicit pixel dimensions + dispatches resize.
+    func triggerResize() {
+        let js = """
+        (function() {
+            var v = document.querySelector('video');
+            if (!v) return;
+            var w = window.innerWidth, h = window.innerHeight;
+            // Force video to exact screen dimensions in pixels
+            v.style.width = w + 'px';
+            v.style.height = h + 'px';
+            // Also resize #movie_player container
+            var mp = document.getElementById('movie_player');
+            if (mp) {
+                mp.style.width = w + 'px';
+                mp.style.height = h + 'px';
+            }
+            // Dispatch resize event so YouTube's player JS recalculates layout
+            window.dispatchEvent(new Event('resize'));
+            // Also trigger orientationchange for older handlers
+            window.dispatchEvent(new Event('orientationchange'));
+            console.log('[Plink] triggerResize: ' + w + 'x' + h);
+        })();
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     func play() {
         // v32.6: try window.playVideo() first (defined by v32 JS bridge).
         // Fallback: find <video> element directly and call play().

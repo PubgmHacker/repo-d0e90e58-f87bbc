@@ -967,6 +967,63 @@ struct WebVideoView: UIViewRepresentable {
         weak var webView: WKWebView?
         /// 🔧 v35: saved state for lifecycle pause/resume
         private var _savedPlaybackTime: Double = 0
+        /// 🔧 v35.2: saved orientation lock before fullscreen
+        private var _savedOrientationLock: UIInterfaceOrientationMask = .all
+
+        // MARK: - Lifecycle (v35) + Window Observer (v35.2)
+
+        override init() {
+            super.init()
+            // 🔧 v35: Pause video when app loses focus (notification shade, control center).
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appWillResignActive),
+                name: UIApplication.willResignActiveNotification, object: nil
+            )
+            // 🔧 v35: Resume video when app regains focus via micro-seek.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appDidBecomeActive),
+                name: UIApplication.didBecomeActiveNotification, object: nil
+            )
+            // 🔧 v35.2: AVFullScreenViewController window observer.
+            // When YouTube's native fullscreen player appears, allow all orientations.
+            // When it disappears, restore previous lock.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(windowDidBecomeVisible(_:)),
+                name: UIWindow.didBecomeVisibleNotification, object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(windowDidBecomeHidden(_:)),
+                name: UIWindow.didBecomeHiddenNotification, object: nil
+            )
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        // 🔧 v35.2: Handle AVFullScreenViewController appearance
+        @objc private func windowDidBecomeVisible(_ notification: Notification) {
+            guard let window = notification.object as? UIWindow else { return }
+            // Check if this is the AVFullScreenViewController window
+            let className = String(describing: type(of: window.rootViewController ?? NSObject()))
+            if className.contains("AVFullScreen") || className.contains("AVPlayer") {
+                print("📱 v35.2: AVFullScreenViewController appeared — allowing all orientations")
+                _savedOrientationLock = PlinkAppDelegate.orientationLock
+                PlinkAppDelegate.orientationLock = .allButUpsideDown
+                // Force UIKit to re-query supported orientations
+                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+        }
+
+        @objc private func windowDidBecomeHidden(_ notification: Notification) {
+            guard let window = notification.object as? UIWindow else { return }
+            let className = String(describing: type(of: window.rootViewController ?? NSObject()))
+            if className.contains("AVFullScreen") || className.contains("AVPlayer") {
+                print("📱 v35.2: AVFullScreenViewController dismissed — restoring orientation lock")
+                PlinkAppDelegate.orientationLock = _savedOrientationLock
+                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+        }
 
         // 🔧 v30.1: optional callback — invoked when player state changes.
         // Wired up by RoomViewModel/SyncEngine to broadcast play/pause/seek
@@ -974,29 +1031,6 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerStateChange: ((Int, Double) -> Void)?
         var onPlayerReady: (() -> Void)?
         var onPlayerError: ((Int) -> Void)?
-
-        // MARK: - Lifecycle (v35)
-
-        override init() {
-            super.init()
-            // 🔧 v35: Pause video when app loses focus (notification shade, control center).
-            // This prevents the render freeze — instead of letting WKWebView's compositor
-            // die mid-stream, we pause cleanly and resume on didBecomeActive.
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(appWillResignActive),
-                name: UIApplication.willResignActiveNotification, object: nil
-            )
-            // 🔧 v35: Resume video when app regains focus.
-            // Micro-seek kick-starts the WKWebView rendering pipeline.
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(appDidBecomeActive),
-                name: UIApplication.didBecomeActiveNotification, object: nil
-            )
-        }
-
-        deinit {
-            NotificationCenter.default.removeObserver(self)
-        }
 
         @objc private func appWillResignActive() {
             guard webView != nil else { return }

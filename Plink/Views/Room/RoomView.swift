@@ -42,6 +42,8 @@ struct RoomView: View {
     /// с авторотацией в ландшафт. ВАЖНО: используется ТОЛЬКО для управления
     /// ориентацией устройства, а НЕ для выбора layout (layout зависит от геометрии).
     @State private var isFullscreenMode = false
+    /// 🔧 v35.4: prevents resetToPortrait on re-entrant onAppear (fullscreen toggle).
+    @State private var hasRoomAppeared = false
     /// 🔧 v32.13: video ended — shows completion screen with replay/exit buttons.
     @State private var isVideoEnded = false
 
@@ -106,8 +108,12 @@ struct RoomView: View {
             }
         }
         .onAppear {
-            // 🔧 v35.3: guard against re-entrant onAppear during fullscreen toggle.
-            guard !isFullscreenMode else { return }
+            // 🔧 v35.4: ONLY reset orientation on FIRST appear.
+            // SwiftUI fires onAppear again when isFullscreenMode changes
+            // (withAnimation batches the state → onAppear sees OLD value).
+            // hasRoomAppeared prevents re-entrant resetToPortrait.
+            guard !hasRoomAppeared else { return }
+            hasRoomAppeared = true
             resetToPortrait()
         }
         .onChange(of: scenePhase) { _, newPhase in

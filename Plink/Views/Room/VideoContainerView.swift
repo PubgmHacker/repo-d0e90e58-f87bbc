@@ -1133,7 +1133,7 @@ struct WebVideoView: UIViewRepresentable {
                 // 101 = embedding disabled by owner
                 // 150 = embedding disabled OR rate limited
                 // 153 = WKWebView loading error / referrer spoofing
-                if code == 101 || code == 150 || code == 153 {
+                if code == 101 || code == 150 || code == 152 || code == 153 {
                     if !WebViewControl.shared.didFallbackToFullPage {
                         print("🔄 YouTube v34.31: embed failed (\(code)), falling back to m.youtube.com")
                         WebViewControl.shared.didFallbackToFullPage = true

@@ -183,7 +183,6 @@ struct RoomView: View {
                 videoHeight: videoHeight,
                 isFullscreen: isLandscape
             )
-            .frame(height: videoHeight)
 
             // Chat — ALWAYS second child. Height 0 in landscape (hidden),
             // full height in portrait. View tree NEVER changes — no `if` block.
@@ -401,7 +400,6 @@ struct RoomView: View {
                     isPlaying: viewModel.syncEngine.isPlaying,
                     currentTime: viewModel.syncEngine.currentTime,
                     duration: viewModel.syncEngine.duration,
-                    isFullscreen: isFullscreen,
                     onTogglePlay: { viewModel.syncEngine.togglePlayPause() },
                     onSeek: { pos in viewModel.syncEngine.seek(to: pos) }
                 )

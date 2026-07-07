@@ -312,7 +312,6 @@ struct VideoContainerView: View {
     let isPlaying: Bool
     let currentTime: TimeInterval
     let duration: TimeInterval
-    let isFullscreen: Bool
 
     var onTogglePlay: () -> Void
     var onSeek: (TimeInterval) -> Void
@@ -332,9 +331,9 @@ struct VideoContainerView: View {
 
             switch playbackMode {
             case .directStream:
-                directStreamView(size: nil)
+                directStreamView()
             case .webview:
-                webVideoView(size: nil)
+                webVideoView()
             }
 
             if playbackMode == .webview && !isYouTubeReady {
@@ -356,19 +355,10 @@ struct VideoContainerView: View {
         }
     }
 
-    // MARK: - Size Calculation
-
-    private func computeVideoSize(container: CGSize) -> CGSize {
-        if isFullscreen { return container }
-        let width = container.width
-        let height = width * 9.0 / 16.0
-        return CGSize(width: width, height: height)
-    }
-
     // MARK: - Direct Stream (AVPlayer)
 
     @ViewBuilder
-    private func directStreamView(size: CGSize?) -> some View {
+    private func directStreamView() -> some View {
         if let url = URL(string: mediaURL) {
             // 🔧 FIX H3: Use SyncEngine's AVPlayer directly (was: created own AVPlayer).
             // SyncEngine.player is the source of truth — it applies play/pause/seek
@@ -383,7 +373,6 @@ struct VideoContainerView: View {
                 isPlaying: isPlaying,
                 currentTime: currentTime
             )
-            .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 12))
         } else {
             VideoPlaceholder()
         }
@@ -392,7 +381,7 @@ struct VideoContainerView: View {
     // MARK: - WebView (кинотеатры)
 
     @ViewBuilder
-    private func webVideoView(size: CGSize?) -> some View {
+    private func webVideoView() -> some View {
         if let url = URL(string: mediaURL) {
             // 🔧 v32.10: WebVideoView calls onTimeUpdate when video.currentTime changes.
             // We forward this to a NEW method updateCurrentTimeFromWebView() that
@@ -403,7 +392,6 @@ struct VideoContainerView: View {
             WebVideoView(url: url) { time in
                 WebViewControl.shared.handleTimeUpdate(time)
             }
-            .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 12))
         } else {
             VideoPlaceholder()
         }
@@ -872,28 +860,26 @@ struct WebVideoView: UIViewRepresentable {
                             _plinkLastPositionUpdate = Date.now();
                         }
 
-                        // 🔧 v35: Render freeze detector
-                        // Check the iframe's video element for decoded frames
-                        var iframe = document.querySelector('iframe');
+                        // 🔧 v35.1: Render freeze detector — use IFrame API state instead
+                        // of cross-origin iframe.contentDocument (which is always null
+                        // for YouTube iframes due to Same-Origin Policy).
+                        // Detect freeze: playerState == 1 (playing) but currentTime
+                        // hasn't changed for 3+ seconds.
                         var frozenDetected = false;
-                        if (iframe && iframe.contentDocument) {
-                            var vid = iframe.contentDocument.querySelector('video');
-                            if (vid) {
-                                var decoded = vid.webkitDecodedFrameCount || 0;
-                                if (playerState === 1 && decoded === _plinkLastDecoded && decoded > 0) {
-                                    if (_plinkFrozenSince === 0) {
-                                        _plinkFrozenSince = Date.now();
-                                    } else if (Date.now() - _plinkFrozenSince > 3000) {
-                                        console.log('[Plink v35] RENDER FROZEN — requesting reload');
-                                        send('renderFrozen', {});
-                                        _plinkFrozenSince = Date.now() + 60000; // prevent spam
-                                        frozenDetected = true;
-                                    }
-                                } else {
-                                    _plinkFrozenSince = 0;
+                        if (playerState === 1 && ct > 0) {
+                            if (ct === _plinkLastDecoded && ct > 0) {
+                                if (_plinkFrozenSince === 0) {
+                                    _plinkFrozenSince = Date.now();
+                                } else if (Date.now() - _plinkFrozenSince > 3000) {
+                                    console.log('[Plink v35.1] RENDER FROZEN — ct stuck at ' + ct);
+                                    send('renderFrozen', {});
+                                    _plinkFrozenSince = Date.now() + 60000;
+                                    frozenDetected = true;
                                 }
-                                _plinkLastDecoded = decoded;
+                            } else {
+                                _plinkFrozenSince = 0;
                             }
+                            _plinkLastDecoded = ct;
                         }
 
                         // 🔧 v35: Keep-alive — auto-resume if YouTube auto-pauses
@@ -935,16 +921,23 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        print("🔧🔧 updateUIView CALLED")
-        // 🔧 v22: delegate to Coordinator — it blocks duplicate loads
+        // 🔧 v35.1: MINIMAL updateUIView — just re-register coordinator if needed.
+        // loadVideoOnce is only called from makeUIView (first time) — NOT here.
+        // Previously this called loadVideoOnce on EVERY update (including fullscreen
+        // toggle) → even though guard blocked reload, the evaluation itself caused
+        // SwiftUI to re-evaluate the view → potential identity change → makeUIView.
+        // Now: do nothing in updateUIView for YouTube. The WebView is controlled
+        // via WebViewControl.shared (play/pause/seek) from Swift.
         let urlString = url.absoluteString
         let isYouTube = urlString.contains("youtube.com/embed/") ||
                          urlString.contains("youtube-nocookie.com/embed/") ||
                          urlString.contains("youtu.be/")
 
         if isYouTube {
-            let videoId = url.lastPathComponent
-            context.coordinator.loadVideoOnce(id: videoId, webView: uiView)
+            // Just ensure coordinator has the webView reference
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = uiView
+            }
             return
         }
 

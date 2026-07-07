@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import AVFoundation
 import WebKit
 
 // 🔧 v32.12: Notification when YouTube player is ready (hides loading overlay).
@@ -24,6 +25,9 @@ extension Notification.Name {
 final class WebViewControl {
     static let shared = WebViewControl()
     var webView: WKWebView?
+    /// 🔧 v34.31: true after falling back to m.youtube.com (embed failed).
+    /// Prevents reload loops: only fallback ONCE per video.
+    var didFallbackToFullPage = false
     /// 🔧 v34.8: store loadedVideoId HERE (singleton) instead of Coordinator.
     /// When SwiftUI switches portraitLayout ↔ landscapeLayout, it creates a
     /// NEW Coordinator → loadedVideoId was nil → loadVideoOnce reloaded video.
@@ -40,6 +44,7 @@ final class WebViewControl {
     func unregister() {
         self.webView = nil
         self.loadedVideoId = nil
+        self.didFallbackToFullPage = false
     }
 
     /// 🔧 v32.10: handle time updates from <video> element.
@@ -95,30 +100,114 @@ final class WebViewControl {
         webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
-    /// 🔧 FULLSCREEN FIX: Force YouTube <video> to recalculate its size after
-    /// device rotation. CSS uses `100vw`/`100vh` which don't update in WKWebView
-    /// after orientation change — video stays at portrait dimensions → black screen
-    /// with audio only. This sets explicit pixel dimensions + dispatches resize.
+    /// 🔧 v35: Full reload after rendering context loss.
+    /// For IFrame API mode: saves position, reloads loadHTMLString, restores position.
+    /// For m.youtube.com mode (fallback): reloads the URL.
+    func forceReload() {
+        guard let webView = webView else { return }
+        // Save current position before reload
+        webView.evaluateJavaScript("typeof getCurrentTime === 'function' ? getCurrentTime() : (document.querySelector('video')?.currentTime || 0)") { result, _ in
+            let savedTime = result as? Double ?? 0
+            print("🔄 v35: forceReload, saving position \(savedTime)s")
+
+            // Check if we're in IFrame API mode (has our custom functions)
+            webView.evaluateJavaScript("typeof onYouTubeIframeAPIReady === 'function'") { hasAPI, _ in
+                let useHTML = hasAPI as? Bool ?? false
+
+                DispatchQueue.main.async {
+                    if useHTML, let videoId = WebViewControl.shared.loadedVideoId {
+                        // IFrame API mode: reload loadHTMLString with same videoId
+                        let html = WebVideoView.youtubeEmbedHTML(videoId: videoId)
+                        let baseURL = URL(string: "https://www.youtube.com")!
+                        webView.loadHTMLString(html, baseURL: baseURL)
+                        print("🔄 v35: forceReload via loadHTMLString")
+                    } else if let url = webView.url {
+                        // m.youtube.com fallback mode: reload URL
+                        webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
+                        print("🔄 v35: forceReload via URL reload")
+                    }
+
+                    // Restore position after reload
+                    for delay in [3.0, 5.0] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                            self.restorePosition(time: savedTime)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Restore playback position after a page reload.
+    private func restorePosition(time: Double) {
+        let js = """
+        (function() {
+            var ct = 0;
+            if (typeof getCurrentTime === 'function') {
+                ct = getCurrentTime();
+            } else {
+                var v = document.querySelector('video');
+                if (v) ct = v.currentTime;
+            }
+            if (ct < 0.5 && \(time) > 1) {
+                if (typeof seekTo === 'function') {
+                    seekTo(\(time));
+                } else {
+                    var v = document.querySelector('video');
+                    if (v) v.currentTime = \(time);
+                }
+            }
+            return 'restored';
+        })();
+        """
+        webView?.evaluateJavaScript(js) { result, _ in
+            print("🔄 v35: restorePosition(\(time)s) result: \(result ?? "?")")
+        }
+    }
+
+    /// 🔧 FULLSCREEN FIX: Force YouTube player to recalculate its size after
+    /// device rotation. In IFrame API mode (v35), the iframe + #player div need
+    /// to be resized. In m.youtube.com fallback mode, the <video> element.
     func triggerResize() {
         let js = """
         (function() {
-            var v = document.querySelector('video');
-            if (!v) return;
             var w = window.innerWidth, h = window.innerHeight;
-            // Force video to exact screen dimensions in pixels
-            v.style.width = w + 'px';
-            v.style.height = h + 'px';
-            // Also resize #movie_player container
+
+            // v35: IFrame API mode — resize iframe + #player container
+            var iframe = document.querySelector('iframe');
+            if (iframe) {
+                iframe.style.width = w + 'px';
+                iframe.style.height = h + 'px';
+            }
+            var playerDiv = document.getElementById('player');
+            if (playerDiv) {
+                playerDiv.style.width = w + 'px';
+                playerDiv.style.height = h + 'px';
+            }
+            // Resize inside the iframe too (if accessible)
+            if (iframe && iframe.contentWindow) {
+                try {
+                    iframe.contentWindow.postMessage(JSON.stringify({
+                        event: 'listening'
+                    }), '*');
+                } catch(e) {}
+            }
+
+            // m.youtube.com fallback mode — resize <video> + #movie_player
+            var v = document.querySelector('video');
+            if (v) {
+                v.style.width = w + 'px';
+                v.style.height = h + 'px';
+            }
             var mp = document.getElementById('movie_player');
             if (mp) {
                 mp.style.width = w + 'px';
                 mp.style.height = h + 'px';
             }
-            // Dispatch resize event so YouTube's player JS recalculates layout
-            window.dispatchEvent(new Event('resize'));
-            // Also trigger orientationchange for older handlers
-            window.dispatchEvent(new Event('orientationchange'));
-            console.log('[Plink] triggerResize: ' + w + 'x' + h);
+
+            // 🔧 v34.26: do NOT dispatch orientationchange — YouTube reacts to it
+            // by pausing + resetting video.
+            console.log('[Plink v35] triggerResize: ' + w + 'x' + h);
         })();
         """
         webView?.evaluateJavaScript(js, completionHandler: nil)
@@ -233,31 +322,33 @@ struct VideoContainerView: View {
     @State private var isYouTubeReady = false
 
     var body: some View {
-        GeometryReader { geo in
-            let videoSize = computeVideoSize(container: geo.size)
+        // 🔧 v34.25: REMOVED inner GeometryReader.
+        // The parent (videoSection in RoomView) already sets .frame(height: videoHeight).
+        // Inner GeometryReader caused double layout pass on rotation → SwiftUI
+        // re-evaluated WebVideoView identity → makeUIView called again →
+        // WKWebView recreated → video reset.
+        ZStack {
+            Color.black.opacity(0.3)
 
-            ZStack {
-                Color.black.opacity(0.3)
-
-                switch playbackMode {
-                case .directStream:
-                    directStreamView(size: videoSize)
-                case .webview:
-                    webVideoView(size: videoSize)
-                }
-
-                if playbackMode == .webview && !isYouTubeReady {
-                    Color.black
-                        .overlay(
-                            ProgressView()
-                                .tint(.white)
-                                .scaleEffect(1.2)
-                        )
-                        .transition(.opacity)
-                }
+            switch playbackMode {
+            case .directStream:
+                directStreamView(size: nil)
+            case .webview:
+                webVideoView(size: nil)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+
+            if playbackMode == .webview && !isYouTubeReady {
+                Color.black
+                    .overlay(
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.2)
+                    )
+                    .transition(.opacity)
+            }
         }
+        // 🔧 v34.25: fill whatever frame the parent gives us.
+        // No explicit width/height — parent controls sizing.
         .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
                 isYouTubeReady = true
@@ -277,7 +368,7 @@ struct VideoContainerView: View {
     // MARK: - Direct Stream (AVPlayer)
 
     @ViewBuilder
-    private func directStreamView(size: CGSize) -> some View {
+    private func directStreamView(size: CGSize?) -> some View {
         if let url = URL(string: mediaURL) {
             // 🔧 FIX H3: Use SyncEngine's AVPlayer directly (was: created own AVPlayer).
             // SyncEngine.player is the source of truth — it applies play/pause/seek
@@ -292,39 +383,29 @@ struct VideoContainerView: View {
                 isPlaying: isPlaying,
                 currentTime: currentTime
             )
-            .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 12))
         } else {
             VideoPlaceholder()
-                .frame(width: size.width, height: size.height)
         }
     }
 
     // MARK: - WebView (кинотеатры)
 
     @ViewBuilder
-    private func webVideoView(size: CGSize) -> some View {
+    private func webVideoView(size: CGSize?) -> some View {
         if let url = URL(string: mediaURL) {
             // 🔧 v32.10: WebVideoView calls onTimeUpdate when video.currentTime changes.
             // We forward this to a NEW method updateCurrentTimeFromWebView() that
             // ONLY updates the published currentTime — does NOT seek the player.
             // This prevents the feedback loop where timeupdate → seek → timeupdate.
             // onSeek is now ONLY called for user-initiated seeks (seek bar, ±10s).
+            // 🔧 v34.25: NO explicit frame — parent controls sizing via .frame(height:)
             WebVideoView(url: url) { time in
-                // v32.10: update currentTime without seeking
-                // We can't call syncEngine directly from here, so we use onSeek
-                // but with a flag. Actually, the parent (RoomView) passes
-                // onSeek as { pos in syncEngine.seek(to: pos) }. We need a
-                // different callback for time updates.
-                // For now, we'll use a static flag on WebViewControl to indicate
-                // "this is a time update, not a seek".
                 WebViewControl.shared.handleTimeUpdate(time)
             }
-            .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 12))
         } else {
             VideoPlaceholder()
-                .frame(width: size.width, height: size.height)
         }
     }
 }
@@ -333,7 +414,7 @@ struct VideoContainerView: View {
 //
 // 🔧 FIX H3: PlayerUIView now accepts an EXTERNAL AVPlayer (from SyncEngine)
 // instead of creating its own. This eliminates the dual-AVPlayer desync bug
-// where SyncEngine controlled one invisible player while the user saw a
+// where SyncEngine controlled an invisible player while the user saw a
 // different player out of sync.
 //
 // 🔧 FIX H8: PlayerUIView now overrides willMove(toSuperview:) to invalidate
@@ -506,6 +587,15 @@ struct WebVideoView: UIViewRepresentable {
     var onTimeUpdate: (TimeInterval) -> Void
 
     func makeUIView(context: Context) -> WKWebView {
+        // 🔧 v35: Configure AVAudioSession for background playback.
+        // This keeps audio alive when notification shade/control center is pulled down.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ v35: AVAudioSession config failed: \(error)")
+        }
+        print("🔧🔧🔧 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
         let urlString = url.absoluteString
         // 🔧 v14.1: must also match youtube-nocookie.com (v14 changed embed URL domain)
         let isYouTube = urlString.contains("youtube.com/embed/") ||
@@ -616,6 +706,35 @@ struct WebVideoView: UIViewRepresentable {
                 forMainFrameOnly: false
             )
             config.userContentController.addUserScript(fullscreenCssScript)
+
+            // 🔧 v34.26: EARLY orientation block — runs BEFORE YouTube loads.
+            // Monkey-patch window.dispatchEvent to swallow orientationchange.
+            // This prevents YouTube's player from pausing/resetting on rotation.
+            let orientationBlockScript = WKUserScript(
+                source: """
+                (function() {
+                    var _orig = window.dispatchEvent.bind(window);
+                    window.dispatchEvent = function(event) {
+                        if (event && event.type === 'orientationchange') {
+                            console.log('[Plink v34.26] BLOCKED orientationchange (early)');
+                            return false;
+                        }
+                        return _orig(event);
+                    };
+                    // Also override window.onorientationchange setter
+                    try {
+                        Object.defineProperty(window, 'onorientationchange', {
+                            get: function() { return null; },
+                            set: function() { console.log('[Plink v34.26] BLOCKED onorientationchange setter'); },
+                            configurable: true
+                        });
+                    } catch(e) {}
+                })();
+                """,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(orientationBlockScript)
         }
 
         // 🔧 v30.1: For YouTube — register plinkBridge so the IFrame API
@@ -630,12 +749,8 @@ struct WebVideoView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
 
-        // 🔧 v32 (July 2026): NO customUserAgent for YouTube.
-        // v31.1 set iOS 18 Safari UA, but YouTube's anti-bot detects WKWebView
-        // via OTHER signals (WebGL, touch events, JS environment) regardless of
-        // UA. Setting a fake UA actually INCREASES detection risk because the
-        // UA doesn't match the actual WKWebView fingerprint.
-        // v32: leave customUserAgent UNSET. iOS sends real iPhone Safari UA
+        // 🔧 v34.34: NO customUserAgent — real WKWebView UA (what m.youtube.com expects).
+        // Embed required fake Safari UA, but m.youtube.com works with real WKWebView UA.
         // which IS the actual WKWebView UA — no mismatch, no detection.
 
         // 🔧 v32: set Coordinator as navigationDelegate so didFinish fires
@@ -674,16 +789,15 @@ struct WebVideoView: UIViewRepresentable {
         return webView
     }
 
-    /// 🔧 v7 (July 2026): custom HTML with YouTube IFrame API.
+    /// 🔧 v35: custom HTML with YouTube IFrame API via loadHTMLString.
+    /// Bypasses error 153 because the IFrame API script runs in OUR page
+    /// context with baseURL: https://www.youtube.com.
     ///
-    /// This bypasses error 153 because the IFrame API script runs in OUR page
-    /// context (not YouTube's), so YouTube's WKWebView-detection code never
-    /// runs against our WKWebView environment.
-    ///
-    /// v7 FIX: 'origin' parameter changed from 'youtube-nocookie.com' to
-    /// 'youtube.com' to match the new baseURL. This is what was causing the
-    /// 'sign in to confirm you are not a bot' interstitial — Origin header
-    /// mismatch between what the IFrame API expected and what we sent.
+    /// v35 improvements over v34.32:
+    /// - Render freeze detector (webkitDecodedFrameCount polling)
+    /// - Playback keep-alive watchdog (auto-resume after YouTube auto-pause)
+    /// - Position reset protection
+    /// - Proper origin parameter matching baseURL
     static func youtubeEmbedHTML(videoId: String) -> String {
         return """
         <!DOCTYPE html>
@@ -693,8 +807,8 @@ struct WebVideoView: UIViewRepresentable {
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-                #player { width: 100vw; height: 100vh; }
-                iframe { width: 100% !important; height: 100% !important; border: none; }
+                #player { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+                iframe { width: 100% !important; height: 100% !important; border: none !important; }
             </style>
         </head>
         <body>
@@ -702,6 +816,16 @@ struct WebVideoView: UIViewRepresentable {
             <script src="https://www.youtube.com/iframe_api"></script>
             <script>
                 var player;
+                var _plinkUserPaused = false;
+                var _plinkLastDecoded = 0;
+                var _plinkFrozenSince = 0;
+                var _plinkLastGoodPosition = 0;
+                var _plinkLastPositionUpdate = Date.now();
+
+                function send(type, data) {
+                    try { window.webkit.messageHandlers.plinkBridge.postMessage(Object.assign({event: type}, data || {})); } catch(e) {}
+                }
+
                 function onYouTubeIframeAPIReady() {
                     player = new YT.Player('player', {
                         videoId: '\(videoId)',
@@ -718,19 +842,92 @@ struct WebVideoView: UIViewRepresentable {
                         },
                         events: {
                             'onReady': function(e) {
-                                window.webkit.messageHandlers.videoBridge.postMessage({type:'ready', duration: player.getDuration()});
+                                send('ready', { duration: player.getDuration() });
                                 player.playVideo();
                             },
                             'onStateChange': function(e) {
-                                window.webkit.messageHandlers.videoBridge.postMessage({type:'state', state: e.data});
-                                if (e.data === 0) {
-                                    player.seekTo(0, true);
-                                    player.pauseVideo();
-                                }
+                                send('stateChange', { state: e.data, currentTime: player.getCurrentTime() });
+                                if (e.data === 0) { player.seekTo(0, true); player.pauseVideo(); }
+                            },
+                            'onError': function(e) {
+                                send('error', { code: e.data });
                             }
                         }
                     });
+
+                    // Poll time every 0.5s + render freeze detector + keep-alive
+                    setInterval(function() {
+                        if (!player || !player.getCurrentTime) return;
+
+                        var ct = player.getCurrentTime();
+                        var dur = player.getDuration();
+                        var playerState = player.getPlayerState();
+
+                        // Send time update
+                        send('stateChange', { state: playerState === 1 ? 1 : playerState, currentTime: ct });
+
+                        // Track last good position
+                        if (playerState === 1 && ct > 0) {
+                            _plinkLastGoodPosition = ct;
+                            _plinkLastPositionUpdate = Date.now();
+                        }
+
+                        // 🔧 v35: Render freeze detector
+                        // Check the iframe's video element for decoded frames
+                        var iframe = document.querySelector('iframe');
+                        var frozenDetected = false;
+                        if (iframe && iframe.contentDocument) {
+                            var vid = iframe.contentDocument.querySelector('video');
+                            if (vid) {
+                                var decoded = vid.webkitDecodedFrameCount || 0;
+                                if (playerState === 1 && decoded === _plinkLastDecoded && decoded > 0) {
+                                    if (_plinkFrozenSince === 0) {
+                                        _plinkFrozenSince = Date.now();
+                                    } else if (Date.now() - _plinkFrozenSince > 3000) {
+                                        console.log('[Plink v35] RENDER FROZEN — requesting reload');
+                                        send('renderFrozen', {});
+                                        _plinkFrozenSince = Date.now() + 60000; // prevent spam
+                                        frozenDetected = true;
+                                    }
+                                } else {
+                                    _plinkFrozenSince = 0;
+                                }
+                                _plinkLastDecoded = decoded;
+                            }
+                        }
+
+                        // 🔧 v35: Keep-alive — auto-resume if YouTube auto-pauses
+                        if (!frozenDetected && !_plinkUserPaused && playerState === 2 && ct > 0 && ct < (dur || Infinity) - 1) {
+                            console.log('[Plink v35] Auto-resuming after YouTube pause');
+                            player.playVideo();
+                        }
+                    }, 1000);
                 }
+
+                // Swift bridge functions
+                window.playVideo = function() {
+                    _plinkUserPaused = false;
+                    if (player) player.playVideo();
+                };
+                window.pauseVideo = function() {
+                    _plinkUserPaused = true;
+                    if (player) player.pauseVideo();
+                };
+                window.seekTo = function(s) {
+                    if (player) {
+                        player.seekTo(s, true);
+                        _plinkLastGoodPosition = s;
+                        _plinkLastPositionUpdate = Date.now();
+                    }
+                };
+                window.getCurrentTime = function() { return player ? player.getCurrentTime() : 0; };
+                window.getDuration = function() { return player ? player.getDuration() : 0; };
+                window.seekRelative = function(d) {
+                    if (player) player.seekTo(player.getCurrentTime() + d, true);
+                };
+
+                // Expose pause state for Swift queries
+                window.isUserPaused = function() { return _plinkUserPaused; };
             </script>
         </body>
         </html>
@@ -738,6 +935,7 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
+        print("🔧🔧 updateUIView CALLED")
         // 🔧 v22: delegate to Coordinator — it blocks duplicate loads
         let urlString = url.absoluteString
         let isYouTube = urlString.contains("youtube.com/embed/") ||
@@ -767,11 +965,15 @@ struct WebVideoView: UIViewRepresentable {
     // 🔧 v30.1: Coordinator is now NSObject + WKScriptMessageHandler so it can
     // receive messages from the YouTube IFrame API via the plinkBridge handler.
     // 🔧 v32: also WKNavigationDelegate to inject CSS/JS after page loads.
+    // 🔧 v35: also listens for app lifecycle events (willResignActive/didBecomeActive)
+    // to pause/resume playback and fix render freeze.
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var bridge: VideoTimeBridge?
         // 🔧 v22: YouTube guard — stores loadedVideoId to prevent reload loops
         var loadedVideoId: String? = nil
         weak var webView: WKWebView?
+        /// 🔧 v35: saved state for lifecycle pause/resume
+        private var _savedPlaybackTime: Double = 0
 
         // 🔧 v30.1: optional callback — invoked when player state changes.
         // Wired up by RoomViewModel/SyncEngine to broadcast play/pause/seek
@@ -780,6 +982,76 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerReady: (() -> Void)?
         var onPlayerError: ((Int) -> Void)?
 
+        // MARK: - Lifecycle (v35)
+
+        override init() {
+            super.init()
+            // 🔧 v35: Pause video when app loses focus (notification shade, control center).
+            // This prevents the render freeze — instead of letting WKWebView's compositor
+            // die mid-stream, we pause cleanly and resume on didBecomeActive.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appWillResignActive),
+                name: UIApplication.willResignActiveNotification, object: nil
+            )
+            // 🔧 v35: Resume video when app regains focus.
+            // Micro-seek kick-starts the WKWebView rendering pipeline.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appDidBecomeActive),
+                name: UIApplication.didBecomeActiveNotification, object: nil
+            )
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        @objc private func appWillResignActive() {
+            guard webView != nil else { return }
+            // Save current time, then pause
+            webView?.evaluateJavaScript("""
+            (function() {
+                if (typeof getCurrentTime === 'function') {
+                    return getCurrentTime();
+                }
+                var v = document.querySelector('video');
+                return v ? v.currentTime : 0;
+            })();
+            """) { result, _ in
+                let t = result as? Double ?? 0
+                self._savedPlaybackTime = t
+                print("⏸️ v35: appWillResignActive — saved time \(t)s, pausing")
+                self.webView?.evaluateJavaScript("""
+                (function() {
+                    if (typeof pauseVideo === 'function') pauseVideo();
+                    else { var v = document.querySelector('video'); if (v) v.pause(); }
+                })();
+                """, completionHandler: nil)
+            }
+        }
+
+        @objc private func appDidBecomeActive() {
+            guard webView != nil else { return }
+            print("▶️ v35: appDidBecomeActive — micro-seek to restore render")
+            // Wait a beat for the UI to settle, then micro-seek + play
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self = self, let wv = self.webView else { return }
+                let savedTime = self._savedPlaybackTime
+                wv.evaluateJavaScript("""
+                (function() {
+                    // Micro-seek: move ±0.1s to kick the rendering pipeline
+                    if (typeof seekTo === 'function' && typeof getCurrentTime === 'function') {
+                        var t = getCurrentTime();
+                        var target = t === 0 && \(savedTime) > 1 ? \(savedTime) : t;
+                        seekTo(target + 0.1);
+                        setTimeout(function() { seekTo(target); }, 100);
+                    }
+                    if (typeof playVideo === 'function') playVideo();
+                    else { var v = document.querySelector('video'); if (v) v.play().catch(function(){}); }
+                })();
+                """, completionHandler: nil)
+            }
+        }
+
         // MARK: - JS Bridge Handler
 
         /// Called by window.webkit.messageHandlers.plinkBridge.postMessage(...) from the
@@ -787,6 +1059,7 @@ struct WebVideoView: UIViewRepresentable {
         ///   { event: "ready" }                                  — player ready
         ///   { event: "stateChange", state: Int, currentTime: N } — state change
         ///   { event: "error", code: Int }                        — player error
+        ///   { event: "renderFrozen" }                             — render context frozen
         func userContentController(_ userContentController: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
             guard message.name == "plinkBridge",
@@ -829,11 +1102,40 @@ struct WebVideoView: UIViewRepresentable {
 
             case "error":
                 let code = dict["code"] as? Int ?? -1
-                print("❌ YouTube v32: player error code=\(code)")
+                print("❌ YouTube v34.31: player error code=\(code)")
+                // 🔧 v34.31: On embed errors (101/150/153), fallback to m.youtube.com.
+                // 101 = embedding disabled by owner
+                // 150 = embedding disabled OR rate limited
+                // 153 = WKWebView loading error / referrer spoofing
+                if code == 101 || code == 150 || code == 153 {
+                    if !WebViewControl.shared.didFallbackToFullPage {
+                        print("🔄 YouTube v34.31: embed failed (\(code)), falling back to m.youtube.com")
+                        WebViewControl.shared.didFallbackToFullPage = true
+                        if let vid = WebViewControl.shared.loadedVideoId,
+                           let wv = self.webView {
+                            let watchURL = URL(string: "https://m.youtube.com/watch?v=\(vid)")!
+                            wv.load(URLRequest(url: watchURL, cachePolicy: .reloadIgnoringLocalCacheData))
+                        }
+                    }
+                }
                 onPlayerError?(code)
 
+            case "renderFrozen":
+                // 🔧 v35: WKWebView rendering context frozen (notification shade,
+                // control center). Force micro-seek to kick compositor back to life.
+                print("🧊 YouTube v35: render freeze detected — forcing micro-seek")
+                webView?.evaluateJavaScript("""
+                (function() {
+                    if (typeof window.seekTo === 'function' && typeof window.getCurrentTime === 'function') {
+                        var t = window.getCurrentTime();
+                        window.seekTo(t + 0.1);
+                        setTimeout(function() { window.seekTo(t); }, 100);
+                    }
+                })();
+                """) { _, _ in }
+
             default:
-                print("⚠️ YouTube v32: unknown event '\(event)'")
+                print("⚠️ YouTube v35: unknown event '\(event)'")
             }
         }
 
@@ -865,10 +1167,10 @@ struct WebVideoView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // 🔧 v32.1: only inject on youtube.com pages, not on google.com (which
-            // we now block anyway, but be defensive).
+            // 🔧 v32.1: only inject on youtube pages, not on google.com.
+            // 🔧 v34.30: also match youtube-nocookie.com (embed domain).
             guard let url = webView.url, let host = url.host?.lowercased(),
-                  host.contains("youtube.com") || host.contains("youtu.be") else {
+                  host.contains("youtube.com") || host.contains("youtube-nocookie.com") || host.contains("youtu.be") else {
                 print("⚠️ YouTube v32.1: skipped injection on non-youtube page: \(webView.url?.host ?? "nil")")
                 return
             }
@@ -890,101 +1192,33 @@ struct WebVideoView: UIViewRepresentable {
             // 🔧 v32.7: also hide topbar/header elements that appear in corners
             // (YouTube logo top-left, search + 3-dot menu top-right). These are
             // NOT inside #movie_player so v32.5 overlay didn't cover them.
+            // 🔧 v34.30: Simple CSS for embed — just black bg, video fills screen.
+            // No need for MutationObserver or nuclear CSS — embed is already clean.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
-                // v32.5: OVERLAY approach + v32.7 topbar hide
                 style.textContent = [
-                    '/* === BLACK BACKGROUND hides all YouTube UI behind video === */',
                     'html, body {',
                     '    background: #000 !important;',
                     '    overflow: hidden !important;',
-                    '    position: fixed !important;',
-                    '    width: 100% !important;',
-                    '    height: 100% !important;',
-                    '    margin: 0 !important;',
-                    '    padding: 0 !important;',
-                    '    top: 0 !important;',
-                    '    left: 0 !important;',
+                    '    width: 100% !important; height: 100% !important;',
+                    '    margin: 0 !important; padding: 0 !important;',
                     '}',
-
-                    '/* === VIDEO OVERLAY: position video on top of everything === */',
-                    '#movie_player, #movie_player video, .html5-main-video {',
+                    'iframe {',
+                    '    width: 100% !important; height: 100% !important;',
+                    '    border: none !important;',
+                    '}',
+                    'video {',
                     '    position: fixed !important;',
-                    '    top: 0 !important;',
-                    '    left: 0 !important;',
-                    '    width: 100vw !important;',
-                    '    height: 100vh !important;',
-                    '    z-index: 2147483647 !important;',
+                    '    top: 0 !important; left: 0 !important;',
+                    '    width: 100% !important; height: 100% !important;',
+                    '    z-index: 999999 !important;',
                     '    object-fit: contain !important;',
                     '    background: #000 !important;',
-                    '}',
-
-                    '/* === v32.7: HIDE TOPBAR (YouTube logo top-left, search + 3-dot menu top-right) === */',
-                    '#masthead-container, #masthead, ytd-masthead,',
-                    'ytd-topbar-logo-renderer, #logo, #logo-icon,',
-                    'ytd-search, #search-form, #search-input, #search-icon-legacy,',
-                    '#end, #buttons, ytd-topbar-menu-button-renderer,',
-                    'yt-icon-button[aria-label*="Search"], yt-icon-button[aria-label*="search"],',
-                    'button[aria-label*="Search"], button[aria-label*="search"],',
-                    '#guide-button, ytd-topbar-menu-button-renderer,',
-                    'yt-icon-button.yt-spec-icon-button,',
-                    'tp-yt-paper-icon-button,',
-                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
-                    '.mobile-topbar-search-button, .mobile-topbar-menu-button,',
-                    'ytm-search-button, ytm-menu-button,',
-                    'ytm-topbar, ytm-topbar-renderer,',
-                    '#top-bar-button-container, .topbar-buttons,',
-                    '.ytd-mobile-topbar-renderer, ytd-mobile-topbar-renderer {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '    opacity: 0 !important;',
-                    '    pointer-events: none !important;',
-                    '}',
-
-                    '/* === v32.7: HIDE YOUTUBE LOGO INSIDE PLAYER === */',
-                    '.ytp-watermark, .ytp-youtube-logo, .ytp-youtube-button,',
-                    'a.ytp-watermark, a.ytp-youtube-button, .html5-watermark,',
-                    '.ytp-watermark-text, ytd-yoodle-renderer {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '}',
-
-                    '/* === HIDE YOUTUBE PLAYER CONTROLS (inside #movie_player) === */',
-                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-progress-bar,',
-                    '.ytp-settings-button, .ytp-settings-menu,',
-                    '.ytp-subtitles-button, .ytp-size-button,',
-                    '.ytp-fullscreen-button, .ytp-fullerscreen-edu-button,',
-                    '.ytp-mute-button, .ytp-volume-slider,',
-                    '.ytp-unmute-button, .ytp-unmute,',
-                    '.ytp-mute-custom, .ytp-unmute-custom,',
-                    'button[aria-label*="Unmute"], button[aria-label*="Mute"],',
-                    'button[aria-label*="unmute"], button[aria-label*="mute"],',
-                    '.ytp-prev-button, .ytp-next-button,',
-                    '.ytp-play-button, .ytp-replay-button,',
-                    '.ytp-time-display, .ytp-time-current, .ytp-time-duration,',
-                    '.ytp-remote-button, .ytp-cards-button, .ytp-cards-toggle,',
-                    '.ytp-ce-element, .ytp-ce-shelf, .ytp-ce-video,',
-                    '.ytp-endscreen-content, .ytp-endscreen, .html5-endscreen,',
-                    '.ytp-pause-overlay, .ytp-show-cards-title,',
-                    '.ytp-tooltip, .ytp-tooltip-text, .ytp-hover-progress,',
-                    '.ytp-gradient-bottom, .ytp-gradient-top,',
-                    '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
-                    '.ytp-scrim-bottom, .ytp-scrim-top,',
-                    '.ytp-mdx, .ytp-mdx-button, .ytp-mdx-popup,',
-                    '.ytp-iv-bar, .ytp-iv-video-content,',
-                    '.ytp-share-button, .ytp-miniplayer-button,',
-                    '.ytp-ad-overlay-container, .ytp-ad-overlay,',
-                    '.ytp-ad-text, .ytp-ad-skip-button-container {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '    opacity: 0 !important;',
-                    '    pointer-events: none !important;',
                     '}'
-                ].join('\\n');
+                ].join('\\\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v32.7] CSS injected — overlay + topbar/logo hide");
+                console.log("[Plink v34.30] CSS injected (embed mode)");
             })();
             """
 
@@ -1065,6 +1299,24 @@ struct WebVideoView: UIViewRepresentable {
                             lastPositionUpdate = Date.now();
                         } catch(e) {}
                     };
+
+                    // 🔧 v34.26: BLOCK YouTube from pausing/reloading on orientation change.
+                    // (early block already installed at atDocumentStart, but belt+suspenders here)
+                    // Override player.pauseVideo if YouTube's IFrame API created one
+                    var _checkPlayerPause = setInterval(function() {
+                        if (typeof player !== 'undefined' && player && player.pauseVideo) {
+                            var _origPause = player.pauseVideo.bind(player);
+                            player.pauseVideo = function() {
+                                // Only block if we didn't trigger it ourselves
+                                if (window._plinkUserPaused) {
+                                    _origPause();
+                                } else {
+                                    console.log('[Plink v34.26] BLOCKED YouTube player.pauseVideo');
+                                }
+                            };
+                            clearInterval(_checkPlayerPause);
+                        }
+                    }, 500);
                     // v32.8: seekRelative for ±10s buttons (forward + backward)
                     window.seekRelative = function(delta) {
                         try {
@@ -1129,18 +1381,33 @@ struct WebVideoView: UIViewRepresentable {
                     setInterval(function() {
                         // v32.15: don't auto-resume if user explicitly paused
                         if (window._plinkUserPaused) {
-                            // v32.16: but still re-unmute if needed (user paused
-                            // doesn't mean user muted)
-                            if (video.muted) {
-                                video.muted = false;
-                            }
+                            if (video.muted) video.muted = false;
                             return;
                         }
 
-                        // v32.13: detect reset to 0 while video should be playing
-                        // (YouTube sometimes reloads the video from start)
-                        // v32.15: but NOT if we're near the end — that's a legit
-                        // end-of-video state, not a reset
+                        // 🔧 v34.35: RENDER FREEZE DETECTOR.
+                        // If video claims to be playing but decoded frame count
+                        // hasn't changed for 3s → rendering context is frozen
+                        // (notification shade, control center, etc).
+                        // Signal Swift to reload the page.
+                        var decoded = video.webkitDecodedFrameCount || 0;
+                        if (!window._plinkLastDecoded) window._plinkLastDecoded = decoded;
+                        if (!window._plinkFrozenSince) window._plinkFrozenSince = 0;
+
+                        if (!video.paused && decoded === window._plinkLastDecoded) {
+                            if (window._plinkFrozenSince === 0) {
+                                window._plinkFrozenSince = Date.now();
+                            } else if (Date.now() - window._plinkFrozenSince > 3000) {
+                                console.log('[Plink v34.35] RENDER FROZEN — decoded=' + decoded + ', requesting reload');
+                                sendBridge({ "event": "renderFrozen" });
+                                window._plinkFrozenSince = Date.now() + 60000; // prevent spam
+                            }
+                        } else {
+                            window._plinkFrozenSince = 0;
+                        }
+                        window._plinkLastDecoded = decoded;
+
+                        // v32.13: detect reset to 0
                         var nearEnd = video.duration && video.currentTime >= video.duration - 2;
                         if (video.currentTime === 0 && lastGoodPosition > 5 &&
                             !nearEnd &&
@@ -1152,20 +1419,11 @@ struct WebVideoView: UIViewRepresentable {
                         }
 
                         if (video.paused && video.currentTime > 0 && video.currentTime < (video.duration || Infinity) - 1) {
-                            console.log("[Plink v32.13] Video auto-paused, resuming");
-                            video.play().catch(function(e) {
-                                console.log("[Plink v32.13] Resume failed: " + e);
-                            });
+                            video.play().catch(function() {});
                         }
-                        // v32.16: re-unmute if YouTube muted us — check more
-                        // frequently to prevent audio dropouts
-                        if (video.muted) {
-                            video.muted = false;
-                            console.log("[Plink v32.16] Video auto-muted, unmuting");
-                        }
+                        if (video.muted) video.muted = false;
 
-                        // v32.13: aggressively hide any ad/overlay elements that
-                        // may have appeared. YouTube injects these dynamically.
+                        // hide ad/overlay elements
                         var overlays = document.querySelectorAll(
                             '.ytp-ad-overlay-container, .ytp-ad-overlay, .ytp-ad-text, ' +
                             '.ytp-ad-skip-button-container, .ytp-pause-overlay, ' +
@@ -1182,7 +1440,7 @@ struct WebVideoView: UIViewRepresentable {
                             el.style.opacity = '0';
                             el.style.pointerEvents = 'none';
                         });
-                    }, 1000);  // v32.16: check every 1 second (faster mute detection)
+                    }, 1000);  // v34.35: every 1 second
                     // Also block on parent #movie_player
                     var moviePlayer = document.getElementById('movie_player');
                     if (moviePlayer) {
@@ -1194,13 +1452,11 @@ struct WebVideoView: UIViewRepresentable {
                     }
                     // Block on document too
                     document.addEventListener('click', function(e) {
-                        // v32.8: unmute on first tap anywhere
                         if (video.muted) {
                             video.muted = false;
                             video.play();
-                            console.log("[Plink v32.8] Document tapped — unmuted");
+                            console.log("[Plink v34.30] Document tapped — unmuted");
                         }
-                        // Don't preventDefault here — let Plink's overlay buttons work
                     }, { once: true, capture: true });
                 }
 
@@ -1233,68 +1489,26 @@ struct WebVideoView: UIViewRepresentable {
         /// This hides YouTube's UI before user sees it.
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             guard let url = webView.url, let host = url.host?.lowercased(),
-                  host.contains("youtube.com") || host.contains("youtu.be") else {
+                  host.contains("youtube.com") || host.contains("youtube-nocookie.com") || host.contains("youtu.be") else {
                 return
             }
-            // v32.7: same overlay + topbar CSS as didFinish
+            // 🔧 v34.30: simple CSS for embed — black bg + video fullscreen.
             let cssInjection = """
             (function() {
                 var style = document.createElement('style');
                 style.textContent = [
-                    'html, body {',
-                    '    background: #000 !important;',
-                    '    overflow: hidden !important;',
-                    '    position: fixed !important;',
-                    '    width: 100% !important;',
-                    '    height: 100% !important;',
-                    '    margin: 0 !important;',
-                    '    padding: 0 !important;',
-                    '    top: 0 !important;',
-                    '    left: 0 !important;',
-                    '}',
-                    '#movie_player, #movie_player video, .html5-main-video {',
-                    '    position: fixed !important;',
-                    '    top: 0 !important;',
-                    '    left: 0 !important;',
-                    '    width: 100vw !important;',
-                    '    height: 100vh !important;',
-                    '    z-index: 2147483647 !important;',
-                    '    object-fit: contain !important;',
-                    '    background: #000 !important;',
-                    '}',
-                    '#masthead-container, #masthead, ytd-masthead,',
-                    'ytd-topbar-logo-renderer, #logo, #logo-icon,',
-                    'ytd-search, #search-form, #search-input,',
-                    '#end, #buttons, ytd-topbar-menu-button-renderer,',
-                    '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
-                    'ytm-topbar, ytm-topbar-renderer,',
-                    'ytd-mobile-topbar-renderer {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '    opacity: 0 !important;',
-                    '}',
-                    '.ytp-watermark, .ytp-youtube-logo, .ytp-youtube-button,',
-                    '.html5-watermark {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '}',
-                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-settings-button,',
-                    '.ytp-fullscreen-button, .ytp-mute-button, .ytp-unmute-button,',
-                    'button[aria-label*="mute"], button[aria-label*="Mute"],',
-                    '.ytp-play-button, .ytp-time-display, .ytp-pause-overlay,',
-                    '.ytp-endscreen-content, .html5-endscreen,',
-                    '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay {',
-                    '    display: none !important;',
-                    '    visibility: hidden !important;',
-                    '    opacity: 0 !important;',
-                    '}'
-                ].join('\\\\n');
+                    'html, body { background:#000!important; overflow:hidden!important;',
+                    '  width:100%!important; height:100%!important; margin:0!important; padding:0!important; }',
+                    'iframe { width:100%!important; height:100%!important; border:none!important; }',
+                    'video { position:fixed!important; top:0!important; left:0!important;',
+                    '  width:100%!important; height:100%!important; z-index:999999!important;',
+                    '  object-fit:contain!important; background:#000!important; }'
+                ].join('\\n');
                 (document.head || document.documentElement).appendChild(style);
             })();
             """
             webView.evaluateJavaScript(cssInjection) { _, _ in }
-            print("📺 YouTube v32.7: early CSS injection at didCommit (overlay + topbar)")
+            print("📺 YouTube v34.30: early CSS injection at didCommit (embed mode)")
         }
 
         // MARK: - Native commands → JS
@@ -1330,56 +1544,32 @@ struct WebVideoView: UIViewRepresentable {
         /// self.loadedVideoId (Coordinator instance). When SwiftUI switches portrait ↔
         /// landscape, it creates a NEW Coordinator → old loadedVideoId was nil → reload.
         /// With singleton, loadedVideoId persists across Coordinator recreation.
+        ///
+        /// 🔧 v35: loadHTMLString with IFrame API + baseURL: https://www.youtube.com
+        /// This bypasses error 153 because the IFrame API script runs in OUR page
+        /// context. The baseURL tells YouTube's origin check that we're from youtube.com.
         func loadVideoOnce(id: String, webView: WKWebView) {
             guard !id.isEmpty else { return }
             // v34.8: check SINGLETON loadedVideoId, not self.loadedVideoId
             guard id != WebViewControl.shared.loadedVideoId else {
-                print("📺 v34.8: video already loaded (\(id)) — skipping reload")
+                print("📺 v35: video already loaded (\(id)) — skipping reload")
                 return
             }
             WebViewControl.shared.loadedVideoId = id
             self.loadedVideoId = id  // also keep local copy for compatibility
+            WebViewControl.shared.didFallbackToFullPage = false  // reset fallback flag
 
-            // 🔧 v32 (July 2026): Load FULL m.youtube.com/watch page directly.
-            //
-            // WHY (production scalability):
-            //   v30-v31 used IFrame API embeds (youtube.com/embed/ID). This has
-            //   FUNDAMENTAL scaling problems:
-            //     1. Rate limit per IP/device — after ~20 requests, YouTube
-            //        returns error 150 for commercial videos (VEVO, music)
-            //     2. Embedding restrictions — video owner can disable embedding
-            //        in YouTube Studio → error 150/101 (Cartoon Network, etc.)
-            //     3. Anti-bot detection — IFrame API patterns are fingerprinted
-            //
-            //   For an app with 100+ users each making requests, IFrame API
-            //   DOES NOT SCALE. Every user hits rate limits.
-            //
-            // v32 SOLUTION — load the FULL youtube.com/watch page:
-            //   - YouTube doesn't check embedding permissions for their own pages
-            //   - Plays ALL videos (even embedding-restricted like Gumball)
-            //   - Rate limit is per user session, not per app IP
-            //   - This is what Rave and similar co-watch apps do
-            //   - User confirmed: "earlier via web youtube search, Gumball played"
-            //     — that was the full youtube.com/watch page
-            //
-            // UI hiding: after page loads, inject CSS to hide YouTube's UI
-            // (header, recommendations, comments) — keep only the video element.
-            // JS bridge: poll for <video> element, attach listeners, bridge
-            // play/pause/seek/time to Swift via plinkBridge.
-            //
-            // Native UA: NO customUserAgent. iOS sends real iPhone Safari UA.
-            // This is the most trusted UA for YouTube's anti-bot.
             let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
-            let watchURLString = "https://m.youtube.com/watch?v=\(cleanVideoId)"
-            guard let watchURL = URL(string: watchURLString) else {
-                print("❌ v32: invalid URL for videoId='\(cleanVideoId)'")
-                return
-            }
 
-            print("📺 YouTube v32: loading FULL page m.youtube.com/watch?v=\(cleanVideoId) (scalable, no IFrame API)")
+            // 🔧 v35: loadHTMLString with YouTube IFrame API + baseURL youtube.com
+            // This is the "Headless" approach: IFrame API runs in our HTML context,
+            // bypasses error 153 (origin spoofing). play/pause/seek via JS bridge.
+            let htmlString = WebVideoView.youtubeEmbedHTML(videoId: cleanVideoId)
+            let baseURL = URL(string: "https://www.youtube.com")!
+
+            print("📺 YouTube v35: loading IFrame API via loadHTMLString, videoId='\(cleanVideoId)'")
             DispatchQueue.main.async {
-                let request = URLRequest(url: watchURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30.0)
-                webView.load(request)
+                webView.loadHTMLString(htmlString, baseURL: baseURL)
             }
         }
 

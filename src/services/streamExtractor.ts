@@ -83,6 +83,91 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
+// 🔧 v10.2: youtubei.googleapis.com — YouTube's INTERNAL API.
+// This is the same API that youtube.com itself uses. No API key, no yt-dlp.
+// Returns streamingData.formats[] (muxed) + streamingData.adaptiveFormats[] (DASH).
+// We use formats[] — these are muxed streams AVPlayer can play natively.
+//
+// This API is what NewPipe and other YouTube alternative clients use.
+// It's the most reliable way to extract YouTube streams without yt-dlp.
+const YOUTUBEI_CLIENT_VERSION = '1.20240101.0.0';
+
+/**
+ * 🔧 v10.2: Extract stream URL using YouTube's internal API (youtubei.googleapis.com).
+ * This is what youtube.com itself uses — no API key, no yt-dlp, no proxy needed.
+ * Returns streamingData.formats[] which are MUXED (audio+video) streams.
+ */
+async function extractWithYouTubeI(videoId: string): Promise<StreamInfo> {
+  try {
+    const apiUrl = 'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+    console.log(`[streamExtractor] Trying YouTube Internal API for ${videoId}`);
+
+    const body = {
+      context: {
+        client: {
+          clientName: 'ANDROID',
+          clientVersion: YOUTUBEI_CLIENT_VERSION,
+          hl: 'en',
+          gl: 'US',
+        },
+      },
+      videoId: videoId,
+    };
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14; SM-S918B) gzip',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`YouTube Internal API returned ${response.status}`);
+    }
+
+    const data: any = await response.json();
+    const streamingData = data.streamingData || {};
+    const formats = streamingData.formats || [];  // Muxed streams!
+    const videoDetails = data.videoDetails || {};
+
+    console.log(`[streamExtractor] YouTube Internal API OK: title="${videoDetails.title}", ${formats.length} muxed formats`);
+
+    if (formats.length === 0) {
+      throw new Error('YouTube Internal API: no muxed formats (only adaptive/DASH)');
+    }
+
+    // Sort by quality (itag 18 = 360p, 22 = 720p, etc.) — prefer higher quality
+    const sorted = formats.sort((a: any, b: any) => {
+      // itag 22 (720p) is best muxed, 18 (360p) is fallback
+      const qualityOrder: Record<number, number> = { 22: 720, 18: 360, 43: 360, 36: 240, 17: 144 };
+      const qa = qualityOrder[a.itag] || parseInt(a.qualityLabel) || 0;
+      const qb = qualityOrder[b.itag] || parseInt(b.qualityLabel) || 0;
+      return qb - qa;
+    });
+
+    const bestFormat = sorted[0];
+    console.log(`[streamExtractor] Selected: itag ${bestFormat.itag} (${bestFormat.qualityLabel || 'unknown'}, ${bestFormat.mimeType})`);
+
+    return {
+      id: videoId,
+      title: videoDetails.title || 'Unknown',
+      author: videoDetails.author || 'Unknown',
+      thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
+                    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      streamURL: bestFormat.url,
+      duration: parseInt(videoDetails.lengthSeconds) || 0,
+      isLive: videoDetails.isLive || false,
+      extractor: 'youtubei',
+    };
+  } catch (err: any) {
+    console.error(`[streamExtractor] YouTube Internal API error: ${err.message}`);
+    throw err;
+  }
+}
+
 /**
  * 🔧 v10.1: Extract stream URL using Invidious API.
  * Invidious returns formatStreams[] (muxed: audio+video) + adaptiveFormats[] (DASH).
@@ -317,9 +402,8 @@ async function extractWithYtDlp(url: string): Promise<StreamInfo> {
 }
 
 /**
- * 🔧 v10.1: Main extraction function — tries Invidious → Piped → yt-dlp.
- * Invidious has more instances and different blocking patterns than Piped,
- * so it's more likely to work on Railway IPs.
+ * 🔧 v10.2: Main extraction function — tries YouTubeI → Invidious → Piped → yt-dlp.
+ * YouTubeI is YouTube's OWN internal API — most reliable, no proxy needed.
  */
 export async function extractStream(url: string): Promise<StreamInfo> {
   const parsed = new URL(url);
@@ -330,20 +414,28 @@ export async function extractStream(url: string): Promise<StreamInfo> {
   // Extract YouTube video ID
   const videoId = extractYouTubeId(url);
   if (videoId) {
-    // YouTube: try Invidious first (most reliable on Railway)
+    // YouTube: try YouTube Internal API first (most reliable)
     try {
-      console.log(`[streamExtractor] YouTube video ${videoId} — trying Invidious API`);
-      return await extractWithInvidious(videoId);
-    } catch (invidiousErr: any) {
-      console.error(`[streamExtractor] Invidious failed: ${invidiousErr.message}`);
+      console.log(`[streamExtractor] YouTube video ${videoId} — trying YouTube Internal API`);
+      return await extractWithYouTubeI(videoId);
+    } catch (youtubeiErr: any) {
+      console.error(`[streamExtractor] YouTube Internal API failed: ${youtubeiErr.message}`);
 
-      // Fallback: try Piped
+      // Fallback: try Invidious
       try {
-        console.log(`[streamExtractor] Trying Piped API`);
-        return await extractWithPiped(videoId);
-      } catch (pipedErr: any) {
-        console.error(`[streamExtractor] Piped failed: ${pipedErr.message}`);
-        // Fall through to yt-dlp
+        console.log(`[streamExtractor] Trying Invidious API`);
+        return await extractWithInvidious(videoId);
+      } catch (invidiousErr: any) {
+        console.error(`[streamExtractor] Invidious failed: ${invidiousErr.message}`);
+
+        // Fallback: try Piped
+        try {
+          console.log(`[streamExtractor] Trying Piped API`);
+          return await extractWithPiped(videoId);
+        } catch (pipedErr: any) {
+          console.error(`[streamExtractor] Piped failed: ${pipedErr.message}`);
+          // Fall through to yt-dlp
+        }
       }
     }
   }
@@ -354,11 +446,11 @@ export async function extractStream(url: string): Promise<StreamInfo> {
 }
 
 export async function extractMetadata(url: string): Promise<Partial<StreamInfo>> {
-  // For YouTube, try Invidious → Piped
+  // For YouTube, try YouTubeI → Invidious → Piped
   const videoId = extractYouTubeId(url);
   if (videoId) {
     try {
-      const stream = await extractWithInvidious(videoId);
+      const stream = await extractWithYouTubeI(videoId);
       return {
         id: stream.id,
         title: stream.title,
@@ -370,7 +462,7 @@ export async function extractMetadata(url: string): Promise<Partial<StreamInfo>>
       };
     } catch {
       try {
-        const stream = await extractWithPiped(videoId);
+        const stream = await extractWithInvidious(videoId);
         return {
           id: stream.id,
           title: stream.title,
@@ -381,7 +473,20 @@ export async function extractMetadata(url: string): Promise<Partial<StreamInfo>>
           extractor: stream.extractor,
         };
       } catch {
-        // Fall through to yt-dlp
+        try {
+          const stream = await extractWithPiped(videoId);
+          return {
+            id: stream.id,
+            title: stream.title,
+            author: stream.author,
+            thumbnailURL: stream.thumbnailURL,
+            duration: stream.duration,
+            isLive: stream.isLive,
+            extractor: stream.extractor,
+          };
+        } catch {
+          // Fall through to yt-dlp
+        }
       }
     }
   }

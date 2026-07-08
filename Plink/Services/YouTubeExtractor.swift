@@ -31,12 +31,37 @@ final class YouTubeExtractor {
     private var cache: [String: (info: StreamInfo, expires: Date)] = [:]
     private let cacheTTL: TimeInterval = 30 * 60  // 30 minutes
 
+    /// 🔧 v45.1: Track whether we've fetched YouTube cookies.
+    /// YouTube requires CONSENT + SAPISID cookies for some videos.
+    /// We fetch them once from the watch page and the URLSession stores
+    /// them automatically for subsequent requests.
+    private var cookiesFetched = false
+
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
         config.waitsForConnectivity = true
+        // 🔧 v45.1: enable cookie storage so YouTube cookies persist
+        config.httpCookieStorage = HTTPCookieStorage.shared
+        config.httpShouldSetCookies = true
+        config.httpCookieAcceptPolicy = .always
         self.session = URLSession(configuration: config)
+    }
+
+    /// 🔧 v45.1: Fetch YouTube watch page to get CONSENT + SAPISID cookies.
+    /// These cookies are required for YouTube Internal API to return
+    /// playable streams instead of UNPLAYABLE status.
+    private func fetchYouTubeCookies() async {
+        guard let url = URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ") else { return }
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        do {
+            let (_, _) = try await session.data(for: request)
+            print("📺 YouTubeExtractor: fetched YouTube cookies")
+        } catch {
+            print("⚠️ YouTubeExtractor: cookie fetch failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Public API
@@ -128,6 +153,22 @@ final class YouTubeExtractor {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        // 🔧 v45.1: Add Origin + Referer headers — YouTube requires these
+        // to return playable streams. Without Origin, YouTube returns
+        // UNPLAYABLE status (playability check fails).
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Referer")
+        // 🔧 v45.1: Use YouTube's public API key — this is the same key
+        // that youtube.com uses in the browser. It's not secret.
+        request.setValue("AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8", forHTTPHeaderField: "X-YouTube-Client-Key")
+
+        // 🔧 v45.1: First fetch the YouTube watch page to get cookies.
+        // YouTube requires CONSENT cookie + SAPISID for some videos.
+        // We do this only once and cache the cookies in the session.
+        if !cookiesFetched {
+            await fetchYouTubeCookies()
+            cookiesFetched = true
+        }
 
         let body: [String: Any] = [
             "context": [

@@ -49,7 +49,7 @@
                 62670A3BCEFEF620A5B373F1 /* AdPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF226DF4CBF7C89A3BEDAA9 /* AdPlayerView.swift */; };
                 63E2F943F10944E2AF7F4DAF /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AE0CCF0D69FFB3D449EB331 /* AudioManager.swift */; };
                 67A88BBC23C5CEB1AA2CF284 /* YouTubeSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 046B14771115B62C809982E6 /* YouTubeSearchService.swift */; };
-A1B2C3D4E5F6A7B8C9D0E1F2 /* YouTubeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E4D5C6B7A8901234567890 /* YouTubeExtractor.swift */; };
+B2C3D4E5F6A7B8C9D0E1F2A3 /* YouTubeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D5C6B7A8901234567890F1 /* YouTubeExtractor.swift */; };
                 6DB1209DA37D3A43159FA03D /* RoomCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05B0B5401AF8A3019E9A437C /* RoomCardView.swift */; };
                 6EC94FCB7337B391A3DD1BED /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98D0DD109AE78278DFABAD3D /* AuthViewModel.swift */; };
                 6F9A0BF8600F8ACCAC33310A /* ServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C19A11106F98FF43B4DE07 /* ServiceProtocol.swift */; };
@@ -117,7 +117,7 @@ A1B2C3D4E5F6A7B8C9D0E1F2 /* YouTubeExtractor.swift in Sources */ = {isa = PBXBui
 
 /* Begin PBXFileReference section */
                 046B14771115B62C809982E6 /* YouTubeSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeSearchService.swift; sourceTree = "<group>"; };
-F3E4D5C6B7A8901234567890 /* YouTubeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeExtractor.swift; sourceTree = "<group>"; };
+E4D5C6B7A8901234567890F1 /* YouTubeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeExtractor.swift; sourceTree = "<group>"; };
                 04ED4FE5ED59376046BAB30A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
                 DEF456020202020202020202 /* youtube_player.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = youtube_player.html; sourceTree = "<group>"; };
                 05B0B5401AF8A3019E9A437C /* RoomCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCardView.swift; sourceTree = "<group>"; };
@@ -510,7 +510,7 @@ F3E4D5C6B7A8901234567890 /* YouTubeExtractor.swift */ = {isa = PBXFileReference;
                                 D333E130D807F2A3D5BBA273 /* VoiceChatService.swift */,
                                 287D2338002D4E1AD5C01291 /* YandexAuthService.swift */,
                                 046B14771115B62C809982E6 /* YouTubeSearchService.swift */,
-				F3E4D5C6B7A8901234567890 /* YouTubeExtractor.swift */,
+				E4D5C6B7A8901234567890F1 /* YouTubeExtractor.swift */,
                         );
                         path = Services;
                         sourceTree = "<group>";
@@ -701,7 +701,7 @@ F3E4D5C6B7A8901234567890 /* YouTubeExtractor.swift */ = {isa = PBXFileReference;
                                 46C71627961D52CBE56F4CA4 /* WebSocketClient.swift in Sources */,
                                 7688D2D096AA91F0B8123BB9 /* YandexAuthService.swift in Sources */,
                                 67A88BBC23C5CEB1AA2CF284 /* YouTubeSearchService.swift in Sources */,
-				A1B2C3D4E5F6A7B8C9D0E1F2 /* YouTubeExtractor.swift in Sources */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* YouTubeExtractor.swift in Sources */,
                                 D2FA3F79B8C6A5B3D2ED39EC /* YouTubeSearchView.swift in Sources */,
                         );
                         runOnlyForDeploymentPostprocessing = 0;

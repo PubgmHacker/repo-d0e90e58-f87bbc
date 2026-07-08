@@ -60,16 +60,18 @@ export async function extractStream(url: string): Promise<StreamInfo> {
     throw new Error('Invalid URL protocol');
   }
 
-  // 🔧 v9.6: -f "best" lets yt-dlp pick any best format. Removed
-  // --prefer-free-formats which was causing "Requested format is not available"
-  // when YouTube only had DASH formats (separate audio/video).
-  // --dump-single-json returns ALL formats in info.formats array regardless
-  // of -f flag, so we can pick the best combined one ourselves.
+  // 🔧 v9.7: --skip-download prevents "Requested format is not available" error.
+  // Even with --dump-single-json, yt-dlp tries to SELECT a format for download.
+  // When YouTube only has DASH formats (separate audio/video), -f "best" fails
+  // because there's no single combined "best" format. --skip-download tells
+  // yt-dlp "don't select any format, just dump info" — info.formats still
+  // contains ALL formats, and our code picks the best combined one.
+  //
+  // Also removed -f "best" (was still triggering format selection).
+  // Removed --no-check-certificate (was causing SSL issues on some Railway IPs).
   const { stdout } = await execAsync(
     `yt-dlp --dump-single-json --no-warnings --no-call-home ` +
-    `--no-check-certificate ` +
-    `--no-playlist ` +
-    `-f "best" ` +
+    `--no-playlist --skip-download ` +
     `--user-agent "${YT_DLP_UA}" ` +
     `${shellEscape(url)}`,
     { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }

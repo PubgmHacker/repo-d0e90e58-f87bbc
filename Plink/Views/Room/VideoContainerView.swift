@@ -741,6 +741,19 @@ struct WebVideoView: UIViewRepresentable {
         // The Coordinator itself is the WKScriptMessageHandler.
         if isYouTubeLike {
             config.userContentController.add(context.coordinator, name: "plinkBridge")
+
+            // 🔧 v39: Early CSS injection via WKUserScript (atDocumentStart).
+            // Hides YouTube UI BEFORE it renders — no flash of unstyled content.
+            // Previous approach injected CSS via evaluateJavaScript in didFinish,
+            // which runs AFTER page load → user saw YouTube UI for ~1 second.
+            // atDocumentStart runs before DOM is ready, but (document.head || document.documentElement)
+            // works because documentElement always exists.
+            let youtubeCssScript = WKUserScript(
+                source: Self.youtubeHideCSS,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(youtubeCssScript)
         }
 
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -1387,22 +1400,19 @@ struct WebVideoView: UIViewRepresentable {
                         });
                     });
 
-                    // 🔧 v32.8: BLOCK YouTube's default tap-to-pause behavior.
-                    // YouTube's <video> element has its own onclick that toggles
-                    // play/pause. We need Plink's ControlsOverlay to handle taps,
-                    // not YouTube. Solution: capture phase + preventDefault +
-                    // stopPropagation on video click events.
+                    // 🔧 v39: Let YouTube handle tap = play/pause natively.
+                    // v32.8 blocked YouTube's tap (preventDefault + stopPropagation)
+                    // because we had our own ControlsOverlay. v37 removed ControlsOverlay,
+                    // so now we NEED YouTube's native tap-to-toggle. Just unmute on
+                    // first tap (iOS gesture requirement), don't block the event.
                     video.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // v32.8: unmute on first tap (iOS gesture requirement)
                         if (video.muted) {
                             video.muted = false;
                             video.play();
-                            console.log("[Plink v32.8] User tapped — unmuted (NOT paused)");
+                            console.log("[Plink v39] User tapped — unmuted");
                         }
-                        return false;
-                    }, true);  // capture phase — runs BEFORE YouTube's handler
+                        // Don't preventDefault — let YouTube toggle play/pause.
+                    }, true);  // capture phase — runs before YouTube's handler
 
                     // 🔧 v32.12: KEEP VIDEO PLAYING — YouTube sometimes auto-pauses
                     // after 30-60s (ad overlay, pause overlay, buffering).
@@ -1598,10 +1608,13 @@ struct WebVideoView: UIViewRepresentable {
             WebViewControl.shared.didFallbackToFullPage = true  // skip IFrame API fallback
 
             let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
-            let watchURLString = "https://www.youtube.com/watch?v=\(cleanVideoId)"
+            // 🔧 v39: use m.youtube.com — mobile UI is cleaner and the CSS
+            // selectors match better. www.youtube.com on iPhone sometimes
+            // serves the desktop layout which has different class names.
+            let watchURLString = "https://m.youtube.com/watch?v=\(cleanVideoId)"
             guard let watchURL = URL(string: watchURLString) else { return }
 
-            print("📺 YouTube v37.3: loading www.youtube.com/watch?v=\(cleanVideoId)")
+            print("📺 YouTube v39: loading m.youtube.com/watch?v=\(cleanVideoId)")
             DispatchQueue.main.async {
                 let request = URLRequest(url: watchURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30.0)
                 webView.load(request)
@@ -1638,6 +1651,73 @@ struct WebVideoView: UIViewRepresentable {
             return id  // best effort
         }
     }
+
+    /// 🔧 v39: Comprehensive CSS to hide ALL YouTube UI — only show the video.
+    /// Injected via WKUserScript at atDocumentStart so it applies BEFORE first paint.
+    /// Hides: topbar, metadata, action bar (like/subscribe), comments, recommendations,
+    ///        player chrome (controls, progress bar, fullscreen button, mute, play).
+    /// Keeps visible: #movie_player, <video>, .html5-main-video (full-screen, contained).
+    static let youtubeHideCSS: String = """
+    (function() {
+        var style = document.createElement('style');
+        style.textContent = [
+            'html, body { background:#000!important; overflow:hidden!important;',
+            '  position:fixed!important; width:100%!important; height:100%!important;',
+            '  margin:0!important; padding:0!important; top:0!important; left:0!important; }',
+            // Topbar (desktop + mobile)
+            '#masthead-container, #masthead, ytd-masthead, ytd-mini-guide-renderer,',
+            'ytd-guide, #guide-button, #back-button, #logo,',
+            '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
+            'ytd-topbar-logo-renderer, ytd-search, #search-form, #search-input,',
+            '#end, #buttons, ytd-topbar-menu-button-renderer,',
+            'ytm-topbar, ytm-topbar-renderer, ytd-mobile-topbar-renderer {',
+            '  display:none!important; visibility:hidden!important; opacity:0!important;',
+            '  pointer-events:none!important; }',
+            // Watch page metadata + action bar (like, share, subscribe)
+            'ytm-watch-metadata, ytd-watch-metadata, ytd-watch-flexy,',
+            'ytm-slim-video-action-bar-renderer, ytd-slim-video-action-bar-renderer,',
+            '.slim-video-information-title, .slim-video-information-meta,',
+            'ytm-channel-name, ytm-subscribe-button-renderer, ytd-subscribe-button-renderer,',
+            '#info, #info-contents, #meta, #meta-contents, ytd-video-primary-info-renderer,',
+            'ytd-video-secondary-info-renderer {',
+            '  display:none!important; visibility:hidden!important; opacity:0!important;',
+            '  pointer-events:none!important; }',
+            // Comments + related videos
+            'ytm-comment-section-renderer, #comments-button, ytd-comments, #comments,',
+            'ytm-compact-video-renderer, ytd-compact-video-renderer,',
+            'ytm-item-section-renderer, ytd-item-section-renderer,',
+            '#related, #secondary, ytd-watch-next-secondary-results-renderer {',
+            '  display:none!important; visibility:hidden!important; opacity:0!important;',
+            '  pointer-events:none!important; }',
+            // YouTube player chrome (controls, buttons, overlays)
+            '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
+            '.ytp-progress-bar-container, .ytp-progress-bar, .ytp-settings-button,',
+            '.ytp-fullscreen-button, .ytp-mute-button, .ytp-unmute-button,',
+            '.ytp-play-button, .ytp-next-button, .ytp-prev-button,',
+            '.ytp-time-display, .ytp-watermark, .ytp-tooltip,',
+            '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
+            '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
+            '.ytp-scrim-bottom, .ytp-scrim-top, .ytp-mdx-popup,',
+            '.ytp-pause-overlay-back, .paused-overlay,',
+            'button[aria-label*="mute" i], button[aria-label*="unmute" i],',
+            'button[aria-label*="fullscreen" i], button[aria-label*="settings" i],',
+            '.ytp-ad-overlay-container, .ytp-ad-overlay, .ytp-ad-text,',
+            '.ytp-ad-skip-button-container,',
+            'ytd-ad-slot-renderer, ytd-promoted-video-renderer,',
+            'ytd-promo-sparkles-web-renderer, .ytd-banner-promo-renderer {',
+            '  display:none!important; visibility:hidden!important; opacity:0!important;',
+            '  pointer-events:none!important; }',
+            // Make video player fullscreen (only visible element)
+            '#movie_player, #movie_player video, .html5-main-video, video {',
+            '  position:fixed!important; top:0!important; left:0!important;',
+            '  width:100vw!important; height:100vh!important;',
+            '  z-index:2147483647!important; object-fit:contain!important;',
+            '  background:#000!important; }'
+        ].join('\\n');
+        (document.head || document.documentElement).appendChild(style);
+        console.log('[Plink v39] CSS injected at documentStart (YouTube UI hidden)');
+    })();
+    """
 
     static let syncScript: String = """
     (function() {

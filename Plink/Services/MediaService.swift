@@ -54,11 +54,9 @@ final class MediaService {
     ///   "https://www.youtube.com/embed/VIDEO_ID"
     /// - Returns: ExtractedMedia with a playable streamURL (.mp4 direct URL)
     ///
-    /// 🔧 v8 (July 2026): backend endpoint changed from POST /api/media/extract
-    /// to POST /api/media/extract-url (matches what backend actually exposes).
-    /// Also relaxed validation to accept embed URLs (which is what
-    /// ServiceBrowserView produces) — previously only watch?v= URLs validated.
-    /// Response format aligned with backend's StreamInfo struct.
+    /// 🔧 v44.1: backend endpoint is POST /api/media/extract (NOT /extract-url).
+    /// Previous v8 comment said /extract-url but the actual backend route in
+    /// media-v2.ts is /extract. This mismatch caused 500 errors.
     func extract(youTubeURL: String) async throws -> ExtractedMedia {
         // 0. Validate input (accept watch / youtu.be / embed / shorts URLs)
         guard isValidYouTubeURL(youTubeURL) else {
@@ -72,8 +70,8 @@ final class MediaService {
             return cached
         }
 
-        // 2. Build request — POST /api/media/extract-url with {url}
-        let endpoint = apiBaseURL.appendingPathComponent("media/extract-url")
+        // 2. Build request — POST /api/media/extract with {url}
+        let endpoint = apiBaseURL.appendingPathComponent("media/extract")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -105,8 +103,10 @@ final class MediaService {
             data = try await performRequest(request)
         }
 
-        // 4. Decode — backend returns StreamInfo format:
-        //    {id, title, author, thumbnailURL, streamURL, duration, isLive, extractor, formats?}
+        // 4. Decode — backend /extract returns ExtractedMedia format:
+        //    {sourceID, sourceName, mode, streamURL, title, thumbnailURL,
+        //     duration, format, quality, requiresSubscription}
+        // 🔧 v44.1: updated to match backend's actual response (mediaExtractor.ts).
         let response = try decoder.decode(ExtractResponse.self, from: data)
 
         // 5. Validate the stream URL is actually usable
@@ -116,16 +116,15 @@ final class MediaService {
         }
 
         let media = ExtractedMedia(
-            id: response.id,
+            id: response.sourceID ?? UUID().uuidString,
             title: response.title,
-            // 🔧 v8: backend StreamInfo uses 'author' (not 'artist'), map it
-            artist: response.author,
+            artist: response.sourceName,
             thumbnailURL: response.thumbnailURL.flatMap(URL.init(string:)),
             streamURL: streamURL,
             duration: response.duration,
             format: response.format ?? "mp4",
             quality: response.quality ?? "unknown",
-            isLive: response.isLive ?? false
+            isLive: false
         )
 
         // Cache it
@@ -245,23 +244,21 @@ struct ValidateRequest: Codable {
 }
 
 struct ExtractResponse: Codable {
-    let id: String
-    let title: String
-    let author: String?
-    let thumbnailURL: String?
+    /// 🔧 v44.1: backend /extract returns ExtractedMedia (mediaExtractor.ts):
+    /// { sourceID, sourceName, mode, streamURL, title, thumbnailURL,
+    ///   duration, format, quality, requiresSubscription }
+    /// All fields optional except streamURL + title — backend may omit others
+    /// depending on the source.
+    let sourceID: String?
+    let sourceName: String?
+    let mode: String?  // "native" | "webview"
     let streamURL: String
+    let title: String
+    let thumbnailURL: String?
     let duration: Double?
-    // 🔧 v8: backend StreamInfo doesn't always include these — make optional
     let format: String?
     let quality: String?
-    let isLive: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, author
-        case thumbnailURL
-        case streamURL, duration, format, quality
-        case isLive
-    }
+    let requiresSubscription: Bool?
 }
 
 struct ExtractedMedia {

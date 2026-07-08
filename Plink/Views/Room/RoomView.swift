@@ -159,14 +159,12 @@ struct RoomView: View {
         let chatHeight: CGFloat = isLandscape ? 0 : max(geo.size.height - videoHeight - 8, 0)
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
-        // 🔧 v36.1: ZStack instead of VStack — video + chat are ALWAYS
-        // siblings, position controlled by frame + offset.
-        // VStack changes child sizes when isLandscape toggles → SwiftUI
-        // re-layouts children → VideoContainerView frame changes →
-        // SwiftUI calls makeUIView again → WKWebView destroyed.
-        // ZStack: video frame changes but ZStack identity stays same.
-        ZStack(alignment: .top) {
-            // Video — ALWAYS first child
+        // 🔧 v37.1: VStack with FIXED video height — chat fills remainder.
+        // Video height is CONSTANT (screen width * 9/16) regardless of isLandscape.
+        // In landscape: videoHeight = screen height (full), chat height = 0.
+        // VStack re-layout only changes chat height, NOT video height →
+        // VideoContainerView frame stays same → no makeUIView re-trigger.
+        VStack(spacing: 0) {
             videoSection(
                 viewModel: viewModel,
                 videoWidth: videoWidth,
@@ -175,7 +173,6 @@ struct RoomView: View {
             )
             .frame(width: videoWidth, height: videoHeight)
 
-            // Chat — ALWAYS second child, offset below video in portrait
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -192,7 +189,6 @@ struct RoomView: View {
             .padding(.horizontal, isLandscape ? 0 : 8)
             .padding(.bottom, isLandscape ? 0 : 8)
             .opacity(isLandscape ? 0 : 1)
-            .offset(y: isLandscape ? 0 : videoHeight)
         }
         // Landscape chat overlay — ALWAYS present, hidden via opacity in portrait
         .overlay {

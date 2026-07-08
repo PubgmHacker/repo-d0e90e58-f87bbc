@@ -32,6 +32,8 @@ targets:
       - path: Plink/Resources
         excludes:
           - "**/.DS_Store"
+    dependencies:
+      - package: XCDYouTubeKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.syncwatch.plink
@@ -57,3 +59,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: Plink/Resources/Plink.entitlements
+
+packages:
+  XCDYouTubeKit:
+    url: https://github.com/0xced/XCDYouTubeKit.git
+    from: 2.16.0

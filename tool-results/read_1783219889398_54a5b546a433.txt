@@ -1,0 +1,729 @@
+     1→     1→import SwiftUI
+     2→     2→import PhotosUI
+     3→     3→
+     4→     4→// MARK: - Profile View v3 (Premium + Edit Profile)
+     5→     5→/// Профиль: премиальный хедер, бейдж Premium, статистика, история.
+     6→     6→/// Настройки — через шестерёнку.
+     7→     7→struct ProfileView: View {
+     8→     8→    @State private var viewModel: ProfileViewModel
+     9→     9→    @Environment(\.dismiss) private var dismiss
+    10→    10→    @ObservedObject private var loc = LocalizationManager.shared
+    11→    11→    var onSignOut: () -> Void
+    12→    12→
+    13→    13→    @State private var showSettings = false
+    14→    14→    @State private var showEditProfile = false
+    15→    15→    @State private var showPaywall = false
+    16→    16→    @State private var showPhotoPicker = false
+    17→    17→    @State private var selectedPhotoItem: PhotosPickerItem?
+    18→    18→    @State private var friendManager: FriendManager? = nil
+    19→    19→    @State private var isPremium = false
+    20→    20→
+    21→    21→    init(viewModel: ProfileViewModel, onSignOut: @escaping () -> Void) {
+    22→    22→        _viewModel = State(initialValue: viewModel)
+    23→    23→        self.onSignOut = onSignOut
+    24→    24→    }
+    25→    25→
+    26→    26→    var body: some View {
+    27→    27→        ZStack {
+    28→    28→            AnimatedGradientBackground()
+    29→    29→
+    30→    30→            ScrollView {
+    31→    31→                VStack(spacing: 24) {
+    32→    32→                    profileHeader
+    33→    33→                    premiumBanner
+    34→    34→                    activityBlock
+    35→    35→                    statsRow
+    36→    36→                    watchHistorySection
+    37→    37→                }
+    38→    38→                .padding(.horizontal, 20)
+    39→    39→                .padding(.bottom, 40)
+    40→    40→            }
+    41→    41→        }
+    42→    42→        .navigationBarTitleDisplayMode(.inline)
+    43→    43→        .toolbarBackground(Color.clear, for: .navigationBar)
+    44→    44→        .toolbarColorScheme(.dark, for: .navigationBar)
+    45→    45→        .toolbar {
+    46→    46→            ToolbarItem(placement: .principal) {
+    47→    47→                Text(loc.string(.profileTitle))
+    48→    48→                    .font(.headline)
+    49→    49→                    .foregroundColor(.white)
+    50→    50→            }
+    51→    51→            // 🔧 Pack v3: убрана шестерёнка — настройки в таббаре
+    52→    52→        }
+    53→    53→        .preferredColorScheme(.dark)
+    54→    54→        .task {
+    55→    55→            await viewModel.loadUser()
+    56→    56→            isPremium = PremiumStatusManager.shared.isPremium
+    57→    57→        }
+    58→    58→        // 🔧 Pack v3: Перезагружаем после EditProfileSheet (ник + аватар)
+    59→    59→        .onChange(of: showEditProfile) { _, isShown in
+    60→    60→            if !isShown {
+    61→    61→                Task {
+    62→    62→                    await viewModel.loadUser()
+    63→    63→                }
+    64→    64→            }
+    65→    65→        }
+    66→    66→        .sheet(isPresented: $showSettings) {
+    67→    67→            if let concreteAuth = viewModel.authService as? AuthService {
+    68→    68→                SettingsView(authService: concreteAuth)
+    69→    69→            }
+    70→    70→        }
+    71→    71→        .sheet(isPresented: $showEditProfile) {
+    72→    72→            EditProfileSheet(viewModel: viewModel)
+    73→    73→        }
+    74→    74→        .sheet(isPresented: $showPaywall) {
+    75→    75→            PaywallView(
+    76→    76→                onPurchase: {
+    77→    77→                    // 🔧 FIX C9: Premium activation goes through StoreManager.handleSuccessfulPurchase
+    78→    78→                    // → activatePremium(expiryDate:). Direct setPremium() removed.
+    79→    79→                    Task {
+    80→    80→                        await StoreManager.shared.purchase()
+    81→    81→                        isPremium = PremiumStatusManager.shared.isPremium
+    82→    82→                        showPaywall = false
+    83→    83→                    }
+    84→    84→                },
+    85→    85→                onRestore: {
+    86→    86→                    // 🔧 FIX C9: Restore goes through StoreManager.restorePurchases
+    87→    87→                    // which iterates Transaction.currentEntitlements (FIX M5).
+    88→    88→                    Task {
+    89→    89→                        await StoreManager.shared.restorePurchases()
+    90→    90→                        isPremium = PremiumStatusManager.shared.isPremium
+    91→    91→                        showPaywall = false
+    92→    92→                    }
+    93→    93→                },
+    94→    94→                onDismiss: { showPaywall = false }
+    95→    95→            )
+    96→    96→        }
+    97→    97→        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+    98→    98→        .onChange(of: selectedPhotoItem) { _, newItem in
+    99→    99→            guard let newItem else { return }
+   100→   100→            newItem.loadTransferable(type: Data.self) { result in
+   101→   101→                DispatchQueue.main.async {
+   102→   102→                    if case .success(let data?) = result, let img = UIImage(data: data) {
+   103→   103→                        viewModel.saveAvatar(img)
+   104→   104→                    }
+   105→   105→                }
+   106→   106→            }
+   107→   107→            selectedPhotoItem = nil
+   108→   108→        }
+   109→   109→    }
+   110→   110→
+   111→   111→    // MARK: - Profile Header
+   112→   112→
+   113→   113→    private var profileHeader: some View {
+   114→   114→        VStack(spacing: 14) {
+   115→   115→            Button { showPhotoPicker = true } label: {
+   116→   116→                ZStack(alignment: .bottomTrailing) {
+   117→   117→                    // 🔧 Pack v2: переиспользуемый AvatarView с Premium/Admin кольцами
+   118→   118→                    AvatarView(
+   119→   119→                        image: viewModel.avatarImage,
+   120→   120→                        imageURL: viewModel.avatarURL,
+   121→   121→                        username: viewModel.displayName,
+   122→   122→                        size: 120,
+   123→   123→                        isPremium: isPremium,
+   124→   124→                        isAdmin: viewModel.user?.isAdmin ?? false
+   125→   125→                    )
+   126→   126→
+   127→   127→                    // Кнопка камеры для смены аватара
+   128→   128→                    Image(systemName: "camera.circle.fill")
+   129→   129→                        .font(.system(size: 28))
+   130→   130→                        .foregroundColor(.white)
+   131→   131→                        .background(Circle().fill(Color.ravePrimary))
+   132→   132→                        .clipShape(Circle())
+   133→   133→                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+   134→   134→                }
+   135→   135→            }
+   136→   136→            .buttonStyle(.plain)
+   137→   137→
+   138→   138→            VStack(spacing: 4) {
+   139→   139→                // Переливающийся никнейм для премиум (без короны)
+   140→   140→                PremiumUsernameText(
+   141→   141→                    text: viewModel.displayName,
+   142→   142→                    isPremium: isPremium,
+   143→   143→                    isAdmin: viewModel.user?.isAdmin ?? false,
+   144→   144→                    font: .title2.bold()
+   145→   145→                )
+   146→   146→
+   147→   147→                Text(viewModel.email)
+   148→   148→                    .font(.caption)
+   149→   149→                    .foregroundColor(.raveTextSecondary)
+   150→   150→            }
+   151→   151→
+   152→   152→            // Кнопка редактировать — премиум градиент (остаётся под аватаркой)
+   153→   153→            Button { showEditProfile = true } label: {
+   154→   154→                HStack(spacing: 6) {
+   155→   155→                    Image(systemName: "pencil")
+   156→   156→                    Text("Редактировать профиль")
+   157→   157→                }
+   158→   158→                .font(.subheadline.bold())
+   159→   159→                .foregroundColor(.white)
+   160→   160→                .frame(maxWidth: .infinity)
+   161→   161→                .padding(.vertical, 12)
+   162→   162→                .background(Color.raveGradient)
+   163→   163→                .clipShape(RoundedRectangle(cornerRadius: 14))
+   164→   164→                .shadow(color: .ravePrimary.opacity(0.3), radius: 10, y: 4)
+   165→   165→            }
+   166→   166→            .padding(.horizontal, 20)
+   167→   167→        }
+   168→   168→        .padding(.top, 20)
+   169→   169→    }
+   170→   170→
+   171→   171→    @ViewBuilder
+   172→   172→    private var avatarView: some View {
+   173→   173→        if let image = viewModel.avatarImage {
+   174→   174→            Image(uiImage: image).resizable().scaledToFill()
+   175→   175→        } else if let avatarURL = viewModel.avatarURL, let url = URL(string: avatarURL) {
+   176→   176→            AsyncImage(url: url) { phase in
+   177→   177→                switch phase {
+   178→   178→                case .success(let image): image.resizable().scaledToFill()
+   179→   179→                default: avatarFallback
+   180→   180→                }
+   181→   181→            }
+   182→   182→        } else {
+   183→   183→            avatarFallback
+   184→   184→        }
+   185→   185→    }
+   186→   186→
+   187→   187→    private var avatarFallback: some View {
+   188→   188→        ZStack {
+   189→   189→            Circle().fill(
+   190→   190→                LinearGradient(colors: [Color.ravePrimary, Color.raveAccent],
+   191→   191→                               startPoint: .topLeading, endPoint: .bottomTrailing)
+   192→   192→            )
+   193→   193→            Text(viewModel.displayName.prefix(2).uppercased())
+   194→   194→                .font(.system(size: 42, weight: .bold))
+   195→   195→                .foregroundColor(.white)
+   196→   196→        }
+   197→   197→    }
+   198→   198→
+   199→   199→    // MARK: - Premium Banner (дорогой стиль — без дешёвого gold)
+   200→   200→
+   201→   201→    @ViewBuilder
+   202→   202→    private var premiumBanner: some View {
+   203→   203→        if isPremium {
+   204→   204→            // ── Статус подписки: «Plink Premium активен до: [дата]» ──
+   205→   205→            let expiryDate = PremiumStatusManager.shared.subscriptionExpiry ?? Date().addingTimeInterval(30 * 86400)
+   206→   206→            let formatter = DateFormatter()
+   207→   207→            let _ = { formatter.locale = Locale(identifier: "ru_RU"); formatter.dateFormat = "d MMMM yyyy" }()
+   208→   208→            HStack(spacing: 12) {
+   209→   209→                ZStack {
+   210→   210→                    Circle()
+   211→   211→                        .fill(
+   212→   212→                            LinearGradient(colors: [Color.bioCyan.opacity(0.2), Color.bioEmerald.opacity(0.15)],
+   213→   213→                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+   214→   214→                        )
+   215→   215→                        .frame(width: 44, height: 44)
+   216→   216→                    Image(systemName: "sparkles")
+   217→   217→                        .font(.system(size: 20))
+   218→   218→                        .foregroundColor(.bioCyan)
+   219→   219→                }
+   220→   220→
+   221→   221→                VStack(alignment: .leading, spacing: 3) {
+   222→   222→                    Text("Plink Premium активен")
+   223→   223→                        .font(.subheadline.bold())
+   224→   224→                        .foregroundColor(.white)
+   225→   225→                    Text("Действует до \(formatter.string(from: expiryDate))")
+   226→   226→                        .font(.caption)
+   227→   227→                        .foregroundColor(.raveTextSecondary)
+   228→   228→                }
+   229→   229→
+   230→   230→                Spacer()
+   231→   231→
+   232→   232→                Image(systemName: "checkmark.seal.fill")
+   233→   233→                    .font(.system(size: 18))
+   234→   234→                    .foregroundColor(.bioEmerald)
+   235→   235→            }
+   236→   236→            .padding(.horizontal, 16)
+   237→   237→            .padding(.vertical, 14)
+   238→   238→            .glassCard(cornerRadius: 16, opacity: 0.06)
+   239→   239→            .overlay(
+   240→   240→                RoundedRectangle(cornerRadius: 16)
+   241→   241→                    .stroke(Color.bioCyan.opacity(0.2), lineWidth: 0.5)
+   242→   242→            )
+   243→   243→        } else {
+   244→   244→            // Кнопка оформления подписки — стильная, не убогая
+   245→   245→            Button { showPaywall = true } label: {
+   246→   246→                HStack(spacing: 12) {
+   247→   247→                    ZStack {
+   248→   248→                        Circle()
+   249→   249→                            .fill(
+   250→   250→                                LinearGradient(colors: [Color.ravePrimary.opacity(0.2), Color.raveAccent.opacity(0.15)],
+   251→   251→                                               startPoint: .topLeading, endPoint: .bottomTrailing)
+   252→   252→                            )
+   253→   253→                            .frame(width: 44, height: 44)
+   254→   254→                        Image(systemName: "sparkles")
+   255→   255→                            .font(.system(size: 20))
+   256→   256→                            .foregroundColor(.ravePrimary)
+   257→   257→                    }
+   258→   258→
+   259→   259→                    VStack(alignment: .leading, spacing: 3) {
+   260→   260→                        Text("Оформить Premium")
+   261→   261→                            .font(.subheadline.bold())
+   262→   262→                            .foregroundColor(.white)
+   263→   263→                        Text("Без рекламы · 4K · Дизайн · Бейдж")
+   264→   264→                            .font(.caption)
+   265→   265→                            .foregroundColor(.raveTextSecondary)
+   266→   266→                    }
+   267→   267→
+   268→   268→                    Spacer()
+   269→   269→
+   270→   270→                    Image(systemName: "chevron.right")
+   271→   271→                        .font(.caption)
+   272→   272→                        .foregroundColor(.ravePrimary)
+   273→   273→                }
+   274→   274→                .padding(.horizontal, 16)
+   275→   275→                .padding(.vertical, 14)
+   276→   276→                .glassCard(cornerRadius: 16, opacity: 0.06)
+   277→   277→                .overlay(
+   278→   278→                    RoundedRectangle(cornerRadius: 16)
+   279→   279→                        .stroke(Color.ravePrimary.opacity(0.2), lineWidth: 0.5)
+   280→   280→                )
+   281→   281→            }
+   282→   282→            .buttonStyle(.plain)
+   283→   283→        }
+   284→   284→    }
+   285→   285→
+   286→   286→    // MARK: - Activity Block (что смотрит сейчас + последние просмотры)
+   287→   287→
+   288→   288→    private var activityBlock: some View {
+   289→   289→        VStack(alignment: .leading, spacing: 12) {
+   290→   290→            HStack(spacing: 8) {
+   291→   291→                Image(systemName: "waveform")
+   292→   292→                    .font(.system(size: 14))
+   293→   293→                    .foregroundColor(.ravePrimary)
+   294→   294→                Text("Активность")
+   295→   295→                    .font(.system(size: 18, weight: .bold, design: .rounded))
+   296→   296→                    .foregroundColor(.raveTextPrimary)
+   297→   297→            }
+   298→   298→
+   299→   299→            // Что сейчас смотрит (если есть активная комната)
+   300→   300→            HStack(spacing: 10) {
+   301→   301→                ZStack {
+   302→   302→                    Circle()
+   303→   303→                        .fill(Color.raveGreen.opacity(0.15))
+   304→   304→                        .frame(width: 40, height: 40)
+   305→   305→                    Image(systemName: "play.fill")
+   306→   306→                        .font(.system(size: 16))
+   307→   307→                        .foregroundColor(.raveGreen)
+   308→   308→                }
+   309→   309→
+   310→   310→                VStack(alignment: .leading, spacing: 2) {
+   311→   311→                    Text("Сейчас в комнате")
+   312→   312→                        .font(.system(size: 15, weight: .semibold))
+   313→   313→                        .foregroundColor(.raveTextPrimary)
+   314→   314→                    Text("Смотрит с друзьями")
+   315→   315→                        .font(.system(size: 13))
+   316→   316→                        .foregroundColor(.raveTextSecondary)
+   317→   317→                }
+   318→   318→                Spacer()
+   319→   319→                PulsingDot(color: .raveGreen).frame(width: 8, height: 8)
+   320→   320→            }
+   321→   321→            .padding(.horizontal, 14)
+   322→   322→            .padding(.vertical, 12)
+   323→   323→            .glassCard(cornerRadius: 14, opacity: 0.04)
+   324→   324→        }
+   325→   325→    }
+   326→   326→
+   327→   327→    // MARK: - Stats (кликабельные)
+   328→   328→
+   329→   329→    private var statsRow: some View {
+   330→   330→        HStack(spacing: 0) {
+   331→   331→            statBox(value: "\(viewModel.roomsJoined)", label: loc.string(.profileStatsRooms))
+   332→   332→            Divider().frame(height: 40).background(Color.white.opacity(0.06))
+   333→   333→            statBox(value: "\(viewModel.hoursWatched)", label: loc.string(.profileStatsHours))
+   334→   334→            Divider().frame(height: 40).background(Color.white.opacity(0.06))
+   335→   335→            statBox(value: "\(friendManager?.friends.count ?? 0)", label: loc.string(.profileStatsFriends))
+   336→   336→        }
+   337→   337→        .padding(.vertical, 16)
+   338→   338→        .glassCard(cornerRadius: 18, opacity: 0.04)
+   339→   339→    }
+   340→   340→
+   341→   341→    private func statBox(value: String, label: String) -> some View {
+   342→   342→        VStack(spacing: 6) {
+   343→   343→            Text(value)
+   344→   344→                .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
+   345→   345→                .foregroundColor(.raveTextPrimary)
+   346→   346→            Text(label)
+   347→   347→                .font(.system(size: 12, weight: .medium))
+   348→   348→                .foregroundColor(.raveTextSecondary)
+   349→   349→        }
+   350→   350→        .frame(maxWidth: .infinity)
+   351→   351→        .contentShape(Rectangle())
+   352→   352→    }
+   353→   353→
+   354→   354→    // MARK: - Watch History (горизонтальная карусель постеров)
+   355→   355→
+   356→   356→    private var watchHistorySection: some View {
+   357→   357→        VStack(alignment: .leading, spacing: 12) {
+   358→   358→            HStack {
+   359→   359→                Text(loc.string(.profileHistory))
+   360→   360→                    .font(.system(size: 22, weight: .bold, design: .rounded))
+   361→   361→                    .foregroundColor(.raveTextPrimary)
+   362→   362→                Spacer()
+   363→   363→                if !viewModel.history.isEmpty {
+   364→   364→                    Button(loc.string(.profileClear)) { viewModel.clearHistory() }
+   365→   365→                        .font(.system(size: 13))
+   366→   366→                        .foregroundColor(.raveDanger)
+   367→   367→                }
+   368→   368→            }
+   369→   369→
+   370→   370→            if viewModel.history.isEmpty {
+   371→   371→                VStack(spacing: 10) {
+   372→   372→                    Image(systemName: "clock.arrow.circlepath")
+   373→   373→                        .font(.system(size: 36))
+   374→   374→                        .foregroundColor(.raveTextTertiary)
+   375→   375→                    Text(loc.string(.profileHistoryEmpty))
+   376→   376→                        .font(.subheadline)
+   377→   377→                        .foregroundColor(.raveTextSecondary)
+   378→   378→                }
+   379→   379→                .frame(maxWidth: .infinity)
+   380→   380→                .padding(.vertical, 30)
+   381→   381→                .glassCard(cornerRadius: 16, opacity: 0.04)
+   382→   382→            } else {
+   383→   383→                // Горизонтальная карусель постеров
+   384→   384→                ScrollView(.horizontal, showsIndicators: false) {
+   385→   385→                    HStack(spacing: 12) {
+   386→   386→                        ForEach(viewModel.history) { item in
+   387→   387→                            WatchHistoryPoster(item: item) { viewModel.rewatch(item) }
+   388→   388→                                .contextMenu {
+   389→   389→                                    Button(role: .destructive) {
+   390→   390→                                        viewModel.removeHistoryItem(item)
+   391→   391→                                    } label: {
+   392→   392→                                        Label(loc.string(.delete), systemImage: "trash")
+   393→   393→                                    }
+   394→   394→                                }
+   395→   395→                        }
+   396→   396→                    }
+   397→   397→                    .padding(.horizontal, 2)
+   398→   398→                }
+   399→   399→            }
+   400→   400→        }
+   401→   401→    }
+   402→   402→}
+   403→   403→
+   404→   404→// MARK: - Premium Avatar Stroke (пульсирующая ледяной голубой + розовый)
+   405→   405→/// Анимированная обводка аватарки для премиум-пользователей.
+   406→   406→struct PremiumAvatarStroke: ShapeStyle {
+   407→   407→    func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
+   408→   408→        AngularGradient(
+   409→   409→            colors: [
+   410→   410→                Color.bioCyan,
+   411→   411→                Color.raveAccent,
+   412→   412→                Color(hex: 0x22D3EE),
+   413→   413→                Color.raveAccent,
+   414→   414→                Color.bioCyan,
+   415→   415→            ],
+   416→   416→            center: .center
+   417→   417→        )
+   418→   418→    }
+   419→   419→}
+   420→   420→
+   421→   421→// MARK: - Premium Animated Avatar Border
+   422→   422→struct PremiumAvatarModifier: ViewModifier {
+   423→   423→    @State private var rotation: Double = 0
+   424→   424→
+   425→   425→    func body(content: Content) -> some View {
+   426→   426→        content
+   427→   427→            .overlay(
+   428→   428→                Circle()
+   429→   429→                    .trim(from: 0, to: CGFloat(rotation / 360.0))
+   430→   430→                    .stroke(
+   431→   431→                        AngularGradient(
+   432→   432→                            colors: [
+   433→   433→                                Color.bioCyan,
+   434→   434→                                Color.raveAccent,
+   435→   435→                                Color(hex: 0x22D3EE),
+   436→   436→                                Color.bioCyan,
+   437→   437→                            ],
+   438→   438→                            center: .center
+   439→   439→                        ),
+   440→   440→                        lineWidth: 3.5
+   441→   441→                    )
+   442→   442→                    .rotationEffect(.degrees(rotation))
+   443→   443→            )
+   444→   444→            .onAppear {
+   445→   445→                withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) {
+   446→   446→                    rotation = 360
+   447→   447→                }
+   448→   448→            }
+   449→   449→    }
+   450→   450→}
+   451→   451→
+   452→   452→extension View {
+   453→   453→    func premiumAvatarBorder() -> some View {
+   454→   454→        modifier(PremiumAvatarModifier())
+   455→   455→    }
+   456→   456→}
+   457→   457→
+   458→   458→// MARK: - Premium Glow Card Modifier (стеклянное свечение на карточках комнат)
+   459→   459→struct PremiumGlowCard: ViewModifier {
+   460→   460→    var cornerRadius: CGFloat = 16
+   461→   461→
+   462→   462→    func body(content: Content) -> some View {
+   463→   463→        content
+   464→   464→            .glassCard(cornerRadius: cornerRadius, opacity: 0.06)
+   465→   465→            .overlay(
+   466→   466→                RoundedRectangle(cornerRadius: cornerRadius)
+   467→   467→                    .stroke(
+   468→   468→                        LinearGradient(
+   469→   469→                            colors: [Color.bioCyan.opacity(0.3), Color.raveAccent.opacity(0.15)],
+   470→   470→                            startPoint: .topLeading,
+   471→   471→                            endPoint: .bottomTrailing
+   472→   472→                        ),
+   473→   473→                        lineWidth: 0.5
+   474→   474→                    )
+   475→   475→            )
+   476→   476→            .shadow(color: Color.bioCyan.opacity(0.15), radius: 12, y: 4)
+   477→   477→    }
+   478→   478→}
+   479→   479→
+   480→   480→extension View {
+   481→   481→    func premiumGlowCard(cornerRadius: CGFloat = 16) -> some View {
+   482→   482→        modifier(PremiumGlowCard(cornerRadius: cornerRadius))
+   483→   483→    }
+   484→   484→}
+   485→   485→
+   486→   486→// MARK: - Edit Profile Sheet
+   487→   487→/// Изменение имени пользователя.
+   488→   488→struct EditProfileSheet: View {
+   489→   489→    @Environment(\.dismiss) private var dismiss
+   490→   490→    @State private var viewModel: ProfileViewModel
+   491→   491→    @State private var newUsername = ""
+   492→   492→    @State private var isSaving = false
+   493→   493→    @State private var isPremium = false
+   494→   494→
+   495→   495→    init(viewModel: ProfileViewModel) {
+   496→   496→        _viewModel = State(initialValue: viewModel)
+   497→   497→        _newUsername = State(initialValue: viewModel.username)
+   498→   498→    }
+   499→   499→
+   500→   500→    var body: some View {
+   501→   501→        NavigationStack {
+   502→   502→            ZStack {
+   503→   503→                AnimatedGradientBackground()
+   504→   504→
+   505→   505→                VStack(spacing: 24) {
+   506→   506→                    // 🔧 Pack v2: переиспользуемый AvatarView (обводка только для Premium/Admin)
+   507→   507→                    AvatarView(
+   508→   508→                        image: viewModel.avatarImage,
+   509→   509→                        imageURL: viewModel.avatarURL,
+   510→   510→                        username: viewModel.displayName,
+   511→   511→                        size: 100,
+   512→   512→                        isPremium: isPremium,
+   513→   513→                        isAdmin: viewModel.user?.isAdmin ?? false
+   514→   514→                    )
+   515→   515→
+   516→   516→                    VStack(alignment: .leading, spacing: 8) {
+   517→   517→                        Text("Имя пользователя")
+   518→   518→                            .font(.subheadline.bold())
+   519→   519→                            .foregroundColor(.raveTextPrimary)
+   520→   520→                        TextField("Введите имя", text: $newUsername)
+   521→   521→                            .textFieldStyle(RaveTextFieldStyle())
+   522→   522→                    }
+   523→   523→
+   524→   524→                    Spacer()
+   525→   525→
+   526→   526→                    // Кнопка сохранить
+   527→   527→                    Button {
+   528→   528→                        Task {
+   529→   529→                            isSaving = true
+   530→   530→                            await viewModel.updateUsername(newUsername)
+   531→   531→                            isSaving = false
+   532→   532→                            dismiss()
+   533→   533→                        }
+   534→   534→                    } label: {
+   535→   535→                        HStack {
+   536→   536→                            if isSaving { ProgressView().tint(.white) }
+   537→   537→                            Text("Сохранить")
+   538→   538→                        }
+   539→   539→                        .frame(maxWidth: .infinity)
+   540→   540→                    }
+   541→   541→                    .raveButtonStyle()
+   542→   542→                    .disabled(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+   543→   543→                }
+   544→   544→                .padding(.horizontal, 24)
+   545→   545→                .padding(.top, 32)
+   546→   546→            }
+   547→   547→            .dismissKeyboardOnTap()
+   548→   548→            .navigationTitle("Редактировать")
+   549→   549→            .navigationBarTitleDisplayMode(.inline)
+   550→   550→            .toolbar {
+   551→   551→                ToolbarItem(placement: .cancellationAction) {
+   552→   552→                    Button("Отмена") { dismiss() }
+   553→   553→                        .foregroundColor(.raveTextSecondary)
+   554→   554→                }
+   555→   555→            }
+   556→   556→            .task {
+   557→   557→                isPremium = PremiumStatusManager.shared.isPremium
+   558→   558→            }
+   559→   559→        }
+   560→   560→    }
+   561→   561→}
+   562→   562→
+   563→   563→// MARK: - Watch History Poster (вертикальный постер для карусели)
+   564→   564→/// Постер 120×170 с прогресс-баром просмотра и названием снизу.
+   565→   565→struct WatchHistoryPoster: View {
+   566→   566→    let item: WatchHistoryItem
+   567→   567→    var onRewatch: () -> Void
+   568→   568→
+   569→   569→    var body: some View {
+   570→   570→        Button(action: onRewatch) {
+   571→   571→            VStack(alignment: .leading, spacing: 6) {
+   572→   572→                ZStack(alignment: .bottom) {
+   573→   573→                    // Постер
+   574→   574→                    posterImage
+   575→   575→                        .frame(width: 120, height: 170)
+   576→   576→                        .clipShape(RoundedRectangle(cornerRadius: 12))
+   577→   577→                        .overlay(
+   578→   578→                            RoundedRectangle(cornerRadius: 12)
+   579→   579→                                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+   580→   580→                        )
+   581→   581→
+   582→   582→                    // Прогресс-бар
+   583→   583→                    if let progress = item.progress {
+   584→   584→                        GeometryReader { geo in
+   585→   585→                            ZStack(alignment: .leading) {
+   586→   586→                                Rectangle().fill(Color.black.opacity(0.4)).frame(height: 3)
+   587→   587→                                Rectangle().fill(Color.ravePrimary).frame(width: geo.size.width * progress, height: 3)
+   588→   588→                            }
+   589→   589→                        }
+   590→   590→                        .frame(width: 120, height: 3)
+   591→   591→                    }
+   592→   592→
+   593→   593→                    // Иконка типа медиа
+   594→   594→                    Image(systemName: mediaIcon)
+   595→   595→                        .font(.system(size: 10))
+   596→   596→                        .foregroundColor(.white.opacity(0.7))
+   597→   597→                        .padding(6)
+   598→   598→                        .background(Color.black.opacity(0.4))
+   599→   599→                        .clipShape(Circle())
+   600→   600→                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+   601→   601→                        .padding(6)
+   602→   602→                }
+   603→   603→                .frame(width: 120, height: 170)
+   604→   604→
+   605→   605→                Text(item.title)
+   606→   606→                    .font(.system(size: 13, weight: .medium))
+   607→   607→                    .foregroundColor(.raveTextPrimary)
+   608→   608→                    .lineLimit(1)
+   609→   609→                    .frame(width: 120, alignment: .leading)
+   610→   610→
+   611→   611→                Text(item.formattedDate)
+   612→   612→                    .font(.system(size: 11))
+   613→   613→                    .foregroundColor(.raveTextSecondary)
+   614→   614→            }
+   615→   615→        }
+   616→   616→        .buttonStyle(.plain)
+   617→   617→    }
+   618→   618→
+   619→   619→    private var mediaIcon: String {
+   620→   620→        switch item.mediaType {
+   621→   621→        case "movie": return "film"
+   622→   622→        case "series": return "tv"
+   623→   623→        case "music": return "music.note"
+   624→   624→        case "livestream": return "dot.radiowaves.left.and.right"
+   625→   625→        default: return "video"
+   626→   626→        }
+   627→   627→    }
+   628→   628→
+   629→   629→    @ViewBuilder
+   630→   630→    private var posterImage: some View {
+   631→   631→        if let urlStr = item.thumbnailURL, let url = URL(string: urlStr) {
+   632→   632→            AsyncImage(url: url) { phase in
+   633→   633→                if let image = phase.image {
+   634→   634→                    image.resizable().aspectRatio(contentMode: .fill)
+   635→   635→                } else {
+   636→   636→                    posterGradient
+   637→   637→                }
+   638→   638→            }
+   639→   639→        } else {
+   640→   640→            posterGradient
+   641→   641→        }
+   642→   642→    }
+   643→   643→
+   644→   644→    private var posterGradient: some View {
+   645→   645→        LinearGradient(
+   646→   646→            colors: gradientPalette,
+   647→   647→            startPoint: .topLeading,
+   648→   648→            endPoint: .bottomTrailing
+   649→   649→        )
+   650→   650→        .overlay(
+   651→   651→            Image(systemName: "play.circle.fill")
+   652→   652→                .font(.system(size: 28))
+   653→   653→                .foregroundColor(.white.opacity(0.6))
+   654→   654→        )
+   655→   655→    }
+   656→   656→
+   657→   657→    private var gradientPalette: [Color] {
+   658→   658→        let palettes: [[Color]] = [
+   659→   659→            [Color.ravePrimary.opacity(0.4), .black],
+   660→   660→            [Color.raveAccent.opacity(0.4), .black],
+   661→   661→            [Color.raveCyan.opacity(0.4), .black],
+   662→   662→            [Color.raveWarning.opacity(0.4), .black],
+   663→   663→        ]
+   664→   664→        return palettes[abs(item.id.hashValue) % palettes.count]
+   665→   665→    }
+   666→   666→}
+   667→   667→
+   668→   668→// MARK: - Watch History Card (старый — оставлен для совместимости)
+   669→   669→struct WatchHistoryCard: View {
+   670→   670→    let item: WatchHistoryItem
+   671→   671→    var onRewatch: () -> Void
+   672→   672→
+   673→   673→    var body: some View {
+   674→   674→        HStack(spacing: 12) {
+   675→   675→            ZStack {
+   676→   676→                thumbnail
+   677→   677→                    .frame(width: 100, height: 60)
+   678→   678→                    .clipShape(RoundedRectangle(cornerRadius: 10))
+   679→   679→
+   680→   680→                if let progress = item.progress {
+   681→   681→                    GeometryReader { geo in
+   682→   682→                        ZStack(alignment: .leading) {
+   683→   683→                            Rectangle().fill(Color.black.opacity(0.4)).frame(height: 3)
+   684→   684→                            Rectangle().fill(Color.ravePrimary).frame(width: geo.size.width * progress, height: 3)
+   685→   685→                        }
+   686→   686→                    }
+   687→   687→                    .frame(width: 100, height: 3)
+   688→   688→                }
+   689→   689→            }
+   690→   690→            .frame(width: 100, height: 60)
+   691→   691→
+   692→   692→            VStack(alignment: .leading, spacing: 4) {
+   693→   693→                Text(item.title)
+   694→   694→                    .font(.subheadline.bold())
+   695→   695→                    .foregroundColor(.raveTextPrimary)
+   696→   696→                    .lineLimit(2)
+   697→   697→                Text(item.formattedDate)
+   698→   698→                    .font(.caption2)
+   699→   699→                    .foregroundColor(.raveTextSecondary)
+   700→   700→            }
+   701→   701→
+   702→   702→            Spacer()
+   703→   703→
+   704→   704→            Button(action: onRewatch) {
+   705→   705→                Image(systemName: "arrow.clockwise.circle.fill")
+   706→   706→                    .font(.title2)
+   707→   707→                    .foregroundColor(.ravePrimary)
+   708→   708→            }
+   709→   709→        }
+   710→   710→        .padding(12)
+   711→   711→        .glassCard(cornerRadius: 14)
+   712→   712→    }
+   713→   713→
+   714→   714→    @ViewBuilder
+   715→   715→    private var thumbnail: some View {
+   716→   716→        if let urlStr = item.thumbnailURL, let url = URL(string: urlStr) {
+   717→   717→            AsyncImage(url: url) { phase in
+   718→   718→                if let image = phase.image {
+   719→   719→                    image.resizable().aspectRatio(contentMode: .fill)
+   720→   720→                } else {
+   721→   721→                    Rectangle().fill(Color.raveSurface)
+   722→   722→                }
+   723→   723→            }
+   724→   724→        } else {
+   725→   725→            Rectangle().fill(Color.raveSurface)
+   726→   726→        }
+   727→   727→    }
+   728→   728→}
+   729→   729→

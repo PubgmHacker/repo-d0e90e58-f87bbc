@@ -1,0 +1,613 @@
+     1→     1→import SwiftUI
+     2→     2→import WebKit
+     3→     3→
+     4→     4→// MARK: - ServiceBrowserView
+     5→     5→/// 🔧 REDESIGNED: Full-screen WebView with smart video page detection.
+     6→     6→///
+     7→     7→/// When the user navigates to a video page in the service's catalog:
+     8→     8→///   • For YouTube/VK/Rutube: detects the video page URL pattern automatically
+     9→     9→///     and offers to "Создать комнату" with the embeddable URL
+    10→    10→///   • For cinema services (Kinopoisk, Ivi, Okko, etc.): the page URL itself
+    11→    11→///     becomes the content URL — the WebView acts as the player in the room
+    12→    12→///
+    13→    13→/// Auth requirements:
+    14→    14→///   • YouTube, VK Video, Rutube: NO auth required for public content
+    15→    15→///   • Kinopoisk, Ivi, Okko, Wink, Start, Premier, KION: subscription required
+    16→    16→///     (user logs in via the WebView; cookies persist between sessions)
+    17→    17→///   • Смотрим: free (state TV, no subscription)
+    18→    18→///
+    19→    19→/// The "Создать комнату" button is always available at the bottom, but when
+    20→    20→/// a video page is detected, a prominent banner appears prompting the user
+    21→    21→/// to create a room with the detected content.
+    22→    22→struct ServiceBrowserView: View {
+    23→    23→    @Environment(\.dismiss) private var dismiss
+    24→    24→    let service: VideoService
+    25→    25→    /// 🔧 Passes content URL + title to parent for RoomSetupView
+    26→    26→    var onCreateRoom: (String, String) -> Void
+    27→    27→
+    28→    28→    @State private var currentURL: URL?
+    29→    29→    @State private var pageTitle: String = ""
+    30→    30→    @State private var canGoBack = false
+    31→    31→    @State private var canGoForward = false
+    32→    32→    @State private var showCreateConfirm = false
+    33→    33→    /// 🔧 NEW: When a video page is detected, this is set to the detected video info
+    34→    34→    @State private var detectedVideo: DetectedVideo?
+    35→    35→    /// 🔧 NEW: Whether this service requires auth for content
+    36→    36→    @State private var showAuthBanner: Bool
+    37→    37→
+    38→    38→    init(service: VideoService, onCreateRoom: @escaping (String, String) -> Void) {
+    39→    39→        self.service = service
+    40→    40→        self.onCreateRoom = onCreateRoom
+    41→    41→        self._showAuthBanner = State(initialValue: service.requiresAuth)
+    42→    42→    }
+    43→    43→
+    44→    44→    var body: some View {
+    45→    45→        NavigationStack {
+    46→    46→            ZStack {
+    47→    47→                Color.raveBackground.ignoresSafeArea()
+    48→    48→
+    49→    49→                VStack(spacing: 0) {
+    50→    50→                    // 🔧 Auth banner (shown for subscription services)
+    51→    51→                    if showAuthBanner {
+    52→    52→                        authBanner
+    53→    53→                    }
+    54→    54→
+    55→    55→                    // WebView
+    56→    56→                    ServiceWebView(
+    57→    57→                        initialURL: URL(string: service.browseURL)!,
+    58→    58→                        currentURL: $currentURL,
+    59→    59→                        pageTitle: $pageTitle,
+    60→    60→                        canGoBack: $canGoBack,
+    61→    61→                        canGoForward: $canGoForward,
+    62→    62→                        onVideoDetected: { video in
+    63→    63→                            detectedVideo = video
+    64→    64→                        }
+    65→    65→                    )
+    66→    66→
+    67→    67→                    // 🔧 Pack v3: bottomBar убран — авто-переход через onChange
+    68→    68→                    // Кнопка "Создать комнату" больше не нужна — видео автоматически
+    69→    69→                    // открывает RoomSetupView.
+    70→    70→                }
+    71→    71→            }
+    72→    72→            .navigationTitle(service.brandName)
+    73→    73→            .navigationBarTitleDisplayMode(.inline)
+    74→    74→            .toolbar {
+    75→    75→                ToolbarItem(placement: .topBarLeading) {
+    76→    76→                    Button {
+    77→    77→                        dismiss()
+    78→    78→                    } label: {
+    79→    79→                        Image(systemName: "chevron.left")
+    80→    80→                            .font(.system(size: 15, weight: .semibold))
+    81→    81→                            .foregroundColor(.bioCyan)
+    82→    82→                    }
+    83→    83→                }
+    84→    84→            }
+    85→    85→            .toolbarBackground(.hidden, for: .navigationBar)
+    86→    86→            // 🔧 Pack v3: АВТО-переход — мгновенно, без задержки
+    87→    87→            .onChange(of: detectedVideo) { _, newVideo in
+    88→    88→                guard let video = newVideo else { return }
+    89→    89→                HapticManager.impact(.medium)
+    90→    90→                // 🔧 DEBUG: log what we're passing to onCreateRoom
+    91→    91→                print("🔍 ServiceBrowserView: detected video, embedURL='\(video.embedURL)', title='\(video.title ?? "nil")', pageTitle='\(pageTitle)'")
+    92→    92→                onCreateRoom(video.embedURL, video.title ?? pageTitle)
+    93→    93→            }
+    94→    94→        }
+    95→    95→        .preferredColorScheme(.dark)
+    96→    96→    }
+    97→    97→
+    98→    98→    // MARK: - Auth Banner
+    99→    99→
+   100→   100→    private var authBanner: some View {
+   101→   101→        HStack(spacing: 10) {
+   102→   102→            Image(systemName: "lock.fill")
+   103→   103→                .font(.system(size: 14))
+   104→   104→                .foregroundColor(.raveWarning)
+   105→   105→
+   106→   106→            VStack(alignment: .leading, spacing: 2) {
+   107→   107→                Text("Требуется подписка \(service.brandName)")
+   108→   108→                    .font(.system(size: 13, weight: .semibold))
+   109→   109→                    .foregroundColor(.raveTextPrimary)
+   110→   110→                Text("Войдите в свой аккаунт для доступа к контенту. YouTube, VK Видео и Rutube не требуют входа.")
+   111→   111→                    .font(.system(size: 10))
+   112→   112→                    .foregroundColor(.raveTextSecondary)
+   113→   113→                    .lineLimit(2)
+   114→   114→            }
+   115→   115→
+   116→   116→            Spacer()
+   117→   117→
+   118→   118→            Button {
+   119→   119→                withAnimation { showAuthBanner = false }
+   120→   120→            } label: {
+   121→   121→                Image(systemName: "xmark")
+   122→   122→                    .font(.system(size: 12, weight: .semibold))
+   123→   123→                    .foregroundColor(.raveTextTertiary)
+   124→   124→                    .frame(width: 24, height: 24)
+   125→   125→            }
+   126→   126→        }
+   127→   127→        .padding(.horizontal, 14)
+   128→   128→        .padding(.vertical, 10)
+   129→   129→        .background(Color.raveWarning.opacity(0.08))
+   130→   130→        .overlay(Rectangle().fill(Color.raveWarning.opacity(0.2)).frame(height: 0.5))
+   131→   131→    }
+   132→   132→
+   133→   133→    // MARK: - Video Detected Banner
+   134→   134→
+   135→   135→    private func videoDetectedBanner(video: DetectedVideo) -> some View {
+   136→   136→        HStack(spacing: 12) {
+   137→   137→            // Service logo
+   138→   138→            ServiceLogoView(service: service, size: 32)
+   139→   139→                .frame(width: 40, height: 40)
+   140→   140→                .background(Color.white.opacity(0.06))
+   141→   141→                .clipShape(RoundedRectangle(cornerRadius: 8))
+   142→   142→
+   143→   143→            VStack(alignment: .leading, spacing: 2) {
+   144→   144→                Text("Видео найдено!")
+   145→   145→                    .font(.system(size: 13, weight: .bold))
+   146→   146→                    .foregroundColor(.bioEmerald)
+   147→   147→                Text(video.title ?? pageTitle)
+   148→   148→                    .font(.system(size: 12))
+   149→   149→                    .foregroundColor(.raveTextPrimary)
+   150→   150→                    .lineLimit(1)
+   151→   151→            }
+   152→   152→
+   153→   153→            Spacer()
+   154→   154→
+   155→   155→            Button {
+   156→   156→                HapticManager.impact(.medium)
+   157→   157→                showCreateConfirm = true
+   158→   158→            } label: {
+   159→   159→                HStack(spacing: 6) {
+   160→   160→                    Image(systemName: "plus.circle.fill")
+   161→   161→                        .font(.system(size: 14))
+   162→   162→                    Text("Комната")
+   163→   163→                        .font(.system(size: 13, weight: .bold))
+   164→   164→                }
+   165→   165→                .foregroundColor(.white)
+   166→   166→                .padding(.horizontal, 14)
+   167→   167→                .padding(.vertical, 10)
+   168→   168→                .background(Color.raveGradient)
+   169→   169→                .clipShape(Capsule())
+   170→   170→            }
+   171→   171→        }
+   172→   172→        .padding(.horizontal, 14)
+   173→   173→        .padding(.vertical, 10)
+   174→   174→        .background(.ultraThinMaterial)
+   175→   175→        .overlay(
+   176→   176→            Rectangle()
+   177→   177→                .fill(LinearGradient(colors: [Color.bioEmerald.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing))
+   178→   178→                .frame(height: 2)
+   179→   179→                .offset(y: -22)
+   180→   180→        )
+   181→   181→    }
+   182→   182→
+   183→   183→    // MARK: - Bottom Bar
+   184→   184→
+   185→   185→    private var bottomBar: some View {
+   186→   186→        HStack(spacing: 16) {
+   187→   187→            VStack(alignment: .leading, spacing: 2) {
+   188→   188→                Text(pageTitle.isEmpty ? "Выберите контент" : pageTitle)
+   189→   189→                    .font(.system(size: 13, weight: .semibold))
+   190→   190→                    .foregroundColor(.raveTextPrimary)
+   191→   191→                    .lineLimit(1)
+   192→   192→                if let url = currentURL {
+   193→   193→                    Text(url.host ?? "")
+   194→   194→                        .font(.system(size: 10))
+   195→   195→                        .foregroundColor(.raveTextTertiary)
+   196→   196→                        .lineLimit(1)
+   197→   197→                }
+   198→   198→            }
+   199→   199→            .frame(maxWidth: .infinity, alignment: .leading)
+   200→   200→
+   201→   201→            Button {
+   202→   202→                HapticManager.impact(.medium)
+   203→   203→                showCreateConfirm = true
+   204→   204→            } label: {
+   205→   205→                HStack(spacing: 8) {
+   206→   206→                    Image(systemName: "plus.circle.fill")
+   207→   207→                        .font(.system(size: 16))
+   208→   208→                    Text("Создать комнату")
+   209→   209→                        .font(.system(size: 14, weight: .bold))
+   210→   210→                }
+   211→   211→                .foregroundColor(.white)
+   212→   212→                .padding(.horizontal, 16)
+   213→   213→                .padding(.vertical, 12)
+   214→   214→                .background(Color.raveGradient)
+   215→   215→                .clipShape(Capsule())
+   216→   216→                .shadow(color: .ravePrimary.opacity(0.4), radius: 8, y: 3)
+   217→   217→            }
+   218→   218→            .disabled(currentURL == nil)
+   219→   219→            .opacity(currentURL == nil ? 0.5 : 1)
+   220→   220→        }
+   221→   221→        .padding(.horizontal, 16)
+   222→   222→        .padding(.vertical, 10)
+   223→   223→        .background(.ultraThinMaterial)
+   224→   224→    }
+   225→   225→}
+   226→   226→
+   227→   227→// MARK: - Detected Video Model
+   228→   228→
+   229→   229→struct DetectedVideo: Equatable {
+   230→   230→    let title: String?
+   231→   231→    let embedURL: String       // URL that can be used in our player
+   232→   232→    let originalURL: String    // original page URL
+   233→   233→    let service: VideoService
+   234→   234→}
+   235→   235→
+   236→   236→// MARK: - VideoService + Auth Requirements
+   237→   237→
+   238→   238→extension VideoService {
+   239→   239→    /// 🔧 Returns true if this service requires authentication/subscription for content.
+   240→   240→    /// YouTube, VK Video, and Rutube have free public content.
+   241→   241→    /// Cinema services require subscription.
+   242→   242→    var requiresAuth: Bool {
+   243→   243→        switch self {
+   244→   244→        case .youtube, .vk, .rutube, .smotrim, .browser, .customURL:
+   245→   245→            return false  // free / public content
+   246→   246→        case .netflix, .disney, .kinopoisk, .ivi, .okko, .wink, .start, .premier, .kion:
+   247→   247→            return true   // subscription required
+   248→   248→        }
+   249→   249→    }
+   250→   250→
+   251→   251→    /// 🔧 Detects if a URL is a video page for this service, and returns the
+   252→   252→    /// embeddable video URL if so. Returns nil if the URL is not a video page.
+   253→   253→    static func detectVideoURL(_ url: URL, for service: VideoService, title: String?) -> DetectedVideo? {
+   254→   254→        let urlString = url.absoluteString
+   255→   255→        let host = url.host ?? ""
+   256→   256→
+   257→   257→        switch service {
+   258→   258→        case .youtube:
+   259→   259→            // youtube.com/watch?v=VIDEO_ID or youtu.be/VIDEO_ID
+   260→   260→            if host.contains("youtube.com") {
+   261→   261→                if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+   262→   262→                   let videoId = components.queryItems?.first(where: { $0.name == "v" })?.value {
+   263→   263→                    return DetectedVideo(
+   264→   264→                        title: title,
+   265→   265→                        embedURL: "https://www.youtube.com/embed/\(videoId)",
+   266→   266→                        originalURL: urlString,
+   267→   267→                        service: .youtube
+   268→   268→                    )
+   269→   269→                }
+   270→   270→            }
+   271→   271→            if host.contains("youtu.be") {
+   272→   272→                let videoId = url.lastPathComponent
+   273→   273→                if !videoId.isEmpty {
+   274→   274→                    return DetectedVideo(
+   275→   275→                        title: title,
+   276→   276→                        embedURL: "https://www.youtube.com/embed/\(videoId)",
+   277→   277→                        originalURL: urlString,
+   278→   278→                        service: .youtube
+   279→   279→                    )
+   280→   280→                }
+   281→   281→            }
+   282→   282→
+   283→   283→        case .vk:
+   284→   284→            // vk.com/video-OWNER_ID_VIDEO_ID or vk.com/video/OWNER_ID_VIDEO_ID
+   285→   285→            if host.contains("vk.com") || host.contains("vk.ru") {
+   286→   286→                let path = url.path
+   287→   287→                if path.contains("/video") {
+   288→   288→                    // For VK, we use the original URL — VK's player works in WebView
+   289→   289→                    return DetectedVideo(
+   290→   290→                        title: title,
+   291→   291→                        embedURL: urlString,
+   292→   292→                        originalURL: urlString,
+   293→   293→                        service: .vk
+   294→   294→                    )
+   295→   295→                }
+   296→   296→            }
+   297→   297→
+   298→   298→        case .rutube:
+   299→   299→            // rutube.ru/video/VIDEO_ID/
+   300→   300→            if host.contains("rutube.ru") || host.contains("rutube.video") {
+   301→   301→                let path = url.path
+   302→   302→                if path.contains("/video/") {
+   303→   303→                    // Extract video ID from path
+   304→   304→                    let segments = path.split(separator: "/")
+   305→   305→                    if segments.count >= 2, segments[0] == "video" {
+   306→   306→                        let videoId = String(segments[1])
+   307→   307→                        return DetectedVideo(
+   308→   308→                            title: title,
+   309→   309→                            embedURL: "https://rutube.ru/play/embed/\(videoId)",
+   310→   310→                            originalURL: urlString,
+   311→   311→                            service: .rutube
+   312→   312→                        )
+   313→   313→                    }
+   314→   314→                }
+   315→   315→            }
+   316→   316→
+   317→   317→        case .kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion, .netflix, .disney:
+   318→   318→            // For cinema services, detect video/content pages by URL patterns
+   319→   319→            // These services use their own players with DRM — we can't extract streams
+   320→   320→            // Instead, the page URL itself becomes the content URL
+   321→   321→            // The WebView will be the player in the room
+   322→   322→            let path = url.path.lowercased()
+   323→   323→            // Common patterns: /film/, /series/, /video/, /watch/, /play/
+   324→   324→            let videoPatterns = ["/film/", "/series/", "/video/", "/watch/", "/play/", "/movies/", "/show/"]
+   325→   325→            if videoPatterns.contains(where: { path.contains($0) }) {
+   326→   326→                return DetectedVideo(
+   327→   327→                    title: title,
+   328→   328→                    embedURL: urlString,  // use original URL — WebView is the player
+   329→   329→                    originalURL: urlString,
+   330→   330→                    service: service
+   331→   331→                )
+   332→   332→            }
+   333→   333→
+   334→   334→        case .browser, .customURL:
+   335→   335→            // No auto-detection for browser/customURL
+   336→   336→            break
+   337→   337→        }
+   338→   338→
+   339→   339→        return nil
+   340→   340→    }
+   341→   341→}
+   342→   342→
+   343→   343→// MARK: - ServiceWebView (WKWebView wrapper with video detection)
+   344→   344→
+   345→   345→struct ServiceWebView: UIViewRepresentable {
+   346→   346→    let initialURL: URL
+   347→   347→    @Binding var currentURL: URL?
+   348→   348→    @Binding var pageTitle: String
+   349→   349→    @Binding var canGoBack: Bool
+   350→   350→    @Binding var canGoForward: Bool
+   351→   351→    /// 🔧 NEW: Called when a video page is detected
+   352→   352→    var onVideoDetected: ((DetectedVideo) -> Void)?
+   353→   353→
+   354→   354→    func makeUIView(context: Context) -> WKWebView {
+   355→   355→        let config = WKWebViewConfiguration()
+   356→   356→        config.allowsInlineMediaPlayback = true
+   357→   357→        config.mediaTypesRequiringUserActionForPlayback = []
+   358→   358→        config.websiteDataStore = WKWebsiteDataStore.default()
+   359→   359→
+   360→   360→        // 🔧 Pack v3: Register message handler for SPA URL changes
+   361→   361→        let contentController = WKUserContentController()
+   362→   362→        contentController.add(context.coordinator, name: "plinkURLChange")
+   363→   363→
+   364→   364→        // 🔧 v9.3 (July 2026): REMOVED the viewport-fit script for YouTube.
+   365→   365→        //
+   366→   366→        // v9.1 added a script that injected <meta viewport width=1280
+   367→   367→        // initial-scale=0.32> to scale the desktop YouTube UI down to iPhone
+   368→   368→        // width. That was needed because v9.1 used Mac UA → YouTube served
+   369→   369→        // desktop pages (1280px+ layout).
+   370→   370→        //
+   371→   371→        // v9.2 changed UA to iPad → YouTube now redirects to m.youtube.com
+   372→   372→        // (mobile UI). m.youtube.com is ALREADY optimized for iPhone screens:
+   373→   373→        //   - width=device-width viewport (no scaling needed)
+   374→   374→        //   - Touch-friendly tap targets
+   375→   375→        //   - Single-column grid that fits 390-430pt screens
+   376→   376→        //   - Native pinch-to-zoom support
+   377→   377→        //
+   378→   378→        // The old viewport script was BREAKING the mobile UI by forcing
+   379→   379→        // width=1280 + scale=0.32 — making everything tiny on iPhone.
+   380→   380→        // User reported: 'исправь десктоп версию на айфонах = она должна быть
+   381→   381→        // под мобильную интегрирована, иначе слишком большой экран и все
+   382→   382→        // слишком мелко в ютубе'.
+   383→   383→        //
+   384→   384→        // Fix: just don't inject any viewport script. m.youtube.com's own
+   385→   385→        // viewport meta is correct for iPhone. The only CSS we still inject
+   386→   386→        // is overflow-x:hidden as a safety net (via the comment below).
+   387→   387→        if initialURL.host?.contains("youtube.com") == true ||
+   388→   388→           initialURL.host?.contains("youtu.be") == true {
+   389→   389→            let safetyScript = WKUserScript(
+   390→   390→                source: """
+   391→   391→                (function() {
+   392→   392→                    // 🔧 v9.3: only inject overflow-x:hidden as a safety net.
+   393→   393→                    // m.youtube.com's own viewport meta is correct — we don't
+   394→   394→                    // override it. This just prevents minor horizontal scroll
+   395→   395→                    // from layout glitches.
+   396→   396→                    var style = document.createElement('style');
+   397→   397→                    style.innerHTML = 'html, body { overflow-x: hidden !important; max-width: 100% !important; }';
+   398→   398→                    (document.head || document.documentElement).appendChild(style);
+   399→   399→                })();
+   400→   400→                """,
+   401→   401→                injectionTime: .atDocumentEnd,
+   402→   402→                forMainFrameOnly: true
+   403→   403→            )
+   404→   404→            contentController.addUserScript(safetyScript)
+   405→   405→        }
+   406→   406→
+   407→   407→        config.userContentController = contentController
+   408→   408→
+   409→   409→        let webView = WKWebView(frame: .zero, configuration: config)
+   410→   410→        webView.navigationDelegate = context.coordinator
+   411→   411→        webView.uiDelegate = context.coordinator
+   412→   412→        webView.allowsBackForwardNavigationGestures = true
+   413→   413→
+   414→   414→        // 🔧 v9.2 (July 2026): YouTube UA = iPad Safari.
+   415→   415→        //
+   416→   416→        // iPad UA makes YouTube redirect to m.youtube.com (mobile UI 2026):
+   417→   417→        //   1. Modern redesign — large thumbnails, grid, filter chips
+   418→   418→        //   2. NO consent interstitial (mobile/touch UA bypasses EU consent)
+   419→   419→        //   3. Already fits iPhone screen — no viewport scaling needed
+   420→   420→        //   4. Touch-friendly tap targets
+   421→   421→        //
+   422→   422→        // Mac UA was tried in v9.1 but caused:
+   423→   423→        //   - Consent interstitial (no Google cookies in WKWebView)
+   424→   424→        //   - Desktop layout too wide for iPhone (needed scale=0.32 hack)
+   425→   425→        //
+   426→   426→        // Default WKWebView UA was tried before v9.1 but YouTube served the
+   427→   427→        // OLD 2018 m.youtube.com layout (small thumbnails, list view).
+   428→   428→        //
+   429→   429→        // iPad UA is the Goldilocks: modern mobile UI, no consent, fits
+   430→   430→        // iPhone screen natively.
+   431→   431→        if initialURL.host?.contains("youtube.com") == true ||
+   432→   432→           initialURL.host?.contains("youtu.be") == true {
+   433→   433→            webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+   434→   434→        }
+   435→   435→
+   436→   436→        webView.load(URLRequest(url: initialURL))
+   437→   437→
+   438→   438→        webView.isOpaque = false
+   439→   439→        webView.backgroundColor = UIColor(Color.raveBackground)
+   440→   440→        webView.scrollView.backgroundColor = UIColor(Color.raveBackground)
+   441→   441→
+   442→   442→        return webView
+   443→   443→    }
+   444→   444→
+   445→   445→    func updateUIView(_ webView: WKWebView, context: Context) {
+   446→   446→        DispatchQueue.main.async {
+   447→   447→            self.canGoBack = webView.canGoBack
+   448→   448→            self.canGoForward = webView.canGoForward
+   449→   449→        }
+   450→   450→    }
+   451→   451→
+   452→   452→    func makeCoordinator() -> Coordinator {
+   453→   453→        Coordinator(parent: self)
+   454→   454→    }
+   455→   455→
+   456→   456→    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+   457→   457→        let parent: ServiceWebView
+   458→   458→        private var lastDetectedURL: String?
+   459→   459→
+   460→   460→        init(parent: ServiceWebView) {
+   461→   461→            self.parent = parent
+   462→   462→        }
+   463→   463→
+   464→   464→        // 🔧 Pack v3: Handle SPA URL changes from JavaScript
+   465→   465→        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+   466→   466→            if message.name == "plinkURLChange",
+   467→   467→               let body = message.body as? [String: Any],
+   468→   468→               let urlString = body["url"] as? String,
+   469→   469→               let url = URL(string: urlString) {
+   470→   470→
+   471→   471→                let title = body["title"] as? String
+   472→   472→                let service = Self.serviceFromURL(url)
+   473→   473→                if let service, let detected = VideoService.detectVideoURL(url, for: service, title: title) {
+   474→   474→                    DispatchQueue.main.async {
+   475→   475→                        self.parent.currentURL = url
+   476→   476→                        self.parent.pageTitle = title ?? ""
+   477→   477→                        self.parent.onVideoDetected?(detected)
+   478→   478→                    }
+   479→   479→                }
+   480→   480→            }
+   481→   481→        }
+   482→   482→
+   483→   483→        // 🔧 Pack v3: Перехватываем КАЖДУЮ навигацию (включая SPA YouTube).
+   484→   484→        // Раньше: только didFinish → YouTube SPA не триггерит → видео играло без создания комнаты.
+   485→   485→        // Теперь: decidePolicyFor ловит URLchange → детектим видео → авто-переход.
+   486→   486→        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+   487→   487→            // Сначала проверяем URL на видео
+   488→   488→            if let url = navigationAction.request.url {
+   489→   489→                let urlString = url.absoluteString
+   490→   490→                // Избегаем повторного срабатывания на тот же URL
+   491→   491→                if urlString != lastDetectedURL {
+   492→   492→                    lastDetectedURL = urlString
+   493→   493→                    let service = Self.serviceFromURL(url)
+   494→   494→                    if let service, let detected = VideoService.detectVideoURL(url, for: service, title: nil) {
+   495→   495→                        // 🔧 FIX: CANCEL navigation — don't load the YouTube watch page.
+   496→   496→                        // Was: .allow → YouTube watch page loaded → video auto-played for
+   497→   497→                        // a second before room creation took over.
+   498→   498→                        // Now: .cancel → YouTube watch page never loads, no video playback.
+   499→   499→                        // We just extract the video ID from the URL and create the room.
+   500→   500→                        DispatchQueue.main.async {
+   501→   501→                            self.parent.currentURL = url
+   502→   502→                            self.parent.pageTitle = webView.title ?? ""
+   503→   503→                            self.parent.onVideoDetected?(detected)
+   504→   504→                        }
+   505→   505→                        decisionHandler(.cancel)
+   506→   506→                        return
+   507→   507→                    }
+   508→   508→                }
+   509→   509→            }
+   510→   510→            decisionHandler(.allow)
+   511→   511→        }
+   512→   512→
+   513→   513→        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+   514→   514→            DispatchQueue.main.async {
+   515→   515→                self.parent.currentURL = webView.url
+   516→   516→                self.parent.pageTitle = webView.title ?? ""
+   517→   517→                self.parent.canGoBack = webView.canGoBack
+   518→   518→                self.parent.canGoForward = webView.canGoForward
+   519→   519→            }
+   520→   520→
+   521→   521→            // 🔧 Detect video page on full load too
+   522→   522→            if let url = webView.url {
+   523→   523→                let title = webView.title
+   524→   524→                let service = Self.serviceFromURL(url)
+   525→   525→                if let service, let detected = VideoService.detectVideoURL(url, for: service, title: title) {
+   526→   526→                    DispatchQueue.main.async {
+   527→   527→                        self.parent.onVideoDetected?(detected)
+   528→   528→                    }
+   529→   529→                }
+   530→   530→            }
+   531→   531→
+   532→   532→            // 🔧 Pack v3: Inject JS to detect SPA URL changes (YouTube React app)
+   533→   533→            // YouTube меняет URL через History API без полной перезагрузки.
+   534→   534→            // Этот скрипт следит за URL и вызывает Swift когда URL меняется.
+   535→   535→            let js = """
+   536→   536→            (function() {
+   537→   537→                if (window._plinkURLObserver) return;
+   538→   538→                window._plinkURLObserver = true;
+   539→   539→                let lastURL = window.location.href;
+   540→   540→                setInterval(function() {
+   541→   541→                    if (window.location.href !== lastURL) {
+   542→   542→                        lastURL = window.location.href;
+   543→   543→                        try {
+   544→   544→                            window.webkit.messageHandlers.plinkURLChange.postMessage({
+   545→   545→                                url: lastURL,
+   546→   546→                                title: document.title
+   547→   547→                            });
+   548→   548→                        } catch(e) {}
+   549→   549→                    }
+   550→   550→                }, 500);
+   551→   551→            })();
+   552→   552→            """
+   553→   553→
+   554→   554→            // Inject dark CSS
+   555→   555→            let darkCSS = """
+   556→   556→            :root { color-scheme: dark; }
+   557→   557→            body { background-color: #0A0D14 !important; }
+   558→   558→            """
+   559→   559→            let cssJS = """
+   560→   560→            var style = document.createElement('style');
+   561→   561→            style.textContent = '\(darkCSS)';
+   562→   562→            document.head.appendChild(style);
+   563→   563→            """
+   564→   564→
+   565→   565→            webView.evaluateJavaScript(js)
+   566→   566→            webView.evaluateJavaScript(cssJS)
+   567→   567→        }
+   568→   568→
+   569→   569→        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+   570→   570→            DispatchQueue.main.async {
+   571→   571→                self.parent.pageTitle = "Ошибка загрузки"
+   572→   572→            }
+   573→   573→        }
+   574→   574→
+   575→   575→        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+   576→   576→            // 🔧 FIX: Rutube opens video in new window. Check for video URL before loading.
+   577→   577→            if let url = navigationAction.request.url {
+   578→   578→                let service = Self.serviceFromURL(url)
+   579→   579→                if let service, let detected = VideoService.detectVideoURL(url, for: service, title: nil) {
+   580→   580→                    DispatchQueue.main.async {
+   581→   581→                        self.parent.currentURL = url
+   582→   582→                        self.parent.pageTitle = webView.title ?? ""
+   583→   583→                        self.parent.onVideoDetected?(detected)
+   584→   584→                    }
+   585→   585→                    return nil  // Don't open new window — go straight to room creation
+   586→   586→                }
+   587→   587→                // Not a video — load in current webView
+   588→   588→                webView.load(URLRequest(url: url))
+   589→   589→            }
+   590→   590→            return nil
+   591→   591→        }
+   592→   592→
+   593→   593→        // 🔧 Helper: determine VideoService from URL host
+   594→   594→        private static func serviceFromURL(_ url: URL) -> VideoService? {
+   595→   595→            let host = (url.host ?? "").lowercased()
+   596→   596→            if host.contains("youtube") || host.contains("youtu.be") { return .youtube }
+   597→   597→            if host.contains("vk.com") || host.contains("vk.ru") { return .vk }
+   598→   598→            if host.contains("rutube") { return .rutube }
+   599→   599→            if host.contains("netflix") { return .netflix }
+   600→   600→            if host.contains("disney") { return .disney }
+   601→   601→            if host.contains("kinopoisk") { return .kinopoisk }
+   602→   602→            if host.contains("ivi.ru") || host.contains("ivi.tv") { return .ivi }
+   603→   603→            if host.contains("okko") { return .okko }
+   604→   604→            if host.contains("wink") { return .wink }
+   605→   605→            if host.contains("start.ru") { return .start }
+   606→   606→            if host.contains("premier") { return .premier }
+   607→   607→            if host.contains("smotrim") { return .smotrim }
+   608→   608→            if host.contains("kion") { return .kion }
+   609→   609→            return nil
+   610→   610→        }
+   611→   611→    }
+   612→   612→}
+   613→   613→

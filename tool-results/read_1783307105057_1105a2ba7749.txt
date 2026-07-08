@@ -1,0 +1,886 @@
+     1→import SwiftUI
+     2→
+     3→// MARK: - Toast Message
+     4→struct ToastMessage: Identifiable {
+     5→    let id = UUID()
+     6→    let text: String
+     7→    let icon: String
+     8→}
+     9→
+    10→// MARK: - Home View v3 — "Pure Black × Ice Glow"
+    11→///
+    12→/// Минимализм. Только две горизонтальные секции:
+    13→/// 1. «Сейчас в эфире» — live-карточки с индикатором LIVE
+    14→/// 2. «Рекомендации для тебя» — постеры фильмов/видео
+    15→/// Floating CTA «Создать комнату» внизу. Никаких «общих комнат».
+    16→struct HomeView: View {
+    17→    @EnvironmentObject private var apiClient: APIClient
+    18→    @State private var viewModel: HomeViewModel
+    19→    @State private var showCreateRoom = false
+    20→    @State private var showJoinSheet = false
+    21→    @State private var joinInput = ""
+    22→    @State private var navigateToRoom: Room?
+    23→    @State private var toast: ToastMessage?
+    24→
+    25→    @State private var reportRoomTarget: Room?
+    26→    @State private var blockRoomTarget: Room?
+    27→    @ObservedObject private var loc = LocalizationManager.shared
+    28→
+    29→    // Каскадная анимация появления
+    30→    @State private var appeared = false
+    31→
+    32→    // Кнопка «Создать комнату» — сворачивается в плюсик через 8 сек
+    33→    @State private var isCTACollapsed = false
+    34→    @State private var ctaCollapseTimer: Timer?
+    35→    @State private var userInteracted = false
+    36→
+    37→    // 🔧 REMOVED: aiQuery, aiResults, aiSearching, aiResponseText
+    38→    // AI recommendations now live ONLY in the AI tab — no inline AI on Home.
+    39→    @State private var showProfile = false
+    40→
+    41→    // onProfileTap больше не используется (профиль открывается через sheet).
+    42→    // Оставлен для совместимости со старым вызовом из MainTabView.
+    43→    var onProfileTap: () -> Void = {}
+    44→
+    45→    init(viewModel: HomeViewModel, onProfileTap: @escaping () -> Void,
+    46→         onSwitchToAITab: (() -> Void)? = nil,
+    47→         onSwitchToJoinTab: (() -> Void)? = nil) {
+    48→        _viewModel = State(initialValue: viewModel)
+    49→        self.onProfileTap = onProfileTap
+    50→        self.onSwitchToAITab = onSwitchToAITab
+    51→        self.onSwitchToJoinTab = onSwitchToJoinTab
+    52→    }
+    53→
+    54→    var body: some View {
+    55→        NavigationStack {
+    56→            ZStack {
+    57→                // Чёрный фон + blur-пятна
+    58→                AnimatedGradientBackground()
+    59→
+    60→                // Контент
+    61→                ScrollView(showsIndicators: false) {
+    62→                    VStack(spacing: 0) {
+    63→                        headerView
+    64→                            .padding(.horizontal, 20)
+    65→                            .padding(.top, 8)
+    66→
+    67→                        // 🔧 REMOVED: aiAssistantBar + aiResultsSection
+    68→                        // AI recommendations now live ONLY in the AI tab (bottom tab bar).
+    69→                        // Home shows a CTA card that deep-links to the AI tab instead.
+    70→                        aiCTACard
+    71→                            .padding(.horizontal, 20)
+    72→                            .padding(.top, 16)
+    73→
+    74→                        // Секция 1: Сейчас в эфире
+    75→                        if !liveRooms.isEmpty {
+    76→                            liveSection
+    77→                                .padding(.top, 24)
+    78→                        } else {
+    79→                            // 🔧 Pack v3: Заглушка когда нет активных комнат
+    80→                            emptyLiveSection
+    81→                                .padding(.top, 24)
+    82→                        }
+    83→
+    84→                        // Секция 2: Рекомендации для тебя
+    85→                        if !recommendationRooms.isEmpty {
+    86→                            recommendationsSection
+    87→                                .padding(.top, 28)
+    88→                        }
+    89→                        Spacer(minLength: 120)
+    90→                    }
+    91→                }
+    92→                .scrollDismissesKeyboard(.interactively)
+    93→                .onTapGesture {
+    94→                    // Тап по контенту сбрасывает таймер сворачивания CTA
+    95→                    resetCTACollapseTimer()
+    96→                }
+    97→
+    98→                // Floating CTA внизу
+    99→                VStack {
+   100→                    Spacer()
+   101→                    floatingCTA
+   102→                        .padding(.horizontal, 20)
+   103→                        .padding(.bottom, 16)
+   104→                }
+   105→            }
+   106→            .navigationDestination(item: $navigateToRoom) { room in
+   107→                // 🔧 FIX v2 (July 2026): placeholder — actual RoomView presentation
+   108→                // is via .fullScreenCover below. Without this placeholder, SwiftUI
+   109→                // would warn about an unhandled navigation item, but the EmptyView
+   110→                // ensures no actual NavigationStack push happens.
+   111→                EmptyView()
+   112→            }
+   113→            // 🔧 FIX v2: present RoomView modally via fullScreenCover. The old
+   114→            // `navigationDestination(item:)` here caused the same swipe-left escape
+   115→            // bug as MainTabView — RoomView was pushed onto HomeView's
+   116→            // NavigationStack, where iOS edge-swipe could pop it. See commit
+   117→            // 1b8ccb7 for the full rationale.
+   118→            .fullScreenCover(item: $navigateToRoom) { room in
+   119→                RoomView(room: room)
+   120→            }
+   121→            .sheet(isPresented: $showCreateRoom) {
+   122→                RoomCreationView { room in
+   123→                    showCreateRoom = false
+   124→                    navigateToRoom = room
+   125→                }
+   126→            }
+   127→            .sheet(isPresented: $showJoinSheet) {
+   128→                joinRoomSheet
+   129→            }
+   130→            .sheet(isPresented: $showProfile) {
+   131→                NavigationStack {
+   132→                    ProfileView(
+   133→                        viewModel: ProfileViewModel(authService: AuthService(api: apiClient)),
+   134→                        onSignOut: { showProfile = false }
+   135→                    )
+   136→                }
+   137→                .preferredColorScheme(.dark)
+   138→            }
+   139→            .overlay(alignment: .top) {
+   140→                if let toast {
+   141→                    Label(toast.text, systemImage: toast.icon)
+   142→                        .font(.subheadline.bold())
+   143→                        .foregroundColor(.raveTextPrimary)
+   144→                        .padding(.horizontal, 16)
+   145→                        .padding(.vertical, 10)
+   146→                        .glassCard(cornerRadius: 14, opacity: 0.08)
+   147→                        .padding(.top, 50)
+   148→                        .transition(.move(edge: .top).combined(with: .opacity))
+   149→                        .onAppear {
+   150→                            Task {
+   151→                                try? await Task.sleep(nanoseconds: 2_000_000_000)
+   152→                                await MainActor.run { self.toast = nil }
+   153→                            }
+   154→                        }
+   155→                }
+   156→            }
+   157→            .task { await viewModel.loadRooms() }
+   158→            .refreshable { await viewModel.refresh() }
+   159→            .alert(loc.string(.reportRoom), isPresented: Binding(
+   160→                get: { reportRoomTarget != nil },
+   161→                set: { if !$0 { reportRoomTarget = nil } }
+   162→            )) {
+   163→                Button(loc.string(.cancel), role: .cancel) { reportRoomTarget = nil }
+   164→                ForEach(ReportReason.allCases) { reason in
+   165→                    Button(reason.rawValue) {
+   166→                        if let target = reportRoomTarget {
+   167→                            toast = ToastMessage(text: loc.string(.reportRoomSent), icon: "flag.fill")
+   168→                            UserBlockManager().reportRoom(target.id, reason: reason.apiCode) { _ in }
+   169→                        }
+   170→                        reportRoomTarget = nil
+   171→                    }
+   172→                }
+   173→            }
+   174→            .alert(loc.string(.blockHost), isPresented: Binding(
+   175→                get: { blockRoomTarget != nil },
+   176→                set: { if !$0 { blockRoomTarget = nil } }
+   177→            )) {
+   178→                Button(loc.string(.cancel), role: .cancel) { blockRoomTarget = nil }
+   179→                Button(loc.string(.blockHostTitle), role: .destructive) {
+   180→                    if let target = blockRoomTarget {
+   181→                        viewModel.blockRoom(target)
+   182→                        toast = ToastMessage(text: loc.string(.blockHostDone), icon: "hand.raised.fill")
+   183→                    }
+   184→                    blockRoomTarget = nil
+   185→                }
+   186→            } message: {
+   187→                Text(loc.string(.blockHostMessage))
+   188→            }
+   189→        }
+   190→        .preferredColorScheme(.dark)
+   191→        .onAppear {
+   192→            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+   193→                appeared = true
+   194→            }
+   195→            startCTACollapseTimer()
+   196→        }
+   197→        // 🔧 FIX M15: Invalidate the CTA collapse timer on disappear so it
+   198→        // doesn't fire on a stale view (was: stored in @State with no cleanup).
+   199→        .onDisappear {
+   200→            ctaCollapseTimer?.invalidate()
+   201→            ctaCollapseTimer = nil
+   202→        }
+   203→    }
+   204→
+   205→    // MARK: - Header (минимализм: приветствие + аватар)
+   206→
+   207→    private var headerView: some View {
+   208→        HStack(spacing: 14) {
+   209→            VStack(alignment: .leading, spacing: 4) {
+   210→                Text("Привет 👋")
+   211→                    .font(.system(size: 15, weight: .medium))
+   212→                    .foregroundColor(.raveTextSecondary)
+   213→                    .opacity(appeared ? 1 : 0)
+   214→                    .offset(y: appeared ? 0 : -8)
+   215→
+   216→                Text(loc.string(.homeDiscover))
+   217→                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+   218→                    .foregroundColor(.raveTextPrimary)
+   219→                    .opacity(appeared ? 1 : 0)
+   220→                    .offset(y: appeared ? 0 : -8)
+   221→            }
+   222→
+   223→            Spacer()
+   224→
+   225→            // Аватарка (tap → экран профиля) — telegram-glass без cyan glow
+   226→            Button {
+   227→                showProfile = true
+   228→            } label: {
+   229→                Image(systemName: "person.fill")
+   230→                    .font(.system(size: 17, weight: .semibold))
+   231→                    .foregroundColor(.raveTextPrimary)
+   232→                    .frame(width: 44, height: 44)
+   233→                    .telegramGlass(cornerRadius: 22)
+   234→            }
+   235→            .buttonStyle(.plain)
+   236→
+   237→            // Join по коду — telegram-glass без cyan glow
+   238→            Button {
+   239→                showJoinSheet = true
+   240→            } label: {
+   241→                Image(systemName: "link")
+   242→                    .font(.system(size: 17, weight: .semibold))
+   243→                    .foregroundColor(.raveTextPrimary)
+   244→                    .frame(width: 44, height: 44)
+   245→                    .telegramGlass(cornerRadius: 22)
+   246→            }
+   247→            .buttonStyle(.plain)
+   248→        }
+   249→        .opacity(appeared ? 1 : 0)
+   250→    }
+   251→
+   252→    // MARK: - Live Section (Сейчас в эфире)
+   253→
+   254→    /// 🔧 Pack v3: Заглушка когда нет активных комнат
+   255→    private var emptyLiveSection: some View {
+   256→        VStack(alignment: .leading, spacing: 12) {
+   257→            HStack(spacing: 8) {
+   258→                Text(loc.string(.homeWatchingNow))
+   259→                    .font(.system(size: 22, weight: .bold, design: .rounded))
+   260→                    .foregroundColor(.raveTextPrimary)
+   261→                Spacer()
+   262→            }
+   263→            .padding(.horizontal, 20)
+   264→
+   265→            VStack(spacing: 12) {
+   266→                Image(systemName: "tv.slash")
+   267→                    .font(.system(size: 36))
+   268→                    .foregroundColor(.raveTextTertiary)
+   269→
+   270→                Text("Пока никто не смотрит")
+   271→                    .font(.system(size: 16, weight: .semibold))
+   272→                    .foregroundColor(.raveTextSecondary)
+   273→
+   274→                Text("Создайте комнату и пригласите друзей — они появятся здесь")
+   275→                    .font(.system(size: 13))
+   276→                    .foregroundColor(.raveTextTertiary)
+   277→                    .multilineTextAlignment(.center)
+   278→            }
+   279→            .frame(maxWidth: .infinity)
+   280→            .padding(.vertical, 32)
+   281→            .padding(.horizontal, 20)
+   282→            .background(.ultraThinMaterial)
+   283→            .clipShape(RoundedRectangle(cornerRadius: 16))
+   284→            .overlay(
+   285→                RoundedRectangle(cornerRadius: 16)
+   286→                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+   287→            )
+   288→            .padding(.horizontal, 20)
+   289→        }
+   290→    }
+   291→
+   292→    private var liveSection: some View {
+   293→        VStack(alignment: .leading, spacing: 12) {
+   294→            // Заголовок секции
+   295→            HStack(spacing: 8) {
+   296→                Text(loc.string(.homeWatchingNow))
+   297→                    .font(.system(size: 22, weight: .bold, design: .rounded))
+   298→                    .foregroundColor(.raveTextPrimary)
+   299→                Spacer()
+   300→                Text("\(liveRooms.count)")
+   301→                    .font(.system(size: 13, weight: .bold).monospacedDigit())
+   302→                    .foregroundColor(.raveTextSecondary)
+   303→            }
+   304→            .padding(.horizontal, 20)
+   305→
+   306→            // Горизонтальный скролл live-карточек
+   307→            ScrollView(.horizontal, showsIndicators: false) {
+   308→                HStack(spacing: 14) {
+   309→                    ForEach(liveRooms) { room in
+   310→                        Button {
+   311→                            HapticManager.impact(.light)
+   312→                            navigateToRoom = room
+   313→                        } label: {
+   314→                            LiveCardView(room: room)
+   315→                        }
+   316→                        .buttonStyle(.plain)
+   317→                    }
+   318→                }
+   319→                .padding(.horizontal, 20)
+   320→            }
+   321→        }
+   322→        .opacity(appeared ? 1 : 0)
+   323→        .offset(y: appeared ? 0 : 20)
+   324→    }
+   325→
+   326→    // MARK: - Recommendations Section (Рекомендации для тебя)
+   327→
+   328→    private var recommendationsSection: some View {
+   329→        VStack(alignment: .leading, spacing: 12) {
+   330→            HStack(spacing: 8) {
+   331→                Text("Рекомендации для тебя")
+   332→                    .font(.system(size: 22, weight: .bold, design: .rounded))
+   333→                    .foregroundColor(.raveTextPrimary)
+   334→                Spacer()
+   335→            }
+   336→            .padding(.horizontal, 20)
+   337→
+   338→            // Если сервер пустой — показываем мок-рекомендации
+   339→            ScrollView(.horizontal, showsIndicators: false) {
+   340→                HStack(spacing: 14) {
+   341→                    ForEach(recommendationRooms) { room in
+   342→                        Button {
+   343→                            HapticManager.impact(.light)
+   344→                            navigateToRoom = room
+   345→                        } label: {
+   346→                            RecommendationCardView(room: room)
+   347→                        }
+   348→                        .buttonStyle(.plain)
+   349→                    }
+   350→                }
+   351→                .padding(.horizontal, 20)
+   352→            }
+   353→        }
+   354→        .opacity(appeared ? 1 : 0)
+   355→        .offset(y: appeared ? 0 : 30)
+   356→    }
+   357→
+   358→    // MARK: - AI CTA Card (replaces aiAssistantBar + aiResultsSection)
+   359→    /// 🔧 REDESIGNED: Was a search bar with inline AI response. Now a CTA card
+   360→    /// that deep-links to the AI tab. Per user request: AI only works through
+   361→    /// the dedicated tab in the bottom tab bar — no inline AI responses on Home.
+   362→
+   363→    private var aiCTACard: some View {
+   364→        Button {
+   365→            HapticManager.impact(.light)
+   366→            // Switch to AI tab — MainTabView observes this via onProfileTap-like callback
+   367→            onSwitchToAITab?()
+   368→        } label: {
+   369→            HStack(spacing: 14) {
+   370→                // Icon
+   371→                ZStack {
+   372→                    Circle()
+   373→                        .fill(
+   374→                            LinearGradient(
+   375→                                colors: [Color.bioCyan, Color.bioEmerald],
+   376→                                startPoint: .topLeading,
+   377→                                endPoint: .bottomTrailing
+   378→                            )
+   379→                        )
+   380→                        .frame(width: 44, height: 44)
+   381→                    Image(systemName: "sparkles")
+   382→                        .font(.system(size: 20, weight: .semibold))
+   383→                        .foregroundColor(.white)
+   384→                }
+   385→                .shadow(color: Color.bioCyan.opacity(0.4), radius: 8, y: 3)
+   386→
+   387→                VStack(alignment: .leading, spacing: 3) {
+   388→                    Text("Что посмотреть?")
+   389→                        .font(.system(size: 16, weight: .bold, design: .rounded))
+   390→                        .foregroundColor(.raveTextPrimary)
+   391→                    Text("Спроси ИИ — подберёт фильм для совместного просмотра")
+   392→                        .font(.system(size: 12))
+   393→                        .foregroundColor(.raveTextSecondary)
+   394→                        .lineLimit(1)
+   395→                }
+   396→
+   397→                Spacer()
+   398→
+   399→                Image(systemName: "chevron.right")
+   400→                    .font(.system(size: 13, weight: .semibold))
+   401→                    .foregroundColor(.raveTextTertiary)
+   402→            }
+   403→            .padding(.horizontal, 16)
+   404→            .padding(.vertical, 14)
+   405→            .background(.ultraThinMaterial)
+   406→            .clipShape(RoundedRectangle(cornerRadius: 16))
+   407→            .overlay(
+   408→                RoundedRectangle(cornerRadius: 16)
+   409→                    .stroke(
+   410→                        LinearGradient(
+   411→                            colors: [Color.bioCyan.opacity(0.3), Color.white.opacity(0.04)],
+   412→                            startPoint: .topLeading,
+   413→                            endPoint: .bottomTrailing
+   414→                        ),
+   415→                        lineWidth: 0.5
+   416→                    )
+   417→            )
+   418→            .contentShape(RoundedRectangle(cornerRadius: 16))
+   419→        }
+   420→        .buttonStyle(.plain)
+   421→    }
+   422→
+   423→    /// Closure called when user taps the AI CTA — MainTabView switches to AI tab.
+   424→    var onSwitchToAITab: (() -> Void)?
+   425→    /// 🔧 NEW: Closure to switch to the Join tab from Home's "Присоединиться" button.
+   426→    var onSwitchToJoinTab: (() -> Void)?
+   427→
+   428→    // MARK: - AI Results Section (REMOVED — AI only via tab bar)
+   429→
+   430→    // MARK: - AI Assistant Bar (REMOVED — AI only via tab bar)
+   431→    // The old aiAssistantBar (search field with inline AI response) and
+   432→    // searchAI() function were removed per user request. AI recommendations
+   433→    // now live ONLY in the AI tab in the bottom tab bar. Home shows a
+   434→    // CTA card (aiCTACard) that deep-links to the AI tab.
+   435→
+   436→    // MARK: - Floating Dual CTA (Создать + Присоединиться)
+   437→    //
+   438→    // 🔧 REDESIGNED: Two glass buttons side by side — "Создать комнату" and
+   439→    // "Присоединиться". Both use liquid glass (.ultraThinMaterial + subtle
+   440→    // gradient border). After 6 seconds of inactivity, text fades out and
+   441→    // they collapse into icon-only circles (smooth spring animation).
+   442→
+   443→    private var floatingCTA: some View {
+   444→        HStack(spacing: 12) {
+   445→            // ── Create Room Button ──
+   446→            dualGlassButton(
+   447→                icon: "plus",
+   448→                text: loc.string(.homeCreateRoom),
+   449→                gradient: Color.raveGradient,
+   450→                isCollapsed: isCTACollapsed,
+   451→                action: {
+   452→                    HapticManager.impact(.medium)
+   453→                    showCreateRoom = true
+   454→                }
+   455→            )
+   456→
+   457→            // ── Join Room Button ──
+   458→            dualGlassButton(
+   459→                icon: "arrow.right.circle.fill",
+   460→                text: "Присоединиться",
+   461→                gradient: LinearGradient(
+   462→                    colors: [Color.bioCyan, Color.bioEmerald],
+   463→                    startPoint: .topLeading, endPoint: .bottomTrailing
+   464→                ),
+   465→                isCollapsed: isCTACollapsed,
+   466→                action: {
+   467→                    HapticManager.impact(.medium)
+   468→                    onSwitchToJoinTab?()
+   469→                }
+   470→            )
+   471→        }
+   472→        .padding(.horizontal, 20)
+   473→        .opacity(appeared ? 1 : 0)
+   474→        .offset(y: appeared ? 0 : 40)
+   475→    }
+   476→
+   477→    /// 🔧 NEW: Reusable glass button — collapses from full label to icon-only.
+   478→    private func dualGlassButton(
+   479→        icon: String,
+   480→        text: String,
+   481→        gradient: LinearGradient,
+   482→        isCollapsed: Bool,
+   483→        action: @escaping () -> Void
+   484→    ) -> some View {
+   485→        Button(action: action) {
+   486→            HStack(spacing: 8) {
+   487→                Image(systemName: icon)
+   488→                    .font(.system(size: isCollapsed ? 20 : 16, weight: .bold))
+   489→                    .foregroundColor(.white)
+   490→
+   491→                if !isCollapsed {
+   492→                    Text(text)
+   493→                        .font(.system(size: 14, weight: .bold, design: .rounded))
+   494→                        .foregroundColor(.white)
+   495→                        .transition(.opacity.combined(with: .scale))
+   496→                }
+   497→            }
+   498→            .padding(.horizontal, isCollapsed ? 12 : 18)
+   499→            .padding(.vertical, isCollapsed ? 12 : 14)
+   500→            .frame(
+   501→                width: isCollapsed ? 46 : nil,
+   502→                height: isCollapsed ? 46 : nil
+   503→            )
+   504→            .background(
+   505→                ZStack {
+   506→                    // Liquid glass base
+   507→                    RoundedRectangle(cornerRadius: isCollapsed ? 23 : 16)
+   508→                        .fill(.ultraThinMaterial)
+   509→                    // Subtle gradient overlay for depth
+   510→                    RoundedRectangle(cornerRadius: isCollapsed ? 23 : 16)
+   511→                        .fill(
+   512→                            LinearGradient(
+   513→                                colors: [
+   514→                                    Color.ravePrimary.opacity(0.15),
+   515→                                    Color.clear,
+   516→                                ],
+   517→                                startPoint: .topLeading,
+   518→                                endPoint: .bottomTrailing
+   519→                            )
+   520→                        )
+   521→                }
+   522→            )
+   523→            .overlay(
+   524→                // Glass border — thin gradient stroke
+   525→                RoundedRectangle(cornerRadius: isCollapsed ? 23 : 16)
+   526→                    .stroke(
+   527→                        LinearGradient(
+   528→                            colors: [
+   529→                                Color.white.opacity(0.2),
+   530→                                Color.white.opacity(0.04),
+   531→                            ],
+   532→                            startPoint: .topLeading,
+   533→                            endPoint: .bottomTrailing
+   534→                        ),
+   535→                        lineWidth: 0.5
+   536→                    )
+   537→            )
+   538→            .shadow(color: Color.ravePrimary.opacity(0.3), radius: 8, y: 3)
+   539→        }
+   540→        .buttonStyle(GlassButtonStyle())
+   541→    }
+   542→
+   543→    // MARK: - CTA Collapse Timer
+   544→
+   545→    private func startCTACollapseTimer() {
+   546→        ctaCollapseTimer?.invalidate()
+   547→        ctaCollapseTimer = Timer.scheduledTimer(withTimeInterval: 6.0, repeats: false) { _ in
+   548→            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+   549→                isCTACollapsed = true
+   550→            }
+   551→        }
+   552→    }
+   553→
+   554→    private func resetCTACollapseTimer() {
+   555→        ctaCollapseTimer?.invalidate()
+   556→        if isCTACollapsed {
+   557→            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+   558→                isCTACollapsed = false
+   559→            }
+   560→        }
+   561→        startCTACollapseTimer()
+   562→    }
+   563→
+   564→    // MARK: - Data
+   565→
+   566→    /// 🔧 Live-комнаты: топ 5-10 самых активных по онлайну, отсортированных по participantCount
+   567→    private var liveRooms: [Room] {
+   568→        viewModel.filteredRooms
+   569→            .filter { $0.isActive && $0.privacy == .publicRoom }
+   570→            .sorted { $0.participantCount > $1.participantCount }
+   571→            .prefix(10)
+   572→            .map { $0 }
+   573→    }
+   574→
+   575→    /// 🔧 Рекомендации: на основе ИИ + история просмотров + разные сервисы
+   576→    private var recommendationRooms: [Room] {
+   577→        // Сортируем по активности, берём разные сервисы
+   578→        let all = viewModel.filteredRooms.sorted { $0.participantCount > $1.participantCount }
+   579→        // Группируем по сервису чтобы получить разнообразие
+   580→        var seen = Set<VideoService>()
+   581→        var result: [Room] = []
+   582→        for room in all {
+   583→            if let source = room.mediaItem?.source, let service = VideoService(rawValue: source.rawValue), !seen.contains(service) {
+   584→                seen.insert(service)
+   585→                result.append(room)
+   586→            }
+   587→        }
+   588→        // Добавляем остальные
+   589→        result.append(contentsOf: all.filter { room in
+   590→            !result.contains(where: { $0.id == room.id })
+   591→        })
+   592→        return Array(result.prefix(10))
+   593→    }
+   594→
+   595→    // MARK: - Join Room Sheet
+   596→
+   597→    private var joinRoomSheet: some View {
+   598→        VStack(spacing: 24) {
+   599→            VStack(spacing: 8) {
+   600→                Image(systemName: "link.badge.plus")
+   601→                    .font(.system(size: 40))
+   602→                    .foregroundStyle(Color.raveGradient)
+   603→                Text(loc.string(.joinTitle))
+   604→                    .font(.title2.bold())
+   605→                    .foregroundColor(.raveTextPrimary)
+   606→                Text(loc.string(.joinSubtitle))
+   607→                    .font(.subheadline)
+   608→                    .foregroundColor(.raveTextSecondary)
+   609→            }
+   610→
+   611→            TextField("ABC123 или https://...", text: $joinInput)
+   612→                .textFieldStyle(RaveTextFieldStyle())
+   613→                .multilineTextAlignment(.center)
+   614→                .font(.title2.monospaced().bold())
+   615→                .padding(.horizontal, 40)
+   616→                .autocapitalization(.allCharacters)
+   617→                .onChange(of: joinInput) { _, newValue in
+   618→                    if !newValue.contains("http") && !newValue.contains(".") {
+   619→                        joinInput = String(newValue.prefix(6)).uppercased()
+   620→                    } else {
+   621→                        joinInput = String(newValue.prefix(500))
+   622→                    }
+   623→                }
+   624→
+   625→            Button(action: {
+   626→                Task {
+   627→                    let code = extractCode(from: joinInput)
+   628→                    guard !code.isEmpty else { return }
+   629→                    do {
+   630→                        let room = try await viewModel.joinRoom(code: code)
+   631→                        showJoinSheet = false
+   632→                        navigateToRoom = room
+   633→                        joinInput = ""
+   634→                    } catch {
+   635→                        viewModel.errorMessage = error.localizedDescription
+   636→                    }
+   637→                }
+   638→            }) {
+   639→                Text(loc.string(.joinEnter))
+   640→                    .frame(maxWidth: .infinity)
+   641→            }
+   642→            .buttonStyle(PremiumButtonStyle())
+   643→            .background(Color.raveGradient)
+   644→            .clipShape(RoundedRectangle(cornerRadius: 16))
+   645→            .disabled(!isValidJoinInput || viewModel.isLoading)
+   646→            .padding(.horizontal, 40)
+   647→
+   648→            if let error = viewModel.errorMessage {
+   649→                Text(error).font(.caption).foregroundColor(.raveDanger)
+   650→            }
+   651→
+   652→            Button(loc.string(.cancel)) {
+   653→                showJoinSheet = false
+   654→                joinInput = ""
+   655→            }
+   656→            .foregroundColor(.raveTextSecondary)
+   657→
+   658→            Spacer()
+   659→        }
+   660→        .padding(.top, 32)
+   661→        .presentationDetents([.medium])
+   662→        .presentationBackground(Color.raveBackground)
+   663→        .preferredColorScheme(.dark)
+   664→    }
+   665→
+   666→    private var isValidJoinInput: Bool {
+   667→        let trimmed = joinInput.trimmingCharacters(in: .whitespaces)
+   668→        return trimmed.count == 6 || trimmed.contains("http") || trimmed.contains("plnk") || trimmed.contains(".")
+   669→    }
+   670→
+   671→    private func extractCode(from input: String) -> String {
+   672→        let trimmed = input.trimmingCharacters(in: .whitespaces)
+   673→        if trimmed.count == 6 && trimmed.allSatisfy({ $0.isLetter || $0.isNumber }) { return trimmed }
+   674→        if let url = URL(string: trimmed) {
+   675→            if let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "code" })?.value { return code }
+   676→            let path = url.lastPathComponent
+   677→            if path.count >= 4 && path.count <= 8 { return path.uppercased() }
+   678→        }
+   679→        return trimmed
+   680→    }
+   681→}
+   682→
+   683→// MARK: - Live Card View (Яндекс Музыка стиль)
+   684→///
+   685→/// Широкая горизонтальная карточка для live-трансляций.
+   686→/// Глубокий чёрный фон, тонкая обводка 0.5pt, glow на постере.
+   687→private struct LiveCardView: View {
+   688→    let room: Room
+   689→    @State private var pulse = false
+   690→    @State private var isHovered = false
+   691→
+   692→    var body: some View {
+   693→        VStack(alignment: .leading, spacing: 0) {
+   694→            // Постер
+   695→            ZStack(alignment: .topLeading) {
+   696→                Color(hex: 0x0A0A0A)
+   697→                    .frame(width: 280, height: 158)
+   698→
+   699→                LinearGradient(
+   700→                    colors: [
+   701→                        Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
+   702→                        Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
+   703→                        .black
+   704→                    ],
+   705→                    startPoint: .topLeading, endPoint: .bottomTrailing
+   706→                )
+   707→                .frame(width: 280, height: 158)
+   708→
+   709→                // Play icon
+   710→                Image(systemName: "play.circle.fill")
+   711→                    .font(.system(size: 32))
+   712→                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.5))
+   713→
+   714→                // LIVE badge (top-left)
+   715→                HStack(spacing: 4) {
+   716→                    Circle()
+   717→                        .fill(Color.raveDanger)
+   718→                        .frame(width: 6, height: 6)
+   719→                        .scaleEffect(pulse ? 1.3 : 1.0)
+   720→                    Text("LIVE")
+   721→                        .font(.system(size: 10, weight: .heavy))
+   722→                        .foregroundColor(.white)
+   723→                }
+   724→                .padding(.horizontal, 8)
+   725→                .padding(.vertical, 5)
+   726→                .background(Color.raveDanger.opacity(0.25))
+   727→                .clipShape(Capsule())
+   728→                .overlay(Capsule().stroke(Color.raveDanger.opacity(0.5), lineWidth: 0.5))
+   729→                .padding(10)
+   730→
+   731→                // 🔧 Service logo (top-right, small)
+   732→                if let media = room.mediaItem {
+   733→                    ServiceLogoView(service: media.source, size: 18)
+   734→                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+   735→                        .padding(10)
+   736→                }
+   737→
+   738→                // 🔧 Participant count badge (bottom-right, glass capsule)
+   739→                ParticipantBadge(count: room.participantCount)
+   740→                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+   741→                    .padding(8)
+   742→            }
+   743→            .frame(width: 280, height: 158)
+   744→            .clipShape(RoundedRectangle(cornerRadius: 14))
+   745→            .overlay(
+   746→                RoundedRectangle(cornerRadius: 14)
+   747→                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+   748→            )
+   749→
+   750→            // Info under poster
+   751→            VStack(alignment: .leading, spacing: 3) {
+   752→                Text(room.name)
+   753→                    .font(.system(size: 14, weight: .bold))
+   754→                    .foregroundColor(.raveTextPrimary)
+   755→                    .lineLimit(1)
+   756→
+   757→                HStack(spacing: 6) {
+   758→                    // Participant count
+   759→                    HStack(spacing: 2) {
+   760→                        Image(systemName: "person.2.fill")
+   761→                            .font(.system(size: 10))
+   762→                        Text("\(room.participantCount) смотрят")
+   763→                            .font(.system(size: 11, weight: .medium))
+   764→                    }
+   765→                    .foregroundColor(.bioEmerald)
+   766→
+   767→                    // Host
+   768→                    Text("· \(room.hostName)")
+   769→                        .font(.system(size: 11))
+   770→                        .foregroundColor(.raveTextTertiary)
+   771→                }
+   772→            }
+   773→            .padding(.horizontal, 4)
+   774→            .padding(.top, 8)
+   775→        }
+   776→        .frame(width: 280)
+   777→        .onAppear {
+   778→            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+   779→                pulse = true
+   780→            }
+   781→        }
+   782→    }
+   783→}
+   784→
+   785→// MARK: - Recommendation Card View (Яндекс Музыка стиль)
+   786→///
+   787→/// Вертикальный постер фильма/видео для секции рекомендаций.
+   788→/// Глубокий чёрный фон, тонкая обводка 0.5pt, лёгкое свечение.
+   789→private struct RecommendationCardView: View {
+   790→    let room: Room
+   791→    @State private var isHovered = false
+   792→
+   793→    var body: some View {
+   794→        VStack(alignment: .leading, spacing: 8) {
+   795→            // Постер
+   796→            ZStack(alignment: .bottom) {
+   797→                Color(hex: 0x0A0A0A)
+   798→
+   799→                LinearGradient(
+   800→                    colors: [
+   801→                        gradientColors[0],
+   802→                        gradientColors[1],
+   803→                        .black
+   804→                    ],
+   805→                    startPoint: .top, endPoint: .bottom
+   806→                )
+   807→
+   808→                // 🔧 Service logo prominently at the top of the card
+   809→                if let media = room.mediaItem {
+   810→                    ServiceLogoView(service: media.source, size: 28)
+   811→                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+   812→                        .padding(10)
+   813→                }
+   814→
+   815→                // Play icon centered
+   816→                Image(systemName: "play.circle.fill")
+   817→                    .font(.system(size: 32))
+   818→                    .foregroundColor(.white.opacity(isHovered ? 0.9 : 0.5))
+   819→                    .shadow(color: .black.opacity(0.5), radius: 4)
+   820→
+   821→                // 🔧 Participant count badge (bottom-right, glass)
+   822→                ParticipantBadge(count: room.participantCount)
+   823→                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+   824→                    .padding(8)
+   825→            }
+   826→            .frame(width: 150, height: 210)
+   827→            .clipShape(RoundedRectangle(cornerRadius: 14))
+   828→            .overlay(
+   829→                RoundedRectangle(cornerRadius: 14)
+   830→                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+   831→            )
+   832→
+   833→            // Название
+   834→            Text(room.name)
+   835→                .font(.system(size: 13, weight: .semibold))
+   836→                .foregroundColor(.raveTextPrimary)
+   837→                .lineLimit(2)
+   838→                .frame(width: 150, alignment: .leading)
+   839→
+   840→            // 🔧 Service name + host
+   841→            HStack(spacing: 4) {
+   842→                if let media = room.mediaItem, let svc = VideoService(rawValue: media.source.rawValue) {
+   843→                    Text(svc.brandName)
+   844→                        .font(.system(size: 10, weight: .medium))
+   845→                        .foregroundColor(.bioCyan)
+   846→                }
+   847→                Text("· \(room.hostName)")
+   848→                    .font(.system(size: 10))
+   849→                    .foregroundColor(.raveTextTertiary)
+   850→            }
+   851→            .lineLimit(1)
+   852→        }
+   853→        .frame(width: 150)
+   854→    }
+   855→
+   856→    private var gradientColors: [Color] {
+   857→        let palettes: [[Color]] = [
+   858→            [Color.bioCyan.opacity(0.3), Color.bioEmerald.opacity(0.15), .black],
+   859→            [Color.bioTeal.opacity(0.25), Color.bioCyan.opacity(0.1), .black],
+   860→            [Color.bioEmerald.opacity(0.25), Color.bioTeal.opacity(0.1), .black],
+   861→            [Color.bioCyan.opacity(0.2), Color(hex: 0x22D3EE).opacity(0.1), .black],
+   862→        ]
+   863→        let index = abs(room.id.hashValue) % palettes.count
+   864→        return palettes[index]
+   865→    }
+   866→}
+   867→
+   868→// MARK: - Service Badge (маленькая иконка сервиса)
+   869→private struct ServiceBadge: View {
+   870→    let service: VideoService
+   871→    let size: CGFloat
+   872→
+   873→    var body: some View {
+   874→        ServiceLogoIcon(service: service, size: size)
+   875→    }
+   876→}
+   877→
+   878→// MARK: - CTA Press Style (пружинящая анимация нажатия)
+   879→struct CTAPressStyle: ButtonStyle {
+   880→    func makeBody(configuration: Configuration) -> some View {
+   881→        configuration.label
+   882→            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+   883→            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+   884→    }
+   885→}
+   886→

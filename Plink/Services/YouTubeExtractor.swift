@@ -139,17 +139,23 @@ final class YouTubeExtractor {
     /// streamingData (formats[] + hlsManifestUrl).
     /// This is the same method yt-dlp and NewPipe use.
     private func extractFromWatchPage(videoId: String) async throws -> StreamInfo {
-        let watchUrl = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
-        var request = URLRequest(url: watchUrl)
+        // 🔧 v45.4: Try embed page first — it doesn't require CONSENT cookie
+        // and always contains ytInitialPlayerResponse.
+        // Watch page may redirect to consent page in EU/Russia.
+        let embedUrl = URL(string: "https://www.youtube.com/embed/\(videoId)")!
+        var request = URLRequest(url: embedUrl)
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        // 🔧 v45.4: Set CONSENT cookie to bypass EU consent page
+        request.setValue("CONSENT=YES+cb.20210328-17-p0.en+FX+978", forHTTPHeaderField: "Cookie")
 
         let (data, response) = try await session.data(for: request)
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            print("📺 YouTubeExtractor: embed page returned status \((response as? HTTPURLResponse)?.statusCode ?? 0)")
             throw YouTubeExtractorError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
@@ -157,9 +163,12 @@ final class YouTubeExtractor {
             throw YouTubeExtractorError.invalidJSON
         }
 
+        print("📺 YouTubeExtractor: embed page fetched, \(html.count) chars, has ytInitialPlayerResponse: \(html.contains("ytInitialPlayerResponse"))")
+
         // Extract ytInitialPlayerResponse JSON from the HTML
-        // It's embedded as: var ytInitialPlayerResponse = {...};
         guard let playerResponseJson = extractJsonFromHtml(html, key: "ytInitialPlayerResponse") else {
+            // Log first 300 chars to see what YouTube returned
+            print("📺 YouTubeExtractor: HTML preview: \(html.prefix(300))")
             throw YouTubeExtractorError.invalidJSON
         }
 

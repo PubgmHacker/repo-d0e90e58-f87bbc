@@ -69,13 +69,28 @@ export async function extractStream(url: string): Promise<StreamInfo> {
   //
   // Also removed -f "best" (was still triggering format selection).
   // Removed --no-check-certificate (was causing SSL issues on some Railway IPs).
-  const { stdout } = await execAsync(
-    `yt-dlp --dump-single-json --no-warnings --no-call-home ` +
-    `--no-playlist --skip-download ` +
-    `--user-agent "${YT_DLP_UA}" ` +
-    `${shellEscape(url)}`,
-    { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
-  );
+  let stdout: string;
+  try {
+    const result = await execAsync(
+      `yt-dlp --dump-single-json --no-warnings --no-call-home ` +
+      `--no-playlist --skip-download ` +
+      `--user-agent "${YT_DLP_UA}" ` +
+      `${shellEscape(url)}`,
+      { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
+    );
+    stdout = result.stdout;
+  } catch (err: any) {
+    // 🔧 v9.7: include stderr in error message for better debugging.
+    // yt-dlp writes errors to stderr, which execAsync captures in err.stderr.
+    const stderr = err.stderr?.toString() || '';
+    const stdoutPartial = err.stdout?.toString() || '';
+    console.error('[streamExtractor] yt-dlp FAILED', {
+      stderr: stderr.slice(0, 1000),
+      stdout: stdoutPartial.slice(0, 500),
+      code: err.code,
+    });
+    throw new Error(`yt-dlp failed (code ${err.code}): ${stderr.slice(0, 500) || err.message}`);
+  }
 
   const info = JSON.parse(stdout);
 

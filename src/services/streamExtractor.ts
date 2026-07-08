@@ -77,7 +77,7 @@ export async function extractStream(url: string): Promise<StreamInfo> {
   try {
     const printResult = await execAsync(
       `yt-dlp --no-warnings --no-call-home --no-playlist ` +
-      `--skip-download ` +
+      `--skip-download --no-check-formats ` +
       `--user-agent "${YT_DLP_UA}" ` +
       `--print "%(id)s\\t%(title)s\\t%(thumbnail)s\\t%(duration)s\\t%(uploader)s\\t%(is_live)s\\t%(extractor_key)s\\t%(formats)j" ` +
       `${shellEscape(url)}`,

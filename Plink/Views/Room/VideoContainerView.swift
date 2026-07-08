@@ -79,6 +79,64 @@ final class WebViewControl {
         onPlayStateChange?(isPlaying)
     }
 
+    /// 🔧 v41: Flag to force a COMPLETE WKWebView recreation on next makeUIView.
+    /// Set by RoomView.enterFullscreen / exitFullscreen BEFORE the layout change.
+    /// When true, makeUIView will:
+    ///   1. Save the current playback position via evaluateJavaScript
+    ///   2. Remove the existing WKWebView from its superview
+    ///   3. Set webView = nil (allow old WebContent process to terminate)
+    ///   4. Create a brand-new WKWebView
+    ///   5. Load the video URL fresh
+    ///   6. Restore the saved position
+    /// This is the ONLY reliable way to avoid "MediaSourcePrivateRemote object
+    /// has been destroyed" — the rendering context is permanently dead after
+    /// the WKWebView moves between view hierarchies, and no amount of
+    /// reusing-the-same-instance will bring it back. Full reload is required.
+    var needsFullReload = false
+
+    /// 🔧 v41: Saved position to restore after a full reload.
+    var savedPositionForReload: TimeInterval = 0
+
+    /// 🔧 v41: Save current position, then mark for full reload on next makeUIView.
+    /// Called by RoomView.enterFullscreen / exitFullscreen.
+    func prepareForFullReload() {
+        guard let webView = webView else {
+            needsFullReload = true
+            return
+        }
+        webView.evaluateJavaScript("""
+        (function() {
+            if (typeof getCurrentTime === 'function') return getCurrentTime();
+            var v = document.querySelector('video');
+            return v ? v.currentTime : 0;
+        })();
+        """) { [weak self] result, _ in
+            let t = result as? Double ?? 0
+            DispatchQueue.main.async {
+                self?.savedPositionForReload = t
+                self?.needsFullReload = true
+                print("🔄 v41: prepareForFullReload — saved position \(t)s, will recreate WKWebView on next makeUIView")
+            }
+        }
+    }
+
+    /// 🔧 v41: Destroy the existing WKWebView completely.
+    /// Called from makeUIView when needsFullReload is true.
+    func destroyExistingWebView() {
+        guard let webView = webView else { return }
+        print("💥 v41: destroyExistingWebView — removing from superview, releasing WKWebView")
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController.removeAllUserScripts()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "plinkBridge")
+        webView.removeFromSuperview()
+        self.webView = nil
+        // Don't clear loadedVideoId — loadVideoOnce needs to know which video to reload.
+        // loadVideoOnce has internal guard: if id == loadedVideoId → skip.
+        // For full reload we need to BYPASS that guard — see makeUIView.
+    }
+
     /// 🔧 v32.11: unmute video. iOS blocks unmuted autoplay without user gesture.
     /// This must be called from a user gesture handler (tap) to work.
     /// Calls video.muted = false; video.play() via evaluateJavaScript.
@@ -599,25 +657,38 @@ struct WebVideoView: UIViewRepresentable {
         // 🔧 v12: backend embed proxy URL
         let isBackendPlayer = urlString.contains("plink-backend") && (urlString.contains("youtube-player") || urlString.contains("youtube-embed"))
 
-        // 🔧 v34: REUSE existing WebView if available (fullscreen rotation fix).
-        // When device rotates, SwiftUI switches portraitLayout ↔ landscapeLayout.
-        // These are different view trees → SwiftUI calls makeUIView again.
-        // Without this check, a NEW WKWebView is created → video resets.
-        // With this check, we return the EXISTING WebView from WebViewControl.
-        // The video keeps playing because the WKWebView process is the same.
-        if let existing = WebViewControl.shared.webView {
-            print("📺 v37.2: reusing existing WKWebView")
+        // 🔧 v41: FULL RELOAD on orientation change.
+        // Previous approach (v34-v40): reuse existing WKWebView when rotating
+        // to avoid video reset. PROBLEM: "MediaSourcePrivateRemote object has
+        // been destroyed" — when SwiftUI re-attaches the WKWebView to a new
+        // view hierarchy (portrait → landscape), the WebContent rendering
+        // context is permanently destroyed. The WKWebView is still "alive"
+        // (JS still runs, audio still plays) but the visual rendering is gone
+        // → BLACK SCREEN.
+        //
+        // v41 solution: RoomView.enterFullscreen/exitFullscreen calls
+        // WebViewControl.shared.prepareForFullReload() BEFORE the layout change.
+        // That saves the current position and sets needsFullReload = true.
+        // Here in makeUIView, we check that flag:
+        //   - If true: destroy the old WKWebView, create a new one, reload the
+        //     video, restore the saved position. Brief flicker but video works.
+        //   - If false: reuse the existing WKWebView (normal case, no rotation).
+        if WebViewControl.shared.needsFullReload {
+            print("💥 v41: makeUIView — needsFullReload=true, destroying old WKWebView")
+            WebViewControl.shared.destroyExistingWebView()
+            WebViewControl.shared.needsFullReload = false
+            // Fall through to create a brand-new WKWebView below.
+            // loadedVideoId is preserved so loadVideoOnce knows which video
+            // to reload, but we need to bypass its "already loaded" guard.
+            // See loadVideoOnceForceReload below.
+        } else if let existing = WebViewControl.shared.webView {
+            print("📺 v41: reusing existing WKWebView (no rotation)")
             if isYouTube || isBackendPlayer {
                 existing.navigationDelegate = context.coordinator
             }
             if context.coordinator.webView == nil {
                 context.coordinator.webView = existing
             }
-            // 🔧 v37.2: ALWAYS call loadVideoOnce — it has internal guard.
-            // If video already loaded → guard blocks (no reload).
-            // If video NOT loaded yet (first makeUIView after room creation
-            // where WebViewControl.shared.webView was set by a previous
-            // makeUIView that returned early) → loadVideoOnce loads it.
             if isYouTube || isBackendPlayer {
                 let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
                 context.coordinator.loadVideoOnce(id: videoId, webView: existing)
@@ -799,8 +870,36 @@ struct WebVideoView: UIViewRepresentable {
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
-            print("📺 YouTube v29: makeUIView → Coordinator.loadVideoOnce, videoId='\(videoId)', url='\(urlString.prefix(80))'")
-            context.coordinator.loadVideoOnce(id: videoId, webView: webView)
+            // 🔧 v41: Check if we just did a full reload (needsFullReload was true).
+            // If so, bypass loadVideoOnce's "already loaded" guard by clearing
+            // loadedVideoId first, then call loadVideoOnce which will reload.
+            // Also schedule position restoration after the page loads.
+            if WebViewControl.shared.savedPositionForReload > 0 {
+                print("📺 YouTube v41: full reload — bypassing loadVideoOnce guard, will restore position \(WebViewControl.shared.savedPositionForReload)s")
+                WebViewControl.shared.loadedVideoId = nil  // bypass guard
+                context.coordinator.loadVideoOnce(id: videoId, webView: webView)
+                // Schedule position restoration for after the page loads.
+                // The page takes ~2-4s to load + video element to appear.
+                let pos = WebViewControl.shared.savedPositionForReload
+                WebViewControl.shared.savedPositionForReload = 0  // consume
+                for delay in [3.0, 5.0, 7.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak webView] in
+                        webView?.evaluateJavaScript("""
+                        (function() {
+                            var v = document.querySelector('video');
+                            if (v && v.duration > 0 && v.currentTime < 0.5) {
+                                v.currentTime = \(pos);
+                                v.play().catch(function(){});
+                                console.log('[Plink v41] Restored position to \(pos)s');
+                            }
+                        })();
+                        """, completionHandler: nil)
+                    }
+                }
+            } else {
+                print("📺 YouTube v29: makeUIView → Coordinator.loadVideoOnce, videoId='\(videoId)', url='\(urlString.prefix(80))'")
+                context.coordinator.loadVideoOnce(id: videoId, webView: webView)
+            }
         } else if urlString.contains("rutube.ru") {
             webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
             webView.load(URLRequest(url: url))
@@ -1096,68 +1195,67 @@ struct WebVideoView: UIViewRepresentable {
             print("📱 v40: appDidBecomeActive — no-op (video kept playing)")
         }
 
-        /// 🔧 v40: Trigger Picture-in-Picture when app enters real background.
-        /// Uses video.webkitSetPresentationMode('picture-in-picture') — the
-        /// HTML5 video element API on iOS WKWebView. Requires:
-        ///   - config.allowsPictureInPictureMediaPlayback = true (set above)
-        ///   - UIBackgroundModes: [audio, picture-in-picture] in Info.plist
-        ///   - AVAudioSession category = .playback (set in makeUIView)
+        /// 🔧 v41: Background handling.
         ///
-        /// 🔧 v40.1: If PiP fails or isn't supported, PAUSE the video — don't
-        /// keep playing audio in the dark. User explicitly said: "don't want
-        /// audio without picture in picture". So either we have PiP (visible
-        /// mini-screen) OR we pause. No audio-only background playback.
+        /// REALITY CHECK on PiP with WKWebView + m.youtube.com:
+        /// The previous v40 code tried `video.webkitSetPresentationMode('picture-in-picture')`
+        /// via evaluateJavaScript. This DOES NOT WORK because:
+        /// 1. The <video> element is on m.youtube.com (cross-origin from our app).
+        /// 2. YouTube's player code controls the video element — our JS is a guest.
+        /// 3. webkitSetPresentationMode on a cross-origin video is blocked by iOS.
+        /// 4. Logs confirmed: NO "background result" log appeared — the handler
+        ///    either didn't fire or the JS silently failed.
+        /// 5. After backgrounding, logs showed "ProcessAssertion acquireSync Failed...
+        ///    process does not exist" — the WebContent process was KILLED.
+        ///
+        /// TRUE PiP for WKWebView requires either:
+        ///   a) AVPictureInPictureController with a custom AVPlayerLayer (we don't
+        ///      have one for YouTube — video is inside WKWebView).
+        ///   b) The website itself to call requestPictureInPicture() (YouTube
+        ///      mobile doesn't do this).
+        ///
+        /// v41 pragmatic solution: SAVE position on background, PAUSE video.
+        /// On foreground, RESTORE position and resume. This matches the user's
+        /// requirement: "don't want audio without PiP" — we pause, so no audio.
+        /// When user returns, video resumes from the same position.
         @objc private func appDidEnterBackground() {
             guard webView != nil else { return }
-            print("📱 v40.1: appDidEnterBackground — triggering PiP (or pause if unsupported)")
+            print("📱 v41: appDidEnterBackground — saving position + pausing (no PiP support for WKWebView)")
             webView?.evaluateJavaScript("""
             (function() {
                 var v = document.querySelector('video');
-                if (!v) return 'no-video';
-                // Enable PiP attribute (must be set before presentation mode change)
-                try { v.setAttribute('playsinline', 'true'); } catch(e) {}
-                // Try webkitSetPresentationMode (iOS WKWebView-specific API)
-                if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) {
-                    var entered = v.webkitSetPresentationMode('picture-in-picture');
-                    // Verify PiP actually engaged (webkitSetPresentationMode returns the new mode)
-                    if (v.webkitPresentationMode === 'picture-in-picture') {
-                        console.log('[Plink v40.1] Entered PiP mode — video keeps playing');
-                        return 'pip-entered';
-                    }
-                }
-                // 🔧 v40.1: PiP NOT supported or failed → PAUSE the video.
-                // Don't keep playing audio in background without visual.
-                console.log('[Plink v40.1] PiP not supported — pausing video');
+                var t = 0;
+                if (typeof getCurrentTime === 'function') t = getCurrentTime();
+                else if (v) t = v.currentTime;
+                // Save position to a global for restoration on foreground
+                window._plinkSavedBackgroundTime = t;
+                // Pause — user doesn't want audio without PiP
                 if (typeof pauseVideo === 'function') pauseVideo();
-                else v.pause();
-                return 'paused-pip-unsupported';
+                else if (v) v.pause();
+                return 'paused-at-' + t + 's';
             })();
             """) { result, _ in
-                print("📱 v40.1: background result: \(result ?? "?")")
+                print("📱 v41: background — \(result ?? "?")")
             }
         }
 
-        /// 🔧 v40: Exit Picture-in-Picture when app returns to foreground.
-        /// Also resume playback if we paused in v40.1 because PiP wasn't supported.
+        /// 🔧 v41: Restore position and resume playback on foreground return.
         @objc private func appWillEnterForeground() {
             guard webView != nil else { return }
-            print("📱 v40.1: appWillEnterForeground — exiting PiP / resuming if paused")
+            print("📱 v41: appWillEnterForeground — restoring position + resuming")
             webView?.evaluateJavaScript("""
             (function() {
                 var v = document.querySelector('video');
-                if (!v) return;
-                // Exit PiP if active
-                if (v.webkitPresentationMode === 'picture-in-picture') {
-                    v.webkitSetPresentationMode('inline');
-                    console.log('[Plink v40.1] Exited PiP mode, back to inline');
+                var saved = window._plinkSavedBackgroundTime || 0;
+                if (saved > 0 && v) {
+                    v.currentTime = saved;
+                    console.log('[Plink v41] Restored position to ' + saved + 's');
                 }
-                // 🔧 v40.1: if video was paused because PiP wasn't supported,
-                // resume playback now that we're back in foreground.
-                if (v.paused && !window._plinkUserPaused) {
-                    v.play().catch(function(e) {
-                        console.log('[Plink v40.1] resume play failed: ' + e);
-                    });
-                    console.log('[Plink v40.1] Resumed playback after foreground return');
+                // Resume playback (unless user had manually paused)
+                if (!window._plinkUserPaused) {
+                    if (typeof playVideo === 'function') playVideo();
+                    else if (v) v.play().catch(function(){});
+                    console.log('[Plink v41] Resumed playback after foreground return');
                 }
             })();
             """, completionHandler: nil)

@@ -553,6 +553,15 @@ struct RoomView: View {
 
     private func enterFullscreen() {
         print("📱📱📱 enterFullscreen START — isFullscreenMode was: \(isFullscreenMode)")
+        // 🔧 v41: Prepare WKWebView for full reload BEFORE the layout change.
+        // This saves the current playback position and sets needsFullReload = true.
+        // When SwiftUI re-evaluates videoSection (due to isFullscreenMode change),
+        // makeUIView will see needsFullReload=true, destroy the old WKWebView,
+        // create a new one, and restore the saved position.
+        // This avoids "MediaSourcePrivateRemote object has been destroyed"
+        // (black screen after rotation) — the rendering context is permanently
+        // dead after re-parenting, so we MUST recreate the WKWebView.
+        WebViewControl.shared.prepareForFullReload()
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = true
             showControls = true
@@ -560,27 +569,18 @@ struct RoomView: View {
         print("📱📱📱 enterFullscreen — calling lockToLandscape, isFullscreenMode now: \(isFullscreenMode)")
         OrientationManager.shared.lockToLandscape()
         resetControlsTimer()
-        // 🔧 v35: Single triggerResize after rotation settles.
-        // Coordinator handles render freeze via NotificationCenter lifecycle.
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            WebViewControl.shared.triggerResize()
-        }
     }
 
     private func exitFullscreen() {
         print("📱 exitFullscreen: isFullscreenMode = false + rotating to portrait")
+        // 🔧 v41: Same as enterFullscreen — prepare for full reload.
+        WebViewControl.shared.prepareForFullReload()
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = false
             showControls = true
         }
         OrientationManager.shared.lockToPortrait()
         resetControlsTimer()
-        // 🔧 v35: Single triggerResize after rotation back to portrait.
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            WebViewControl.shared.triggerResize()
-        }
     }
 
     private func resetControlsTimer() {

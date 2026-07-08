@@ -60,65 +60,66 @@ export async function extractStream(url: string): Promise<StreamInfo> {
     throw new Error('Invalid URL protocol');
   }
 
-  // 🔧 v9.8: COMPLETELY DIFFERENT APPROACH.
-  // v9.7 with --skip-download STILL got "Requested format is not available"
-  // because yt-dlp's YouTube extractor internally selects a format even when
-  // just dumping info. The only way to avoid this is to use --list-formats-as-json
-  // which outputs ONLY the formats array without triggering format selection.
+  // 🔧 v9.9: COMPLETELY BYPASS format selection using --print.
+  // v9.8 failed because:
+  //   - --dump-json STILL triggers format selection internally (even with --skip-download)
+  //   - --list-formats-as-json DOESN'T EXIST in yt-dlp (error: no such option)
   //
-  // But --list-formats-as-json doesn't include title/thumbnail/duration. So we
-  // make TWO yt-dlp calls:
-  //   1. --dump-json --skip-download (get metadata — title, thumbnail, duration)
-  //      This may fail on format selection, but we catch it and continue.
-  //   2. --list-formats-as-json (get formats array — never fails on selection)
-  // Then combine the two.
+  // The ONLY way to get format info without triggering selection is --print
+  // with a template. --print outputs template values WITHOUT selecting a format:
+  //   yt-dlp --print "%(id)s\t%(title)s\t%(thumbnail)s\t%(duration)s\t%(formats)j" URL
   //
-  // If call #1 fails, we still have call #2 (formats) and use generic metadata.
+  // This gives us tab-separated: id, title, thumbnail, duration, formats_json
+  // Then we parse formats_json and pick the best combined format ourselves.
 
   let info: any = { formats: [] };
-  let metadataError: string | null = null;
 
-  // Call 1: get metadata (best effort — may fail on format selection)
   try {
-    const metaResult = await execAsync(
-      `yt-dlp --dump-json --no-warnings --no-call-home ` +
-      `--no-playlist --skip-download ` +
+    const printResult = await execAsync(
+      `yt-dlp --no-warnings --no-call-home --no-playlist ` +
+      `--skip-download ` +
       `--user-agent "${YT_DLP_UA}" ` +
+      `--print "%(id)s\\t%(title)s\\t%(thumbnail)s\\t%(duration)s\\t%(uploader)s\\t%(is_live)s\\t%(extractor_key)s\\t%(formats)j" ` +
       `${shellEscape(url)}`,
-      { timeout: 20_000, maxBuffer: 10 * 1024 * 1024 }
+      { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
     );
-    info = JSON.parse(metaResult.stdout);
-    console.log(`[streamExtractor] Metadata extracted: title="${info.title}", ${info.formats?.length || 0} formats`);
+
+    const stdout = printResult.stdout.trim();
+    // Split on first 7 tabs (formats JSON may contain tabs? unlikely but safe)
+    const parts = stdout.split('\t');
+    if (parts.length < 8) {
+      throw new Error(`Unexpected --print output: ${stdout.slice(0, 200)}`);
+    }
+
+    info = {
+      id: parts[0],
+      title: parts[1],
+      thumbnail: parts[2],
+      duration: parseFloat(parts[3]) || 0,
+      uploader: parts[4],
+      is_live: parts[5] === 'True' || parts[5] === 'true',
+      extractor_key: parts[6],
+      formats: [],
+    };
+
+    // Parse formats JSON (last field)
+    try {
+      const formatsData = JSON.parse(parts[7]);
+      info.formats = Array.isArray(formatsData) ? formatsData : [];
+    } catch {
+      console.error('[streamExtractor] Failed to parse formats JSON');
+    }
+
+    console.log(`[streamExtractor] --print succeeded: title="${info.title}", ${info.formats.length} formats, duration=${info.duration}s`);
   } catch (err: any) {
     const stderr = err.stderr?.toString() || '';
-    metadataError = stderr.slice(0, 500);
-    console.error('[streamExtractor] Metadata call failed (will try formats-only):', metadataError);
-  }
-
-  // Call 2: if no formats from call 1, get formats via --list-formats-as-json
-  // This NEVER triggers format selection — it just lists what's available.
-  if (!info.formats || info.formats.length === 0) {
-    try {
-      const formatsResult = await execAsync(
-        `yt-dlp --list-formats-as-json --no-warnings --no-call-home ` +
-        `--no-playlist ` +
-        `--user-agent "${YT_DLP_UA}" ` +
-        `${shellEscape(url)}`,
-        { timeout: 20_000, maxBuffer: 10 * 1024 * 1024 }
-      );
-      const formatsData = JSON.parse(formatsResult.stdout);
-      info.formats = Array.isArray(formatsData) ? formatsData : (formatsData.formats || []);
-      console.log(`[streamExtractor] Got ${info.formats.length} formats via --list-formats-as-json`);
-    } catch (err: any) {
-      const stderr = err.stderr?.toString() || '';
-      console.error('[streamExtractor] Formats call also failed:', stderr.slice(0, 500));
-      throw new Error(`yt-dlp failed completely. Metadata error: ${metadataError}. Formats error: ${stderr.slice(0, 300)}`);
-    }
+    console.error('[streamExtractor] --print failed:', stderr.slice(0, 1000));
+    throw new Error(`yt-dlp --print failed (code ${err.code}): ${stderr.slice(0, 500) || err.message}`);
   }
 
   // If we still have no formats, we can't proceed
   if (!info.formats || info.formats.length === 0) {
-    throw new Error(`No formats available. Metadata error: ${metadataError}`);
+    throw new Error('No formats available from yt-dlp --print');
   }
 
   // 🔧 v9.6: broader format search

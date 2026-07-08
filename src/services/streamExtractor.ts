@@ -135,106 +135,118 @@ async function extractWithYouTubeI(videoId: string): Promise<StreamInfo> {
     },
   ];
 
-  let lastError: string | null = null;
+  // 🔧 v10.2.4: proxy the YouTube Internal API request through public CORS proxies.
+  // Railway IP is blocked by YouTube (LOGIN_REQUIRED for all clients).
+  // Public CORS proxies have different IPs and can reach YouTube.
+  // We try multiple proxies — if one is down, try the next.
+  const CORS_PROXIES = [
+    'https://corsproxy.io/?url=',
+    'https://api.allorigins.win/raw?url=',
+    'https://cors-anywhere.herokuapp.com/',
+    'https://proxy.cors.sh/',
+  ];
+
+  const youtubeApiUrl = 'https://www.youtube.com/youtubei/v1/player';
 
   for (const client of clients) {
-    try {
-      // 🔧 v10.2.1: use /youtubei/v1/player WITHOUT key for WEB client.
-      // The key is only needed for certain clients. Try without key first.
-      const apiUrl = 'https://www.youtube.com/youtubei/v1/player';
-      console.log(`[streamExtractor] Trying YouTube Internal API (${client.name}) for ${videoId}`);
+    // 🔧 v10.2.4: try direct first, then through CORS proxies
+    const urlsToTry = [
+      youtubeApiUrl,
+      ...CORS_PROXIES.map(proxy => proxy + encodeURIComponent(youtubeApiUrl)),
+    ];
 
-      const body = {
-        context: {
-          client: {
-            clientName: client.clientName,
-            clientVersion: client.clientVersion,
-            hl: 'en',
-            gl: 'US',
+    for (const apiUrl of urlsToTry) {
+      try {
+        const isProxied = apiUrl !== youtubeApiUrl;
+        const proxyLabel = isProxied ? ` via ${apiUrl.split('?')[0].split('//')[1]}` : ' direct';
+        console.log(`[streamExtractor] Trying YouTube Internal API (${client.name}${proxyLabel}) for ${videoId}`);
+
+        const body = {
+          context: {
+            client: {
+              clientName: client.clientName,
+              clientVersion: client.clientVersion,
+              hl: 'en',
+              gl: 'US',
+            },
           },
-        },
-        videoId: videoId,
-      };
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': client.userAgent,
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(10_000),
-      });
-
-      if (!response.ok) {
-        lastError = `YouTube Internal API (${client.name}) returned ${response.status}`;
-        console.error(`[streamExtractor] ${lastError}`);
-        continue;
-      }
-
-      const data: any = await response.json();
-      const streamingData = data.streamingData || {};
-      const formats = streamingData.formats || [];  // Muxed streams!
-      const videoDetails = data.videoDetails || {};
-      const playabilityStatus = data.playabilityStatus || {};
-
-      console.log(`[streamExtractor] YouTube Internal API (${client.name}) OK: title="${videoDetails.title}", ${formats.length} muxed formats, hls=${!!streamingData.hlsManifestUrl}, dash=${!!streamingData.dashManifestUrl}`);
-
-      // 🔧 v10.2.2: if no muxed formats, try HLS manifest URL.
-      // AVPlayer can play HLS (.m3u8) natively — it's adaptive streaming
-      // that handles audio+video together. YouTube provides hlsManifestUrl
-      // for most videos.
-      if (formats.length === 0 && streamingData.hlsManifestUrl) {
-        console.log(`[streamExtractor] No muxed formats, using HLS manifest: ${streamingData.hlsManifestUrl.slice(0, 100)}...`);
-        return {
-          id: videoId,
-          title: videoDetails.title || 'Unknown',
-          author: videoDetails.author || 'Unknown',
-          thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
-                        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-          streamURL: streamingData.hlsManifestUrl,
-          duration: parseInt(videoDetails.lengthSeconds) || 0,
-          isLive: videoDetails.isLive || false,
-          extractor: 'youtubei-hls',
+          videoId: videoId,
         };
-      }
 
-      if (formats.length === 0) {
-        lastError = `YouTube Internal API (${client.name}): no muxed formats and no HLS manifest (playability: ${playabilityStatus.status})`;
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': client.userAgent,
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!response.ok) {
+          console.error(`[streamExtractor] YouTube Internal API (${client.name}${proxyLabel}) returned ${response.status}`);
+          continue;
+        }
+
+        const data: any = await response.json();
+        const streamingData = data.streamingData || {};
+        const formats = streamingData.formats || [];
+        const videoDetails = data.videoDetails || {};
+        const playabilityStatus = data.playabilityStatus || {};
+
+        console.log(`[streamExtractor] YouTube Internal API (${client.name}${proxyLabel}) OK: title="${videoDetails.title}", ${formats.length} muxed, hls=${!!streamingData.hlsManifestUrl}, playability=${playabilityStatus.status}`);
+
+        // If HLS manifest available, use it (best for AVPlayer)
+        if (streamingData.hlsManifestUrl) {
+          console.log(`[streamExtractor] Using HLS manifest: ${streamingData.hlsManifestUrl.slice(0, 100)}...`);
+          return {
+            id: videoId,
+            title: videoDetails.title || 'Unknown',
+            author: videoDetails.author || 'Unknown',
+            thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
+                          `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            streamURL: streamingData.hlsManifestUrl,
+            duration: parseInt(videoDetails.lengthSeconds) || 0,
+            isLive: videoDetails.isLive || false,
+            extractor: 'youtubei-hls',
+          };
+        }
+
+        // If muxed formats available, use best one
+        if (formats.length > 0) {
+          const sorted = formats.sort((a: any, b: any) => {
+            const qualityOrder: Record<number, number> = { 22: 720, 18: 360, 43: 360, 36: 240, 17: 144 };
+            const qa = qualityOrder[a.itag] || parseInt(a.qualityLabel) || 0;
+            const qb = qualityOrder[b.itag] || parseInt(b.qualityLabel) || 0;
+            return qb - qa;
+          });
+          const bestFormat = sorted[0];
+          console.log(`[streamExtractor] Selected muxed: itag ${bestFormat.itag} (${bestFormat.qualityLabel || 'unknown'})`);
+          return {
+            id: videoId,
+            title: videoDetails.title || 'Unknown',
+            author: videoDetails.author || 'Unknown',
+            thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
+                          `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            streamURL: bestFormat.url,
+            duration: parseInt(videoDetails.lengthSeconds) || 0,
+            isLive: videoDetails.isLive || false,
+            extractor: 'youtubei',
+          };
+        }
+
+        // No formats and no HLS — try next client/proxy
+        lastError = `YouTube Internal API (${client.name}${proxyLabel}): no formats (playability: ${playabilityStatus.status})`;
         console.error(`[streamExtractor] ${lastError}`);
-        continue;
+      } catch (err: any) {
+        lastError = `YouTube Internal API (${client.name}) error: ${err.message}`;
+        console.error(`[streamExtractor] ${lastError}`);
       }
-
-      // Sort by quality (itag 18 = 360p, 22 = 720p, etc.) — prefer higher quality
-      const sorted = formats.sort((a: any, b: any) => {
-        const qualityOrder: Record<number, number> = { 22: 720, 18: 360, 43: 360, 36: 240, 17: 144 };
-        const qa = qualityOrder[a.itag] || parseInt(a.qualityLabel) || 0;
-        const qb = qualityOrder[b.itag] || parseInt(b.qualityLabel) || 0;
-        return qb - qa;
-      });
-
-      const bestFormat = sorted[0];
-      console.log(`[streamExtractor] Selected: itag ${bestFormat.itag} (${bestFormat.qualityLabel || 'unknown'}, ${bestFormat.mimeType})`);
-
-      return {
-        id: videoId,
-        title: videoDetails.title || 'Unknown',
-        author: videoDetails.author || 'Unknown',
-        thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
-                      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        streamURL: bestFormat.url,
-        duration: parseInt(videoDetails.lengthSeconds) || 0,
-        isLive: videoDetails.isLive || false,
-        extractor: 'youtubei',
-      };
-    } catch (err: any) {
-      lastError = `YouTube Internal API (${client.name}) error: ${err.message}`;
-      console.error(`[streamExtractor] ${lastError}`);
     }
   }
 
-  throw new Error(`All YouTube Internal API clients failed. Last error: ${lastError}`);
+  throw new Error(`All YouTube Internal API attempts failed. Last error: ${lastError}`);
 }
 
 /**

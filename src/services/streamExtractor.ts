@@ -1,17 +1,21 @@
-// src/services/streamExtractor.ts — yt-dlp wrapper для извлечения прямых stream URLs
-// v9.6 (Jan 2027): fixed "Requested format is not available" error.
-//   Problem: --prefer-free-formats without -f flag caused yt-dlp to fail
-//   when no combined format was available (YouTube now uses DASH).
-//   Solution: use -f "best" to let yt-dlp pick ANY best format, then
-//   our code selects the best combined format from info.formats array.
+// src/services/streamExtractor.ts — YouTube stream extraction
+// v10.0 (Jan 2027): REPLACED yt-dlp with Piped API as primary extractor.
+//   yt-dlp is broken on Railway — "Requested format is not available" error
+//   occurs with ALL flag combinations (--dump-json, --print, --skip-download,
+//   --no-check-formats). YouTube changed their API and yt-dlp can't extract
+//   combined formats from DASH streams without complex format merging.
+//
+//   Piped API (https://piped-api.kavin.rocks) is a public YouTube proxy that
+//   returns direct stream URLs without yt-dlp. It's free, no API key needed,
+//   and handles YouTube's DASH format internally.
+//
+//   Fallback: yt-dlp --print (still broken, but kept as last resort)
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-// 🔧 v9.5: single User-Agent used everywhere — yt-dlp extraction + upstream fetch.
-// Must be the SAME in both, otherwise googlevideo returns 403 (UA mismatch).
 const YT_DLP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
 export interface StreamInfo {
@@ -36,42 +40,116 @@ export interface StreamFormat {
   tbr: number;
 }
 
-// 🔧 v9.5: export the UA so media.ts can use the SAME UA for upstream fetch
 export const UPSTREAM_USER_AGENT = YT_DLP_UA;
 
+// 🔧 v10.0: Piped API instances — public YouTube proxies.
+// If one is down, try the next. All are free, no API key required.
+const PIPED_INSTANCES = [
+  'https://piped-api.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://api.piped.yt',
+  'https://pipedapi.r4fo.com',
+];
+
 /**
- * Извлекает прямой stream URL из видео-сервиса.
- *
- * 🔧 v9.6: Fixed "Requested format is not available" error.
- *   - Removed --prefer-free-formats (was causing format selection failures)
- *   - Use -f "best" so yt-dlp picks any best format and returns info.formats
- *   - Our code then selects the best COMBINED format (video+audio in one file)
- *     which AVPlayer can play natively
- *
- * Format selection priority:
- *   1. Combined formats (vcodec != none AND acodec != none) — best for AVPlayer
- *   2. itag 18 (360p mp4, always combined) — universal fallback
- *   3. info.url (single-format videos)
- *   4. First available format (last resort)
+ * Extract video ID from any YouTube URL format.
  */
-export async function extractStream(url: string): Promise<StreamInfo> {
-  const parsed = new URL(url);
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('Invalid URL protocol');
+function extractYouTubeId(url: string): string | null {
+  // youtu.be/ID
+  const shortMatch = url.match(/youtu\.be\/([\w-]{11})/);
+  if (shortMatch) return shortMatch[1];
+  // youtube.com/watch?v=ID
+  const watchMatch = url.match(/[?&]v=([\w-]{11})/);
+  if (watchMatch) return watchMatch[1];
+  // youtube.com/embed/ID or youtube.com/shorts/ID
+  const embedMatch = url.match(/youtube\.com\/(?:embed|shorts)\/([\w-]{11})/);
+  if (embedMatch) return embedMatch[1];
+  return null;
+}
+
+/**
+ * 🔧 v10.0: Extract stream URL using Piped API.
+ * Piped returns video info including audioStreams + videoStreams arrays.
+ * We pick the best combined stream (or muxed stream if available).
+ *
+ * Piped API response format:
+ *   { title, uploader, thumbnailUrl, duration, audioStreams: [...],
+ *     videoStreams: [{ url, format, quality, mimeType, codec: "h264"|"vp9"|...,
+ *                      videoOnly: true|false }] }
+ *
+ * For AVPlayer, we need a "muxed" stream (videoOnly: false) — has both
+ * audio + video in one file.
+ */
+async function extractWithPiped(videoId: string): Promise<StreamInfo> {
+  let lastError: string | null = null;
+
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const apiUrl = `${instance}/streams/${videoId}`;
+      console.log(`[streamExtractor] Trying Piped: ${apiUrl}`);
+
+      const response = await fetch(apiUrl, {
+        headers: { 'User-Agent': YT_DLP_UA },
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!response.ok) {
+        lastError = `Piped ${instance} returned ${response.status}`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      const data: any = await response.json();
+      console.log(`[streamExtractor] Piped ${instance} OK: title="${data.title}", ${data.videoStreams?.length || 0} video streams, ${data.audioStreams?.length || 0} audio streams`);
+
+      // Find best muxed stream (videoOnly: false = has both audio + video)
+      const videoStreams = data.videoStreams || [];
+      const muxedStreams = videoStreams.filter((s: any) => s.videoOnly === false);
+
+      let bestStream: any = null;
+      if (muxedStreams.length > 0) {
+        // Sort by quality (e.g., "720p" → 720) descending
+        const sorted = muxedStreams.sort((a: any, b: any) => {
+          const qa = parseInt(a.quality) || 0;
+          const qb = parseInt(b.quality) || 0;
+          return qb - qa;
+        });
+        bestStream = sorted[0];
+        console.log(`[streamExtractor] Selected muxed stream: ${bestStream.quality} ${bestStream.format} (${bestStream.mimeType})`);
+      }
+
+      // Fallback: if no muxed streams, Piped doesn't provide them.
+      // We can't use video-only or audio-only for AVPlayer.
+      if (!bestStream) {
+        lastError = `Piped ${instance}: no muxed streams (only DASH)`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      return {
+        id: videoId,
+        title: data.title || 'Unknown',
+        author: data.uploader || 'Unknown',
+        thumbnailURL: data.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        streamURL: bestStream.url,
+        duration: data.duration || 0,
+        isLive: data.livestream || false,
+        extractor: 'piped',
+      };
+    } catch (err: any) {
+      lastError = `Piped ${instance} error: ${err.message}`;
+      console.error(`[streamExtractor] ${lastError}`);
+    }
   }
 
-  // 🔧 v9.9: COMPLETELY BYPASS format selection using --print.
-  // v9.8 failed because:
-  //   - --dump-json STILL triggers format selection internally (even with --skip-download)
-  //   - --list-formats-as-json DOESN'T EXIST in yt-dlp (error: no such option)
-  //
-  // The ONLY way to get format info without triggering selection is --print
-  // with a template. --print outputs template values WITHOUT selecting a format:
-  //   yt-dlp --print "%(id)s\t%(title)s\t%(thumbnail)s\t%(duration)s\t%(formats)j" URL
-  //
-  // This gives us tab-separated: id, title, thumbnail, duration, formats_json
-  // Then we parse formats_json and pick the best combined format ourselves.
+  throw new Error(`All Piped instances failed. Last error: ${lastError}`);
+}
 
+/**
+ * 🔧 v10.0: Extract stream URL using yt-dlp (fallback, usually broken).
+ * Kept as last resort — if Piped is down AND yt-dlp somehow works.
+ */
+async function extractWithYtDlp(url: string): Promise<StreamInfo> {
   let info: any = { formats: [] };
 
   try {
@@ -85,7 +163,6 @@ export async function extractStream(url: string): Promise<StreamInfo> {
     );
 
     const stdout = printResult.stdout.trim();
-    // Split on first 7 tabs (formats JSON may contain tabs? unlikely but safe)
     const parts = stdout.split('\t');
     if (parts.length < 8) {
       throw new Error(`Unexpected --print output: ${stdout.slice(0, 200)}`);
@@ -102,86 +179,91 @@ export async function extractStream(url: string): Promise<StreamInfo> {
       formats: [],
     };
 
-    // Parse formats JSON (last field)
     try {
       const formatsData = JSON.parse(parts[7]);
       info.formats = Array.isArray(formatsData) ? formatsData : [];
     } catch {
       console.error('[streamExtractor] Failed to parse formats JSON');
     }
-
-    console.log(`[streamExtractor] --print succeeded: title="${info.title}", ${info.formats.length} formats, duration=${info.duration}s`);
   } catch (err: any) {
     const stderr = err.stderr?.toString() || '';
-    console.error('[streamExtractor] --print failed:', stderr.slice(0, 1000));
-    throw new Error(`yt-dlp --print failed (code ${err.code}): ${stderr.slice(0, 500) || err.message}`);
+    throw new Error(`yt-dlp --print failed: ${stderr.slice(0, 500) || err.message}`);
   }
 
-  // If we still have no formats, we can't proceed
   if (!info.formats || info.formats.length === 0) {
-    throw new Error('No formats available from yt-dlp --print');
+    throw new Error('No formats from yt-dlp');
   }
 
-  // 🔧 v9.6: broader format search
-  let bestFormat: any = null;
-  const allFormats = info.formats || [];
-
-  // Priority 1: combined formats (video+audio in one file) — AVPlayer can play these
-  // Sort by total bitrate (tbr) descending — highest quality first
-  const combined = allFormats
+  // Select best combined format
+  const combined = info.formats
     .filter((f: any) => f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none')
     .sort((a: any, b: any) => (b.tbr || 0) - (a.tbr || 0));
 
-  if (combined.length > 0) {
-    bestFormat = combined[0];
-    console.log(`[streamExtractor] Selected combined format: ${bestFormat.format_id} (${bestFormat.ext}, ${bestFormat.height}p, tbr=${bestFormat.tbr})`);
-  }
-
-  // Priority 2: itag 18 (360p mp4, always combined)
-  if (!bestFormat) {
-    bestFormat = allFormats.find((f: any) => f.format_id === '18');
-    if (bestFormat) console.log(`[streamExtractor] Fallback to itag 18 (360p mp4)`);
-  }
-
-  // Priority 3: info.url (some extractors provide a direct URL)
-  if (!bestFormat && info.url) {
-    bestFormat = { url: info.url, ext: 'mp4', vcodec: 'h264', acodec: 'aac', tbr: 0 };
-    console.log(`[streamExtractor] Fallback to info.url`);
-  }
-
-  // Priority 4: first available format (last resort — may be video-only or audio-only)
-  if (!bestFormat && allFormats.length > 0) {
-    bestFormat = allFormats[0];
-    console.log(`[streamExtractor] Last resort: first format ${bestFormat.format_id} (may be video-only or audio-only)`);
-  }
+  let bestFormat = combined[0] || info.formats.find((f: any) => f.format_id === '18') || info.formats[0];
 
   if (!bestFormat) {
-    throw new Error('No suitable stream format found. Available: ' +
-      allFormats.map((f: any) => `${f.format_id}(${f.ext},${f.vcodec},${f.acodec})`).join(', '));
+    throw new Error('No suitable format found');
   }
 
   return {
-    id: info.id || parsed.searchParams.get('v') || Date.now().toString(),
+    id: info.id,
     title: info.title || 'Unknown',
-    author: info.uploader || info.channel || 'Unknown',
+    author: info.uploader || 'Unknown',
     thumbnailURL: info.thumbnail || '',
     streamURL: bestFormat.url,
     duration: info.duration || 0,
     isLive: info.is_live || false,
-    extractor: info.extractor_key?.toLowerCase() || 'unknown',
-    formats: combined.slice(0, 5).map((f: any) => ({
-      url: f.url,
-      ext: f.ext,
-      resolution: f.resolution || `${f.height}p`,
-      vcodec: f.vcodec,
-      acodec: f.acodec,
-      filesize: f.filesize || 0,
-      tbr: f.tbr || 0,
-    })),
+    extractor: 'yt-dlp',
   };
 }
 
+/**
+ * 🔧 v10.0: Main extraction function — tries Piped first, yt-dlp as fallback.
+ */
+export async function extractStream(url: string): Promise<StreamInfo> {
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Invalid URL protocol');
+  }
+
+  // Extract YouTube video ID
+  const videoId = extractYouTubeId(url);
+  if (videoId) {
+    // YouTube: try Piped first (reliable, no yt-dlp issues)
+    try {
+      console.log(`[streamExtractor] YouTube video ${videoId} — trying Piped API`);
+      return await extractWithPiped(videoId);
+    } catch (pipedErr: any) {
+      console.error(`[streamExtractor] Piped failed: ${pipedErr.message}, trying yt-dlp`);
+      // Fall through to yt-dlp
+    }
+  }
+
+  // Fallback: yt-dlp (may fail, but try)
+  return await extractWithYtDlp(url);
+}
+
 export async function extractMetadata(url: string): Promise<Partial<StreamInfo>> {
+  // For YouTube, use Piped
+  const videoId = extractYouTubeId(url);
+  if (videoId) {
+    try {
+      const stream = await extractWithPiped(videoId);
+      return {
+        id: stream.id,
+        title: stream.title,
+        author: stream.author,
+        thumbnailURL: stream.thumbnailURL,
+        duration: stream.duration,
+        isLive: stream.isLive,
+        extractor: stream.extractor,
+      };
+    } catch {
+      // Fall through to yt-dlp
+    }
+  }
+
+  // Fallback: yt-dlp
   const { stdout } = await execAsync(
     `yt-dlp --dump-single-json --no-warnings --no-call-home ` +
     `--skip-download --no-playlist ` +

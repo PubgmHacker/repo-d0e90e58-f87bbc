@@ -1598,10 +1598,10 @@ struct WebVideoView: UIViewRepresentable {
             WebViewControl.shared.didFallbackToFullPage = true  // skip IFrame API fallback
 
             let cleanVideoId = Self.sanitizeVideoIdForBundle(id)
-            let watchURLString = "https://m.youtube.com/watch?v=\(cleanVideoId)"
+            let watchURLString = "https://www.youtube.com/watch?v=\(cleanVideoId)"
             guard let watchURL = URL(string: watchURLString) else { return }
 
-            print("📺 YouTube v36: loading m.youtube.com/watch?v=\(cleanVideoId) (direct, no IFrame API)")
+            print("📺 YouTube v37.3: loading www.youtube.com/watch?v=\(cleanVideoId)")
             DispatchQueue.main.async {
                 let request = URLRequest(url: watchURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30.0)
                 webView.load(request)

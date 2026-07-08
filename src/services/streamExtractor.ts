@@ -51,6 +51,22 @@ const PIPED_INSTANCES = [
   'https://pipedapi.r4fo.com',
 ];
 
+// 🔧 v10.1: Invidious API instances — alternative YouTube proxies.
+// Piped instances are often blocked on Railway IPs. Invidious has more
+// instances and different blocking patterns, so it's more likely to work.
+// Invidious API: GET https://invidious.example.com/api/v1/videos/VIDEO_ID
+// Returns: { title, author, lengthSeconds, formatStreams: [{url, type, quality}], adaptiveFormats: [...] }
+// formatStreams are muxed (audio+video) — perfect for AVPlayer!
+const INVIDIOUS_INSTANCES = [
+  'https://invidious.nerdvpn.de',
+  'https://invidious.jing.rocks',
+  'https://invidious.privacyredirect.com',
+  'https://inv.nadeko.net',
+  'https://invidious.perennialte.ch',
+  'https://iv.ggtyler.dev',
+  'https://invidious.einfachzocken.eu',
+];
+
 /**
  * Extract video ID from any YouTube URL format.
  */
@@ -65,6 +81,89 @@ function extractYouTubeId(url: string): string | null {
   const embedMatch = url.match(/youtube\.com\/(?:embed|shorts)\/([\w-]{11})/);
   if (embedMatch) return embedMatch[1];
   return null;
+}
+
+/**
+ * 🔧 v10.1: Extract stream URL using Invidious API.
+ * Invidious returns formatStreams[] (muxed: audio+video) + adaptiveFormats[] (DASH).
+ * We use formatStreams — these are direct URLs AVPlayer can play natively.
+ *
+ * Invidious API response format:
+ *   { title, author, lengthSeconds, videoThumbnails: [{url}],
+ *     formatStreams: [{url, type, quality}],  ← MUXED streams!
+ *     adaptiveFormats: [{url, type, ...}] }   ← DASH (separate a/v)
+ */
+async function extractWithInvidious(videoId: string): Promise<StreamInfo> {
+  let lastError: string | null = null;
+
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const apiUrl = `${instance}/api/v1/videos/${videoId}?fields=title,author,lengthSeconds,videoThumbnails,formatStreams,liveNow`;
+      console.log(`[streamExtractor] Trying Invidious: ${apiUrl}`);
+
+      const response = await fetch(apiUrl, {
+        headers: {
+          'User-Agent': YT_DLP_UA,
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) {
+        lastError = `Invidious ${instance} returned ${response.status}`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      const data: any = await response.json();
+      const formatStreams = data.formatStreams || [];
+      console.log(`[streamExtractor] Invidious ${instance} OK: title="${data.title}", ${formatStreams.length} muxed streams`);
+
+      if (formatStreams.length === 0) {
+        lastError = `Invidious ${instance}: no formatStreams (only adaptive)`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      // Sort by quality descending (e.g., "720p" → 720)
+      const sorted = formatStreams
+        .filter((s: any) => s.url)
+        .sort((a: any, b: any) => {
+          const qa = parseInt(a.quality) || 0;
+          const qb = parseInt(b.quality) || 0;
+          return qb - qa;
+        });
+
+      const bestStream = sorted[0];
+      if (!bestStream) {
+        lastError = `Invidious ${instance}: no valid stream URLs`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      // Get best thumbnail
+      const thumbnail = data.videoThumbnails?.[0]?.url ||
+                        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+      console.log(`[streamExtractor] Selected: ${bestStream.quality} ${bestStream.type}`);
+
+      return {
+        id: videoId,
+        title: data.title || 'Unknown',
+        author: data.author || 'Unknown',
+        thumbnailURL: thumbnail,
+        streamURL: bestStream.url,
+        duration: data.lengthSeconds || 0,
+        isLive: data.liveNow || false,
+        extractor: 'invidious',
+      };
+    } catch (err: any) {
+      lastError = `Invidious ${instance} error: ${err.message}`;
+      console.error(`[streamExtractor] ${lastError}`);
+    }
+  }
+
+  throw new Error(`All Invidious instances failed. Last error: ${lastError}`);
 }
 
 /**
@@ -218,7 +317,9 @@ async function extractWithYtDlp(url: string): Promise<StreamInfo> {
 }
 
 /**
- * 🔧 v10.0: Main extraction function — tries Piped first, yt-dlp as fallback.
+ * 🔧 v10.1: Main extraction function — tries Invidious → Piped → yt-dlp.
+ * Invidious has more instances and different blocking patterns than Piped,
+ * so it's more likely to work on Railway IPs.
  */
 export async function extractStream(url: string): Promise<StreamInfo> {
   const parsed = new URL(url);
@@ -229,26 +330,35 @@ export async function extractStream(url: string): Promise<StreamInfo> {
   // Extract YouTube video ID
   const videoId = extractYouTubeId(url);
   if (videoId) {
-    // YouTube: try Piped first (reliable, no yt-dlp issues)
+    // YouTube: try Invidious first (most reliable on Railway)
     try {
-      console.log(`[streamExtractor] YouTube video ${videoId} — trying Piped API`);
-      return await extractWithPiped(videoId);
-    } catch (pipedErr: any) {
-      console.error(`[streamExtractor] Piped failed: ${pipedErr.message}, trying yt-dlp`);
-      // Fall through to yt-dlp
+      console.log(`[streamExtractor] YouTube video ${videoId} — trying Invidious API`);
+      return await extractWithInvidious(videoId);
+    } catch (invidiousErr: any) {
+      console.error(`[streamExtractor] Invidious failed: ${invidiousErr.message}`);
+
+      // Fallback: try Piped
+      try {
+        console.log(`[streamExtractor] Trying Piped API`);
+        return await extractWithPiped(videoId);
+      } catch (pipedErr: any) {
+        console.error(`[streamExtractor] Piped failed: ${pipedErr.message}`);
+        // Fall through to yt-dlp
+      }
     }
   }
 
-  // Fallback: yt-dlp (may fail, but try)
+  // Last resort: yt-dlp (usually broken, but try)
+  console.log(`[streamExtractor] All APIs failed, trying yt-dlp as last resort`);
   return await extractWithYtDlp(url);
 }
 
 export async function extractMetadata(url: string): Promise<Partial<StreamInfo>> {
-  // For YouTube, use Piped
+  // For YouTube, try Invidious → Piped
   const videoId = extractYouTubeId(url);
   if (videoId) {
     try {
-      const stream = await extractWithPiped(videoId);
+      const stream = await extractWithInvidious(videoId);
       return {
         id: stream.id,
         title: stream.title,
@@ -259,7 +369,20 @@ export async function extractMetadata(url: string): Promise<Partial<StreamInfo>>
         extractor: stream.extractor,
       };
     } catch {
-      // Fall through to yt-dlp
+      try {
+        const stream = await extractWithPiped(videoId);
+        return {
+          id: stream.id,
+          title: stream.title,
+          author: stream.author,
+          thumbnailURL: stream.thumbnailURL,
+          duration: stream.duration,
+          isLive: stream.isLive,
+          extractor: stream.extractor,
+        };
+      } catch {
+        // Fall through to yt-dlp
+      }
     }
   }
 

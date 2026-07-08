@@ -106,26 +106,31 @@ struct RoomView: View {
             }
         }
         .onAppear {
+            // 🔧 v34.25: guard against re-entrant onAppear during fullscreen toggle.
+            // SwiftUI fires onAppear when the view tree re-evaluates after rotation.
+            // Without this guard, lockToPortrait() fires AFTER enterFullscreen()'s
+            // lockToLandscape() → orientation flips back → video resets.
+            guard !isFullscreenMode else { return }
             resetToPortrait()
+            OrientationManager.shared.lockToPortrait()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            // КЛЮЧЕВОЙ ФИКС: при возврате из background принудительно сбрасываем
-            // ориентацию и fullscreen-режим, иначе чат растягивается.
-            // 🔧 v34.2: DON'T reset if user is in fullscreen mode — would exit fullscreen
-            if newPhase == .active && !isFullscreenMode {
-                resetToPortrait()
+            print("📱📱 scenePhase changed to: \(newPhase), isFullscreenMode: \(isFullscreenMode)")
+            if newPhase == .active {
+                // 🔧 v35: Lifecycle management moved to Coordinator (NotificationCenter).
+                // scenePhase still handles orientation reset only.
+                if !isFullscreenMode {
+                    resetToPortrait()
+                }
             }
         }
         .onDisappear {
-            // 🔧 v34.13: onDisappear fires on EVERY layout switch (fullscreen toggle).
-            // Previously it disconnected WS → reconnect → loadMedia → VideoContainerView
-            // re-render → WebContent rendering context destroyed → black screen.
-            // NOW: onDisappear does NOTHING except save position. All cleanup
-            // (WS disconnect, voiceChat endCall, cleanupFlow, unregister) happens
-            // ONLY in explicit close/exit button handlers.
-            OrientationManager.shared.unlockOrientation()
-            OrientationManager.shared.forcePortrait()
-
+            print("📱📱📱 onDisappear FIRED — isFullscreenMode: \(isFullscreenMode)")
+            // 🔧 v34.13+22: onDisappear fires on EVERY layout switch (fullscreen toggle).
+            // Do NOT reset orientation here — it cancels the fullscreen landscape lock!
+            // Orientation unlock + forcePortrait now live in the actual room-exit handlers
+            // (onClose non-fullscreen, video-ended exit button).
+            // Only save position here.
             guard let viewModel else { return }
 
             // Save position
@@ -449,6 +454,9 @@ struct RoomView: View {
                     if isFullscreen {
                         exitFullscreen()
                     } else {
+                        // 🔧 v34.22: actual room exit — unlock orientation BEFORE dismiss
+                        OrientationManager.shared.unlockOrientation()
+                        OrientationManager.shared.forcePortrait()
                         // 🔧 v34.13: ALL cleanup happens HERE (actual room exit)
                         syncManager?.disconnect()
                         Task {
@@ -514,6 +522,9 @@ struct RoomView: View {
 
                             Button {
                                 HapticManager.impact(.medium)
+                                // 🔧 v34.22: actual room exit — unlock orientation BEFORE dismiss
+                                OrientationManager.shared.unlockOrientation()
+                                OrientationManager.shared.forcePortrait()
                                 // 🔧 v34.13: ALL cleanup happens HERE (actual room exit)
                                 syncManager?.disconnect()
                                 Task {
@@ -613,14 +624,9 @@ struct RoomView: View {
         if showControls { resetControlsTimer() }
     }
 
-    // MARK: - Orientation Reset (фикс бага растягивания чата)
+    // MARK: - Fullscreen State Reset
 
-    /// Принудительный сброс в портрет — вызывается при onAppear, возврате из background,
-    /// и при смене scenePhase на .active. Гарантирует что чат всегда корректного размера.
-    ///
-    /// 🔧 FIX v2 (July 2026): now ALSO locks the orientation at the AppDelegate
-    /// level via OrientationManager.lockToPortrait(). This prevents system edge-swipe
-    /// gestures and accidental device rotations from interfering with the chat layout.
+    /// Сброс fullscreen-состояния — вызывается при onAppear и возврате из background.
     private func resetToPortrait() {
         // 🔧 v34.2: don't reset if user is in fullscreen mode
         guard !isFullscreenMode else { return }
@@ -630,41 +636,40 @@ struct RoomView: View {
         OrientationManager.shared.lockToPortrait()
     }
 
-    // MARK: - Fullscreen (YouTube-style)
+    // MARK: - Fullscreen (с вращением устройства)
+    //
+    // 🔧 v34.24: fullscreen = вращение устройства + layout.
+    // Ключевое: onDisappear больше НЕ сбрасывает ориентацию (v34.22),
+    // поэтому lockToLandscape больше не отменяется mid-toggle.
 
     private func enterFullscreen() {
-        print("📱 enterFullscreen: isFullscreenMode = true")
+        print("📱📱📱 enterFullscreen START — isFullscreenMode was: \(isFullscreenMode)")
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = true
             showControls = true
         }
+        print("📱📱📱 enterFullscreen — calling lockToLandscape, isFullscreenMode now: \(isFullscreenMode)")
         OrientationManager.shared.lockToLandscape()
         resetControlsTimer()
-        // 🔧 FULLSCREEN FIX: force video element to recalculate size after rotation.
-        // Multiple retries because rotation + layout settle over ~0.5-0.8s.
+        // 🔧 v35: Single triggerResize after rotation settles.
+        // Coordinator handles render freeze via NotificationCenter lifecycle.
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            WebViewControl.shared.triggerResize()
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            WebViewControl.shared.triggerResize()
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            try? await Task.sleep(nanoseconds: 400_000_000)
             WebViewControl.shared.triggerResize()
         }
     }
 
     private func exitFullscreen() {
-        print("📱 exitFullscreen: isFullscreenMode = false")
+        print("📱 exitFullscreen: isFullscreenMode = false + rotating to portrait")
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = false
             showControls = true
         }
         OrientationManager.shared.lockToPortrait()
         resetControlsTimer()
-        // 🔧 FULLSCREEN FIX: force video to recalculate size after rotating back to portrait
+        // 🔧 v35: Single triggerResize after rotation back to portrait.
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            WebViewControl.shared.triggerResize()
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: 400_000_000)
             WebViewControl.shared.triggerResize()
         }
     }

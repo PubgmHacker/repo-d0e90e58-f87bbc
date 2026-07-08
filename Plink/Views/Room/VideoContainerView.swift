@@ -1102,9 +1102,14 @@ struct WebVideoView: UIViewRepresentable {
         ///   - config.allowsPictureInPictureMediaPlayback = true (set above)
         ///   - UIBackgroundModes: [audio, picture-in-picture] in Info.plist
         ///   - AVAudioSession category = .playback (set in makeUIView)
+        ///
+        /// 🔧 v40.1: If PiP fails or isn't supported, PAUSE the video — don't
+        /// keep playing audio in the dark. User explicitly said: "don't want
+        /// audio without picture in picture". So either we have PiP (visible
+        /// mini-screen) OR we pause. No audio-only background playback.
         @objc private func appDidEnterBackground() {
             guard webView != nil else { return }
-            print("📱 v40: appDidEnterBackground — triggering PiP")
+            print("📱 v40.1: appDidEnterBackground — triggering PiP (or pause if unsupported)")
             webView?.evaluateJavaScript("""
             (function() {
                 var v = document.querySelector('video');
@@ -1113,31 +1118,46 @@ struct WebVideoView: UIViewRepresentable {
                 try { v.setAttribute('playsinline', 'true'); } catch(e) {}
                 // Try webkitSetPresentationMode (iOS WKWebView-specific API)
                 if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) {
-                    v.webkitSetPresentationMode('picture-in-picture');
-                    console.log('[Plink v40] Entered PiP mode');
-                    return 'pip-entered';
+                    var entered = v.webkitSetPresentationMode('picture-in-picture');
+                    // Verify PiP actually engaged (webkitSetPresentationMode returns the new mode)
+                    if (v.webkitPresentationMode === 'picture-in-picture') {
+                        console.log('[Plink v40.1] Entered PiP mode — video keeps playing');
+                        return 'pip-entered';
+                    }
                 }
-                // Fallback: just keep playing inline (audio continues in background
-                // because of UIBackgroundModes: audio)
-                console.log('[Plink v40] PiP not supported, keeping inline audio');
-                return 'pip-unsupported';
+                // 🔧 v40.1: PiP NOT supported or failed → PAUSE the video.
+                // Don't keep playing audio in background without visual.
+                console.log('[Plink v40.1] PiP not supported — pausing video');
+                if (typeof pauseVideo === 'function') pauseVideo();
+                else v.pause();
+                return 'paused-pip-unsupported';
             })();
             """) { result, _ in
-                print("📱 v40: PiP result: \(result ?? "?")")
+                print("📱 v40.1: background result: \(result ?? "?")")
             }
         }
 
         /// 🔧 v40: Exit Picture-in-Picture when app returns to foreground.
+        /// Also resume playback if we paused in v40.1 because PiP wasn't supported.
         @objc private func appWillEnterForeground() {
             guard webView != nil else { return }
-            print("📱 v40: appWillEnterForeground — exiting PiP")
+            print("📱 v40.1: appWillEnterForeground — exiting PiP / resuming if paused")
             webView?.evaluateJavaScript("""
             (function() {
                 var v = document.querySelector('video');
                 if (!v) return;
+                // Exit PiP if active
                 if (v.webkitPresentationMode === 'picture-in-picture') {
                     v.webkitSetPresentationMode('inline');
-                    console.log('[Plink v40] Exited PiP mode, back to inline');
+                    console.log('[Plink v40.1] Exited PiP mode, back to inline');
+                }
+                // 🔧 v40.1: if video was paused because PiP wasn't supported,
+                // resume playback now that we're back in foreground.
+                if (v.paused && !window._plinkUserPaused) {
+                    v.play().catch(function(e) {
+                        console.log('[Plink v40.1] resume play failed: ' + e);
+                    });
+                    console.log('[Plink v40.1] Resumed playback after foreground return');
                 }
             })();
             """, completionHandler: nil)

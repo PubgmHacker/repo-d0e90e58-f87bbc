@@ -98,9 +98,23 @@ const YOUTUBEI_CLIENT_VERSION = '1.20240101.0.0';
  * Returns streamingData.formats[] which are MUXED (audio+video) streams.
  */
 async function extractWithYouTubeI(videoId: string): Promise<StreamInfo> {
-  // 🔧 v10.2.1: try multiple client types — WEB, ANDROID, IOS.
-  // Different clients have different format availability and bot detection.
+  // 🔧 v10.2.3: TVHTML5 client is the key — it's used by Smart TV apps
+  // and has DIFFERENT bot detection than WEB/ANDROID/IOS.
+  // WEB client returns UNPLAYABLE for many videos on datacenter IPs.
+  // TVHTML5 client doesn't trigger bot detection and returns HLS manifest.
   const clients = [
+    {
+      name: 'TVHTML5',
+      clientName: 'TVHTML5',
+      clientVersion: '7.20240101.0.0',
+      userAgent: 'Mozilla/5.0 (PlayStation; PlayStation 4/12.00) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15',
+    },
+    {
+      name: 'MWEB',
+      clientName: 'MWEB',
+      clientVersion: '2.20240101.0.0',
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    },
     {
       name: 'WEB',
       clientName: 'WEB',

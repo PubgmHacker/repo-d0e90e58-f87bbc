@@ -444,17 +444,16 @@ struct RoomSetupView: View {
                     finalDuration = streamInfo.duration
                     print("✅ RoomSetupView v45: iOS extraction succeeded, extractor=\(streamInfo.extractor)")
                 } catch {
-                    print("⚠️ RoomSetupView v45: iOS extraction failed (\(error.localizedDescription)), falling back to embed URL + WebView mode")
-                    // Fallback: embed URL (v37.3 approach — m.youtube.com in WKWebView)
-                    var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
-                    embedComponents.queryItems = [
-                        URLQueryItem(name: "playsinline", value: "1"),
-                        URLQueryItem(name: "rel", value: "0"),
-                    ]
-                    finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
-                    finalSource = .youtube  // WebView mode
-                    finalDuration = nil
-                    print("🔧 RoomSetupView v45: fallback to embed URL (WebView mode)")
+                    // 🔧 v45.2: NO WebView fallback — AVPlayer only.
+                    // If extraction fails, show error to user instead of
+                    // falling back to WebView (which has reload issues,
+                    // no PiP, bot detection, etc).
+                    print("❌ RoomSetupView v45: iOS extraction failed (\(error.localizedDescription)) — NO fallback, showing error")
+                    await MainActor.run {
+                        errorMessage = "Не удалось извлечь видео. Попробуйте другое видео или повторите позже."
+                        isCreating = false
+                    }
+                    return
                 }
             } else {
                 finalStreamURL = contentURL

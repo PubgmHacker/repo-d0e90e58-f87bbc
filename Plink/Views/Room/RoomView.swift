@@ -381,10 +381,10 @@ struct RoomView: View {
         isFullscreen: Bool
     ) -> some View {
         ZStack {
-            // Видео контейнер
+            // 🔧 v37: JUST the WebView. NO transparent tap layer.
+            // NO ControlsOverlay. Let YouTube handle ALL gestures natively.
             if let mediaItem = viewModel.syncEngine.currentMediaItem,
                !mediaItem.streamURL.isEmpty {
-
                 VideoContainerView(
                     mediaURL: mediaItem.streamURL,
                     playbackMode: mediaItem.effectivePlaybackMode,
@@ -398,123 +398,69 @@ struct RoomView: View {
                 videoPlaceholder
             }
 
-            // 🔧 v32.9: TRANSPARENT TAP LAYER — catches taps that WKWebView
-            // would otherwise swallow. Sits BELOW ControlsOverlay so when
-            // controls are visible, overlay buttons get taps first.
-            // When controls hidden (allowsHitTesting=false on overlay),
-            // taps pass through to this layer.
-            // 🔧 v32.11: first tap also unmutes video (iOS requires user gesture
-            // for unmuted playback — WKWebView blocks unmuted autoplay).
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    // v32.11: unmute on every tap (no-op if already unmuted)
-                    WebViewControl.shared.unmute()
-                    toggleControls()
-                }
-                .allowsHitTesting(true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // 🔧 OUR controls overlay — sits ABOVE transparent tap layer.
-            // .allowsHitTesting(isVisible) means:
-            //   - controls visible → buttons catch taps
-            //   - controls hidden → taps pass through to transparent layer below
-            ControlsOverlay(
-                isPlaying: viewModel.syncEngine.isPlaying,
-                currentTime: viewModel.syncEngine.currentTime,
-                duration: viewModel.syncEngine.duration,
-                participantCount: viewModel.room.participantCount,
-                roomName: viewModel.room.name,
-                isFullscreen: isFullscreen,
-                onTogglePlay: {
-                    HapticManager.impact(.light)
-                    viewModel.syncEngine.togglePlayPause()
-                    resetControlsTimer()
-                },
-                onSeek: { pos in
-                    viewModel.syncEngine.seek(to: pos)
-                    resetControlsTimer()
-                },
-                onSeekRelative: { delta in
-                    viewModel.syncEngine.seekRelative(delta)
-                    resetControlsTimer()
-                },
-                onClose: {
-                    if isFullscreen {
-                        exitFullscreen()
-                    } else {
-                        // 🔧 v34.22: actual room exit — unlock orientation BEFORE dismiss
-                        OrientationManager.shared.unlockOrientation()
-                        OrientationManager.shared.forcePortrait()
-                        // 🔧 v34.13: ALL cleanup happens HERE (actual room exit)
-                        syncManager?.disconnect()
-                        Task {
-                            await voiceChat?.endCall()
-                            await viewModel.cleanupFlow()
-                            WebViewControl.shared.unregister()
+            // Minimal floating close button (top-left)
+            VStack {
+                HStack {
+                    Button {
+                        HapticManager.impact(.light)
+                        if isFullscreen {
+                            exitFullscreen()
+                        } else {
+                            OrientationManager.shared.unlockOrientation()
+                            OrientationManager.shared.forcePortrait()
+                            syncManager?.disconnect()
+                            Task {
+                                await voiceChat?.endCall()
+                                await viewModel.cleanupFlow()
+                                WebViewControl.shared.unregister()
+                            }
+                            dismiss()
                         }
-                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 30, height: 30)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
                     }
-                },
-                onShowParticipants: {
-                    showParticipants = true
-                },
-                onToggleFullscreen: {
-                    HapticManager.impact(.light)
-                    // 🔧 v34.2: check isFullscreenMode (state), not isFullscreen (param)
-                    if isFullscreenMode {
-                        exitFullscreen()
-                    } else {
-                        enterFullscreen()
-                    }
-                },
-                isVisible: $showControls
-            )
+                    Spacer()
+                    ParticipantBadge(count: viewModel.room.participantCount)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                Spacer()
+            }
+            .allowsHitTesting(true)
 
-            // 🔧 v32.13: COMPLETION SCREEN — shown when video ends (state=0).
-            // Overlay with replay + exit buttons.
+            // Completion screen
             if isVideoEnded {
                 ZStack {
-                    Color.black.opacity(0.85)
-                        .ignoresSafeArea()
-
+                    Color.black.opacity(0.85).ignoresSafeArea()
                     VStack(spacing: 20) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 56))
-                            .foregroundColor(.bioEmerald)
-
+                            .font(.system(size: 56)).foregroundColor(.bioEmerald)
                         Text("Видео завершено")
                             .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
-
                         HStack(spacing: 16) {
                             Button {
                                 HapticManager.impact(.medium)
-                                // Replay from start
                                 viewModel.syncEngine.seek(to: 0)
                                 WebViewControl.shared.play()
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    isVideoEnded = false
-                                }
+                                withAnimation(.easeInOut(duration: 0.3)) { isVideoEnded = false }
                             } label: {
                                 VStack(spacing: 6) {
-                                    Image(systemName: "arrow.counterclockwise")
-                                        .font(.system(size: 22))
-                                    Text("Сначала")
-                                        .font(.system(size: 13, weight: .medium))
+                                    Image(systemName: "arrow.counterclockwise").font(.system(size: 22))
+                                    Text("Сначала").font(.system(size: 13, weight: .medium))
                                 }
-                                .foregroundColor(.white)
-                                .frame(width: 100, height: 70)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .foregroundColor(.white).frame(width: 100, height: 70)
+                                .background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 14))
                             }
-
                             Button {
                                 HapticManager.impact(.medium)
-                                // 🔧 v34.22: actual room exit — unlock orientation BEFORE dismiss
                                 OrientationManager.shared.unlockOrientation()
                                 OrientationManager.shared.forcePortrait()
-                                // 🔧 v34.13: ALL cleanup happens HERE (actual room exit)
                                 syncManager?.disconnect()
                                 Task {
                                     await voiceChat?.endCall()
@@ -524,72 +470,20 @@ struct RoomView: View {
                                 dismiss()
                             } label: {
                                 VStack(spacing: 6) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 22))
-                                    Text("Выйти")
-                                        .font(.system(size: 13, weight: .medium))
+                                    Image(systemName: "xmark").font(.system(size: 22))
+                                    Text("Выйти").font(.system(size: 13, weight: .medium))
                                 }
-                                .foregroundColor(.white)
-                                .frame(width: 100, height: 70)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .foregroundColor(.white).frame(width: 100, height: 70)
+                                .background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 14))
                             }
                         }
                     }
                 }
-                .transition(.opacity)
-                .zIndex(100)
+                .transition(.opacity).zIndex(100)
             }
-
-            // 🔧 GLASS CONTROLS: Mic, share buttons — always visible in landscape,
-            // dimmed (0.35) when controls hidden, brightened (1.0) when controls visible.
-            if let voiceChat {
-                VStack {
-                    // ── Share: правый верхний угол ──
-                    HStack {
-                        Spacer()
-                        Button {
-                            HapticManager.impact(.light)
-                            shareSheetPresented = true
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(.white)
-                                .frame(width: 32, height: 32)
-                                .background(
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .overlay(Circle().stroke(Color.white.opacity(0.06), lineWidth: 0.3))
-                                )
-                        }
-                        .buttonStyle(GlassButtonStyle())
-                        .opacity(showControls ? 1.0 : 0.35)
-                        .padding(.trailing, 12)
-                        .padding(.top, 6)
-                    }
-
-                    Spacer()
-
-                    // ── Микрофон: левый нижний угол ──
-                    HStack(spacing: 10) {
-                        VoiceChatButton(voiceChat: voiceChat) {
-                            voiceChat.toggleMute()
-                        }
-                        .opacity(showControls ? 1.0 : 0.35)
-                        Spacer()
-                    }
-                    .padding(.leading, 12)
-                    .padding(.bottom, 6)
-                }
-                .animation(.easeInOut(duration: 0.25), value: showControls)
-            }
-
-            // Бегущая строка (marquee) — последнее сообщение
-            MarqueeContainer(messages: syncManager?.chatMessages ?? viewModel.messages)
         }
-        .frame(width: isFullscreen ? nil : videoWidth,
-               height: isFullscreen ? nil : videoHeight)
-        .clipShape(RoundedRectangle(cornerRadius: isFullscreen ? 0 : 16))
+        .frame(width: videoWidth, height: videoHeight)
+        .clipped()
     }
 
     private var videoPlaceholder: some View {

@@ -1,11 +1,11 @@
 import Foundation
-import XCDYouTubeKit
+import YouTubeKit
 
 // MARK: - YouTube Extractor (iOS-side)
 //
-// 🔧 v46: Uses XCDYouTubeKit for reliable YouTube stream extraction.
-// XCDYouTubeKit is a proven library (10+ years) that handles YouTube's
-// complex extraction logic including bot detection, DASH formats, etc.
+// 🔧 v47: Uses YouTubeKit (bclewaer) — modern Swift library with SPM support.
+// XCDYouTubeKit failed SPM integration (Obj-C, old, package graph error).
+// YouTubeKit is pure Swift, handles YouTube extraction for AVPlayer.
 
 @MainActor
 final class YouTubeExtractor {
@@ -23,43 +23,36 @@ final class YouTubeExtractor {
             return cached.info
         }
 
-        print("📺 YouTubeExtractor: extracting with XCDYouTubeKit for \(videoId)")
+        print("📺 YouTubeExtractor: extracting with YouTubeKit for \(videoId)")
 
-        let video: XCDYouTubeVideo = try await withCheckedThrowingContinuation { continuation in
-            XCDYouTubeClient.default().getVideoWithIdentifier(videoId) { video, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else if let video = video {
-                    continuation.resume(returning: video)
-                } else {
-                    continuation.resume(throwing: YouTubeExtractorError.noFormats)
-                }
-            }
-        }
+        // YouTubeKit extracts video info including stream URLs
+        let video = try await YouTubeKit.videoInfo(for: videoId)
 
-        let streamURLs = video.streamURLs ?? [:]
-        let url = streamURLs[XCDYouTubeVideoQuality.HD720.rawValue]
-                  ?? streamURLs[XCDYouTubeVideoQuality.medium360.rawValue]
-                  ?? streamURLs[XCDYouTubeVideoQuality.small240.rawValue]
-                  ?? streamURLs.values.first
+        // Get best muxed stream URL (video+audio combined)
+        // YouTubeKit provides streamURLs sorted by quality
+        let streamURLs = video.streamURLs
 
-        guard let streamURL = url else {
-            print("❌ YouTubeExtractor: no stream URLs. Keys: \(streamURLs.keys)")
+        guard let bestStream = streamURLs
+            .sorted(by: { $0.key > $1.key })
+            .first else {
+            print("❌ YouTubeExtractor: no stream URLs found")
             throw YouTubeExtractorError.noFormats
         }
 
-        let quality = streamURLs.first(where: { $0.value == streamURL })?.key ?? 0
+        let url = bestStream.value
+        let quality = bestStream.key
+
         print("✅ YouTubeExtractor: succeeded, quality=\(quality)p")
 
         let info = StreamInfo(
             id: videoId,
             title: video.title ?? "Unknown",
             author: video.author ?? "Unknown",
-            thumbnailURL: video.thumbnailURL?.absoluteString ?? "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
-            streamURL: streamURL.absoluteString,
-            duration: video.duration,
+            thumbnailURL: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
+            streamURL: url.absoluteString,
+            duration: video.lengthSeconds,
             isLive: false,
-            extractor: "xcdyoutubekit"
+            extractor: "youtubekit"
         )
 
         cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))

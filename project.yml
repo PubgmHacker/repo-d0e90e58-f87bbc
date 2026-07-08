@@ -64,3 +64,4 @@ packages:
   XCDYouTubeKit:
     url: https://github.com/0xced/XCDYouTubeKit.git
     from: 2.16.0
+    shallowClone: true

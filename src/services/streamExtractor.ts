@@ -98,74 +98,109 @@ const YOUTUBEI_CLIENT_VERSION = '1.20240101.0.0';
  * Returns streamingData.formats[] which are MUXED (audio+video) streams.
  */
 async function extractWithYouTubeI(videoId: string): Promise<StreamInfo> {
-  try {
-    const apiUrl = 'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-    console.log(`[streamExtractor] Trying YouTube Internal API for ${videoId}`);
+  // 🔧 v10.2.1: try multiple client types — WEB, ANDROID, IOS.
+  // Different clients have different format availability and bot detection.
+  const clients = [
+    {
+      name: 'WEB',
+      clientName: 'WEB',
+      clientVersion: '2.20240101.0.0',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+    {
+      name: 'ANDROID',
+      clientName: 'ANDROID',
+      clientVersion: '19.09.37',
+      userAgent: 'com.google.android.youtube/19.09.37 (Linux; U; Android 14; SM-S918B) gzip',
+    },
+    {
+      name: 'IOS',
+      clientName: 'IOS',
+      clientVersion: '19.09.3',
+      userAgent: 'com.google.ios.youtube/19.09.3 (iPhone15,3; U; CPU iOS 15_6 like Mac OS X)',
+    },
+  ];
 
-    const body = {
-      context: {
-        client: {
-          clientName: 'ANDROID',
-          clientVersion: YOUTUBEI_CLIENT_VERSION,
-          hl: 'en',
-          gl: 'US',
+  let lastError: string | null = null;
+
+  for (const client of clients) {
+    try {
+      // 🔧 v10.2.1: use /youtubei/v1/player WITHOUT key for WEB client.
+      // The key is only needed for certain clients. Try without key first.
+      const apiUrl = 'https://www.youtube.com/youtubei/v1/player';
+      console.log(`[streamExtractor] Trying YouTube Internal API (${client.name}) for ${videoId}`);
+
+      const body = {
+        context: {
+          client: {
+            clientName: client.clientName,
+            clientVersion: client.clientVersion,
+            hl: 'en',
+            gl: 'US',
+          },
         },
-      },
-      videoId: videoId,
-    };
+        videoId: videoId,
+      };
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14; SM-S918B) gzip',
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': client.userAgent,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      });
 
-    if (!response.ok) {
-      throw new Error(`YouTube Internal API returned ${response.status}`);
+      if (!response.ok) {
+        lastError = `YouTube Internal API (${client.name}) returned ${response.status}`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      const data: any = await response.json();
+      const streamingData = data.streamingData || {};
+      const formats = streamingData.formats || [];  // Muxed streams!
+      const videoDetails = data.videoDetails || {};
+
+      console.log(`[streamExtractor] YouTube Internal API (${client.name}) OK: title="${videoDetails.title}", ${formats.length} muxed formats`);
+
+      if (formats.length === 0) {
+        lastError = `YouTube Internal API (${client.name}): no muxed formats`;
+        console.error(`[streamExtractor] ${lastError}`);
+        continue;
+      }
+
+      // Sort by quality (itag 18 = 360p, 22 = 720p, etc.) — prefer higher quality
+      const sorted = formats.sort((a: any, b: any) => {
+        const qualityOrder: Record<number, number> = { 22: 720, 18: 360, 43: 360, 36: 240, 17: 144 };
+        const qa = qualityOrder[a.itag] || parseInt(a.qualityLabel) || 0;
+        const qb = qualityOrder[b.itag] || parseInt(b.qualityLabel) || 0;
+        return qb - qa;
+      });
+
+      const bestFormat = sorted[0];
+      console.log(`[streamExtractor] Selected: itag ${bestFormat.itag} (${bestFormat.qualityLabel || 'unknown'}, ${bestFormat.mimeType})`);
+
+      return {
+        id: videoId,
+        title: videoDetails.title || 'Unknown',
+        author: videoDetails.author || 'Unknown',
+        thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
+                      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        streamURL: bestFormat.url,
+        duration: parseInt(videoDetails.lengthSeconds) || 0,
+        isLive: videoDetails.isLive || false,
+        extractor: 'youtubei',
+      };
+    } catch (err: any) {
+      lastError = `YouTube Internal API (${client.name}) error: ${err.message}`;
+      console.error(`[streamExtractor] ${lastError}`);
     }
-
-    const data: any = await response.json();
-    const streamingData = data.streamingData || {};
-    const formats = streamingData.formats || [];  // Muxed streams!
-    const videoDetails = data.videoDetails || {};
-
-    console.log(`[streamExtractor] YouTube Internal API OK: title="${videoDetails.title}", ${formats.length} muxed formats`);
-
-    if (formats.length === 0) {
-      throw new Error('YouTube Internal API: no muxed formats (only adaptive/DASH)');
-    }
-
-    // Sort by quality (itag 18 = 360p, 22 = 720p, etc.) — prefer higher quality
-    const sorted = formats.sort((a: any, b: any) => {
-      // itag 22 (720p) is best muxed, 18 (360p) is fallback
-      const qualityOrder: Record<number, number> = { 22: 720, 18: 360, 43: 360, 36: 240, 17: 144 };
-      const qa = qualityOrder[a.itag] || parseInt(a.qualityLabel) || 0;
-      const qb = qualityOrder[b.itag] || parseInt(b.qualityLabel) || 0;
-      return qb - qa;
-    });
-
-    const bestFormat = sorted[0];
-    console.log(`[streamExtractor] Selected: itag ${bestFormat.itag} (${bestFormat.qualityLabel || 'unknown'}, ${bestFormat.mimeType})`);
-
-    return {
-      id: videoId,
-      title: videoDetails.title || 'Unknown',
-      author: videoDetails.author || 'Unknown',
-      thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
-                    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      streamURL: bestFormat.url,
-      duration: parseInt(videoDetails.lengthSeconds) || 0,
-      isLive: videoDetails.isLive || false,
-      extractor: 'youtubei',
-    };
-  } catch (err: any) {
-    console.error(`[streamExtractor] YouTube Internal API error: ${err.message}`);
-    throw err;
   }
+
+  throw new Error(`All YouTube Internal API clients failed. Last error: ${lastError}`);
 }
 
 /**

@@ -70,12 +70,6 @@ struct RoomView: View {
     var body: some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height || isFullscreenMode
-            // 🔧 v42: read webviewReloadTrigger so SwiftUI tracks it as a
-            // dependency. When it changes (via .onReceive notification),
-            // SwiftUI re-evaluates this body → unifiedLayout → videoSection →
-            // VideoSectionContent → VideoContainerView → makeUIView.
-            // makeUIView sees needsFullReload=true → recreates WKWebView.
-            _ = webviewReloadTrigger
 
             ZStack {
                 AmbilightBackground()
@@ -423,10 +417,16 @@ struct RoomView: View {
     ) -> some View {
         ZStack {
             // 🔧 v38: delegate media rendering to a subview that observes SyncEngine.
+            // 🔧 v42: .id(webviewReloadTrigger) forces SwiftUI to create a NEW view
+            // identity when the trigger changes (after shade open / background return).
+            // New identity → makeUIView is called (not just updateUIView) →
+            // makeUIView sees needsFullReload=true → destroys dead WKWebView →
+            // creates fresh one → restores saved position.
             VideoSectionContent(
                 syncEngine: viewModel.syncEngine,
                 videoPlaceholder: { AnyView(videoPlaceholder) }
             )
+            .id(webviewReloadTrigger)
 
             // Minimal floating close button (top-left) + fullscreen button (top-right)
             VStack {

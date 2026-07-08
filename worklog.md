@@ -3354,3 +3354,24 @@ recommended to confirm the fixes landed and the project compiles
 end-to-end.
 
 **— end of FINAL-AUDIT-V4 —**
+
+---
+Task ID: v38
+Agent: main (Super Z)
+Task: Fix video not loading after room creation — makeUIView never called despite currentMediaItem being set on SyncEngine.
+
+Work Log:
+- Read user's latest logs: WS connects → loadMedia called → "currentMediaItem == nil: false" confirmed → but NO `🔧🔧🔧 makeUIView CALLED` log appears. VideoContainerView is never instantiated.
+- Diagnosed root cause: `RoomViewModel` uses Swift's new `@Observable` macro, but `SyncEngine` is the legacy `ObservableObject` protocol. When RoomView reads `viewModel.syncEngine.currentMediaItem`, the @Observable macro tracks access to `viewModel.syncEngine` (the reference) but does NOT subscribe to SyncEngine's `objectWillChange` publisher. Result: changes to SyncEngine's @Published properties (currentMediaItem, isPlaying, currentTime, duration) never trigger a RoomView re-render.
+- Confirmed hypothesis by reading RoomView.swift lines 382-391: videoSection directly reads `viewModel.syncEngine.currentMediaItem` in a `if let` branch. Since SyncEngine isn't observed, the if-let always sees the value from the last actual re-render (which was nil before WS connect).
+- Applied fix: extracted the media-rendering branch into a new private subview `VideoSectionContent` that declares `@ObservedObject var syncEngine: SyncEngine`. This forces SwiftUI to subscribe to SyncEngine's `objectWillChange`, so any @Published change now triggers a re-render of the subview.
+- Parent `videoSection` keeps the close button + completion screen (they don't depend on SyncEngine state) and just delegates media rendering to the new subview.
+- Added an `.onAppear` print on the VideoContainerView branch inside VideoSectionContent so future regressions are immediately visible: "🎬 v38: VideoSectionContent — rendering VideoContainerView for streamURL=..."
+- Verified file structure: 139/139 braces balanced, 335/335 parens balanced.
+
+Stage Summary:
+- Root cause: @Observable + nested ObservableObject doesn't auto-subscribe to objectWillChange. This is a known SwiftUI gotcha when mixing the new @Observable macro with legacy ObservableObject.
+- Fix: extract subview with @ObservedObject. Single-file change to Plink/Views/Room/RoomView.swift (added VideoSectionContent struct, modified videoSection func).
+- Expected effect: after WS connects and loadMedia sets currentMediaItem, VideoSectionContent will re-render, instantiate VideoContainerView, which will call makeUIView, which will load www.youtube.com/watch?v=ID. The existing v37.3 loading logic + CSS injection + JS bridge will take over from there.
+- This fix UNBLOCKS the video loading path. It does NOT solve the previously-reported `MediaSourcePrivateRemote destroyed` fullscreen issue or the YouTube `DownloadFailed` rate-limit issue — those are separate concerns that need to be revisited after this fix is verified working.
+- Files changed: Plink/Views/Room/RoomView.swift (lines 370-507 videoSection, lines 738-781 new VideoSectionContent struct).

@@ -54,9 +54,10 @@ final class MediaService {
     ///   "https://www.youtube.com/embed/VIDEO_ID"
     /// - Returns: ExtractedMedia with a playable streamURL (.mp4 direct URL)
     ///
-    /// 🔧 v44.1: backend endpoint is POST /api/media/extract (NOT /extract-url).
-    /// Previous v8 comment said /extract-url but the actual backend route in
-    /// media-v2.ts is /extract. This mismatch caused 500 errors.
+    /// 🔧 v44.2: backend endpoint is POST /api/media/extract-url (confirmed
+    /// in plink-backend/src/routes/media.ts line 230). Returns StreamInfo:
+    ///   {id, title, author, thumbnailURL, streamURL, duration, isLive, extractor}
+    /// v44.1 changed this to /extract which was WRONG — reverted.
     func extract(youTubeURL: String) async throws -> ExtractedMedia {
         // 0. Validate input (accept watch / youtu.be / embed / shorts URLs)
         guard isValidYouTubeURL(youTubeURL) else {
@@ -70,8 +71,8 @@ final class MediaService {
             return cached
         }
 
-        // 2. Build request — POST /api/media/extract with {url}
-        let endpoint = apiBaseURL.appendingPathComponent("media/extract")
+        // 2. Build request — POST /api/media/extract-url with {url}
+        let endpoint = apiBaseURL.appendingPathComponent("media/extract-url")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -103,10 +104,10 @@ final class MediaService {
             data = try await performRequest(request)
         }
 
-        // 4. Decode — backend /extract returns ExtractedMedia format:
-        //    {sourceID, sourceName, mode, streamURL, title, thumbnailURL,
-        //     duration, format, quality, requiresSubscription}
-        // 🔧 v44.1: updated to match backend's actual response (mediaExtractor.ts).
+        // 4. Decode — backend /extract-url returns StreamInfo format:
+        //    {id, title, author, thumbnailURL, streamURL, duration, isLive, extractor, formats?}
+        // 🔧 v44.2: reverted v44.1 change — this is the correct format that
+        // plink-backend/src/services/streamExtractor.ts actually returns.
         let response = try decoder.decode(ExtractResponse.self, from: data)
 
         // 5. Validate the stream URL is actually usable
@@ -116,15 +117,16 @@ final class MediaService {
         }
 
         let media = ExtractedMedia(
-            id: response.sourceID ?? UUID().uuidString,
+            id: response.id,
             title: response.title,
-            artist: response.sourceName,
+            // 🔧 v8: backend StreamInfo uses 'author' (not 'artist'), map it
+            artist: response.author,
             thumbnailURL: response.thumbnailURL.flatMap(URL.init(string:)),
             streamURL: streamURL,
             duration: response.duration,
             format: response.format ?? "mp4",
             quality: response.quality ?? "unknown",
-            isLive: false
+            isLive: response.isLive ?? false
         )
 
         // Cache it
@@ -244,21 +246,24 @@ struct ValidateRequest: Codable {
 }
 
 struct ExtractResponse: Codable {
-    /// 🔧 v44.1: backend /extract returns ExtractedMedia (mediaExtractor.ts):
-    /// { sourceID, sourceName, mode, streamURL, title, thumbnailURL,
-    ///   duration, format, quality, requiresSubscription }
-    /// All fields optional except streamURL + title — backend may omit others
-    /// depending on the source.
-    let sourceID: String?
-    let sourceName: String?
-    let mode: String?  // "native" | "webview"
-    let streamURL: String
+    /// 🔧 v44.2: matches plink-backend StreamInfo (streamExtractor.ts):
+    /// {id, title, author, thumbnailURL, streamURL, duration, isLive, extractor}
+    let id: String
     let title: String
+    let author: String?
     let thumbnailURL: String?
+    let streamURL: String
     let duration: Double?
     let format: String?
     let quality: String?
-    let requiresSubscription: Bool?
+    let isLive: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, author
+        case thumbnailURL
+        case streamURL, duration, format, quality
+        case isLive
+    }
 }
 
 struct ExtractedMedia {

@@ -123,17 +123,7 @@ struct RoomView: View {
             // only in explicit room-exit handlers.
         }
         .onChange(of: scenePhase) { _, newPhase in
-            // 🔧 v35.5: NO resetToPortrait on scenePhase change.
-            // This was firing during lockToLandscape() → cancelling it.
-        }
-        // 🔧 v42: Force re-render when WebContent process was killed during
-        // background. Coordinator.appWillEnterForeground posts this after
-        // calling prepareForFullReload(). The trigger state change causes
-        // SwiftUI to re-evaluate videoSection → makeUIView → sees
-        // needsFullReload=true → destroys dead WKWebView → creates new one.
-        .onReceive(NotificationCenter.default.publisher(for: .plinkWebviewNeedsReload)) { _ in
-            webviewReloadTrigger += 1
-            print("📱 v42: RoomView received plinkWebviewNeedsReload — forcing re-render (trigger=\(webviewReloadTrigger))")
+            // 🔧 v46.1: NO-OP. Video keeps playing in background/shade.
         }
         .onDisappear {
             // 🔧 v35.3: ONLY save position. NO orientation reset here.
@@ -417,16 +407,13 @@ struct RoomView: View {
     ) -> some View {
         ZStack {
             // 🔧 v38: delegate media rendering to a subview that observes SyncEngine.
-            // 🔧 v42: .id(webviewReloadTrigger) forces SwiftUI to create a NEW view
-            // identity when the trigger changes (after shade open / background return).
-            // New identity → makeUIView is called (not just updateUIView) →
-            // makeUIView sees needsFullReload=true → destroys dead WKWebView →
-            // creates fresh one → restores saved position.
+            // 🔧 v46.1: NO .id() modifier — don't force view recreation.
+            // The WKWebView stays stable during rotation because the view tree
+            // doesn't change (unified layout, no if/else switch).
             VideoSectionContent(
                 syncEngine: viewModel.syncEngine,
                 videoPlaceholder: { AnyView(videoPlaceholder) }
             )
-            .id(webviewReloadTrigger)
 
             // Minimal floating close button (top-left) + fullscreen button (top-right)
             VStack {
@@ -577,15 +564,10 @@ struct RoomView: View {
 
     private func enterFullscreen() {
         print("📱📱📱 enterFullscreen START — isFullscreenMode was: \(isFullscreenMode)")
-        // 🔧 v41: Prepare WKWebView for full reload BEFORE the layout change.
-        // This saves the current playback position and sets needsFullReload = true.
-        // When SwiftUI re-evaluates videoSection (due to isFullscreenMode change),
-        // makeUIView will see needsFullReload=true, destroy the old WKWebView,
-        // create a new one, and restore the saved position.
-        // This avoids "MediaSourcePrivateRemote object has been destroyed"
-        // (black screen after rotation) — the rendering context is permanently
-        // dead after re-parenting, so we MUST recreate the WKWebView.
-        WebViewControl.shared.prepareForFullReload()
+        // 🔧 v46.1: NO prepareForFullReload — don't reload WKWebView on rotation.
+        // The WKWebView stays stable because the view tree doesn't change
+        // (unified layout with no if/else). The AVPlayerLayer/WKWebView
+        // just resizes when the frame changes.
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = true
             showControls = true
@@ -597,8 +579,7 @@ struct RoomView: View {
 
     private func exitFullscreen() {
         print("📱 exitFullscreen: isFullscreenMode = false + rotating to portrait")
-        // 🔧 v41: Same as enterFullscreen — prepare for full reload.
-        WebViewControl.shared.prepareForFullReload()
+        // 🔧 v46.1: NO prepareForFullReload — don't reload WKWebView on rotation.
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isFullscreenMode = false
             showControls = true

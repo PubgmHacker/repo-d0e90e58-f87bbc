@@ -1251,43 +1251,13 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerError: ((Int) -> Void)?
 
         @objc private func appWillResignActive() {
-            // 🔧 v43: Save current position to Swift singleton. This covers BOTH
-            // shade-open AND background scenarios — whichever fires first wins,
-            // subsequent calls don't overwrite (guard below).
-            // v42 bug: appDidBecomeActive was ALSO calling prepareForFullReload
-            // → saved 0.0s → overwrote the good 15.8s saved by appDidEnterBackground.
-            // v43 fix: only save if we don't already have a saved position.
-            print("📱 v43: appWillResignActive — saving position (guard: don't overwrite existing)")
-            webView?.evaluateJavaScript("""
-            (function() {
-                if (typeof getCurrentTime === 'function') return getCurrentTime();
-                var v = document.querySelector('video');
-                return v ? v.currentTime : 0;
-            })();
-            """) { result, _ in
-                let t = result as? Double ?? 0
-                if t > 0 && WebViewControl.shared.savedPositionForReload == 0 {
-                    // 🔧 v43: only save if we don't already have a saved position.
-                    // This prevents appDidBecomeActive (which fires AFTER
-                    // appWillEnterForeground) from overwriting the good position
-                    // with 0.0s.
-                    WebViewControl.shared.savedPositionForReload = t
-                    print("📱 v43: saved position \(t)s to Swift")
-                }
-            }
+            // 🔧 v46.1: NO-OP. Don't save position or reload on shade open.
+            print("📱 v46.1: appWillResignActive — no-op")
         }
 
         @objc private func appDidBecomeActive() {
-            // 🔧 v43: REMOVED the full reload that v42 did here.
-            // v42 bug: appDidBecomeActive fired AFTER appWillEnterForeground,
-            // and called prepareForFullReload which saved position=0.0s (because
-            // the new WKWebView was still loading) → overwrote the good 15.8s
-            // saved by appDidEnterBackground → video restarted from 0.
-            //
-            // v43: appWillEnterForeground already handles the reload. Here we
-            // do nothing — if the shade was only opened briefly (not full bg),
-            // the video keeps playing fine (no reload needed).
-            print("📱 v43: appDidBecomeActive — no-op (v43: removed reload to prevent position overwrite)")
+            // 🔧 v46.1: NO-OP. Don't reload on shade close.
+            print("📱 v46.1: appDidBecomeActive — no-op")
         }
 
         /// 🔧 v42: Background handling.
@@ -1314,63 +1284,27 @@ struct WebVideoView: UIViewRepresentable {
         /// full WKWebView reload (the WebContent process is dead, so JS won't
         /// work anyway). The reload restores the saved position.
         @objc private func appDidEnterBackground() {
-            guard let webView = webView else { return }
-            print("📱 v43: appDidEnterBackground — saving position to Swift + pausing")
-            webView.evaluateJavaScript("""
+            // 🔧 v46.1: Just pause the video, no position saving or reload.
+            guard webView != nil else { return }
+            print("📱 v46.1: appDidEnterBackground — pausing video")
+            webView?.evaluateJavaScript("""
             (function() {
-                var t = 0;
-                if (typeof getCurrentTime === 'function') t = getCurrentTime();
-                else { var v = document.querySelector('video'); if (v) t = v.currentTime; }
-                // Save to JS global (best effort — process may die soon)
-                window._plinkSavedBackgroundTime = t;
-                // Pause — user doesn't want audio without PiP
                 if (typeof pauseVideo === 'function') pauseVideo();
                 else { var v = document.querySelector('video'); if (v) v.pause(); }
-                return t;
             })();
-            """) { [weak self] result, _ in
-                // 🔧 v43: Save position to SWIFT singleton (survives WebContent death)
-                // Guard: don't overwrite if already saved by appWillResignActive.
-                let t = result as? Double ?? 0
-                if t > 0 && WebViewControl.shared.savedPositionForReload == 0 {
-                    WebViewControl.shared.savedPositionForReload = t
-                    print("📱 v43: background — saved position \(t)s to Swift")
-                } else if t > 0 {
-                    print("📱 v43: background — position \(t)s NOT saved (already have \(WebViewControl.shared.savedPositionForReload)s)")
-                }
-                _ = self
-            }
+            """, completionHandler: nil)
         }
 
-        /// 🔧 v42: Trigger full WKWebView reload on foreground return.
-        ///
-        /// REALITY (from logs): When app backgrounds, iOS KILLS the WebContent
-        /// process (logs show "ProcessAssertion acquireSync Failed... process
-        /// does not exist"). When app returns to foreground, the WKWebView is
-        /// still there but its rendering context is DEAD — JS evaluateJavaScript
-        /// either silently fails or runs on a zombie process. The v41 approach
-        /// (restore position via JS + resume) doesn't work because the JS never
-        /// executes properly.
-        ///
-        /// v42 solution: position was already saved to Swift by appDidEnterBackground.
-        /// Here we just set needsFullReload=true and post a notification. RoomView
-        /// observes the notification and forces a re-render → makeUIView sees
-        /// needsFullReload=true → destroys dead WKWebView → creates fresh one →
-        /// restores saved position.
+        /// 🔧 v46.1: Resume playback on foreground return (no reload).
         @objc private func appWillEnterForeground() {
             guard webView != nil else { return }
-            print("📱 v42: appWillEnterForeground — triggering full WKWebView reload (WebContent process was killed)")
-            // 🔧 v42: Don't call prepareForFullReload (it tries JS which won't work
-            // on a dead process). Position is already saved in savedPositionForReload
-            // by appDidEnterBackground. Just set the flag and notify RoomView.
-            WebViewControl.shared.needsFullReload = true
-            // 🔧 v42: Force SwiftUI to re-evaluate the view tree. Without this,
-            // makeUIView might not be called again (no state change = no re-render).
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: .plinkWebviewNeedsReload, object: nil
-                )
-            }
+            print("📱 v46.1: appWillEnterForeground — resuming playback")
+            webView?.evaluateJavaScript("""
+            (function() {
+                if (typeof playVideo === 'function') playVideo();
+                else { var v = document.querySelector('video'); if (v) v.play().catch(function(){}); }
+            })();
+            """, completionHandler: nil)
         }
 
         // MARK: - JS Bridge Handler

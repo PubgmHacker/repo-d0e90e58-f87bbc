@@ -529,10 +529,24 @@ final class PlayerUIView: UIView {
     private var videoOutput: AVPlayerItemVideoOutput?
     private var displayLink: CADisplayLink?
     private var ownsPlayer: Bool = false  // true if we created the player (vs. borrowed from SyncEngine)
+    /// 🔧 v44: AVPictureInPictureController for native PiP support.
+    /// Created when the AVPlayer is ready. Automatically shows a floating
+    /// PiP window when the app backgrounds (if video is playing).
+    private var pipController: AVPictureInPictureController?
 
     init(url: URL, isPlaying: Bool, currentTime: TimeInterval, sharedPlayer: AVPlayer? = nil) {
         super.init(frame: .zero)
         backgroundColor = .black
+
+        // 🔧 v44: Configure AVAudioSession for background playback + PiP.
+        // Previously this was only set in WebVideoView.makeUIView (YouTube
+        // WebView mode). Now directStream (AVPlayer) mode also needs it.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ v44: AVAudioSession config failed: \(error)")
+        }
 
         if let shared = sharedPlayer {
             // 🔧 FIX H3: Use SyncEngine's AVPlayer — no second player created.
@@ -542,6 +556,8 @@ final class PlayerUIView: UIView {
             if let item = shared.currentItem {
                 attachVideoOutput(to: item)
             }
+            // 🔧 v44: Setup PiP for shared player
+            setupPictureInPicture(for: shared)
         } else {
             // Fallback: create a local player (used in previews / tests / no-SyncEngine context)
             let item = AVPlayerItem(url: url)
@@ -553,6 +569,8 @@ final class PlayerUIView: UIView {
             ownsPlayer = true
 
             if isPlaying { p.play() }
+            // 🔧 v44: Setup PiP for local player
+            setupPictureInPicture(for: p)
         }
 
         playerLayer.player = player
@@ -565,6 +583,32 @@ final class PlayerUIView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 🔧 v44: Setup AVPictureInPictureController for native PiP.
+    /// Requires:
+    ///   - AVAudioSession category = .playback (set in WebVideoView.makeUIView)
+    ///   - UIBackgroundModes: [audio, picture-in-picture] in Info.plist (added in v40)
+    ///   - AVPlayerLayer must be attached to a view in the hierarchy
+    /// When the app backgrounds, iOS automatically shows a PiP window if
+    /// the video is playing. No JS hacks needed — this is the native iOS API.
+    private func setupPictureInPicture(for player: AVPlayer) {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else {
+            print("📱 v44: PiP not supported on this device")
+            return
+        }
+        // AVPictureInPictureController requires the AVPlayerLayer to be
+        // visible in the view hierarchy. We create it here but it won't
+        // start PiP until the user backgrounds the app (or calls start()).
+        pipController = AVPictureInPictureController(playerLayer: playerLayer)
+        if let pip = pipController {
+            // 🔧 v44: allow PiP to start automatically when app backgrounds
+            if #available(iOS 14.2, *) {
+                pip.canStartPictureInPictureAutomaticallyFromInline = true
+            }
+            pip.requiresLinearPlayback = false
+            print("📱 v44: AVPictureInPictureController created — PiP ready")
+        }
     }
 
     /// 🔧 FIX H8: Tear down display link + player when the view is removed

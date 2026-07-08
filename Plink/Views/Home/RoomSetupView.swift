@@ -416,80 +416,59 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v11 (July 2026): YouTube via backend hosted IFrame player.
+            // 🔧 v44 (Jan 2027): For YouTube, extract a DIRECT mp4 stream URL via
+            // backend yt-dlp BEFORE creating the room. This bypasses WKWebView
+            // entirely — AVPlayer plays the mp4 directly. Benefits:
+            //   - Instant playback (AVPlayer starts immediately, no WKWebView load)
+            //   - No "MediaSourcePrivateRemote destroyed" (AVPlayer survives rotation/bg)
+            //   - Native Picture-in-Picture via AVPictureInPictureController
+            //   - No bot check, no error 153, no IFrame API issues
             //
-            // ALL previous approaches failed:
-            //   v1-v7: WebView embed → 153 (YouTube detects WKWebView)
-            //   v8: backend yt-dlp extraction → googlevideo IP-bound → -11828
-            //   v9: backend streaming proxy → yt-dlp blocked on Railway IP
-            //   v10.x: clean WKWebView + various UAs → still 153
-            //
-            // v11 SOLUTION: backend hosts an HTML page with YouTube IFrame API.
-            // iOS loads: https://plink-backend.../api/media/youtube-player?id=VIDEO_ID
-            //
-            // The page has a REAL origin (backend domain), so:
-            //   - IFrame API postMessage works (no 152-4, unlike loadHTMLString)
-            //   - YouTube's WKWebView detection doesn't run in our page context
-            //     (the IFrame API script runs in OUR page, not YouTube's embed)
-            //   - No 153 (YouTube's player JS initializes inside an iframe
-            //     loaded from youtube.com, but the PARENT page is our backend)
-            //   - No bot check (we're not loading youtube.com directly in WKWebView)
+            // If extraction fails (yt-dlp can't process this video, network error,
+            // backend down), fall back to embed URL + WebView mode (v37.3 approach).
             let finalStreamURL: String
             let finalSource: MediaItem.MediaSource
+            let finalDuration: TimeInterval?
 
             if service == .youtube {
-                // 🔧 v29 (July 2026): YouTube IFrame embed — proper configuration.
-                //
-                // Based on analysis of how Rave/Discord Activities work:
-                // 1. Use youtube-nocookie.com (weaker bot detection)
-                // 2. Pass origin + widget_referrer params (YouTube requires these)
-                // 3. Requests go from CLIENT (iPhone), not server — no backend proxy
-                // 4. Persistent cookies (don't clear — YouTube needs CONSENT cookie)
-                // 5. Standard mobile Safari UA (cbr=Safari+Mobile, not cbr=Webview)
-                // 6. Clean WKWebView (no scripts/handlers/CSS that trigger detection)
-                //
-                // 🔧 v29 BUG FIX: previous code did `contentURL.components(separatedBy: "/").last`
-                // which for "https://www.youtube.com/watch?v=VIDEO_ID" returns "watch?v=VIDEO_ID"
-                // (the WHOLE query string), NOT the video ID. Result: the embed URL became
-                // "youtube-nocookie.com/embed/watch?v=VIDEO_ID?playsinline=1&..." which has
-                // TWO `?` signs (broken URL) and YouTube returns error 153 because
-                // "watch?v=VIDEO_ID" is not a valid video ID.
-                //
-                // FIX: properly parse the video ID from any YouTube URL format:
-                //   - youtube.com/watch?v=VIDEO_ID → query param v
-                //   - youtu.be/VIDEO_ID → last path component
-                //   - youtube.com/embed/VIDEO_ID → last path component
-                //   - youtube-nocookie.com/embed/VIDEO_ID → last path component
-                let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? ""
-                guard !videoId.isEmpty else {
-                    print("❌ RoomSetupView: failed to extract YouTube video ID from '\(contentURL)'")
-                    await MainActor.run {
-                        errorMessage = "Не удалось извлечь ID видео из ссылки"
-                    }
-                    return
+                // 🔧 v44: try backend extraction first. If it succeeds, use the
+                // direct googlevideo.com URL → AVPlayer plays it natively.
+                // If it fails, fall back to embed URL → WebView mode.
+                let mediaService = MediaService()
+                if let token = KeychainHelper.read(for: "rave_auth_token") {
+                    mediaService.setAuthToken(token)
                 }
-                // 🔧 v31.1 (July 2026): cleaned ALL origin/widget_referrer params from streamURL.
-                // The streamURL is now a MINIMAL youtube.com/embed/ID?playsinline=1&rel=0 URL.
-                // Origin is set DYNAMICALLY in youtube_player.html via window.location.origin,
-                // which reads the baseURL passed to WKWebView.loadHTMLString.
-                //
-                // Previous v30.3 had origin=https://www.youtube.com hardcoded here, but
-                // Swift was loading HTML with baseURL=https://plink.app → mismatch →
-                // YouTube saw this as referrer spoofing → error 150.
-                //
-                // Now streamURL is just for IDENTIFICATION (extract videoId later),
-                // and the actual embed URL is constructed inside youtube_player.html.
-                var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
-                embedComponents.queryItems = [
-                    URLQueryItem(name: "playsinline", value: "1"),
-                    URLQueryItem(name: "rel", value: "0"),
-                ]
-                finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
-                finalSource = .youtube
-                print("🔧 RoomSetupView v31.1: YouTube streamURL='\(finalStreamURL)' (minimal, origin will be set dynamically in JS), videoId='\(videoId)'")
+                let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? ""
+                do {
+                    print("🔧 RoomSetupView v44: calling MediaService.extract for videoId='\(videoId)'")
+                    let extracted = try await mediaService.extract(youTubeURL: contentURL)
+                    finalStreamURL = extracted.streamURL.absoluteString
+                    finalSource = .url  // direct stream, not youtube embed
+                    finalDuration = extracted.duration
+                    print("✅ RoomSetupView v44: extraction succeeded — streamURL='\(finalStreamURL.prefix(80))', duration=\(finalDuration ?? 0)s, format=\(extracted.format)")
+                } catch {
+                    print("⚠️ RoomSetupView v44: extraction failed (\(error.localizedDescription)), falling back to embed URL + WebView mode")
+                    // Fallback: embed URL (v37.3 approach — m.youtube.com in WKWebView)
+                    guard !videoId.isEmpty else {
+                        await MainActor.run {
+                            errorMessage = "Не удалось извлечь ID видео из ссылки"
+                        }
+                        return
+                    }
+                    var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+                    embedComponents.queryItems = [
+                        URLQueryItem(name: "playsinline", value: "1"),
+                        URLQueryItem(name: "rel", value: "0"),
+                    ]
+                    finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
+                    finalSource = .youtube  // WebView mode
+                    finalDuration = nil
+                    print("🔧 RoomSetupView v44: fallback embed URL='\(finalStreamURL.prefix(80))'")
+                }
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource
+                finalDuration = nil
             }
 
             let finalTitle = contentTitle.isEmpty ? name : contentTitle
@@ -519,7 +498,7 @@ struct RoomSetupView: View {
                 artist: nil,
                 thumbnailURL: finalThumbnailURL,
                 streamURL: finalStreamURL,
-                duration: nil,
+                duration: finalDuration,
                 mediaType: .video,
                 source: finalSource
             )

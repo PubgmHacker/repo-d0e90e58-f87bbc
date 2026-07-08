@@ -159,20 +159,23 @@ struct RoomView: View {
         let chatHeight: CGFloat = isLandscape ? 0 : max(geo.size.height - videoHeight - 8, 0)
         let roomTheme = PremiumStatusManager.shared.selectedRoomTheme
 
-        // 🔧 v34.21: TRULY immutable VStack — same 2 children always.
-        // SwiftUI diff sees: child[0] = videoSection (unchanged), child[1] = chat (unchanged).
-        // Only frame heights change → no identity change → WKWebView stays put.
-        VStack(spacing: 0) {
-            // Video — ALWAYS first child, ALWAYS same position
+        // 🔧 v36.1: ZStack instead of VStack — video + chat are ALWAYS
+        // siblings, position controlled by frame + offset.
+        // VStack changes child sizes when isLandscape toggles → SwiftUI
+        // re-layouts children → VideoContainerView frame changes →
+        // SwiftUI calls makeUIView again → WKWebView destroyed.
+        // ZStack: video frame changes but ZStack identity stays same.
+        ZStack(alignment: .top) {
+            // Video — ALWAYS first child
             videoSection(
                 viewModel: viewModel,
                 videoWidth: videoWidth,
                 videoHeight: videoHeight,
                 isFullscreen: isLandscape
             )
+            .frame(width: videoWidth, height: videoHeight)
 
-            // Chat — ALWAYS second child. Height 0 in landscape (hidden),
-            // full height in portrait. View tree NEVER changes — no `if` block.
+            // Chat — ALWAYS second child, offset below video in portrait
             RoomChatView(
                 messages: syncManager?.chatMessages ?? viewModel.messages,
                 chatText: chatTextBinding,
@@ -180,15 +183,16 @@ struct RoomView: View {
                 currentUserID: viewModel.currentUserId,
                 mode: .portrait
             )
-            .frame(height: chatHeight)
+            .frame(width: videoWidth, height: chatHeight)
             .background(
                 Group {
                     if roomTheme.hasPlayerBorder { roomTheme.chatBackground } else { Color.clear }
                 }
             )
-            .padding(.horizontal, 8)
-            .padding(.bottom, 8)
-            .clipped()  // clips chat content when height is 0 in landscape
+            .padding(.horizontal, isLandscape ? 0 : 8)
+            .padding(.bottom, isLandscape ? 0 : 8)
+            .opacity(isLandscape ? 0 : 1)
+            .offset(y: isLandscape ? 0 : videoHeight)
         }
         // Landscape chat overlay — ALWAYS present, hidden via opacity in portrait
         .overlay {

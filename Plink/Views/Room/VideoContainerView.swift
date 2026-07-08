@@ -896,32 +896,27 @@ struct WebVideoView: UIViewRepresentable {
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
-            // 🔧 v41: Check if we just did a full reload (needsFullReload was true).
+            // 🔧 v43: Check if we just did a full reload (needsFullReload was true).
             // If so, bypass loadVideoOnce's "already loaded" guard by clearing
             // loadedVideoId first, then call loadVideoOnce which will reload.
-            // Also schedule position restoration after the page loads.
+            // Position is restored by the JS bridge (attachToVideo) which reads
+            // window._plinkRestorePosition global — see evaluateJavaScript below.
             if WebViewControl.shared.savedPositionForReload > 0 {
-                print("📺 YouTube v41: full reload — bypassing loadVideoOnce guard, will restore position \(WebViewControl.shared.savedPositionForReload)s")
-                WebViewControl.shared.loadedVideoId = nil  // bypass guard
-                context.coordinator.loadVideoOnce(id: videoId, webView: webView)
-                // Schedule position restoration for after the page loads.
-                // The page takes ~2-4s to load + video element to appear.
                 let pos = WebViewControl.shared.savedPositionForReload
+                print("📺 YouTube v43: full reload — will restore position \(pos)s via JS global")
+                WebViewControl.shared.loadedVideoId = nil  // bypass guard
+                // 🔧 v43: Set window._plinkRestorePosition BEFORE the page loads.
+                // evaluateJavaScript runs on the current page (about:blank or
+                // previous page) — the global persists into the new page load
+                // because WKWebView keeps the same JS context for main frame.
+                // Actually, it DOESN'T persist across navigation. So we inject
+                // it via a WKUserScript at documentStart instead. But since we
+                // can't modify the config after creation, we use a different
+                // approach: store it in the Coordinator and inject via
+                // didCommit navigation callback.
+                context.coordinator.pendingRestorePosition = pos
                 WebViewControl.shared.savedPositionForReload = 0  // consume
-                for delay in [3.0, 5.0, 7.0] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak webView] in
-                        webView?.evaluateJavaScript("""
-                        (function() {
-                            var v = document.querySelector('video');
-                            if (v && v.duration > 0 && v.currentTime < 0.5) {
-                                v.currentTime = \(pos);
-                                v.play().catch(function(){});
-                                console.log('[Plink v41] Restored position to \(pos)s');
-                            }
-                        })();
-                        """, completionHandler: nil)
-                    }
-                }
+                context.coordinator.loadVideoOnce(id: videoId, webView: webView)
             } else {
                 print("📺 YouTube v29: makeUIView → Coordinator.loadVideoOnce, videoId='\(videoId)', url='\(urlString.prefix(80))'")
                 context.coordinator.loadVideoOnce(id: videoId, webView: webView)
@@ -1125,6 +1120,11 @@ struct WebVideoView: UIViewRepresentable {
         weak var webView: WKWebView?
         /// 🔧 v35.2: saved orientation lock before fullscreen
         private var _savedOrientationLock: UIInterfaceOrientationMask = .all
+        /// 🔧 v43: position to restore after a full reload. Set by makeUIView
+        /// when needsFullReload=true. Injected as window._plinkRestorePosition
+        /// in didCommit (page start) so the JS bridge (attachToVideo) can read
+        /// it when the <video> element appears.
+        var pendingRestorePosition: TimeInterval = 0
 
         // MARK: - Lifecycle (v35) + Window Observer (v35.2)
 
@@ -1207,14 +1207,13 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerError: ((Int) -> Void)?
 
         @objc private func appWillResignActive() {
-            // 🔧 v40: NO-OP. Video keeps playing when notification shade / control
-            // center is pulled down. UIBackgroundModes: [audio] in Info.plist
-            // keeps the audio session alive, and the WebContent process keeps
-            // rendering frames because we don't pause the <video> element.
-            print("📱 v42: appWillResignActive — saving position (in case shade kills render)")
-            // 🔧 v42: Save position proactively — if the shade kills the render
-            // (which it does — logs show render freeze), we'll need to reload.
-            // Save to Swift singleton so it survives WebContent process death.
+            // 🔧 v43: Save current position to Swift singleton. This covers BOTH
+            // shade-open AND background scenarios — whichever fires first wins,
+            // subsequent calls don't overwrite (guard below).
+            // v42 bug: appDidBecomeActive was ALSO calling prepareForFullReload
+            // → saved 0.0s → overwrote the good 15.8s saved by appDidEnterBackground.
+            // v43 fix: only save if we don't already have a saved position.
+            print("📱 v43: appWillResignActive — saving position (guard: don't overwrite existing)")
             webView?.evaluateJavaScript("""
             (function() {
                 if (typeof getCurrentTime === 'function') return getCurrentTime();
@@ -1223,33 +1222,28 @@ struct WebVideoView: UIViewRepresentable {
             })();
             """) { result, _ in
                 let t = result as? Double ?? 0
-                if t > 0 {
+                if t > 0 && WebViewControl.shared.savedPositionForReload == 0 {
+                    // 🔧 v43: only save if we don't already have a saved position.
+                    // This prevents appDidBecomeActive (which fires AFTER
+                    // appWillEnterForeground) from overwriting the good position
+                    // with 0.0s.
                     WebViewControl.shared.savedPositionForReload = t
+                    print("📱 v43: saved position \(t)s to Swift")
                 }
             }
         }
 
         @objc private func appDidBecomeActive() {
-            // 🔧 v42: After returning from shade/control center, the rendering
-            // may be frozen (logs show "render freeze detected" after shade).
-            // iOS sometimes suspends the WebContent rendering context when the
-            // app is inactive (shade open). When we return, JS still works but
-            // the visual rendering is dead → black screen.
+            // 🔧 v43: REMOVED the full reload that v42 did here.
+            // v42 bug: appDidBecomeActive fired AFTER appWillEnterForeground,
+            // and called prepareForFullReload which saved position=0.0s (because
+            // the new WKWebView was still loading) → overwrote the good 15.8s
+            // saved by appDidEnterBackground → video restarted from 0.
             //
-            // Solution: trigger a full WKWebView reload, same as background case.
-            // prepareForFullReload will save position via JS (WebContent process
-            // is still alive after shade, unlike real background) and set
-            // needsFullReload=true. RoomView forces a re-render → makeUIView →
-            // recreates WKWebView → restores position.
-            guard webView != nil else { return }
-            print("📱 v42: appDidBecomeActive — triggering full reload (shade may have killed render)")
-            // Use prepareForFullReload (JS works here — process is alive after shade)
-            WebViewControl.shared.prepareForFullReload()
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: .plinkWebviewNeedsReload, object: nil
-                )
-            }
+            // v43: appWillEnterForeground already handles the reload. Here we
+            // do nothing — if the shade was only opened briefly (not full bg),
+            // the video keeps playing fine (no reload needed).
+            print("📱 v43: appDidBecomeActive — no-op (v43: removed reload to prevent position overwrite)")
         }
 
         /// 🔧 v42: Background handling.
@@ -1277,7 +1271,7 @@ struct WebVideoView: UIViewRepresentable {
         /// work anyway). The reload restores the saved position.
         @objc private func appDidEnterBackground() {
             guard let webView = webView else { return }
-            print("📱 v42: appDidEnterBackground — saving position to Swift + pausing")
+            print("📱 v43: appDidEnterBackground — saving position to Swift + pausing")
             webView.evaluateJavaScript("""
             (function() {
                 var t = 0;
@@ -1291,10 +1285,15 @@ struct WebVideoView: UIViewRepresentable {
                 return t;
             })();
             """) { [weak self] result, _ in
-                // 🔧 v42: Save position to SWIFT singleton (survives WebContent death)
+                // 🔧 v43: Save position to SWIFT singleton (survives WebContent death)
+                // Guard: don't overwrite if already saved by appWillResignActive.
                 let t = result as? Double ?? 0
-                WebViewControl.shared.savedPositionForReload = t
-                print("📱 v42: background — saved position \(t)s to Swift (survives WebContent death)")
+                if t > 0 && WebViewControl.shared.savedPositionForReload == 0 {
+                    WebViewControl.shared.savedPositionForReload = t
+                    print("📱 v43: background — saved position \(t)s to Swift")
+                } else if t > 0 {
+                    print("📱 v43: background — position \(t)s NOT saved (already have \(WebViewControl.shared.savedPositionForReload)s)")
+                }
                 _ = self
             }
         }
@@ -1529,6 +1528,38 @@ struct WebVideoView: UIViewRepresentable {
 
                     console.log("[Plink v32.1] Found <video> element, attaching listeners");
                     sendBridge({ "event": "ready", "duration": video.duration || 0 });
+
+                    // 🔧 v43: Restore position if _plinkRestorePosition was set
+                    // by Swift (didCommit injection). This runs IMMEDIATELY when
+                    // the <video> element is found, before YouTube's autoplay
+                    // kicks in. The 'loadedmetadata' event fires when duration
+                    // is known — we seek there.
+                    if (window._plinkRestorePosition && window._plinkRestorePosition > 0) {
+                        var restorePos = window._plinkRestorePosition;
+                        window._plinkRestorePosition = 0;  // consume
+                        console.log("[Plink v43] Will restore position to " + restorePos + "s");
+                        var doRestore = function() {
+                            if (video.duration > 0 || video.readyState >= 1) {
+                                try {
+                                    video.currentTime = restorePos;
+                                    console.log("[Plink v43] Restored position to " + restorePos + "s");
+                                } catch(e) {
+                                    console.log("[Plink v43] Restore failed: " + e);
+                                }
+                            } else {
+                                // metadata not loaded yet — retry in 200ms
+                                setTimeout(doRestore, 200);
+                            }
+                        };
+                        // Try immediately, then via loadedmetadata event as backup
+                        doRestore();
+                        video.addEventListener('loadedmetadata', function() {
+                            if (video.currentTime < 0.5 && restorePos > 1) {
+                                video.currentTime = restorePos;
+                                console.log("[Plink v43] Restored via loadedmetadata to " + restorePos + "s");
+                            }
+                        }, { once: true });
+                    }
 
                     // v32.11: send duration when metadata loads
                     video.addEventListener('loadedmetadata', function() {
@@ -1781,6 +1812,22 @@ struct WebVideoView: UIViewRepresentable {
             """
             webView.evaluateJavaScript(cssInjection) { _, _ in }
             print("📺 YouTube v34.30: early CSS injection at didCommit (embed mode)")
+
+            // 🔧 v43: Inject window._plinkRestorePosition so the JS bridge
+            // (attachToVideo) can restore playback position as soon as the
+            // <video> element appears. This replaces the v41 3s/5s/7s polling
+            // approach which was unreliable (video had already started playing
+            // by the time the JS ran → currentTime > 0.5 → restore skipped).
+            if pendingRestorePosition > 0 {
+                let pos = pendingRestorePosition
+                let restoreJS = """
+                window._plinkRestorePosition = \(pos);
+                console.log('[Plink v43] Set _plinkRestorePosition = ' + \(pos) + 's');
+                """
+                webView.evaluateJavaScript(restoreJS) { _, _ in
+                    print("📺 YouTube v43: injected _plinkRestorePosition = \(pos)s at didCommit")
+                }
+            }
         }
 
         // MARK: - Native commands → JS

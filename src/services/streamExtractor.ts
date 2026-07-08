@@ -60,39 +60,66 @@ export async function extractStream(url: string): Promise<StreamInfo> {
     throw new Error('Invalid URL protocol');
   }
 
-  // 🔧 v9.7: --skip-download prevents "Requested format is not available" error.
-  // Even with --dump-single-json, yt-dlp tries to SELECT a format for download.
-  // When YouTube only has DASH formats (separate audio/video), -f "best" fails
-  // because there's no single combined "best" format. --skip-download tells
-  // yt-dlp "don't select any format, just dump info" — info.formats still
-  // contains ALL formats, and our code picks the best combined one.
+  // 🔧 v9.8: COMPLETELY DIFFERENT APPROACH.
+  // v9.7 with --skip-download STILL got "Requested format is not available"
+  // because yt-dlp's YouTube extractor internally selects a format even when
+  // just dumping info. The only way to avoid this is to use --list-formats-as-json
+  // which outputs ONLY the formats array without triggering format selection.
   //
-  // Also removed -f "best" (was still triggering format selection).
-  // Removed --no-check-certificate (was causing SSL issues on some Railway IPs).
-  let stdout: string;
+  // But --list-formats-as-json doesn't include title/thumbnail/duration. So we
+  // make TWO yt-dlp calls:
+  //   1. --dump-json --skip-download (get metadata — title, thumbnail, duration)
+  //      This may fail on format selection, but we catch it and continue.
+  //   2. --list-formats-as-json (get formats array — never fails on selection)
+  // Then combine the two.
+  //
+  // If call #1 fails, we still have call #2 (formats) and use generic metadata.
+
+  let info: any = { formats: [] };
+  let metadataError: string | null = null;
+
+  // Call 1: get metadata (best effort — may fail on format selection)
   try {
-    const result = await execAsync(
-      `yt-dlp --dump-single-json --no-warnings --no-call-home ` +
+    const metaResult = await execAsync(
+      `yt-dlp --dump-json --no-warnings --no-call-home ` +
       `--no-playlist --skip-download ` +
       `--user-agent "${YT_DLP_UA}" ` +
       `${shellEscape(url)}`,
-      { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
+      { timeout: 20_000, maxBuffer: 10 * 1024 * 1024 }
     );
-    stdout = result.stdout;
+    info = JSON.parse(metaResult.stdout);
+    console.log(`[streamExtractor] Metadata extracted: title="${info.title}", ${info.formats?.length || 0} formats`);
   } catch (err: any) {
-    // 🔧 v9.7: include stderr in error message for better debugging.
-    // yt-dlp writes errors to stderr, which execAsync captures in err.stderr.
     const stderr = err.stderr?.toString() || '';
-    const stdoutPartial = err.stdout?.toString() || '';
-    console.error('[streamExtractor] yt-dlp FAILED', {
-      stderr: stderr.slice(0, 1000),
-      stdout: stdoutPartial.slice(0, 500),
-      code: err.code,
-    });
-    throw new Error(`yt-dlp failed (code ${err.code}): ${stderr.slice(0, 500) || err.message}`);
+    metadataError = stderr.slice(0, 500);
+    console.error('[streamExtractor] Metadata call failed (will try formats-only):', metadataError);
   }
 
-  const info = JSON.parse(stdout);
+  // Call 2: if no formats from call 1, get formats via --list-formats-as-json
+  // This NEVER triggers format selection — it just lists what's available.
+  if (!info.formats || info.formats.length === 0) {
+    try {
+      const formatsResult = await execAsync(
+        `yt-dlp --list-formats-as-json --no-warnings --no-call-home ` +
+        `--no-playlist ` +
+        `--user-agent "${YT_DLP_UA}" ` +
+        `${shellEscape(url)}`,
+        { timeout: 20_000, maxBuffer: 10 * 1024 * 1024 }
+      );
+      const formatsData = JSON.parse(formatsResult.stdout);
+      info.formats = Array.isArray(formatsData) ? formatsData : (formatsData.formats || []);
+      console.log(`[streamExtractor] Got ${info.formats.length} formats via --list-formats-as-json`);
+    } catch (err: any) {
+      const stderr = err.stderr?.toString() || '';
+      console.error('[streamExtractor] Formats call also failed:', stderr.slice(0, 500));
+      throw new Error(`yt-dlp failed completely. Metadata error: ${metadataError}. Formats error: ${stderr.slice(0, 300)}`);
+    }
+  }
+
+  // If we still have no formats, we can't proceed
+  if (!info.formats || info.formats.length === 0) {
+    throw new Error(`No formats available. Metadata error: ${metadataError}`);
+  }
 
   // 🔧 v9.6: broader format search
   let bestFormat: any = null;

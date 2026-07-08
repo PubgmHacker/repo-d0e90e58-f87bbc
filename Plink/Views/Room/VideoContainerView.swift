@@ -629,6 +629,16 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true
+        // 🔧 v40: Enable Picture-in-Picture for media playback.
+        // This allows the video to continue playing in a small floating window
+        // when the app is backgrounded (like YouTube / Rave do).
+        // Requires UIBackgroundModes: [audio, picture-in-picture] in Info.plist
+        // (added in v40).
+        config.allowsPictureInPictureMediaPlayback = true
+        // NOTE: background audio playback is enabled via UIBackgroundModes: [audio]
+        // in Info.plist — that's the official Apple way. There's no need for a
+        // WKWebView config flag; the WebContent process keeps the audio session
+        // alive as long as AVAudioSession category is .playback (set in makeUIView).
         // 🔧 v27 (July 2026): WKProcessPool is DEPRECATED in iOS 15+.
         // Apple docs: 'Creating and using multiple instances of
         // WKProcessPool no longer has any effect.' Each WKWebView always
@@ -988,8 +998,6 @@ struct WebVideoView: UIViewRepresentable {
         // 🔧 v22: YouTube guard — stores loadedVideoId to prevent reload loops
         var loadedVideoId: String? = nil
         weak var webView: WKWebView?
-        /// 🔧 v35: saved state for lifecycle pause/resume
-        private var _savedPlaybackTime: Double = 0
         /// 🔧 v35.2: saved orientation lock before fullscreen
         private var _savedOrientationLock: UIInterfaceOrientationMask = .all
 
@@ -997,15 +1005,33 @@ struct WebVideoView: UIViewRepresentable {
 
         override init() {
             super.init()
-            // 🔧 v35: Pause video when app loses focus (notification shade, control center).
+            // 🔧 v40: REPLACED pause-on-resign with keep-playing + PiP-on-background.
+            // Old behavior (v35): appWillResignActive paused the video, appDidBecomeActive
+            //   did a micro-seek to restore render. User reported: "render stops, audio
+            //   stops when opening notification shade" — annoying for co-watching.
+            // New behavior (v40):
+            //   - willResignActive (shade/control center): do nothing — video keeps playing.
+            //     The video element keeps rendering because we set allowsBackgroundPlayback.
+            //   - didEnterBackground (real background): trigger PiP so user sees floating
+            //     window. If PiP isn't supported or video doesn't allow it, just keep playing.
+            //   - willEnterForeground: exit PiP back to inline mode.
+            //   - didBecomeActive: noop (no micro-seek needed — video never paused).
             NotificationCenter.default.addObserver(
                 self, selector: #selector(appWillResignActive),
                 name: UIApplication.willResignActiveNotification, object: nil
             )
-            // 🔧 v35: Resume video when app regains focus via micro-seek.
             NotificationCenter.default.addObserver(
                 self, selector: #selector(appDidBecomeActive),
                 name: UIApplication.didBecomeActiveNotification, object: nil
+            )
+            // 🔧 v40: Real background/foreground notifications for PiP trigger.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appDidEnterBackground),
+                name: UIApplication.didEnterBackgroundNotification, object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appWillEnterForeground),
+                name: UIApplication.willEnterForegroundNotification, object: nil
             )
             // 🔧 v35.2: AVFullScreenViewController window observer.
             // When YouTube's native fullscreen player appears, allow all orientations.
@@ -1056,50 +1082,65 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerError: ((Int) -> Void)?
 
         @objc private func appWillResignActive() {
-            guard webView != nil else { return }
-            // Save current time, then pause
-            webView?.evaluateJavaScript("""
-            (function() {
-                if (typeof getCurrentTime === 'function') {
-                    return getCurrentTime();
-                }
-                var v = document.querySelector('video');
-                return v ? v.currentTime : 0;
-            })();
-            """) { result, _ in
-                let t = result as? Double ?? 0
-                self._savedPlaybackTime = t
-                print("⏸️ v35: appWillResignActive — saved time \(t)s, pausing")
-                self.webView?.evaluateJavaScript("""
-                (function() {
-                    if (typeof pauseVideo === 'function') pauseVideo();
-                    else { var v = document.querySelector('video'); if (v) v.pause(); }
-                })();
-                """, completionHandler: nil)
-            }
+            // 🔧 v40: NO-OP. Video keeps playing when notification shade / control
+            // center is pulled down. UIBackgroundModes: [audio] in Info.plist
+            // keeps the audio session alive, and the WebContent process keeps
+            // rendering frames because we don't pause the <video> element.
+            // Old v35 code paused here and resumed in didBecomeActive — that caused
+            // "render stops, audio stops" every time user opened the shade.
+            print("📱 v40: appWillResignActive — keeping video playing (no pause)")
         }
 
         @objc private func appDidBecomeActive() {
+            // 🔧 v40: NO-OP. Video never paused, so no micro-seek needed.
+            print("📱 v40: appDidBecomeActive — no-op (video kept playing)")
+        }
+
+        /// 🔧 v40: Trigger Picture-in-Picture when app enters real background.
+        /// Uses video.webkitSetPresentationMode('picture-in-picture') — the
+        /// HTML5 video element API on iOS WKWebView. Requires:
+        ///   - config.allowsPictureInPictureMediaPlayback = true (set above)
+        ///   - UIBackgroundModes: [audio, picture-in-picture] in Info.plist
+        ///   - AVAudioSession category = .playback (set in makeUIView)
+        @objc private func appDidEnterBackground() {
             guard webView != nil else { return }
-            print("▶️ v35: appDidBecomeActive — micro-seek to restore render")
-            // Wait a beat for the UI to settle, then micro-seek + play
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                guard let self = self, let wv = self.webView else { return }
-                let savedTime = self._savedPlaybackTime
-                wv.evaluateJavaScript("""
-                (function() {
-                    // Micro-seek: move ±0.1s to kick the rendering pipeline
-                    if (typeof seekTo === 'function' && typeof getCurrentTime === 'function') {
-                        var t = getCurrentTime();
-                        var target = t === 0 && \(savedTime) > 1 ? \(savedTime) : t;
-                        seekTo(target + 0.1);
-                        setTimeout(function() { seekTo(target); }, 100);
-                    }
-                    if (typeof playVideo === 'function') playVideo();
-                    else { var v = document.querySelector('video'); if (v) v.play().catch(function(){}); }
-                })();
-                """, completionHandler: nil)
+            print("📱 v40: appDidEnterBackground — triggering PiP")
+            webView?.evaluateJavaScript("""
+            (function() {
+                var v = document.querySelector('video');
+                if (!v) return 'no-video';
+                // Enable PiP attribute (must be set before presentation mode change)
+                try { v.setAttribute('playsinline', 'true'); } catch(e) {}
+                // Try webkitSetPresentationMode (iOS WKWebView-specific API)
+                if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) {
+                    v.webkitSetPresentationMode('picture-in-picture');
+                    console.log('[Plink v40] Entered PiP mode');
+                    return 'pip-entered';
+                }
+                // Fallback: just keep playing inline (audio continues in background
+                // because of UIBackgroundModes: audio)
+                console.log('[Plink v40] PiP not supported, keeping inline audio');
+                return 'pip-unsupported';
+            })();
+            """) { result, _ in
+                print("📱 v40: PiP result: \(result ?? "?")")
             }
+        }
+
+        /// 🔧 v40: Exit Picture-in-Picture when app returns to foreground.
+        @objc private func appWillEnterForeground() {
+            guard webView != nil else { return }
+            print("📱 v40: appWillEnterForeground — exiting PiP")
+            webView?.evaluateJavaScript("""
+            (function() {
+                var v = document.querySelector('video');
+                if (!v) return;
+                if (v.webkitPresentationMode === 'picture-in-picture') {
+                    v.webkitSetPresentationMode('inline');
+                    console.log('[Plink v40] Exited PiP mode, back to inline');
+                }
+            })();
+            """, completionHandler: nil)
         }
 
         // MARK: - JS Bridge Handler

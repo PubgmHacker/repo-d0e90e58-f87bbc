@@ -48,6 +48,9 @@ targets:
         UILaunchScreen:
           UIColorName: raveBackground
         UIRequiresFullScreen: false
+        UIBackgroundModes:
+          - audio
+          - picture-in-picture
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

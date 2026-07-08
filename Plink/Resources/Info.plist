@@ -51,6 +51,11 @@
         </dict>
         <key>UIRequiresFullScreen</key>
         <false/>
+        <key>UIBackgroundModes</key>
+        <array>
+                <string>audio</string>
+                <string>picture-in-picture</string>
+        </array>
         <key>UISupportedInterfaceOrientations</key>
         <array>
                 <string>UIInterfaceOrientationPortrait</string>

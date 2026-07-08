@@ -163,11 +163,31 @@ async function extractWithYouTubeI(videoId: string): Promise<StreamInfo> {
       const streamingData = data.streamingData || {};
       const formats = streamingData.formats || [];  // Muxed streams!
       const videoDetails = data.videoDetails || {};
+      const playabilityStatus = data.playabilityStatus || {};
 
-      console.log(`[streamExtractor] YouTube Internal API (${client.name}) OK: title="${videoDetails.title}", ${formats.length} muxed formats`);
+      console.log(`[streamExtractor] YouTube Internal API (${client.name}) OK: title="${videoDetails.title}", ${formats.length} muxed formats, hls=${!!streamingData.hlsManifestUrl}, dash=${!!streamingData.dashManifestUrl}`);
+
+      // 🔧 v10.2.2: if no muxed formats, try HLS manifest URL.
+      // AVPlayer can play HLS (.m3u8) natively — it's adaptive streaming
+      // that handles audio+video together. YouTube provides hlsManifestUrl
+      // for most videos.
+      if (formats.length === 0 && streamingData.hlsManifestUrl) {
+        console.log(`[streamExtractor] No muxed formats, using HLS manifest: ${streamingData.hlsManifestUrl.slice(0, 100)}...`);
+        return {
+          id: videoId,
+          title: videoDetails.title || 'Unknown',
+          author: videoDetails.author || 'Unknown',
+          thumbnailURL: videoDetails.thumbnail?.thumbnails?.pop()?.url ||
+                        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          streamURL: streamingData.hlsManifestUrl,
+          duration: parseInt(videoDetails.lengthSeconds) || 0,
+          isLive: videoDetails.isLive || false,
+          extractor: 'youtubei-hls',
+        };
+      }
 
       if (formats.length === 0) {
-        lastError = `YouTube Internal API (${client.name}): no muxed formats`;
+        lastError = `YouTube Internal API (${client.name}): no muxed formats and no HLS manifest (playability: ${playabilityStatus.status})`;
         console.error(`[streamExtractor] ${lastError}`);
         continue;
       }

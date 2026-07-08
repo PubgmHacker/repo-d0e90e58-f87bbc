@@ -98,7 +98,7 @@ fastify.get('/health', async () => {
     status: db ? 'ok' : 'degraded',
     timestamp: Date.now(),
     uptime: process.uptime(),
-    version: '1.6.0',
+    version: '1.6.1-v10.2',
     environment: config.NODE_ENV,
     services: {
       database: db ? 'up' : 'down',

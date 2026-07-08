@@ -6,6 +6,11 @@ import WebKit
 // 🔧 v32.12: Notification when YouTube player is ready (hides loading overlay).
 extension Notification.Name {
     static let youtubePlayerReady = Notification.Name("PlinkYouTubePlayerReady")
+    /// 🔧 v42: Posted by Coordinator.appWillEnterForeground to force RoomView
+    /// to re-evaluate its view tree. This triggers makeUIView again, which
+    /// sees needsFullReload=true and recreates the WKWebView (the old one's
+    /// WebContent process was killed during background).
+    static let plinkWebviewNeedsReload = Notification.Name("PlinkWebviewNeedsReload")
 }
 
 // MARK: - WebViewControl (singleton for JS bridge to WKWebView)
@@ -98,7 +103,13 @@ final class WebViewControl {
     var savedPositionForReload: TimeInterval = 0
 
     /// 🔧 v41: Save current position, then mark for full reload on next makeUIView.
-    /// Called by RoomView.enterFullscreen / exitFullscreen.
+    /// Called by RoomView.enterFullscreen / exitFullscreen, AND by v42
+    /// appWillEnterForeground (after WebContent process was killed during bg).
+    ///
+    /// 🔧 v42: Try to read position from JS first (works for fullscreen case
+    /// where WebContent is still alive). If JS fails (WebContent killed during
+    /// background), fall back to _plinkSavedBackgroundTime which was saved by
+    /// appDidEnterBackground JS BEFORE the process was killed.
     func prepareForFullReload() {
         guard let webView = webView else {
             needsFullReload = true
@@ -111,9 +122,24 @@ final class WebViewControl {
             return v ? v.currentTime : 0;
         })();
         """) { [weak self] result, _ in
-            let t = result as? Double ?? 0
+            let t = result as? Double ?? -1
             DispatchQueue.main.async {
-                self?.savedPositionForReload = t
+                if t >= 0 {
+                    // JS worked — WebContent process is alive (fullscreen case)
+                    self?.savedPositionForReload = t
+                } else {
+                    // JS failed — WebContent process was killed (background case).
+                    // Use the position saved by appDidEnterBackground JS before death.
+                    // Read it via a SEPARATE evaluateJavaScript that checks the global.
+                    self?.webView?.evaluateJavaScript("window._plinkSavedBackgroundTime || 0") { saved, _ in
+                        DispatchQueue.main.async {
+                            self?.savedPositionForReload = (saved as? Double) ?? 0
+                            self?.needsFullReload = true
+                            print("🔄 v42: prepareForFullReload — WebContent dead, using saved bg position \(self?.savedPositionForReload ?? 0)s")
+                        }
+                    }
+                    return
+                }
                 self?.needsFullReload = true
                 print("🔄 v41: prepareForFullReload — saved position \(t)s, will recreate WKWebView on next makeUIView")
             }
@@ -1185,17 +1211,48 @@ struct WebVideoView: UIViewRepresentable {
             // center is pulled down. UIBackgroundModes: [audio] in Info.plist
             // keeps the audio session alive, and the WebContent process keeps
             // rendering frames because we don't pause the <video> element.
-            // Old v35 code paused here and resumed in didBecomeActive — that caused
-            // "render stops, audio stops" every time user opened the shade.
-            print("📱 v40: appWillResignActive — keeping video playing (no pause)")
+            print("📱 v42: appWillResignActive — saving position (in case shade kills render)")
+            // 🔧 v42: Save position proactively — if the shade kills the render
+            // (which it does — logs show render freeze), we'll need to reload.
+            // Save to Swift singleton so it survives WebContent process death.
+            webView?.evaluateJavaScript("""
+            (function() {
+                if (typeof getCurrentTime === 'function') return getCurrentTime();
+                var v = document.querySelector('video');
+                return v ? v.currentTime : 0;
+            })();
+            """) { result, _ in
+                let t = result as? Double ?? 0
+                if t > 0 {
+                    WebViewControl.shared.savedPositionForReload = t
+                }
+            }
         }
 
         @objc private func appDidBecomeActive() {
-            // 🔧 v40: NO-OP. Video never paused, so no micro-seek needed.
-            print("📱 v40: appDidBecomeActive — no-op (video kept playing)")
+            // 🔧 v42: After returning from shade/control center, the rendering
+            // may be frozen (logs show "render freeze detected" after shade).
+            // iOS sometimes suspends the WebContent rendering context when the
+            // app is inactive (shade open). When we return, JS still works but
+            // the visual rendering is dead → black screen.
+            //
+            // Solution: trigger a full WKWebView reload, same as background case.
+            // prepareForFullReload will save position via JS (WebContent process
+            // is still alive after shade, unlike real background) and set
+            // needsFullReload=true. RoomView forces a re-render → makeUIView →
+            // recreates WKWebView → restores position.
+            guard webView != nil else { return }
+            print("📱 v42: appDidBecomeActive — triggering full reload (shade may have killed render)")
+            // Use prepareForFullReload (JS works here — process is alive after shade)
+            WebViewControl.shared.prepareForFullReload()
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .plinkWebviewNeedsReload, object: nil
+                )
+            }
         }
 
-        /// 🔧 v41: Background handling.
+        /// 🔧 v42: Background handling.
         ///
         /// REALITY CHECK on PiP with WKWebView + m.youtube.com:
         /// The previous v40 code tried `video.webkitSetPresentationMode('picture-in-picture')`
@@ -1214,51 +1271,63 @@ struct WebVideoView: UIViewRepresentable {
         ///   b) The website itself to call requestPictureInPicture() (YouTube
         ///      mobile doesn't do this).
         ///
-        /// v41 pragmatic solution: SAVE position on background, PAUSE video.
-        /// On foreground, RESTORE position and resume. This matches the user's
-        /// requirement: "don't want audio without PiP" — we pause, so no audio.
-        /// When user returns, video resumes from the same position.
+        /// v42 pragmatic solution: SAVE position to SWIFT (not JS, because JS
+        /// process will die) on background, PAUSE video. On foreground, trigger
+        /// full WKWebView reload (the WebContent process is dead, so JS won't
+        /// work anyway). The reload restores the saved position.
         @objc private func appDidEnterBackground() {
-            guard webView != nil else { return }
-            print("📱 v41: appDidEnterBackground — saving position + pausing (no PiP support for WKWebView)")
-            webView?.evaluateJavaScript("""
+            guard let webView = webView else { return }
+            print("📱 v42: appDidEnterBackground — saving position to Swift + pausing")
+            webView.evaluateJavaScript("""
             (function() {
-                var v = document.querySelector('video');
                 var t = 0;
                 if (typeof getCurrentTime === 'function') t = getCurrentTime();
-                else if (v) t = v.currentTime;
-                // Save position to a global for restoration on foreground
+                else { var v = document.querySelector('video'); if (v) t = v.currentTime; }
+                // Save to JS global (best effort — process may die soon)
                 window._plinkSavedBackgroundTime = t;
                 // Pause — user doesn't want audio without PiP
                 if (typeof pauseVideo === 'function') pauseVideo();
-                else if (v) v.pause();
-                return 'paused-at-' + t + 's';
+                else { var v = document.querySelector('video'); if (v) v.pause(); }
+                return t;
             })();
-            """) { result, _ in
-                print("📱 v41: background — \(result ?? "?")")
+            """) { [weak self] result, _ in
+                // 🔧 v42: Save position to SWIFT singleton (survives WebContent death)
+                let t = result as? Double ?? 0
+                WebViewControl.shared.savedPositionForReload = t
+                print("📱 v42: background — saved position \(t)s to Swift (survives WebContent death)")
+                _ = self
             }
         }
 
-        /// 🔧 v41: Restore position and resume playback on foreground return.
+        /// 🔧 v42: Trigger full WKWebView reload on foreground return.
+        ///
+        /// REALITY (from logs): When app backgrounds, iOS KILLS the WebContent
+        /// process (logs show "ProcessAssertion acquireSync Failed... process
+        /// does not exist"). When app returns to foreground, the WKWebView is
+        /// still there but its rendering context is DEAD — JS evaluateJavaScript
+        /// either silently fails or runs on a zombie process. The v41 approach
+        /// (restore position via JS + resume) doesn't work because the JS never
+        /// executes properly.
+        ///
+        /// v42 solution: position was already saved to Swift by appDidEnterBackground.
+        /// Here we just set needsFullReload=true and post a notification. RoomView
+        /// observes the notification and forces a re-render → makeUIView sees
+        /// needsFullReload=true → destroys dead WKWebView → creates fresh one →
+        /// restores saved position.
         @objc private func appWillEnterForeground() {
             guard webView != nil else { return }
-            print("📱 v41: appWillEnterForeground — restoring position + resuming")
-            webView?.evaluateJavaScript("""
-            (function() {
-                var v = document.querySelector('video');
-                var saved = window._plinkSavedBackgroundTime || 0;
-                if (saved > 0 && v) {
-                    v.currentTime = saved;
-                    console.log('[Plink v41] Restored position to ' + saved + 's');
-                }
-                // Resume playback (unless user had manually paused)
-                if (!window._plinkUserPaused) {
-                    if (typeof playVideo === 'function') playVideo();
-                    else if (v) v.play().catch(function(){});
-                    console.log('[Plink v41] Resumed playback after foreground return');
-                }
-            })();
-            """, completionHandler: nil)
+            print("📱 v42: appWillEnterForeground — triggering full WKWebView reload (WebContent process was killed)")
+            // 🔧 v42: Don't call prepareForFullReload (it tries JS which won't work
+            // on a dead process). Position is already saved in savedPositionForReload
+            // by appDidEnterBackground. Just set the flag and notify RoomView.
+            WebViewControl.shared.needsFullReload = true
+            // 🔧 v42: Force SwiftUI to re-evaluate the view tree. Without this,
+            // makeUIView might not be called again (no state change = no re-render).
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .plinkWebviewNeedsReload, object: nil
+                )
+            }
         }
 
         // MARK: - JS Bridge Handler
@@ -1597,27 +1666,18 @@ struct WebVideoView: UIViewRepresentable {
                             return;
                         }
 
-                        // 🔧 v34.35: RENDER FREEZE DETECTOR.
-                        // If video claims to be playing but decoded frame count
-                        // hasn't changed for 3s → rendering context is frozen
-                        // (notification shade, control center, etc).
-                        // Signal Swift to reload the page.
-                        var decoded = video.webkitDecodedFrameCount || 0;
-                        if (!window._plinkLastDecoded) window._plinkLastDecoded = decoded;
-                        if (!window._plinkFrozenSince) window._plinkFrozenSince = 0;
-
-                        if (!video.paused && decoded === window._plinkLastDecoded) {
-                            if (window._plinkFrozenSince === 0) {
-                                window._plinkFrozenSince = Date.now();
-                            } else if (Date.now() - window._plinkFrozenSince > 3000) {
-                                console.log('[Plink v34.35] RENDER FROZEN — decoded=' + decoded + ', requesting reload');
-                                sendBridge({ "event": "renderFrozen" });
-                                window._plinkFrozenSince = Date.now() + 60000; // prevent spam
-                            }
-                        } else {
-                            window._plinkFrozenSince = 0;
-                        }
-                        window._plinkLastDecoded = decoded;
+                        // 🔧 v42: REMOVED RENDER FREEZE DETECTOR.
+                        // v34.35 had a detector that checked webkitDecodedFrameCount
+                        // every 1s and fired 'renderFrozen' if no change for 3s.
+                        // PROBLEM: opening the notification shade CAUSES the frame
+                        // count to stop (iOS suspends rendering when app is inactive).
+                        // The detector then fired → Swift did a micro-seek → which
+                        // does NOT help (rendering is still suspended) but DOES cause
+                        // a visible glitch when user closes the shade.
+                        // v42: trust the OS — rendering resumes automatically when
+                        // app becomes active again. If WebContent process is killed
+                        // (real background), v42 does a full reload in
+                        // appWillEnterForeground (see below).
 
                         // v32.13: detect reset to 0
                         var nearEnd = video.duration && video.currentTime >= video.duration - 2;

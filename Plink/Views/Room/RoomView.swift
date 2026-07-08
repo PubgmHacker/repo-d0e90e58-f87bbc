@@ -56,11 +56,26 @@ struct RoomView: View {
     // WS connect without auth → 401 → reconnect loop.
     @EnvironmentObject private var sharedWsClient: WebSocketClient
 
+    /// 🔧 v42: Trigger counter — incremented when .plinkWebviewNeedsReload
+    /// notification fires (from Coordinator.appWillEnterForeground). Changing
+    /// this @State forces SwiftUI to re-evaluate the view tree, which calls
+    /// makeUIView again. makeUIView sees needsFullReload=true (set by
+    /// prepareForFullReload in appWillEnterForeground) and recreates the
+    /// WKWebView — because the old one's WebContent process was killed during
+    /// background and JS evaluateJavaScript no longer works on it.
+    @State private var webviewReloadTrigger = 0
+
     private let controlsHideDelay: UInt64 = 3_000_000_000
 
     var body: some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height || isFullscreenMode
+            // 🔧 v42: read webviewReloadTrigger so SwiftUI tracks it as a
+            // dependency. When it changes (via .onReceive notification),
+            // SwiftUI re-evaluates this body → unifiedLayout → videoSection →
+            // VideoSectionContent → VideoContainerView → makeUIView.
+            // makeUIView sees needsFullReload=true → recreates WKWebView.
+            _ = webviewReloadTrigger
 
             ZStack {
                 AmbilightBackground()
@@ -116,6 +131,15 @@ struct RoomView: View {
         .onChange(of: scenePhase) { _, newPhase in
             // 🔧 v35.5: NO resetToPortrait on scenePhase change.
             // This was firing during lockToLandscape() → cancelling it.
+        }
+        // 🔧 v42: Force re-render when WebContent process was killed during
+        // background. Coordinator.appWillEnterForeground posts this after
+        // calling prepareForFullReload(). The trigger state change causes
+        // SwiftUI to re-evaluate videoSection → makeUIView → sees
+        // needsFullReload=true → destroys dead WKWebView → creates new one.
+        .onReceive(NotificationCenter.default.publisher(for: .plinkWebviewNeedsReload)) { _ in
+            webviewReloadTrigger += 1
+            print("📱 v42: RoomView received plinkWebviewNeedsReload — forcing re-render (trigger=\(webviewReloadTrigger))")
         }
         .onDisappear {
             // 🔧 v35.3: ONLY save position. NO orientation reset here.

@@ -606,17 +606,21 @@ struct WebVideoView: UIViewRepresentable {
         // With this check, we return the EXISTING WebView from WebViewControl.
         // The video keeps playing because the WKWebView process is the same.
         if let existing = WebViewControl.shared.webView {
-            print("📺 v34: reusing existing WKWebView (fullscreen rotation — no reset)")
-            // Re-register coordinator as navigationDelegate (may have been lost)
+            print("📺 v37.2: reusing existing WKWebView")
             if isYouTube || isBackendPlayer {
                 existing.navigationDelegate = context.coordinator
             }
-            // Re-register coordinator as plinkBridge handler
-            // (WKUserContentController handlers may need re-adding)
-            // Actually, the config is part of the WebView — handlers persist.
-            // Just make sure coordinator.webView points to the existing one.
             if context.coordinator.webView == nil {
                 context.coordinator.webView = existing
+            }
+            // 🔧 v37.2: ALWAYS call loadVideoOnce — it has internal guard.
+            // If video already loaded → guard blocks (no reload).
+            // If video NOT loaded yet (first makeUIView after room creation
+            // where WebViewControl.shared.webView was set by a previous
+            // makeUIView that returned early) → loadVideoOnce loads it.
+            if isYouTube || isBackendPlayer {
+                let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
+                context.coordinator.loadVideoOnce(id: videoId, webView: existing)
             }
             return existing
         }

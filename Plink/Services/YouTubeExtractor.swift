@@ -79,6 +79,21 @@ final class YouTubeExtractor {
             return cached.info
         }
 
+        // 🔧 v45.3: Primary method — scrape the watch page HTML.
+        // The watch page contains ytInitialPlayerResponse JSON with
+        // streamingData (formats + hlsManifestUrl). This is what yt-dlp
+        // and NewPipe do — it's the most reliable method.
+        do {
+            print("📺 YouTubeExtractor: scraping watch page for \(videoId)")
+            let info = try await extractFromWatchPage(videoId: videoId)
+            cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
+            print("✅ YouTubeExtractor: watch page extraction succeeded, extractor=\(info.extractor)")
+            return info
+        } catch {
+            print("⚠️ YouTubeExtractor: watch page scraping failed: \(error.localizedDescription)")
+        }
+
+        // 🔧 v45.3: Fallback — YouTube Internal API (youtubei.googleapis.com)
         // Try multiple client types — different clients have different
         // format availability and bot detection.
         let clients: [(name: String, clientName: String, clientVersion: String, userAgent: String)] = [
@@ -117,6 +132,154 @@ final class YouTubeExtractor {
         }
 
         throw YouTubeExtractorError.allClientsFailed(lastError ?? "unknown")
+    }
+
+    /// 🔧 v45.3: Extract stream info by scraping the YouTube watch page HTML.
+    /// The watch page contains `ytInitialPlayerResponse` JSON which has
+    /// streamingData (formats[] + hlsManifestUrl).
+    /// This is the same method yt-dlp and NewPipe use.
+    private func extractFromWatchPage(videoId: String) async throws -> StreamInfo {
+        let watchUrl = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
+        var request = URLRequest(url: watchUrl)
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw YouTubeExtractorError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+
+        guard let html = String(data: data, encoding: .utf8) else {
+            throw YouTubeExtractorError.invalidJSON
+        }
+
+        // Extract ytInitialPlayerResponse JSON from the HTML
+        // It's embedded as: var ytInitialPlayerResponse = {...};
+        guard let playerResponseJson = extractJsonFromHtml(html, key: "ytInitialPlayerResponse") else {
+            throw YouTubeExtractorError.invalidJSON
+        }
+
+        guard let playerData = playerResponseJson.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: playerData) as? [String: Any] else {
+            throw YouTubeExtractorError.invalidJSON
+        }
+
+        let playabilityStatus = (json["playabilityStatus"] as? [String: Any])?["status"] as? String ?? "unknown"
+        let streamingData = json["streamingData"] as? [String: Any]
+        let videoDetails = json["videoDetails"] as? [String: Any]
+
+        print("📺 YouTubeExtractor: watch page playability=\(playabilityStatus), hasStreamingData=\(streamingData != nil)")
+
+        guard playabilityStatus == "OK" || playabilityStatus == "LIVE_STREAM_OFFLINE" else {
+            throw YouTubeExtractorError.playabilityError(playabilityStatus)
+        }
+
+        guard let streamingData = streamingData else {
+            throw YouTubeExtractorError.noStreamingData
+        }
+
+        // Priority 1: HLS manifest (best for AVPlayer — adaptive quality)
+        if let hlsUrl = streamingData["hlsManifestUrl"] as? String, !hlsUrl.isEmpty {
+            print("📺 YouTubeExtractor: using HLS manifest from watch page")
+            return StreamInfo(
+                id: videoId,
+                title: videoDetails?["title"] as? String ?? "Unknown",
+                author: videoDetails?["author"] as? String ?? "Unknown",
+                thumbnailURL: extractThumbnail(videoDetails: videoDetails, videoId: videoId),
+                streamURL: hlsUrl,
+                duration: Double(videoDetails?["lengthSeconds"] as? String ?? "0") ?? 0,
+                isLive: videoDetails?["isLive"] as? Bool ?? false,
+                extractor: "watchpage-hls"
+            )
+        }
+
+        // Priority 2: muxed formats (formats[] array)
+        if let formats = streamingData["formats"] as? [[String: Any]], !formats.isEmpty {
+            let sorted = formats.sorted { a, b in
+                let itagA = a["itag"] as? Int ?? 0
+                let itagB = b["itag"] as? Int ?? 0
+                let qualityOrder: [Int: Int] = [22: 720, 18: 360, 43: 360, 36: 240, 17: 144]
+                let qa = qualityOrder[itagA] ?? 0
+                let qb = qualityOrder[itagB] ?? 0
+                return qa > qb
+            }
+
+            if let best = sorted.first,
+               let url = best["url"] as? String, !url.isEmpty {
+                let itag = best["itag"] as? Int ?? 0
+                print("📺 YouTubeExtractor: using muxed format itag=\(itag) from watch page")
+                return StreamInfo(
+                    id: videoId,
+                    title: videoDetails?["title"] as? String ?? "Unknown",
+                    author: videoDetails?["author"] as? String ?? "Unknown",
+                    thumbnailURL: extractThumbnail(videoDetails: videoDetails, videoId: videoId),
+                    streamURL: url,
+                    duration: Double(videoDetails?["lengthSeconds"] as? String ?? "0") ?? 0,
+                    isLive: videoDetails?["isLive"] as? Bool ?? false,
+                    extractor: "watchpage"
+                )
+            }
+        }
+
+        throw YouTubeExtractorError.noFormats
+    }
+
+    /// Extract a JSON object from HTML by searching for `var key = {...};`
+    /// or `key = {...};` pattern.
+    private func extractJsonFromHtml(_ html: String, key: String) -> String? {
+        // Search for: var ytInitialPlayerResponse = { ... };
+        // or: ytInitialPlayerResponse = { ... };
+        let patterns = [
+            "var \(key) = ",
+            "\(key) = ",
+        ]
+
+        for pattern in patterns {
+            guard let range = html.range(of: pattern) else { continue }
+            let jsonStart = html[range.upperBound...]
+
+            // Find the matching closing brace by counting { and }
+            var depth = 0
+            var inString = false
+            var escape = false
+            var jsonEnd: String.Index?
+
+            for (i, ch) in jsonStart.enumerated() {
+                if escape {
+                    escape = false
+                    continue
+                }
+                if ch == "\\" {
+                    escape = true
+                    continue
+                }
+                if ch == "\"" {
+                    inString.toggle()
+                    continue
+                }
+                if inString { continue }
+
+                if ch == "{" {
+                    depth += 1
+                } else if ch == "}" {
+                    depth -= 1
+                    if depth == 0 {
+                        jsonEnd = jsonStart.index(jsonStart.startIndex, offsetBy: i)
+                        break
+                    }
+                }
+            }
+
+            if let end = jsonEnd {
+                return String(jsonStart[jsonStart.startIndex...end])
+            }
+        }
+
+        return nil
     }
 
     /// Extract video ID from any YouTube URL format.

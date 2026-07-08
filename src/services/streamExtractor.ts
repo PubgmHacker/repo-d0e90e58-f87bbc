@@ -148,6 +148,8 @@ async function extractWithYouTubeI(videoId: string): Promise<StreamInfo> {
 
   const youtubeApiUrl = 'https://www.youtube.com/youtubei/v1/player';
 
+  let lastError: string | null = null;
+
   for (const client of clients) {
     // 🔧 v10.2.4: try direct first, then through CORS proxies
     const urlsToTry = [

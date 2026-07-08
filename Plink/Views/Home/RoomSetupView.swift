@@ -416,45 +416,36 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v44 (Jan 2027): For YouTube, extract a DIRECT mp4 stream URL via
-            // backend yt-dlp BEFORE creating the room. This bypasses WKWebView
-            // entirely — AVPlayer plays the mp4 directly. Benefits:
-            //   - Instant playback (AVPlayer starts immediately, no WKWebView load)
-            //   - No "MediaSourcePrivateRemote destroyed" (AVPlayer survives rotation/bg)
-            //   - Native Picture-in-Picture via AVPictureInPictureController
-            //   - No bot check, no error 153, no IFrame API issues
+            // 🔧 v45: YouTube extraction moved to iOS side.
+            // Backend (Railway) IP is blocked by YouTube — all extraction
+            // methods fail on the server. iPhone has residential IP that
+            // YouTube doesn't block.
             //
-            // If extraction fails (yt-dlp can't process this video, network error,
-            // backend down), fall back to embed URL + WebView mode (v37.3 approach).
+            // YouTubeExtractor calls youtubei.googleapis.com directly from iOS,
+            // gets HLS manifest URL or muxed format URL, returns to AVPlayer.
             let finalStreamURL: String
             let finalSource: MediaItem.MediaSource
             let finalDuration: TimeInterval?
 
             if service == .youtube {
-                // 🔧 v44: try backend extraction first. If it succeeds, use the
-                // direct googlevideo.com URL → AVPlayer plays it natively.
-                // If it fails, fall back to embed URL → WebView mode.
-                let mediaService = MediaService()
-                if let token = KeychainHelper.read(for: "rave_auth_token") {
-                    mediaService.setAuthToken(token)
-                }
                 let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? ""
-                do {
-                    print("🔧 RoomSetupView v44: calling MediaService.extract for videoId='\(videoId)'")
-                    let extracted = try await mediaService.extract(youTubeURL: contentURL)
-                    finalStreamURL = extracted.streamURL.absoluteString
-                    finalSource = .url  // direct stream, not youtube embed
-                    finalDuration = extracted.duration
-                    print("✅ RoomSetupView v44: extraction succeeded — streamURL='\(finalStreamURL.prefix(80))', duration=\(finalDuration ?? 0)s, format=\(extracted.format)")
-                } catch {
-                    print("⚠️ RoomSetupView v44: extraction failed (\(error.localizedDescription)), falling back to embed URL + WebView mode")
-                    // Fallback: embed URL (v37.3 approach — m.youtube.com in WKWebView)
-                    guard !videoId.isEmpty else {
-                        await MainActor.run {
-                            errorMessage = "Не удалось извлечь ID видео из ссылки"
-                        }
-                        return
+                guard !videoId.isEmpty else {
+                    await MainActor.run {
+                        errorMessage = "Не удалось извлечь ID видео из ссылки"
                     }
+                    return
+                }
+
+                do {
+                    print("🔧 RoomSetupView v45: calling iOS YouTubeExtractor for videoId='\(videoId)'")
+                    let streamInfo = try await YouTubeExtractor.shared.extract(videoId: videoId)
+                    finalStreamURL = streamInfo.streamURL
+                    finalSource = .url  // direct stream, not youtube embed
+                    finalDuration = streamInfo.duration
+                    print("✅ RoomSetupView v45: iOS extraction succeeded, extractor=\(streamInfo.extractor)")
+                } catch {
+                    print("⚠️ RoomSetupView v45: iOS extraction failed (\(error.localizedDescription)), falling back to embed URL + WebView mode")
+                    // Fallback: embed URL (v37.3 approach — m.youtube.com in WKWebView)
                     var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
                     embedComponents.queryItems = [
                         URLQueryItem(name: "playsinline", value: "1"),
@@ -463,7 +454,7 @@ struct RoomSetupView: View {
                     finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
                     finalSource = .youtube  // WebView mode
                     finalDuration = nil
-                    print("🔧 RoomSetupView v44: fallback embed URL='\(finalStreamURL.prefix(80))'")
+                    print("🔧 RoomSetupView v45: fallback to embed URL (WebView mode)")
                 }
             } else {
                 finalStreamURL = contentURL

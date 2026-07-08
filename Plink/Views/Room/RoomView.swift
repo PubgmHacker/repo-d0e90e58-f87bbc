@@ -368,6 +368,27 @@ struct RoomView: View {
     }
 
     // MARK: - Video Section (видео + оверлеи)
+    //
+    // 🔧 v38 FIX (CRITICAL): Extract the media-reading branch into a dedicated
+    // subview `VideoSectionContent` that observes `SyncEngine` directly via
+    // `@ObservedObject`. This is REQUIRED because:
+    //
+    //   - `RoomViewModel` is `@Observable` (new macro)
+    //   - `SyncEngine` is legacy `ObservableObject`
+    //   - When RoomView reads `viewModel.syncEngine.currentMediaItem`, the
+    //     @Observable macro tracks the access to `viewModel.syncEngine` (the
+    //     reference), but does NOT subscribe to SyncEngine's `objectWillChange`
+    //     publisher. So changes to `currentMediaItem` / `isPlaying` / `currentTime`
+    //     / `duration` on SyncEngine never trigger a RoomView re-render.
+    //   - Symptom: WS connects → loadMedia sets currentMediaItem → logs confirm
+    //     `currentMediaItem == nil: false` → but `makeUIView` is never called
+    //     because videoSection still sees `currentMediaItem == nil` from the
+    //     last render.
+    //
+    // The fix: a subview with `@ObservedObject var syncEngine: SyncEngine`
+    // explicitly subscribes to `objectWillChange`, so any @Published change on
+    // SyncEngine triggers a re-render of the subview. The non-SyncEngine-dependent
+    // parts (close button, completion screen) stay in the parent for free.
 
     @ViewBuilder
     private func videoSection(
@@ -377,22 +398,11 @@ struct RoomView: View {
         isFullscreen: Bool
     ) -> some View {
         ZStack {
-            // 🔧 v37: JUST the WebView. NO transparent tap layer.
-            // NO ControlsOverlay. Let YouTube handle ALL gestures natively.
-            if let mediaItem = viewModel.syncEngine.currentMediaItem,
-               !mediaItem.streamURL.isEmpty {
-                VideoContainerView(
-                    mediaURL: mediaItem.streamURL,
-                    playbackMode: mediaItem.effectivePlaybackMode,
-                    isPlaying: viewModel.syncEngine.isPlaying,
-                    currentTime: viewModel.syncEngine.currentTime,
-                    duration: viewModel.syncEngine.duration,
-                    onTogglePlay: { viewModel.syncEngine.togglePlayPause() },
-                    onSeek: { pos in viewModel.syncEngine.seek(to: pos) }
-                )
-            } else {
-                videoPlaceholder
-            }
+            // 🔧 v38: delegate media rendering to a subview that observes SyncEngine.
+            VideoSectionContent(
+                syncEngine: viewModel.syncEngine,
+                videoPlaceholder: { AnyView(videoPlaceholder) }
+            )
 
             // Minimal floating close button (top-left)
             VStack {
@@ -722,6 +732,51 @@ struct RoomView: View {
         viewModel = vm
         syncManager = manager
         self.voiceChat = voiceChat
+    }
+}
+
+// MARK: - Video Section Content (v38 — observes SyncEngine directly)
+//
+// 🔧 v38 CRITICAL FIX: This subview exists ONLY to make SwiftUI subscribe to
+// SyncEngine's `objectWillChange` publisher. RoomView is `@Observable`-driven
+// (via RoomViewModel), but SyncEngine is the legacy `ObservableObject` protocol.
+// When the parent reads `viewModel.syncEngine.currentMediaItem`, the @Observable
+// macro tracks the access to `viewModel.syncEngine` (the reference) but does
+// NOT subscribe to SyncEngine's `objectWillChange`. The result: SyncEngine's
+// @Published changes (currentMediaItem, isPlaying, currentTime, duration) never
+// triggered a RoomView re-render — `makeUIView` was never called even though
+// `currentMediaItem` was set (confirmed in logs: "currentMediaItem == nil: false"
+// immediately followed by NO `🔧🔧🔧 makeUIView CALLED` log).
+//
+// By declaring `@ObservedObject var syncEngine: SyncEngine` here, SwiftUI
+// subscribes to `objectWillChange` and re-renders this subview whenever any
+// @Published property on SyncEngine changes. The parent passes the same
+// SyncEngine instance; the subview reads currentMediaItem / isPlaying / etc.
+// directly from the observed reference.
+private struct VideoSectionContent: View {
+    @ObservedObject var syncEngine: SyncEngine
+    let videoPlaceholder: () -> AnyView
+
+    var body: some View {
+        Group {
+            if let mediaItem = syncEngine.currentMediaItem,
+               !mediaItem.streamURL.isEmpty {
+                VideoContainerView(
+                    mediaURL: mediaItem.streamURL,
+                    playbackMode: mediaItem.effectivePlaybackMode,
+                    isPlaying: syncEngine.isPlaying,
+                    currentTime: syncEngine.currentTime,
+                    duration: syncEngine.duration,
+                    onTogglePlay: { syncEngine.togglePlayPause() },
+                    onSeek: { pos in syncEngine.seek(to: pos) }
+                )
+                .onAppear {
+                    print("🎬 v38: VideoSectionContent — rendering VideoContainerView for streamURL=\(mediaItem.streamURL.prefix(80))")
+                }
+            } else {
+                videoPlaceholder()
+            }
+        }
     }
 }
 

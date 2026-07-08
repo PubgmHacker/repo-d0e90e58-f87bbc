@@ -11,10 +11,13 @@ final class OrientationManager {
     /// Принудительно повернуть в ландшафт.
     func forceLandscape() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        print("🔄 FORCE LANDSCAPE at \(callStack())")
 
         // macOS Catalyst / симулятор: через requestGeometryUpdate
         if #available(iOS 16.0, *) {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { error in
+                print("🔄 FORCE LANDSCAPE result: \(error)")
+            }
             // 🔧 iOS 16+: заменённый API вместо устаревшего attemptRotationToDeviceOrientation().
             // Просит UIKit пересчитать поддерживаемые ориентации для всех VC в сцене.
             for vc in scene.windows.compactMap({ $0.rootViewController }) {
@@ -31,6 +34,7 @@ final class OrientationManager {
     /// Принудительно повернуть в портрет.
     func forcePortrait() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        print("🔄 FORCE PORTRAIT at \(callStack())")
 
         if #available(iOS 16.0, *) {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
@@ -88,12 +92,19 @@ final class OrientationManager {
     /// Lock the device to a specific set of orientations.
     /// Pass `.all` to release the lock (allow any orientation).
     func lockOrientation(_ mask: UIInterfaceOrientationMask) {
+        print("🔒 ORIENTATION LOCK: \(mask) at \(callStack())")
         PlinkAppDelegate.orientationLock = mask
         // Force UIKit to re-evaluate the supported orientations NOW.
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
         for vc in scene.windows.compactMap({ $0.rootViewController }) {
             vc.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
+    }
+
+    private func callStack() -> String {
+        let symbols = Thread.callStackSymbols
+        // Skip [0]=callStack [1]=lockOrientation [2]=caller
+        return symbols.dropFirst(2).prefix(8).joined(separator: " ← ")
     }
 
     /// Convenience: lock to portrait only.

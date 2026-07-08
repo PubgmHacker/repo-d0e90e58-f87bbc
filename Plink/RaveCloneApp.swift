@@ -28,7 +28,9 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        return PlinkAppDelegate.orientationLock
+        let lock = PlinkAppDelegate.orientationLock
+        print("📱 AppDelegate supportedInterfaceOrientationsFor → \(lock)")
+        return lock
     }
 }
 

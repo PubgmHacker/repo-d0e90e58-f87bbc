@@ -42,6 +42,29 @@ final class WebViewControl {
     /// Wired up by RoomViewModel to call syncEngine.updateCurrentTimeFromWebView().
     var onTimeUpdate: ((TimeInterval) -> Void)?
 
+    /// 🔧 v72 (Gemini): Global didBecomeActive observer for reactivate.
+    /// Fires every time the app returns to active state. Calls reactivate()
+    /// to wake the video decoder (Frame Nudge + translateZ(0) + micro-seek).
+    /// This is OUTSIDE the SwiftUI view lifecycle, so it works even when
+    /// makeUIView is NOT called (which is the goal — we want makeUIView to
+    /// never be called again after first creation).
+    private var globalActiveObserver: NSObjectProtocol?
+
+    init() {
+        globalActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self, let webView = self.webView else { return }
+            // Give iOS 100ms to deploy the UI before reactivate
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                print("⚡ v72: Global reactivate triggered (didBecomeActive)")
+                self.reactivate(webView: webView)
+            }
+        }
+    }
+
     func register(_ webView: WKWebView) {
         self.webView = webView
     }
@@ -757,15 +780,19 @@ struct VideoContainerView: View {
 
     @ViewBuilder
     private func webVideoView() -> some View {
-        // 🔧 v70 (Gemini): DON'T pass about:blank when mediaURL is empty.
-        // v69 passed about:blank → updateUIView loaded it → destroyed prewarm.
-        // Instead, pass the real URL only if it's valid. WebVideoView now
-        // accepts URL? — if nil, it doesn't load anything (preserves prewarm).
-        // 🔧 v70: No explicit return — use let + direct view expression for ViewBuilder.
+        // 🔧 v72 (Gemini): LOCK identity with .id() — prevents SwiftUI from
+        // recreating WebVideoView when mediaURL changes. Without .id(), the
+        // let url = URL(string: mediaURL) creates a new struct each time
+        // mediaURL changes → SwiftUI sees different identity → makeUIView
+        // called → WKWebView detached → GPU crash.
+        //
+        // With .id("eternal_web_player"), SwiftUI keeps the SAME view instance
+        // across mediaURL changes — only updateUIView is called.
         let url = URL(string: mediaURL)
         WebVideoView(url: url) { time in
             WebViewControl.shared.handleTimeUpdate(time)
         }
+        .id("eternal_web_player")  // 🔧 v72: IRON IDENTITY — never recreate
     }
 }
 
@@ -998,12 +1025,10 @@ struct WebVideoView: UIViewRepresentable {
             print("⚠️ v35: AVAudioSession config failed: \(error)")
         }
 
-        print("🔧🔧🔧 v71 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
+        print("🔧🔧🔧 v72 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
 
-        // 🔧 v71 (Gemini): Use the SINGLETON webView. prewarm() already
+        // 🔧 v71: Use the SINGLETON webView. prewarm() already
         // initialized it and loaded the embed URL. We just adopt it here.
-        // If prewarm didn't run (e.g. user entered room via deep link),
-        // ensureWebViewCreated() creates an empty singleton.
         WebViewControl.shared.ensureWebViewCreated()
         let webView = WebViewControl.shared.webView!
 
@@ -1014,30 +1039,13 @@ struct WebVideoView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
 
         // Register plinkBridge JS message handler (for YouTube IFrame API callbacks)
-        // Check if already registered to avoid duplicate registration crash
         let userContentController = webView.configuration.userContentController
-        // Remove existing handler if any, then re-add
         userContentController.removeScriptMessageHandler(forName: "plinkBridge")
         userContentController.add(context.coordinator, name: "plinkBridge")
 
-        // Schedule reactivate on next run loop (GPU pipeline init)
-        let webViewRef = webView
-        let appState = UIApplication.shared.applicationState
-        if appState == .active {
-            DispatchQueue.main.async {
-                WebViewControl.shared.reactivate(webView: webViewRef)
-            }
-        } else {
-            context.coordinator.activationObserver = NotificationCenter.default.addObserver(
-                forName: UIApplication.didBecomeActiveNotification,
-                object: nil,
-                queue: .main
-            ) { _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    WebViewControl.shared.reactivate(webView: webViewRef)
-                }
-            }
-        }
+        // 🔧 v72: NO reactivate here! The global didBecomeActive observer in
+        // WebViewControl handles all reactivation. This prevents duplicate
+        // reactivate calls and keeps makeUIView minimal.
 
         return webView
     }

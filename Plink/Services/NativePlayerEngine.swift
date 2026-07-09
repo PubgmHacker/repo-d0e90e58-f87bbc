@@ -61,15 +61,11 @@ final class NativePlayerEngine: ObservableObject {
 
     // MARK: - Load & Play
 
-    /// Custom scheme resource loader for injecting headers into AVPlayer requests.
-    /// YouTube requires User-Agent + Referer to match the extraction request.
-    private var resourceLoaderDelegate: YouTubeResourceLoaderDelegate?
-
     /// Load a stream URL and start playing.
-    /// For googlevideo.com URLs, uses AVAssetResourceLoaderDelegate to inject
-    /// User-Agent + Referer headers into EVERY request (including Range requests).
-    /// AVURLAssetHTTPHeaderFieldsKey doesn't work reliably for Range requests.
-    /// 🔧 v92: Also passes cookies from ExtractionBridge to avoid 403.
+    /// 🔧 v94 (Gemini): StreamRelay — ALL googlevideo.com URLs are proxied
+    /// through our backend (plink-backend/api/media/stream?url=...).
+    /// The backend adds User-Agent + Referer headers and relays bytes.
+    /// AVPlayer sees our backend URL — NO 403, NO ResourceLoaderDelegate needed!
     func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = []) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
@@ -77,35 +73,36 @@ final class NativePlayerEngine: ObservableObject {
         }
 
         isLoading = true
-        print("🎬 v91: Loading stream: \(streamURL.prefix(80))")
 
         let lowerURL = streamURL.lowercased()
-        let asset: AVAsset
+        let finalURL: URL
 
-        if lowerURL.contains("googlevideo.com") {
-            // 🔧 v91: Use AVAssetResourceLoaderDelegate with custom scheme.
-            // Replace "https://" with "youtube-proxy://" — this forces AVPlayer
-            // to route ALL requests through our delegate, where we inject headers.
-            let proxyURLString = streamURL.replacingOccurrences(of: "https://", with: "youtube-proxy://")
-            guard let proxyURL = URL(string: proxyURLString) else {
-                print("⚠️ v91: Failed to create proxy URL")
+        if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
+            // 🔧 v94: Route through StreamRelay backend
+            // Backend URL: https://plink-backend.../api/media/stream?url=ENCOD(googlevideoURL)&token=JWT
+            let backendBase = "https://plink-backend-production-ef31.up.railway.app"
+            let encodedURL = streamURL.addingPercentEncoding(
+                withAllowedCharacters: .urlQueryAllowed
+            ) ?? streamURL
+            let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
+            let relayURLString = "\(backendBase)/api/media/stream?url=\(encodedURL)&token=\(token)"
+
+            guard let relayURL = URL(string: relayURLString) else {
+                print("⚠️ v94: Failed to create StreamRelay URL")
                 return
             }
 
-            let loaderDelegate = YouTubeResourceLoaderDelegate(originalURL: url, cookies: cookies)
-            resourceLoaderDelegate = loaderDelegate
-
-            let urlAsset = AVURLAsset(url: proxyURL, options: [
-                AVURLAssetPreferPreciseDurationAndTimingKey: true
-            ])
-            urlAsset.resourceLoader.setDelegate(loaderDelegate, queue: loaderDelegate.queue)
-            asset = urlAsset
-            print("🎬 v91: googlevideo.com URL — AVAssetResourceLoaderDelegate attached (custom scheme: youtube-proxy://)")
+            finalURL = relayURL
+            print("🎬 v94: StreamRelay — routing through backend: \(relayURLString.prefix(80))...")
         } else {
-            asset = AVURLAsset(url: url, options: [
-                AVURLAssetPreferPreciseDurationAndTimingKey: true
-            ])
+            // Non-YouTube URL — play directly (no relay needed)
+            finalURL = url
+            print("🎬 v94: Direct stream: \(streamURL.prefix(80))")
         }
+
+        let asset = AVURLAsset(url: finalURL, options: [
+            AVURLAssetPreferPreciseDurationAndTimingKey: true
+        ])
 
         let newItem = AVPlayerItem(asset: asset)
 

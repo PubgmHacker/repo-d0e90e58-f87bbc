@@ -113,4 +113,75 @@ export async function mediaRoutesV2(fastify: FastifyInstance) {
       }
     }
   );
+
+  // ─── GET /stream — StreamRelay proxy (v94) ──────────────────────────────
+  //
+  // 🔧 v94 (Gemini): Proxies video bytes from YouTube CDN to AVPlayer.
+  // AVPlayer requests: GET /api/media/stream?url=ENCOD(googlevideoURL)&token=JWT
+  // Backend forwards to YouTube CDN with proper User-Agent + Referer headers.
+  // YouTube sees server IP + server TLS → NO 403 Forbidden.
+  //
+  // Supports Range headers for seeking (AVPlayer uses Range requests).
+  // Streams bytes via pipe (no buffering in memory).
+  fastify.get(
+    "/stream",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const { url } = request.query as { url: string };
+
+      if (!url) {
+        return reply.status(400).send({ error: "Missing url parameter" });
+      }
+
+      // Decode the target URL
+      const targetUrl = decodeURIComponent(url);
+
+      // Only allow googlevideo.com and youtube.com URLs
+      if (!targetUrl.includes("googlevideo.com") && !targetUrl.includes("youtube.com") && !targetUrl.includes(".m3u8")) {
+        return reply.status(400).send({ error: "Invalid URL — only googlevideo.com allowed" });
+      }
+
+      try {
+        // Build headers for YouTube CDN
+        const headers: Record<string, string> = {
+          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) " +
+                        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 " +
+                        "Mobile/15E148 Safari/604.1",
+          "Referer": "https://www.youtube.com/",
+          "Origin": "https://www.youtube.com",
+        };
+
+        // Forward Range header from AVPlayer (for seeking)
+        const rangeHeader = request.headers["range"];
+        if (rangeHeader) {
+          headers["Range"] = rangeHeader as string;
+        }
+
+        // Fetch from YouTube CDN
+        const response = await fetch(targetUrl, { headers });
+
+        if (!response.ok && response.status !== 206) {
+          request.log.error({ status: response.status, url: targetUrl.substring(0, 80) }, "[media/stream] YouTube rejected");
+          return reply.status(response.status).send({ error: `YouTube returned ${response.status}` });
+        }
+
+        // Set response headers for AVPlayer
+        reply.status(response.status);
+        reply.header("Content-Type", response.headers.get("content-type") || "video/mp4");
+        reply.header("Accept-Ranges", "bytes");
+
+        const contentLength = response.headers.get("content-length");
+        if (contentLength) reply.header("Content-Length", contentLength);
+
+        const contentRange = response.headers.get("content-range");
+        if (contentRange) reply.header("Content-Range", contentRange);
+
+        // Pipe bytes: YouTube → Client (streaming, not buffering)
+        return reply.send(response.body);
+      } catch (e: any) {
+        request.log.error({ err: e.message, url: targetUrl.substring(0, 80) }, "[media/stream] relay failed");
+        return reply.status(502).send({ error: e.message || "Stream relay failed" });
+      }
+    }
+  );
 }

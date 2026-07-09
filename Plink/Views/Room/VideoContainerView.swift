@@ -83,34 +83,60 @@ final class WebViewControl {
     /// Call this when the user selects a video in RoomCreationView.
     /// The WKWebView starts loading m.youtube.com/watch?v=ID immediately.
     ///
-    /// 🔧 v63: prewarm now ONLY warms the network (DNS, TLS, connection pool).
-    /// The prewarmed WKWebView is NOT consumed by makeUIView because it lacks
-    /// the JS bridge scripts (plinkBridge handler + Coordinator scripts) that
-    /// are only added in makeUIView's config. Instead, makeUIView always
-    /// creates a fresh WKWebView with full config — but the network is already
-    /// warm from prewarm, so page load is faster.
+    /// 🔧 v71 (Gemini): prewarm now uses the SINGLETON webView (self.webView),
+    /// NOT a separate prewarmedWebView. This ensures makeUIView (which reads
+    /// WebViewControl.shared.webView) gets the SAME instance that prewarm
+    /// loaded. The singleton is created on first access via
+    /// ensureWebViewCreated().
     func prewarm(videoId: String) {
         // Don't prewarm the same video twice
-        if prewarmedVideoId == videoId && prewarmedWebView != nil {
-            print("🔥 v63: prewarm(videoId=\(videoId)) — already prewarmed, skipping")
+        if loadedVideoId == videoId && webView != nil {
+            print("🔥 v71: prewarm(videoId=\(videoId)) — already prewarmed, skipping")
             return
         }
 
-        // If prewarming a DIFFERENT video, discard the old prewarmed WKWebView
-        if prewarmedWebView != nil && prewarmedVideoId != videoId {
-            print("🔥 v63: prewarm — discarding stale prewarmed WKWebView (was videoId=\(prewarmedVideoId ?? "?"))")
-            prewarmedWebView?.stopLoading()
-            prewarmedWebView = nil
+        print("🔥 v71: prewarm(videoId=\(videoId)) — initializing singleton + loading embed URL")
+
+        // 🔧 v71: Use the SINGLETON webView — this is what makeUIView reads.
+        // Create it with full config (CSS + JS bridge scripts) so makeUIView
+        // can adopt it as-is without recreating.
+        ensureWebViewCreated()
+
+        // Load the watch URL (same as loadVideoOnce uses) in the singleton
+        // 🔧 v71: MUST use m.youtube.com/watch?v=ID (same as loadVideoOnce)
+        // — NOT embed URL — because loadVideoOnce has a guard that checks
+        // loadedVideoId == id. If we load embed here, the guard would skip
+        // the watch load but the current URL would be embed (different page).
+        let watchURLString = "https://m.youtube.com/watch?v=\(videoId)"
+        guard let url = URL(string: watchURLString) else {
+            print("🔥 v71: prewarm — invalid URL: \(watchURLString)")
+            return
         }
 
-        print("🔥 v63: prewarm(videoId=\(videoId)) — creating hidden WKWebView for network warming")
+        webView!.load(URLRequest(url: url))
+        loadedVideoId = videoId  // mark as loaded so loadVideoOnce doesn't reload
 
-        // Create config — just CSS for now (network warming only, not for display)
+        print("🔥 v71: prewarm complete — singleton WKWebView loading \(watchURLString)")
+    }
+
+    /// 🔧 v71: Ensure the singleton webView is created with full config.
+    /// Called by prewarm() and makeUIView(). Creates the WKWebView ONCE with
+    /// all the scripts and config that makeUIView needs.
+    func ensureWebViewCreated() {
+        if webView != nil { return }
+
+        print("🔥 v71: ensureWebViewCreated — creating singleton WKWebView with full config")
+
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsAirPlayForMediaPlayback = true
+        config.allowsPictureInPictureMediaPlayback = true
+        config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
-        // Inject CSS hide script (same as active player)
+        // Inject CSS hide script (same as makeUIView)
         let youtubeCssScript = WKUserScript(
             source: WebVideoView.youtubeHideCSS,
             injectionTime: .atDocumentStart,
@@ -118,26 +144,20 @@ final class WebViewControl {
         )
         config.userContentController.addUserScript(youtubeCssScript)
 
-        // Create the prewarmed WKWebView
-        let prewarmed = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
-        prewarmed.scrollView.isScrollEnabled = false
-        prewarmed.isOpaque = false
-        prewarmed.backgroundColor = .clear
+        // Inject nativeExperienceScript
+        let nativeExperienceScript = WKUserScript(
+            source: WebVideoView.nativeExperienceScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(nativeExperienceScript)
 
-        // Start loading m.youtube.com/watch?v=ID — this warms DNS, TLS,
-        // connection pool, and YouTube's CDN. When makeUIView creates a fresh
-        // WKWebView and loads the same URL, it'll be faster.
-        let url = URL(string: "https://m.youtube.com/watch?v=\(videoId)")!
-        prewarmed.load(URLRequest(url: url))
+        let newWebView = WKWebView(frame: .zero, configuration: config)
+        newWebView.scrollView.isScrollEnabled = false
+        newWebView.isOpaque = false
+        newWebView.backgroundColor = .clear
 
-        // Store it — released when a different video is prewarmed or on dealloc
-        prewarmedWebView = prewarmed
-        prewarmedVideoId = videoId
-        // 🔧 v63: DO NOT set loadedVideoId here! That would cause
-        // webSocketDidConnect to skip loadMedia → currentMediaItem stays nil
-        // → video section never renders → "eternal loading" bug.
-
-        print("🔥 v63: prewarm complete — network warming started (DNS/TLS/CDN)")
+        self.webView = newWebView
     }
 
     /// Called by WebVideoView.makeUIView to consume the prewarmed WKWebView.
@@ -971,353 +991,52 @@ struct WebVideoView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         // 🔧 v35: Configure AVAudioSession for background playback.
-        // This keeps audio alive when notification shade/control center is pulled down.
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("⚠️ v35: AVAudioSession config failed: \(error)")
         }
-        print("🔧🔧🔧 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
 
-        // 🔧 v70: Handle nil URL (preserves prewarm — don't destroy cached page)
-        // If url is nil, we still create/reuse the WKWebView, but we DON'T load
-        // anything. This preserves the prewarmed page (loaded in
-        // WebViewControl.prewarm) so it's ready when the real URL arrives.
-        guard let url = url else {
-            print("📺 v70: makeUIView — url is nil, preserving prewarm (no load)")
-            // If we have an existing WKWebView from prewarm, return it as-is
-            if let existing = WebViewControl.shared.webView {
-                print("📺 v70: returning existing prewarmed WKWebView (no load)")
-                if context.coordinator.webView == nil {
-                    context.coordinator.webView = existing
-                }
-                return existing
-            }
-            // No prewarmed WKWebView — create a fresh empty one
-            let config = WKWebViewConfiguration()
-            config.allowsInlineMediaPlayback = true
-            config.mediaTypesRequiringUserActionForPlayback = []
-            let emptyWebView = WKWebView(frame: .zero, configuration: config)
-            emptyWebView.scrollView.isScrollEnabled = false
-            emptyWebView.isOpaque = false
-            emptyWebView.backgroundColor = .clear
-            WebViewControl.shared.register(emptyWebView)
-            if context.coordinator.webView == nil {
-                context.coordinator.webView = emptyWebView
-            }
-            return emptyWebView
+        print("🔧🔧🔧 v71 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
+
+        // 🔧 v71 (Gemini): Use the SINGLETON webView. prewarm() already
+        // initialized it and loaded the embed URL. We just adopt it here.
+        // If prewarm didn't run (e.g. user entered room via deep link),
+        // ensureWebViewCreated() creates an empty singleton.
+        WebViewControl.shared.ensureWebViewCreated()
+        let webView = WebViewControl.shared.webView!
+
+        // Set up Coordinator references
+        if context.coordinator.webView == nil {
+            context.coordinator.webView = webView
         }
+        webView.navigationDelegate = context.coordinator
 
-        let urlString = url.absoluteString
-        // 🔧 v14.1: must also match youtube-nocookie.com (v14 changed embed URL domain)
-        let isYouTube = urlString.contains("youtube.com/embed/") ||
-                         urlString.contains("youtube-nocookie.com/embed/") ||
-                         urlString.contains("youtu.be/")
-        // 🔧 v12: backend embed proxy URL
-        let isBackendPlayer = urlString.contains("plink-backend") && (urlString.contains("youtube-player") || urlString.contains("youtube-embed"))
+        // Register plinkBridge JS message handler (for YouTube IFrame API callbacks)
+        // Check if already registered to avoid duplicate registration crash
+        let userContentController = webView.configuration.userContentController
+        // Remove existing handler if any, then re-add
+        userContentController.removeScriptMessageHandler(forName: "plinkBridge")
+        userContentController.add(context.coordinator, name: "plinkBridge")
 
-        // 🔧 v41: FULL RELOAD on orientation change.
-        // Previous approach (v34-v40): reuse existing WKWebView when rotating
-        // to avoid video reset. PROBLEM: "MediaSourcePrivateRemote object has
-        // been destroyed" — when SwiftUI re-attaches the WKWebView to a new
-        // view hierarchy (portrait → landscape), the WebContent rendering
-        // context is permanently destroyed. The WKWebView is still "alive"
-        // (JS still runs, audio still plays) but the visual rendering is gone
-        // → BLACK SCREEN.
-        //
-        // v41 solution: RoomView.enterFullscreen/exitFullscreen calls
-        // WebViewControl.shared.prepareForFullReload() BEFORE the layout change.
-        // That saves the current position and sets needsFullReload = true.
-        // Here in makeUIView, we check that flag:
-        //   - If true: destroy the old WKWebView, create a new one, reload the
-        //     video, restore the saved position. Brief flicker but video works.
-        //   - If false: reuse the existing WKWebView (normal case, no rotation).
-        if WebViewControl.shared.needsFullReload {
-            print("💥 v41: makeUIView — needsFullReload=true, destroying old WKWebView")
-            WebViewControl.shared.destroyExistingWebView()
-            WebViewControl.shared.needsFullReload = false
-            // Fall through to create a brand-new WKWebView below.
-            // loadedVideoId is preserved so loadVideoOnce knows which video
-            // to reload, but we need to bypass its "already loaded" guard.
-            // See loadVideoOnceForceReload below.
-        } else if let existing = WebViewControl.shared.webView {
-            // 🔧 v69 (Gemini): NEVER call removeFromSuperview(). ANY reparenting
-            // kills the GPU context (CARenderServer crash), even when app is
-            // .active. v66 tried to skip detach only when app was inactive,
-            // but logs showed makeUIView firing AFTER appDidBecomeActive (app
-            // was .active) → v66 detached → GPU crash.
-            //
-            // v69 SOLUTION: Just return the existing WKWebView as-is. DON'T
-            // detach it. SwiftUI handles reparenting internally without killing
-            // the GPU context — but only if WE don't force-detach first.
-            //
-            // The key insight: removeFromSuperview() is what kills GPU. If we
-            // never call it, SwiftUI's internal reparenting is safe.
-            let appState = UIApplication.shared.applicationState
-            print("📺 v69: reusing existing WKWebView (appState=\(appState.rawValue)) — NO detach (GPU preserved)")
-
-            if isYouTube || isBackendPlayer {
-                existing.navigationDelegate = context.coordinator
+        // Schedule reactivate on next run loop (GPU pipeline init)
+        let webViewRef = webView
+        let appState = UIApplication.shared.applicationState
+        if appState == .active {
+            DispatchQueue.main.async {
+                WebViewControl.shared.reactivate(webView: webViewRef)
             }
-            if context.coordinator.webView == nil {
-                context.coordinator.webView = existing
-            }
-            if isYouTube || isBackendPlayer {
-                let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
-                context.coordinator.loadVideoOnce(id: videoId, webView: existing)
-            }
-
-            // Schedule reactivate on next run loop — but ONLY if app is active.
-            // If app is not active, defer to didBecomeActiveNotification.
-            let existingRef = existing
-            if appState == .active {
-                DispatchQueue.main.async {
-                    WebViewControl.shared.reactivate(webView: existingRef)
-                }
-            } else {
-                context.coordinator.activationObserver = NotificationCenter.default.addObserver(
-                    forName: UIApplication.didBecomeActiveNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        WebViewControl.shared.reactivate(webView: existingRef)
-                    }
-                }
-            }
-            return existing
-        }
-
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
-        config.allowsAirPlayForMediaPlayback = true
-        // 🔧 v40: Enable Picture-in-Picture for media playback.
-        // This allows the video to continue playing in a small floating window
-        // when the app is backgrounded (like YouTube / Rave do).
-        // Requires UIBackgroundModes: [audio, picture-in-picture] in Info.plist
-        // (added in v40).
-        config.allowsPictureInPictureMediaPlayback = true
-        // NOTE: background audio playback is enabled via UIBackgroundModes: [audio]
-        // in Info.plist — that's the official Apple way. There's no need for a
-        // WKWebView config flag; the WebContent process keeps the audio session
-        // alive as long as AVAudioSession category is .playback (set in makeUIView).
-        // 🔧 v27 (July 2026): WKProcessPool is DEPRECATED in iOS 15+.
-        // Apple docs: 'Creating and using multiple instances of
-        // WKProcessPool no longer has any effect.' Each WKWebView always
-        // gets its own WebContent process automatically. The v26 attempt
-        // to isolate via process pools was based on outdated info —
-        // removed. v27 keeps the v25 nonPersistent() data store, which
-        // is the REAL isolation mechanism.
-        config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
-
-        // 🔧 v31.1 (July 2026): allowUniversalAccessFromFileURLs — bypass CORS
-        // for loadHTMLString with HTTPS baseURL. Without this, the iframe
-        // inside the local HTML cannot make HTTPS requests to youtube.com
-        // because iOS treats the page as 'file://' origin despite the baseURL.
-        // This is a known Apple private API — App Store accepts it (Rave uses
-        // the same trick, plus many WebView-based apps).
-        // 'allowFileAccessFromFileURLs' is the XHR/fetch equivalent.
-        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
-
-        // 🔧 v30 (July 2026): REMOVED setURLSchemeHandler(plink-media://).
-        // Custom scheme caused "nw_connection_copy_protocol_metadata_internal
-        // on unconnected nw_connection" → DownloadFailed → 153.
-        // Now using loadHTMLString with baseURL: https://plink.app.
-        // See Coordinator.loadVideoOnce for the new loading logic.
-
-        let isYouTubeLike = isYouTube || isBackendPlayer
-
-        if !isYouTubeLike {
-            // Non-YouTube (Rutube, VK, etc.): add sync script + bridge + CSS
-            let userScript = WKUserScript(
-                source: Self.syncScript,
-                injectionTime: .atDocumentEnd,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(userScript)
-
-            let bridge = VideoTimeBridge(closure: onTimeUpdate)
-            context.coordinator.bridge = bridge
-            config.userContentController.add(bridge, name: "videoBridge")
-
-            let fullscreenCssScript = WKUserScript(
-                source: """
-                (function() {
-                    var style = document.createElement('style');
-                    style.innerHTML = `
-                        html, body { width: 100% !important; height: 100% !important;
-                                     margin: 0 !important; padding: 0 !important;
-                                     background: #000 !important; overflow: hidden !important; }
-                        iframe, video, #player, #app, .video-frame, .player-container,
-                        .video-player, [class*="player"] {
-                            width: 100% !important; height: 100% !important;
-                            max-width: 100% !important; max-height: 100% !important;
-                            margin: 0 !important; padding: 0 !important;
-                            object-fit: contain !important;
-                        }
-                        video::-webkit-media-controls,
-                        video::-webkit-media-controls-enclosure,
-                        video::-webkit-media-controls-panel {
-                            display: none !important;
-                            pointer-events: none !important;
-                        }
-                        .pl-video-player__controls,
-                        .pl-video-player__progress,
-                        [class*="controls-"],
-                        [class*="player-controls"] {
-                            display: none !important;
-                            pointer-events: none !important;
-                        }
-                    `;
-                    (document.head || document.documentElement).appendChild(style);
-                })();
-                """,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(fullscreenCssScript)
-
-            // 🔧 v34.26: EARLY orientation block — runs BEFORE YouTube loads.
-            // Monkey-patch window.dispatchEvent to swallow orientationchange.
-            // This prevents YouTube's player from pausing/resetting on rotation.
-            let orientationBlockScript = WKUserScript(
-                source: """
-                (function() {
-                    var _orig = window.dispatchEvent.bind(window);
-                    window.dispatchEvent = function(event) {
-                        if (event && event.type === 'orientationchange') {
-                            console.log('[Plink v34.26] BLOCKED orientationchange (early)');
-                            return false;
-                        }
-                        return _orig(event);
-                    };
-                    // Also override window.onorientationchange setter
-                    try {
-                        Object.defineProperty(window, 'onorientationchange', {
-                            get: function() { return null; },
-                            set: function() { console.log('[Plink v34.26] BLOCKED onorientationchange setter'); },
-                            configurable: true
-                        });
-                    } catch(e) {}
-                })();
-                """,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(orientationBlockScript)
-        }
-
-        // 🔧 v30.1: For YouTube — register plinkBridge so the IFrame API
-        // can post messages back to Swift (ready / stateChange / error).
-        // The Coordinator itself is the WKScriptMessageHandler.
-        if isYouTubeLike {
-            config.userContentController.add(context.coordinator, name: "plinkBridge")
-
-            // 🔧 v39: Early CSS injection via WKUserScript (atDocumentStart).
-            // Hides YouTube UI BEFORE it renders — no flash of unstyled content.
-            // Previous approach injected CSS via evaluateJavaScript in didFinish,
-            // which runs AFTER page load → user saw YouTube UI for ~1 second.
-            // atDocumentStart runs before DOM is ready, but (document.head || document.documentElement)
-            // works because documentElement always exists.
-            let youtubeCssScript = WKUserScript(
-                source: Self.youtubeHideCSS,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(youtubeCssScript)
-
-            // 🔧 v61 (Gemini): Native Experience — hide everything except <video>.
-            // Runs on document.ready. Injected at .atDocumentEnd so it fires
-            // after the DOM is ready, then retries at 1s/2s/3s.
-            let nativeExperienceScript = WKUserScript(
-                source: Self.nativeExperienceScript,
-                injectionTime: .atDocumentEnd,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(nativeExperienceScript)
-        }
-
-        let webView: WKWebView
-        // 🔧 v63: ALWAYS create a fresh WKWebView with full config.
-        // The prewarmed WKWebView (from RoomCreationView) is NOT consumed
-        // because it lacks the JS bridge scripts (plinkBridge handler +
-        // Coordinator scripts) that are only added here in makeUIView's config.
-        // prewarm still helps by warming the network (DNS/TLS/CDN), so the
-        // fresh WKWebView loads faster.
-        _ = WebViewControl.shared.consumePrewarmed()  // discard, just for cleanup
-        webView = WKWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = false
-        webView.isOpaque = false
-        webView.backgroundColor = .clear  // 🔧 v61: .clear instead of .black (Native Experience)
-
-        // 🔧 v34.34: NO customUserAgent — real WKWebView UA (what m.youtube.com expects).
-        // Embed required fake Safari UA, but m.youtube.com works with real WKWebView UA.
-        // which IS the actual WKWebView UA — no mismatch, no detection.
-
-        // 🔧 v32: set Coordinator as navigationDelegate so didFinish fires
-        // after m.youtube.com/watch loads → inject CSS + JS bridge.
-        if isYouTube || isBackendPlayer {
-            webView.navigationDelegate = context.coordinator
-        }
-
-        WebViewControl.shared.register(webView)
-
-        // 🔧 Load URL
-        if isBackendPlayer || isYouTube {
-            // 🔧 v24: ALL YouTube paths (backend player + direct embed + nocookie)
-            // go through PlinkSchemeHandler via Coordinator.
-            // NO direct webView.load() — that causes 153.
-            //
-            // 🔧 v29 BUG FIX: previous code did `url.lastPathComponent` which for
-            // the broken URL "youtube-nocookie.com/embed/watch?v=VIDEO_ID" returns
-            // "watch" (not a video ID). With v29 fix in RoomSetupView, the URL is
-            // now correctly "youtube-nocookie.com/embed/VIDEO_ID" so lastPathComponent
-            // returns the proper video ID. But we ALSO support watch?v= URLs as a
-            // safety net — extract video ID properly via query param OR path.
-            let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
-            if context.coordinator.webView == nil {
-                context.coordinator.webView = webView
-            }
-            // 🔧 v43: Check if we just did a full reload (needsFullReload was true).
-            // If so, bypass loadVideoOnce's "already loaded" guard by clearing
-            // loadedVideoId first, then call loadVideoOnce which will reload.
-            // Position is restored by the JS bridge (attachToVideo) which reads
-            // window._plinkRestorePosition global — see evaluateJavaScript below.
-            if WebViewControl.shared.savedPositionForReload > 0 {
-                let pos = WebViewControl.shared.savedPositionForReload
-                print("📺 YouTube v43: full reload — will restore position \(pos)s via JS global")
-                WebViewControl.shared.loadedVideoId = nil  // bypass guard
-                // 🔧 v43: Set window._plinkRestorePosition BEFORE the page loads.
-                // evaluateJavaScript runs on the current page (about:blank or
-                // previous page) — the global persists into the new page load
-                // because WKWebView keeps the same JS context for main frame.
-                // Actually, it DOESN'T persist across navigation. So we inject
-                // it via a WKUserScript at documentStart instead. But since we
-                // can't modify the config after creation, we use a different
-                // approach: store it in the Coordinator and inject via
-                // didCommit navigation callback.
-                context.coordinator.pendingRestorePosition = pos
-                WebViewControl.shared.savedPositionForReload = 0  // consume
-                context.coordinator.loadVideoOnce(id: videoId, webView: webView)
-            } else {
-                print("📺 YouTube v29: makeUIView → Coordinator.loadVideoOnce, videoId='\(videoId)', url='\(urlString.prefix(80))'")
-                context.coordinator.loadVideoOnce(id: videoId, webView: webView)
-            }
-        } else if urlString.contains("rutube.ru") {
-            webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-            webView.load(URLRequest(url: url))
         } else {
-            webView.load(URLRequest(url: url))
-        }
-
-        // 🔧 v64: Also reactivate fresh WKWebView after first creation —
-        // ensures GPU pipeline is initialized when the view enters hierarchy.
-        let freshWebViewRef = webView
-        DispatchQueue.main.async {
-            WebViewControl.shared.reactivate(webView: freshWebViewRef)
+            context.coordinator.activationObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    WebViewControl.shared.reactivate(webView: webViewRef)
+                }
+            }
         }
 
         return webView
@@ -1466,13 +1185,14 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        // 🔧 v70: Handle nil URL — don't load anything, preserve prewarm
+        // 🔧 v71 (Gemini): This is where video loading happens!
+        // makeUIView just returns the singleton (prewarm may have already loaded).
+        // When the socket sends the URL, SwiftUI calls updateUIView with the new url.
+        // We load it ONLY if it's not already loaded (protects prewarm cache).
+
         guard let url = url else {
-            // URL is nil (mediaURL was empty). Don't load anything — the
-            // prewarmed page is preserved. When real URL arrives, SwiftUI
-            // will call makeUIView again (not updateUIView) because the
-            // url property changed from nil to non-nil.
-            print("📺 v70: updateUIView — url is nil, preserving prewarm (no load)")
+            // URL is nil (mediaURL was empty). Don't load anything.
+            print("📺 v71: updateUIView — url is nil, waiting for socket (no load)")
             return
         }
 
@@ -1482,15 +1202,31 @@ struct WebVideoView: UIViewRepresentable {
                          urlString.contains("youtu.be/")
 
         if isYouTube {
-            // Just ensure coordinator has the webView reference
+            // Check if prewarm already loaded this video
+            let currentURL = uiView.url?.absoluteString ?? ""
+            let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
+
+            if currentURL.contains(videoId) || currentURL.contains(videoId.replacingOccurrences(of: "-", with: "")) {
+                // Already loaded by prewarm — don't reload!
+                print("📺 v71: updateUIView — URL matches prewarm (videoId=\(videoId)), skipping load")
+                // Ensure coordinator has the webView reference
+                if context.coordinator.webView == nil {
+                    context.coordinator.webView = uiView
+                }
+                // Nudge WebKit to restore render after background
+                DispatchQueue.main.async {
+                    uiView.setNeedsLayout()
+                    uiView.layoutIfNeeded()
+                }
+                return
+            }
+
+            // Not yet loaded — load it now via Coordinator.loadVideoOnce
+            print("📺 v71: updateUIView — loading YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
             if context.coordinator.webView == nil {
                 context.coordinator.webView = uiView
             }
-            // 🔧 v54 (Gemini): Nudge WebKit to restore render after background
-            DispatchQueue.main.async {
-                uiView.setNeedsLayout()
-                uiView.layoutIfNeeded()
-            }
+            context.coordinator.loadVideoOnce(id: videoId, webView: uiView)
             return
         }
 
@@ -1502,7 +1238,7 @@ struct WebVideoView: UIViewRepresentable {
         if uiView.isLoading {
             return
         }
-        print("📺 WebVideoView updateUIView: URL changed, loading \(url.absoluteString.prefix(60))")
+        print("📺 v71: updateUIView — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
         uiView.load(URLRequest(url: url))
     }
 

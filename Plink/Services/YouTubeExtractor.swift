@@ -1,62 +1,34 @@
 import Foundation
-import YouTubeKit
 
 // MARK: - YouTube Extractor (iOS-side)
 //
-// 🔧 v47: Uses YouTubeKit (bclewaer) — modern Swift library with SPM support.
-// XCDYouTubeKit failed SPM integration (Obj-C, old, package graph error).
-// YouTubeKit is pure Swift, handles YouTube extraction for AVPlayer.
+// 🔧 v47.1: WebView approach. No third-party libraries needed.
+// Extraction returns embed URL — WKWebView handles YouTube playback.
+// The reload-on-fullscreen is fixed by the unified layout (v46.1)
+// which keeps the view tree stable during rotation.
 
 @MainActor
 final class YouTubeExtractor {
 
     static let shared = YouTubeExtractor()
 
-    private var cache: [String: (info: StreamInfo, expires: Date)] = [:]
-    private let cacheTTL: TimeInterval = 30 * 60
-
     private init() {}
 
     func extract(videoId: String) async throws -> StreamInfo {
-        if let cached = cache[videoId], cached.expires > Date() {
-            print("📺 YouTubeExtractor: cache hit for \(videoId)")
-            return cached.info
-        }
+        print("📺 YouTubeExtractor: returning embed URL for \(videoId)")
 
-        print("📺 YouTubeExtractor: extracting with YouTubeKit for \(videoId)")
+        let embedURL = "https://www.youtube.com/embed/\(videoId)?playsinline=1&rel=0"
 
-        // YouTubeKit extracts video info including stream URLs
-        let video = try await YouTubeKit.videoInfo(for: videoId)
-
-        // Get best muxed stream URL (video+audio combined)
-        // YouTubeKit provides streamURLs sorted by quality
-        let streamURLs = video.streamURLs
-
-        guard let bestStream = streamURLs
-            .sorted(by: { $0.key > $1.key })
-            .first else {
-            print("❌ YouTubeExtractor: no stream URLs found")
-            throw YouTubeExtractorError.noFormats
-        }
-
-        let url = bestStream.value
-        let quality = bestStream.key
-
-        print("✅ YouTubeExtractor: succeeded, quality=\(quality)p")
-
-        let info = StreamInfo(
+        return StreamInfo(
             id: videoId,
-            title: video.title ?? "Unknown",
-            author: video.author ?? "Unknown",
+            title: "YouTube Video",
+            author: "Unknown",
             thumbnailURL: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
-            streamURL: url.absoluteString,
-            duration: video.lengthSeconds,
+            streamURL: embedURL,
+            duration: 0,
             isLive: false,
-            extractor: "youtubekit"
+            extractor: "webview"
         )
-
-        cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
-        return info
     }
 
     static func extractVideoId(from url: String) -> String? {

@@ -32,8 +32,6 @@ targets:
       - path: Plink/Resources
         excludes:
           - "**/.DS_Store"
-    dependencies:
-      - package: YouTubeKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.syncwatch.plink
@@ -59,8 +57,3 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: Plink/Resources/Plink.entitlements
-
-packages:
-  YouTubeKit:
-    url: https://github.com/bclewaer/YouTubeKit.git
-    from: 1.0.0

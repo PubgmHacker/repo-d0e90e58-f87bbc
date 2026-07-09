@@ -41,7 +41,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
 
         var errorDescription: String? {
             switch self {
-            case .timeout: return "Превышено время ожидания (15 сек)"
+            case .timeout: return "Превышено время ожидания (30 сек)"
             case .noStreamFound: return "Не удалось извлечь URL видеопотока"
             case .invalidResponse: return "Неверный ответ от YouTube"
             }
@@ -109,9 +109,9 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
             let url = URL(string: "https://m.youtube.com/watch?v=\(videoId)")!
             wv.load(URLRequest(url: url))
 
-            // 15s timeout
+            // 30s timeout (v94.7: was 15s — not enough for VEVO/licensed content)
             timeoutTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { return }
                 self?.finish(with: .failure(ExtractionError.timeout))
             }
@@ -280,7 +280,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                     }
                 }
             } catch(e) {}
-            if (attempts > 20) clearInterval(interval);
+            if (attempts > 60) clearInterval(interval); // v94.7: 60 attempts × 500ms = 30s
         }, 500);
     })();
     """

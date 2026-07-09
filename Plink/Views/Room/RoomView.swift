@@ -440,28 +440,6 @@ struct RoomView: View {
                             .clipShape(Circle())
                     }
                     Spacer()
-                    // 🔧 v39: Dedicated fullscreen toggle button.
-                    // v37 removed ControlsOverlay (which had the fullscreen button)
-                    // → user had no way to enter fullscreen. This button calls
-                    // enterFullscreen() / exitFullscreen() which lock orientation
-                    // to landscape / portrait respectively.
-                    Button {
-                        HapticManager.impact(.light)
-                        if isFullscreen {
-                            exitFullscreen()
-                        } else {
-                            enterFullscreen()
-                        }
-                    } label: {
-                        Image(systemName: isFullscreen
-                              ? "arrow.down.right.and.arrow.up.left"
-                              : "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(width: 30, height: 30)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
                     ParticipantBadge(count: viewModel.room.participantCount)
                 }
                 .padding(.horizontal, 12)

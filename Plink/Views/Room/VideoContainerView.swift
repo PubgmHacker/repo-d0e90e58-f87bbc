@@ -1083,9 +1083,9 @@ final class VideoHostController: UIViewController {
 
             if type == .ended {
                 print("⚡ v80: AVAudioSession interruption ENDED — forcing resume")
-                // 🔧 v83: Increase delay to 500ms — WebContent process needs
-                // time to wake up after background. 200ms was too early.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // 🔧 v84: Increase delay to 800ms — WebContent process needs
+                // to exit 'Suspended' state before we can recover the renderer.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     self.forceResumePlayback()
                 }
             }
@@ -1107,70 +1107,66 @@ final class VideoHostController: UIViewController {
             print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v83 (Gemini): Seek Flush strategy — LESS invasive than Hard Reset.
-        // Instead of clearing src (which breaks YouTube's player), just seek
-        // to currentTime + 0.1 and play. This forces the decoder to request
-        // new segments, kicking it out of state=3 deadlock.
+        // 🔧 v84 (Gemini): Renderer Recovery — window.location.replace()
+        // v83 Seek Flush (currentTime + 0.1) didn't work because the
+        // WebProcess graphics context was damaged (markAllLayersVolatile: Failed).
+        // Simple play() and seek() can't fix a damaged renderer.
+        //
+        // v84: Use window.location.replace(embedUrl) to SOFT reload the page.
+        // This forces WKWebView to rebuild the YouTube JS engine WITHOUT
+        // destroying the WebView instance (no GPU crash). The graphics
+        // context stays attached, but the player reinitializes fresh.
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
                 if (!video) {
-                    console.log('[Plink v83] No video element found');
+                    console.log('[Plink v84] No video element found');
                     return;
                 }
 
-                console.log('[Plink v83] forceResumePlayback — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
+                console.log('[Plink v84] Renderer Recovery — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
 
-                // Seek Flush strategy: if stuck in buffering (readyState < 3),
-                // seek forward 0.1s to force decoder to request new segments
-                if (video.readyState < 3) {
-                    console.log('[Plink v83] Buffering deadlock — Seek Flush');
-                    var curr = video.currentTime;
-                    // Seek +0.1s — forces decoder to pull new data
-                    video.currentTime = curr + 0.1;
-                    console.log('[Plink v83] Seeked to ' + (curr + 0.1) + ' — forcing decoder flush');
+                // Check if stuck in buffering (readyState < 3 = HAVE_FUTURE_DATA)
+                if (video.readyState < 3 || video.paused) {
+                    console.log('[Plink v84] CRITICAL: Renderer zombie detected. Performing Soft Reset.');
 
-                    // Play after 100ms (let seek complete)
-                    setTimeout(function() {
-                        if (typeof window.playVideo === 'function') {
-                            window.playVideo();
-                        } else {
-                            video.play().catch(function(e) {
-                                console.log('[Plink v83] Play after seek failed: ' + e);
-                            });
-                        }
-                        console.log('[Plink v83] Play called after Seek Flush');
-                    }, 100);
-                } else if (video.paused) {
-                    // Simple resume — not buffering, just paused
-                    console.log('[Plink v83] Simple resume (paused, not buffering)');
-                    if (typeof window.playVideo === 'function') {
-                        window.playVideo();
-                    } else {
-                        video.play().catch(function(e) {
-                            console.log('[Plink v83] Play failed: ' + e);
-                        });
-                    }
+                    // 1. Kill old context — clear video src
+                    video.pause();
+                    video.removeAttribute('src');
+                    video.load();
+
+                    // 2. Get current embed URL (window.location.href)
+                    var embedUrl = window.location.href;
+                    console.log('[Plink v84] Soft reloading page: ' + embedUrl.substring(0, 80));
+
+                    // 3. window.location.replace() — soft reload, no new history entry
+                    // This forces WKWebView to rebuild YouTube JS engine
+                    // WITHOUT destroying the WebView instance (GPU context preserved)
+                    window.location.replace(embedUrl);
+
+                    console.log('[Plink v84] Renderer Recovery initiated — page reloading...');
                 } else {
-                    console.log('[Plink v83] Video not paused — just nudging GPU');
+                    console.log('[Plink v84] Video playing normally — no recovery needed');
                 }
-
-                // Nudge GPU with translateZ
-                video.style.transform = 'translateZ(0)';
-                setTimeout(function() { video.style.transform = 'none'; }, 50);
-
-                // Dispatch resize
-                window.dispatchEvent(new Event('resize'));
             } catch(e) {
-                console.log('[Plink v83] forceResumePlayback error: ' + e);
+                console.log('[Plink v84] Renderer Recovery error: ' + e);
             }
         })();
         """
         webView.evaluateJavaScript(js, completionHandler: nil)
 
-        // Retry after 1s — if hard reset didn't work, try simple play again
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        // 🔧 v84: After Renderer Recovery, reset lastLoadedVideoId so
+        // updateUIViewController knows to reload the video when the page
+        // finishes reloading. The Coordinator's shouldLoadVideoId() would
+        // otherwise skip loading because videoId matches lastLoadedVideoId.
+        if let coord = self.coordinator {
+            coord.lastLoadedVideoId = nil
+            print("📺 v84: Reset lastLoadedVideoId — Coordinator will reload after page recovery")
+        }
+
+        // Retry after 2s — if recovery didn't work, try simple play again
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard self != nil, let webView = WebViewControl.shared.webView else { return }
             webView.evaluateJavaScript("""
             (function() {

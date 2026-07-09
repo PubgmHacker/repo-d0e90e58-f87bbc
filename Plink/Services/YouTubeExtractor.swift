@@ -1,36 +1,83 @@
 import Foundation
 
-// MARK: - YouTube Extractor (iOS-side)
+// MARK: - YouTube Extractor (iOS-side) — AVPlayer + XCDYouTubeKit
 //
-// 🔧 v47.1: WebView approach. No third-party libraries needed.
-// Extraction returns embed URL — WKWebView handles YouTube playback.
-// The reload-on-fullscreen is fixed by the unified layout (v46.1)
-// which keeps the view tree stable during rotation.
+// 🔧 v48: IRONCLAD AVPlayer approach. No WKWebView, no reloads, no render death.
+// XCDYouTubeKit source files are bundled directly (no SPM needed).
+// Bridging header imports XCDYouTubeKit.h for Swift access.
+//
+// XCDYouTubeKit handles ALL YouTube complexity:
+//   - Bot detection bypass
+//   - Signature deciphering
+//   - Format selection (muxed streams for AVPlayer)
+//   - Age-restricted videos
+//   - Cookie/auth handling
 
 @MainActor
 final class YouTubeExtractor {
 
     static let shared = YouTubeExtractor()
 
+    private var cache: [String: (info: StreamInfo, expires: Date)] = [:]
+    private let cacheTTL: TimeInterval = 30 * 60
+
     private init() {}
 
+    /// Extract a direct stream URL from a YouTube video ID using XCDYouTubeKit.
+    /// Returns googlevideo.com URL that AVPlayer can play natively.
     func extract(videoId: String) async throws -> StreamInfo {
-        print("📺 YouTubeExtractor: returning embed URL for \(videoId)")
+        if let cached = cache[videoId], cached.expires > Date() {
+            print("📺 YouTubeExtractor: cache hit for \(videoId)")
+            return cached.info
+        }
 
-        let embedURL = "https://www.youtube.com/embed/\(videoId)?playsinline=1&rel=0"
+        print("📺 YouTubeExtractor: extracting with XCDYouTubeKit for \(videoId)")
 
-        return StreamInfo(
+        let video: XCDYouTubeVideo = try await withCheckedThrowingContinuation { continuation in
+            XCDYouTubeClient.default().getVideoWithIdentifier(videoId) { video, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if let video = video {
+                    continuation.resume(returning: video)
+                } else {
+                    continuation.resume(throwing: YouTubeExtractorError.noFormats)
+                }
+            }
+        }
+
+        let streamURLs = video.streamURLs ?? [:]
+
+        // Priority: HD720 > medium360 > small240
+        // These are MUXED streams (video+audio combined) — AVPlayer plays them natively.
+        let url = streamURLs[XCDYouTubeVideoQuality.HD720.rawValue]
+                  ?? streamURLs[XCDYouTubeVideoQuality.medium360.rawValue]
+                  ?? streamURLs[XCDYouTubeVideoQuality.small240.rawValue]
+                  ?? streamURLs.values.first
+
+        guard let streamURL = url else {
+            print("❌ YouTubeExtractor: no stream URLs. Keys: \(streamURLs.keys)")
+            throw YouTubeExtractorError.noFormats
+        }
+
+        let quality = streamURLs.first(where: { $0.value == streamURL })?.key ?? 0
+        print("✅ YouTubeExtractor: succeeded, quality=\(quality)p, URL prefix=\(streamURL.absoluteString.prefix(60))")
+
+        let info = StreamInfo(
             id: videoId,
-            title: "YouTube Video",
-            author: "Unknown",
-            thumbnailURL: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
-            streamURL: embedURL,
-            duration: 0,
+            title: video.title ?? "Unknown",
+            author: video.author ?? "Unknown",
+            thumbnailURL: video.thumbnailURL?.absoluteString ?? "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
+            streamURL: streamURL.absoluteString,
+            duration: video.duration,
             isLive: false,
-            extractor: "webview"
+            extractor: "xcdyoutubekit"
         )
+
+        cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
+        return info
     }
 
+    /// Extract video ID from any YouTube URL format.
     static func extractVideoId(from url: String) -> String? {
         if let match = url.range(of: #"/([\w-]{11})(?:\?|$|/)"#, options: .regularExpression) {
             return String(url[match]).trimmingCharacters(in: CharacterSet(charactersIn: "/?"))

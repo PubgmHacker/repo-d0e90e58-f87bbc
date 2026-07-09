@@ -275,6 +275,8 @@ final class WebViewControl {
             // v78: Removed micro-seek (video.currentTime = curr + 0.001) because
             // it caused YouTube to go to state=3 (buffering) and never recover.
             // translateZ(0) + resize event is enough to wake the decoder.
+            // v79: Added readyState >= 2 check before play() — don't call play()
+            // if video is buffering (state=3), this would worsen the lockup.
             let js = """
             (function() {
                 try {
@@ -289,18 +291,22 @@ final class WebViewControl {
                         // 2. Hardware Acceleration Trigger (CoreAnimation layer rebuild)
                         video.style.transform = 'translateZ(0)';
 
-                        // 3. Resume if paused — but DON'T micro-seek!
-                        if (video.paused) {
-                            console.log('[Plink v78] Video was paused — resuming');
+                        // 3. Resume if paused AND readyState >= 2 (HAVE_CURRENT_DATA)
+                        // v79: DON'T call play() if video is buffering (readyState < 2)
+                        // — this would worsen the buffering lockup
+                        if (video.paused && video.readyState >= 2) {
+                            console.log('[Plink v79] Video paused + ready, resuming');
                             if (typeof window.playVideo === 'function') {
                                 window.playVideo();
                             } else if (window.player && typeof window.player.playVideo === 'function') {
                                 window.player.playVideo();
                             } else {
                                 video.play().catch(function(e) {
-                                    console.log('[Plink v78] Play resume failed: ' + e);
+                                    console.log('[Plink v79] Play resume failed: ' + e);
                                 });
                             }
+                        } else if (video.paused && video.readyState < 2) {
+                            console.log('[Plink v79] Video paused but buffering (readyState=' + video.readyState + '), NOT calling play');
                         }
                     }
 
@@ -313,7 +319,7 @@ final class WebViewControl {
                     // Dispatch resize event — forces WebKit viewport recompute
                     window.dispatchEvent(new Event('resize'));
                 } catch(e) {
-                    console.log('[Plink v78] reactivate error: ' + e);
+                    console.log('[Plink v79] reactivate error: ' + e);
                 }
             })();
             """
@@ -1119,10 +1125,12 @@ struct WebVideoView: UIViewControllerRepresentable {
 
         let webView = uiViewController.webView!
 
-        // 🔧 v71: This is where video loading happens!
+        // 🔧 v79 (Gemini): Sticky URL state — if url is nil, DON'T do anything!
+        // When socket drops, mediaURL becomes nil. We IGNORE this and keep
+        // playing the current video. This prevents YouTube from going to
+        // state=3 (buffering) due to "empty state" signals.
         guard let url = url else {
-            // URL is nil (mediaURL was empty). Don't load anything.
-            print("📺 v77: updateUIViewController — url is nil, waiting for socket (no load)")
+            print("📺 v79: updateUIViewController — url is nil, IGNORING (sticky state, keep playing)")
             return
         }
 
@@ -1136,9 +1144,9 @@ struct WebVideoView: UIViewControllerRepresentable {
             let currentURL = webView.url?.absoluteString ?? ""
             let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
 
-            if currentURL.contains(videoId) || currentURL.contains(videoId.replacingOccurrences(of: "-", with: "")) {
-                // Already loaded by prewarm — don't reload!
-                print("📺 v77: updateUIViewController — URL matches prewarm (videoId=\(videoId)), skipping load")
+            // 🔧 v79: Use shouldLoadVideoId — if same video, skip entirely
+            if !context.coordinator.shouldLoadVideoId(videoId) {
+                print("📺 v79: updateUIViewController — sticky URL (videoId=\(videoId)), skipping load (keep playing)")
                 if context.coordinator.webView == nil {
                     context.coordinator.webView = webView
                 }
@@ -1149,11 +1157,12 @@ struct WebVideoView: UIViewControllerRepresentable {
                 return
             }
 
-            // Not yet loaded — load it now via Coordinator.loadVideoOnce
-            print("📺 v77: updateUIViewController — loading YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
+            // New video — load it now
+            print("📺 v79: updateUIViewController — loading NEW YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
+            context.coordinator.lastLoadedVideoId = videoId
             context.coordinator.loadVideoOnce(id: videoId, webView: webView)
             return
         }
@@ -1166,7 +1175,7 @@ struct WebVideoView: UIViewControllerRepresentable {
         if webView.isLoading {
             return
         }
-        print("📺 v77: updateUIViewController — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
+        print("📺 v79: updateUIViewController — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
         webView.load(URLRequest(url: url))
     }
 
@@ -1343,6 +1352,21 @@ struct WebVideoView: UIViewControllerRepresentable {
         /// makeUIView is called while app is in background. We defer reactivate()
         /// until the app becomes active so iOS doesn't refuse GPU context.
         var activationObserver: NSObjectProtocol?
+        /// 🔧 v79 (Gemini): Sticky URL state — remembers the last loaded videoId.
+        /// When socket drops and mediaURL becomes nil, we IGNORE the nil update
+        /// and keep playing the current video. This prevents YouTube from
+        /// going to state=3 (buffering) due to "empty state" signals.
+        var lastLoadedVideoId: String?
+
+        /// 🔧 v79: Check if we should load a new URL.
+        /// Returns false if:
+        /// - URL is nil (socket drop — ignore, keep playing current video)
+        /// - URL matches lastLoadedVideoId (already loaded — skip)
+        func shouldLoadVideoId(_ videoId: String?) -> Bool {
+            guard let videoId = videoId else { return false }  // Ignore nil
+            if let last = lastLoadedVideoId, last == videoId { return false }  // Same video
+            return true
+        }
 
         // MARK: - Lifecycle (v35) + Window Observer (v35.2)
 

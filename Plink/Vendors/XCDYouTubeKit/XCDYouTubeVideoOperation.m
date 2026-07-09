@@ -146,17 +146,19 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
         }
         else
         {
-                // 🔧 v48.1: Use youtubei/v1/player API instead of deprecated get_video_info.
-                // get_video_info was shut down by YouTube (returns empty response).
-                // youtubei/v1/player returns the same playerResponse JSON.
+                // 🔧 v48.2: Use youtubei/v1/player API with IOS client.
+                // Gemini recommended IOS client (clientVersion: "19.29.1") —
+                // mobile clients don't require SAPISIDHASH, signatures are static.
                 NSString *apiURLString = [NSString stringWithFormat:@"https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"];
                 NSURL *videoInfoURL = [NSURL URLWithString:apiURLString];
                 
                 NSDictionary *body = @{
                         @"context": @{
                                 @"client": @{
-                                        @"clientName": @"ANDROID",
-                                        @"clientVersion": @"19.09.37",
+                                        @"clientName": @"IOS",
+                                        @"clientVersion": @"19.29.1",
+                                        @"deviceMake": @"Apple",
+                                        @"deviceModel": @"iPhone15,3",
                                         @"hl": self.languageIdentifier,
                                         @"gl": @"US"
                                 }
@@ -174,7 +176,7 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                 NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:videoInfoURL cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:10];
                 [request setHTTPMethod:@"POST"];
                 [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-                [request setValue:@"com.google.android.youtube/19.09.37 (Linux; U; Android 14; SM-S918B) gzip" forHTTPHeaderField:@"User-Agent"];
+                [request setValue:@"com.google.ios.youtube/19.29.1 (iPhone15,3; U; CPU iOS 17_0 like Mac OS X)" forHTTPHeaderField:@"User-Agent"];
                 [request setValue:self.languageIdentifier forHTTPHeaderField:@"Accept-Language"];
                 [request setValue:[NSString stringWithFormat:@"https://youtube.com/watch?v=%@", self.videoIdentifier] forHTTPHeaderField:@"Referer"];
                 [request setHTTPBody:bodyData];

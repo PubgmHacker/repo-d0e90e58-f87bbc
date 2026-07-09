@@ -1,37 +1,28 @@
 import Foundation
+import WebKit
 
-// MARK: - NativeYouTubeExtractor (Pure Swift, TVHTML5 stateless)
+// MARK: - HybridYouTubeExtractor (WKWebView Network Hook)
 //
-// 🔧 v50.2: Stateless TVHTML5 client — no cookies, no visitorData, no watch page.
-// Previous approaches failed:
-//   - WEB client: UNPLAYABLE (requires BotGuard po_token)
-//   - IOS client: FAILED_PRECONDITION (web cookies + mobile profile mismatch)
-//   - TVHTML5 + web cookies: UNPLAYABLE "The page needs to be reloaded" (context mismatch)
+// 🔧 v51: Final solution — uses WKWebView to bypass BotGuard.
+// YouTube's BotGuard (2026) blocks all API-only approaches:
+//   - WEB: UNPLAYABLE (needs po_token)
+//   - IOS: FAILED_PRECONDITION
+//   - TVHTML5: LOGIN_REQUIRED
 //
-// TVHTML5 works best when stateless — Smart TVs don't visit watch pages first.
-// They just POST to youtubei/v1/player directly with their TV profile.
+// Hybrid approach: invisible WKWebView loads the watch page.
+// WebKit solves BotGuard natively (it IS Safari). JS hook intercepts
+// the stream URL (googlevideo.com or .m3u8) and sends it to Swift.
+// Swift kills the WebView and feeds the URL to AVPlayer.
 
 @MainActor
 final class YouTubeExtractor {
 
     static let shared = YouTubeExtractor()
 
-    private let session: URLSession
     private var cache: [String: (info: StreamInfo, expires: Date)] = [:]
     private let cacheTTL: TimeInterval = 30 * 60
 
-    private init() {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 15
-        config.timeoutIntervalForResource = 30
-        config.waitsForConnectivity = true
-        // 🔧 v50.2: NO cookie storage — TVHTML5 is stateless
-        config.httpCookieStorage = nil
-        config.httpShouldSetCookies = false
-        self.session = URLSession(configuration: config)
-    }
-
-    // MARK: - Public API
+    private init() {}
 
     func extract(videoId: String) async throws -> StreamInfo {
         if let cached = cache[videoId], cached.expires > Date() {
@@ -39,174 +30,35 @@ final class YouTubeExtractor {
             return cached.info
         }
 
-        print("📺 YouTubeExtractor v50.2: extracting \(videoId) (Stateless TVHTML5)")
+        print("📺 YouTubeExtractor v51: extracting \(videoId) (Hybrid WKWebView Hook)")
 
-        // Single POST request — no watch page, no cookies, no visitorData
-        let streamInfo = try await postPlayerAPI(videoId: videoId)
+        let streamURL = try await withTimeout(15) {
+            try await self.extractStreamURL(videoId: videoId)
+        }
 
-        cache[videoId] = (streamInfo, Date().addingTimeInterval(cacheTTL))
-        print("✅ YouTubeExtractor v50.2: succeeded, extractor=\(streamInfo.extractor)")
-        return streamInfo
-    }
+        print("✅ YouTubeExtractor v51: got stream URL, prefix=\(streamURL.prefix(60))")
 
-    // MARK: - POST to youtubei/v1/player (Stateless TVHTML5)
-
-    private func postPlayerAPI(videoId: String) async throws -> StreamInfo {
-        let apiUrl = URL(string: "https://www.youtube.com/youtubei/v1/player")!
-        var request = URLRequest(url: apiUrl)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        // 🔧 v50.2: Smart TV User-Agent — no cookies, no Origin, no Referer
-        request.setValue(
-            "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/531.2+ (KHTML, like Gecko) WebBrowser/1.0 SmartTV Safari/531.2+",
-            forHTTPHeaderField: "User-Agent"
+        let info = StreamInfo(
+            id: videoId,
+            title: "YouTube Video",
+            author: "Unknown",
+            thumbnailURL: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
+            streamURL: streamURL,
+            duration: 0,
+            isLive: false,
+            extractor: "hybrid-webview"
         )
 
-        // Generate cpn (Client Playback Nonce)
-        let cpn = generateCPN()
-
-        // 🔧 v50.2: Pure TVHTML5 payload — no visitorData, no cookies
-        let body: [String: Any] = [
-            "context": [
-                "client": [
-                    "clientName": "TVHTML5",
-                    "clientVersion": "7.20230407.00.00",
-                    "deviceMake": "Samsung",
-                    "deviceModel": "SmartTV",
-                    "userAgent": "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/531.2+ (KHTML, like Gecko) WebBrowser/1.0 SmartTV Safari/531.2+",
-                    "osName": "Tizen",
-                    "osVersion": "4.0",
-                    "hl": "en",
-                    "gl": "US"
-                ]
-            ],
-            "videoId": videoId,
-            "playbackContext": [
-                "contentPlaybackContext": [
-                    "signatureTimestamp": 19900
-                ]
-            ],
-            "cpn": cpn
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await session.data(for: request)
-
-        guard let http = response as? HTTPURLResponse else {
-            throw YouTubeExtractorError.invalidResponse
-        }
-
-        print("📺 YouTubeExtractor: player API HTTP \(http.statusCode), data=\(data.count) bytes")
-
-        guard http.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
-            print("❌ YouTubeExtractor: HTTP \(http.statusCode): \(errorBody.prefix(300))")
-            throw YouTubeExtractorError.httpError(http.statusCode)
-        }
-
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw YouTubeExtractorError.invalidJSON
-        }
-
-        let playabilityStatus = (json["playabilityStatus"] as? [String: Any])?["status"] as? String ?? "UNKNOWN"
-        print("📺 YouTubeExtractor: playability=\(playabilityStatus)")
-
-        guard playabilityStatus == "OK" || playabilityStatus == "LIVE_STREAM_OFFLINE" else {
-            let reason = (json["playabilityStatus"] as? [String: Any])?["reason"] as? String ?? playabilityStatus
-            print("❌ YouTubeExtractor: not playable: \(reason)")
-            throw YouTubeExtractorError.playabilityError(reason)
-        }
-
-        guard let streamingData = json["streamingData"] as? [String: Any] else {
-            print("❌ YouTubeExtractor: no streamingData")
-            throw YouTubeExtractorError.noStreamingData
-        }
-
-        let videoDetails = json["videoDetails"] as? [String: Any]
-
-        // Priority 1: HLS manifest (best for AVPlayer)
-        if let hlsUrl = streamingData["hlsManifestUrl"] as? String, !hlsUrl.isEmpty {
-            print("📺 YouTubeExtractor: using HLS manifest")
-            return StreamInfo(
-                id: videoId,
-                title: videoDetails?["title"] as? String ?? "Unknown",
-                author: videoDetails?["author"] as? String ?? "Unknown",
-                thumbnailURL: extractThumbnail(videoDetails: videoDetails, videoId: videoId),
-                streamURL: hlsUrl,
-                duration: Double(videoDetails?["lengthSeconds"] as? String ?? "0") ?? 0,
-                isLive: videoDetails?["isLive"] as? Bool ?? false,
-                extractor: "native-hls"
-            )
-        }
-
-        // Priority 2: muxed formats
-        if let formats = streamingData["formats"] as? [[String: Any]], !formats.isEmpty {
-            let sorted = formats.sorted { a, b in
-                let itagA = a["itag"] as? Int ?? 0
-                let itagB = b["itag"] as? Int ?? 0
-                let qualityOrder: [Int: Int] = [22: 720, 18: 360, 43: 360, 36: 240, 17: 144]
-                let qa = qualityOrder[itagA] ?? 0
-                let qb = qualityOrder[itagB] ?? 0
-                return qa > qb
-            }
-
-            if let best = sorted.first,
-               let url = best["url"] as? String, !url.isEmpty {
-                let itag = best["itag"] as? Int ?? 0
-                print("📺 YouTubeExtractor: using muxed format itag=\(itag)")
-                return StreamInfo(
-                    id: videoId,
-                    title: videoDetails?["title"] as? String ?? "Unknown",
-                    author: videoDetails?["author"] as? String ?? "Unknown",
-                    thumbnailURL: extractThumbnail(videoDetails: videoDetails, videoId: videoId),
-                    streamURL: url,
-                    duration: Double(videoDetails?["lengthSeconds"] as? String ?? "0") ?? 0,
-                    isLive: videoDetails?["isLive"] as? Bool ?? false,
-                    extractor: "native"
-                )
-            }
-        }
-
-        // Priority 3: adaptiveFormats — check if any have direct URL (no signatureCipher)
-        if let adaptiveFormats = streamingData["adaptiveFormats"] as? [[String: Any]] {
-            let withUrl = adaptiveFormats.filter { ($0["url"] as? String)?.isEmpty == false }
-            if let best = withUrl.first,
-               let url = best["url"] as? String, !url.isEmpty {
-                print("📺 YouTubeExtractor: using adaptive format (direct URL)")
-                return StreamInfo(
-                    id: videoId,
-                    title: videoDetails?["title"] as? String ?? "Unknown",
-                    author: videoDetails?["author"] as? String ?? "Unknown",
-                    thumbnailURL: extractThumbnail(videoDetails: videoDetails, videoId: videoId),
-                    streamURL: url,
-                    duration: Double(videoDetails?["lengthSeconds"] as? String ?? "0") ?? 0,
-                    isLive: videoDetails?["isLive"] as? Bool ?? false,
-                    extractor: "native-adaptive"
-                )
-            }
-        }
-
-        print("❌ YouTubeExtractor: no playable formats found")
-        throw YouTubeExtractorError.noFormats
+        cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
+        return info
     }
 
-    // MARK: - Helpers
-
-    private func generateCPN() -> String {
-        let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        return String((0..<16).map { _ in chars.randomElement()! })
-    }
-
-    private func extractThumbnail(videoDetails: [String: Any]?, videoId: String) -> String {
-        if let thumbnails = videoDetails?["thumbnail"] as? [String: Any],
-           let thumbsArray = thumbnails["thumbnails"] as? [[String: Any]],
-           let last = thumbsArray.last,
-           let url = last["url"] as? String {
-            return url
+    private func extractStreamURL(videoId: String) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            HybridHookExtractor.extract(videoId: videoId) { result in
+                continuation.resume(with: result)
+            }
         }
-        return "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg"
     }
 
     static func extractVideoId(from url: String) -> String? {
@@ -224,6 +76,146 @@ final class YouTubeExtractor {
     }
 }
 
+// MARK: - Hybrid Hook Extractor (WKWebView + JS Network Intercept)
+
+private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+
+    private weak var webView: WKWebView?
+    private var continuation: (Result<String, Error>)?
+    private var finished = false
+
+    static func extract(videoId: String, completion: @escaping (Result<String, Error>) -> Void) {
+        let extractor = HybridHookExtractor()
+        extractor.continuation = completion
+        extractor.start(videoId: videoId)
+    }
+
+    private func start(videoId: String) {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+
+        // JS hook: intercept fetch/XHR for googlevideo.com or .m3u8 URLs
+        let hookScript = WKUserScript(source: """
+        (function() {
+            function checkURL(url) {
+                if (typeof url !== 'string') return false;
+                return url.indexOf('googlevideo.com/videoplayback') !== -1 ||
+                       url.indexOf('.m3u8') !== -1 ||
+                       url.indexOf('googlevideo.com') !== -1;
+            }
+
+            // Hook fetch
+            var origFetch = window.fetch;
+            window.fetch = function() {
+                var url = arguments[0];
+                if (url && url.url) url = url.url;
+                if (checkURL(url)) {
+                    window.webkit.messageHandlers.hook.postMessage({type: 'fetch', url: url});
+                }
+                return origFetch.apply(this, arguments);
+            };
+
+            // Hook XMLHttpRequest
+            var origOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                if (checkURL(url)) {
+                    window.webkit.messageHandlers.hook.postMessage({type: 'xhr', url: url});
+                }
+                return origOpen.apply(this, arguments);
+            };
+
+            // Hook video src
+            var origCreateElement = document.createElement;
+            document.createElement = function(tag) {
+                var el = origCreateElement.apply(this, arguments);
+                if (tag.toLowerCase() === 'video') {
+                    var observer = new MutationObserver(function(mutations) {
+                        if (el.src && checkURL(el.src)) {
+                            window.webkit.messageHandlers.hook.postMessage({type: 'video', url: el.src});
+                        }
+                    });
+                    observer.observe(el, {attributes: true, attributeFilter: ['src']});
+                }
+                return el;
+            };
+
+            // Also check existing video elements
+            setInterval(function() {
+                var videos = document.querySelectorAll('video');
+                for (var i = 0; i < videos.length; i++) {
+                    var src = videos[i].src || videos[i].currentSrc;
+                    if (src && checkURL(src)) {
+                        window.webkit.messageHandlers.hook.postMessage({type: 'video', url: src});
+                    }
+                }
+            }, 500);
+        })();
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+
+        config.userContentController.addUserScript(hookScript)
+        config.userContentController.add(self, name: "hook")
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        // iPad UA → YouTube returns HLS (.m3u8) instead of MSE (blob)
+        webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        webView.navigationDelegate = self
+        self.webView = webView
+
+        let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
+        webView.load(URLRequest(url: url))
+    }
+
+    // MARK: - WKScriptMessageHandler
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard !finished else { return }
+
+        if let dict = message.body as? [String: Any],
+           let url = dict["url"] as? String,
+           url.contains("googlevideo.com") || url.contains(".m3u8") {
+            print("🎯 YouTubeExtractor v51: HOOK intercepted URL: \(url.prefix(80))")
+            finish(with: .success(url))
+        }
+    }
+
+    // MARK: - WKNavigationDelegate
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        print("📺 YouTubeExtractor v51: watch page loaded, waiting for stream URL...")
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard !finished else { return }
+        print("❌ YouTubeExtractor v51: navigation failed: \(error.localizedDescription)")
+        finish(with: .failure(error))
+    }
+
+    // MARK: - Cleanup
+
+    private func finish(with result: Result<String, Error>) {
+        guard !finished else { return }
+        finished = true
+
+        // Cleanup WebView
+        DispatchQueue.main.async { [weak self] in
+            self?.webView?.stopLoading()
+            self?.webView?.navigationDelegate = nil
+            self?.webView?.configuration.userContentController.removeScriptMessageHandler(forName: "hook")
+            self?.webView = nil
+        }
+
+        continuation?(result)
+    }
+
+    deinit {
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+    }
+}
+
+// MARK: - Models & Errors
+
 struct StreamInfo {
     let id: String
     let title: String
@@ -236,21 +228,35 @@ struct StreamInfo {
 }
 
 enum YouTubeExtractorError: LocalizedError {
+    case timedOut
+    case noStreamFound
     case invalidResponse
-    case httpError(Int)
-    case invalidJSON
-    case playabilityError(String)
-    case noStreamingData
-    case noFormats
 
     var errorDescription: String? {
         switch self {
-        case .invalidResponse: return "Invalid response from YouTube"
-        case .httpError(let code): return "YouTube returned HTTP \(code)"
-        case .invalidJSON: return "Invalid JSON from YouTube"
-        case .playabilityError(let reason): return "Video not playable: \(reason)"
-        case .noStreamingData: return "No streaming data in response"
-        case .noFormats: return "No playable formats found"
+        case .timedOut: return "Превышено время ожидания (15 сек)"
+        case .noStreamFound: return "Не удалось перехватить URL видеопотока"
+        case .invalidResponse: return "Неверный ответ от YouTube"
         }
+    }
+}
+
+// MARK: - Timeout helper
+
+func withTimeout<T: Sendable>(
+    _ seconds: TimeInterval,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            return try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(for: .seconds(seconds))
+            throw YouTubeExtractorError.timedOut
+        }
+        let result = try await group.next()!
+        group.cancelAll()
+        return result
     }
 }

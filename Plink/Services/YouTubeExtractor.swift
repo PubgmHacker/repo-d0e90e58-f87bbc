@@ -93,13 +93,35 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
 
         var scraperInterval = setInterval(function() {
             try {
-                // Method 1: ytInitialPlayerResponse (embedded JSON)
-                if (window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.streamingData) {
-                    var hls = window.ytInitialPlayerResponse.streamingData.hlsManifestUrl;
-                    if (hls && hls.indexOf('.m3u8') !== -1) {
+                // Auto-click "Accept cookies" consent banner
+                var consentBtn = document.querySelector('button[aria-label="Accept all"]');
+                if (consentBtn) consentBtn.click();
+
+                // Find player response object
+                var response = window.ytInitialPlayerResponse;
+                if (!response && window.ytplayer && window.ytplayer.config) {
+                    var raw = window.ytplayer.config.args.raw_player_response;
+                    if (raw) response = JSON.parse(raw);
+                }
+
+                if (response && response.streamingData) {
+                    var sd = response.streamingData;
+
+                    // Priority A: HLS Manifest (.m3u8)
+                    if (sd.hlsManifestUrl) {
                         clearInterval(scraperInterval);
-                        window.webkit.messageHandlers.hook.postMessage(hls);
+                        window.webkit.messageHandlers.hook.postMessage(sd.hlsManifestUrl);
                         return;
+                    }
+
+                    // Priority B: Direct MP4 (muxed video+audio, itag 22=720p, 18=360p)
+                    if (sd.formats && sd.formats.length > 0) {
+                        var bestFormat = sd.formats.find(function(f) { return f.itag === 22 || f.itag === 18; }) || sd.formats[0];
+                        if (bestFormat && bestFormat.url) {
+                            clearInterval(scraperInterval);
+                            window.webkit.messageHandlers.hook.postMessage(bestFormat.url);
+                            return;
+                        }
                     }
                 }
 
@@ -109,19 +131,6 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                     clearInterval(scraperInterval);
                     window.webkit.messageHandlers.hook.postMessage(video.src);
                     return;
-                }
-
-                // Method 3: ytcfg (YouTube config object)
-                if (window.ytcfg && window.ytcfg.get) {
-                    var data = window.ytcfg.get('PLAYER_VARS');
-                    if (data && data.embedded_player_response) {
-                        var parsed = JSON.parse(data.embedded_player_response);
-                        if (parsed.streamingData && parsed.streamingData.hlsManifestUrl) {
-                            clearInterval(scraperInterval);
-                            window.webkit.messageHandlers.hook.postMessage(parsed.streamingData.hlsManifestUrl);
-                            return;
-                        }
-                    }
                 }
             } catch(e) {}
         }, 500);
@@ -154,10 +163,10 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard !isFinished else { return }
 
-        // 🔧 v51.6: Accept string directly (scraper sends plain URL string)
+        // 🔧 v51.7 (Gemini): Accept HLS (.m3u8) OR direct MP4 (videoplayback)
         if let url = message.body as? String,
-           url.contains(".m3u8") || url.contains("manifest/hls") {
-            print("🎯 HybridHookExtractor: SCRAPER found HLS URL: \(url.prefix(80))")
+           url.contains(".m3u8") || url.contains("videoplayback") {
+            print("🎯 HybridHookExtractor: SCRAPER found URL: \(url.prefix(80))")
             finish(with: .success(url))
         }
     }

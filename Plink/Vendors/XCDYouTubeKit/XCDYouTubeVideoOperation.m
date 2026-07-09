@@ -189,13 +189,62 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                         }
                         if (error)
                         {
+                                NSLog(@"[XCDYouTubeKit] youtubei POST network error: %@", error.localizedDescription);
                                 [self finishWithError];
                         }
                         else
                         {
-                                NSDictionary *responseDict = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:NULL];
-                                // 🔧 v48.1: youtubei/v1/player returns JSON directly (not query string).
-                                // Pass it directly to handleVideoInfoResponseWithInfo.
+                                NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+                                NSLog(@"[XCDYouTubeKit] youtubei POST response: HTTP %ld, data.length=%lu", (long)httpResponse.statusCode, (unsigned long)data.length);
+                                
+                                if (data.length == 0)
+                                {
+                                        NSLog(@"[XCDYouTubeKit] youtubei POST returned empty response");
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorEmptyResponse userInfo:nil];
+                                        [self finishWithError];
+                                        return;
+                                }
+                                
+                                NSError *jsonError = nil;
+                                NSDictionary *responseDict = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:&jsonError];
+                                if (jsonError || !responseDict)
+                                {
+                                        NSLog(@"[XCDYouTubeKit] youtubei POST JSON parse error: %@", jsonError.localizedDescription);
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:@{NSLocalizedDescriptionKey: @"JSON parse error"}];
+                                        [self finishWithError];
+                                        return;
+                                }
+                                
+                                // Check playability status
+                                NSDictionary *playability = responseDict[@"playabilityStatus"];
+                                NSString *status = playability[@"status"];
+                                NSLog(@"[XCDYouTubeKit] youtubei playability status: %@", status);
+                                
+                                if (![status isEqualToString:@"OK"] && ![status isEqualToString:@"LIVE_STREAM_OFFLINE"])
+                                {
+                                        NSLog(@"[XCDYouTubeKit] youtubei video not playable: %@", status);
+                                        NSString *reason = playability[@"reason"] ?: status;
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:@{NSLocalizedDescriptionKey: reason}];
+                                        [self finishWithError];
+                                        return;
+                                }
+                                
+                                // Check for streamingData
+                                NSDictionary *streamingData = responseDict[@"streamingData"];
+                                if (!streamingData)
+                                {
+                                        NSLog(@"[XCDYouTubeKit] youtubei no streamingData in response");
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorNoStreamAvailable userInfo:nil];
+                                        [self finishWithError];
+                                        return;
+                                }
+                                
+                                NSLog(@"[XCDYouTubeKit] youtubei success! formats=%lu, hls=%d, adaptive=%lu",
+                                      (unsigned long)[streamingData[@"formats"] count],
+                                      streamingData[@"hlsManifestUrl"] != nil,
+                                      (unsigned long)[streamingData[@"adaptiveFormats"] count]);
+                                
+                                // Pass directly to handleVideoInfoResponseWithInfo
                                 [self handleVideoInfoResponseWithInfo:responseDict response:response];
                         }
                 }];
@@ -341,9 +390,12 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
         {
                 if ([error.domain isEqual:XCDYouTubeVideoErrorDomain] && error.code == XCDYouTubeErrorUseCipherSignature)
                 {
+                        // 🔧 v48.3: DON'T fallback to watch page — it's broken (get_video_info dead).
+                        // IOS client should return URLs without cipher. If it doesn't, just fail.
+                        NSLog(@"[XCDYouTubeKit] UseCipherSignature error — NOT falling back to watch page (broken). Finishing with error.");
                         self.noStreamVideo = error.userInfo[XCDYouTubeNoStreamVideoUserInfoKey];
-                        
-                        [self startWatchPageRequest];
+                        self.lastError = error;
+                        [self finishWithError];
                 }
                 else
                 {

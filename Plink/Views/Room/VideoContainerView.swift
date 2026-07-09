@@ -1111,72 +1111,71 @@ final class VideoHostController: UIViewController {
             print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v85 (Gemini): Event-Driven Renderer Recovery
-        // v84 problem: after window.location.replace(), the page reloads but
-        // video element is created with duration=0. play() called too early
-        // → state=3 (buffering) deadlock.
-        //
-        // v85 solution:
-        // 1. Set pendingAutoPlay flag (signals page load to auto-play)
-        // 2. window.location.replace() reloads the page
-        // 3. A WKUserScript (injected at documentEnd) detects pendingAutoPlay
-        //    and waits for 'durationchange' event before calling play()
-        // 4. 2s fail-safe: if durationchange doesn't fire, force play()
-
-        // Set flag for the page-reload auto-play
-        WebViewControl.shared.pendingAutoPlay = true
-
+        // 🔧 v86 (Gemini): Raw DOM Force Play + Keep-Alive
+        // v84/v85 used window.location.replace() which caused markAllLayersVolatile.
+        // v86: Don't reload page. Instead, force-play via raw DOM manipulation:
+        //   1. video.pause() — reset internal lock
+        //   2. video.playbackRate = 1.0 — reset rate
+        //   3. video.muted = false — ensure audio
+        //   4. video.play() — native unpause
+        //   5. If play() fails: playbackRate = 0.99 → triggers decoder refresh
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
                 if (!video) {
-                    console.log('[Plink v85] No video element found');
+                    console.log('[Plink v86] No video element found');
                     return;
                 }
 
-                console.log('[Plink v85] Renderer Recovery — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
+                console.log('[Plink v86] Raw DOM Force Play — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime + ', duration=' + video.duration);
 
-                // Check if stuck in buffering (readyState < 3 = HAVE_FUTURE_DATA)
-                if (video.readyState < 3 || video.paused) {
-                    console.log('[Plink v85] CRITICAL: Renderer zombie detected. Performing Soft Reset.');
+                // 1. Reset lock — pause first
+                video.pause();
 
-                    // 1. Kill old context
-                    video.pause();
-                    video.removeAttribute('src');
-                    video.load();
+                // 2. Reset rate + unmute
+                video.playbackRate = 1.0;
+                video.muted = false;
 
-                    // 2. Get current embed URL
-                    var embedUrl = window.location.href;
-                    console.log('[Plink v85] Soft reloading page: ' + embedUrl.substring(0, 80));
+                // 3. Native unpause
+                video.play().then(function() {
+                    console.log('[Plink v86] DOM-Force Play SUCCESS');
+                }).catch(function(err) {
+                    console.log('[Plink v86] DOM-Force Play error, forcing rate change: ' + err);
+                    // Trick: playbackRate = 0.99 triggers decoder refresh
+                    video.playbackRate = 0.99;
+                    video.play().then(function() {
+                        console.log('[Plink v86] Play succeeded after rate trick');
+                        // Restore normal rate after 500ms
+                        setTimeout(function() {
+                            video.playbackRate = 1.0;
+                            console.log('[Plink v86] Rate restored to 1.0');
+                        }, 500);
+                    }).catch(function(e2) {
+                        console.log('[Plink v86] Rate trick also failed: ' + e2);
+                    });
+                });
 
-                    // 3. window.location.replace() — soft reload
-                    // The pendingAutoPlay flag is set in Swift — when the page
-                    // finishes reloading, the WKUserScript will detect it and
-                    // wait for durationchange before calling play().
-                    window.location.replace(embedUrl);
+                // Nudge GPU with translateZ + will-change
+                video.style.transform = 'translateZ(0)';
+                video.style.willChange = 'transform';
+                video.style.backfaceVisibility = 'hidden';
+                setTimeout(function() { video.style.transform = 'none'; }, 50);
 
-                    console.log('[Plink v85] Renderer Recovery initiated — page reloading...');
-                } else {
-                    console.log('[Plink v85] Video playing normally — no recovery needed');
-                }
+                // Dispatch resize
+                window.dispatchEvent(new Event('resize'));
             } catch(e) {
-                console.log('[Plink v85] Renderer Recovery error: ' + e);
+                console.log('[Plink v86] Raw DOM Force Play error: ' + e);
             }
         })();
         """
         webView.evaluateJavaScript(js, completionHandler: nil)
 
-        // 🔧 v84: After Renderer Recovery, reset lastLoadedVideoId so
-        // updateUIViewController knows to reload the video when the page
-        // finishes reloading. The Coordinator's shouldLoadVideoId() would
-        // otherwise skip loading because videoId matches lastLoadedVideoId.
-        if let coord = self.coordinator {
-            coord.lastLoadedVideoId = nil
-            print("📺 v84: Reset lastLoadedVideoId — Coordinator will reload after page recovery")
-        }
+        // 🔧 v86: No page reload — no need to reset lastLoadedVideoId.
+        // v84/v85 reset it because window.location.replace() reloaded the page.
+        // v86 uses Raw DOM Force Play — no page reload, no reset needed.
 
-        // Retry after 2s — if recovery didn't work, try simple play again
+        // Retry after 2s — if force play didn't work, try again
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard self != nil, let webView = WebViewControl.shared.webView else { return }
             webView.evaluateJavaScript("""
@@ -1802,7 +1801,8 @@ struct WebVideoView: UIViewControllerRepresentable {
                 style.textContent = [
                     'html, body { background: #000 !important; overflow: hidden !important;',
                     '  position: fixed !important; width: 100% !important; height: 100% !important;',
-                    '  margin: 0 !important; padding: 0 !important; top: 0 !important; left: 0 !important; }',
+                    '  margin: 0 !important; padding: 0 !important; top: 0 !important; left: 0 !important;',
+                    '  transform: translateZ(0) !important; }',
                     '#masthead-container, #masthead, ytd-masthead, ytd-mini-guide-renderer,',
                     'ytd-guide, #guide-button, #back-button, #logo,',
                     '.mobile-topbar-header, .mobile-topbar-logo, .mobile-topbar-actions,',
@@ -1826,10 +1826,12 @@ struct WebVideoView: UIViewControllerRepresentable {
                     '#movie_player, #movie_player video, .html5-main-video {',
                     '  position: fixed !important; top: 0 !important; left: 0 !important;',
                     '  width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important;',
-                    '  object-fit: contain !important; background: #000 !important; }'
+                    '  object-fit: contain !important; background: #000 !important;',
+                    '  will-change: transform !important; backface-visibility: hidden !important;',
+                    '  transform: translateZ(0) !important; }'
                 ].join('\\\\n');
                 (document.head || document.documentElement).appendChild(style);
-                console.log("[Plink v36] CSS injected (m.youtube.com direct — FULL hide)");
+                console.log("[Plink v86] CSS injected (keep-alive: will-change + translateZ)");
             })();
             """
 

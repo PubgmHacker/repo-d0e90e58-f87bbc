@@ -3,9 +3,12 @@ import WebKit
 
 // MARK: - YouTubeExtractor (Hybrid WKWebView Network Hook)
 //
-// 🔧 v51.2: Bulletproof — @MainActor, guaranteed timeout, no retain cycle.
-// Uses invisible WKWebView to bypass BotGuard. WebKit solves all JS
-// challenges natively. JS hook intercepts stream URL for AVPlayer.
+// 🔧 v51.3: Autoplay enabled + native mute + internal timeout.
+// mediaTypesRequiringUserActionForPlayback = .all blocked YouTube from
+// requesting .m3u8 → JS hook had nothing to intercept.
+// withTimeout didn't work with withCheckedThrowingContinuation (leaked).
+//
+// FIX: Allow autoplay, mute via webView.isMuted, timeout inside class.
 
 @MainActor
 final class YouTubeExtractor {
@@ -23,16 +26,11 @@ final class YouTubeExtractor {
             return cached.info
         }
 
-        print("📺 YouTubeExtractor v51.2: extracting \(videoId) (Hybrid WKWebView Hook)")
+        print("📺 YouTubeExtractor v51.3: extracting \(videoId) (Hybrid WKWebView Hook)")
 
-        // 🔧 v51.2: Use withTimeout to guarantee no infinite loading.
-        // HybridHookExtractor holds strong reference to itself via
-        // internal retain cycle that's broken on finish().
-        let streamURL = try await withTimeout(15) {
-            try await HybridHookExtractor.extract(videoId: videoId)
-        }
+        let streamURL = try await HybridHookExtractor.extract(videoId: videoId)
 
-        print("✅ YouTubeExtractor v51.2: got stream URL, prefix=\(streamURL.prefix(60))")
+        print("✅ YouTubeExtractor v51.3: got stream URL, prefix=\(streamURL.prefix(60))")
 
         let info = StreamInfo(
             id: videoId,
@@ -73,12 +71,12 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     private var continuation: CheckedContinuation<String, Error>?
     private var isFinished = false
     private var selfRetain: HybridHookExtractor?
+    private var timeoutTask: Task<Void, Never>?
 
     static func extract(videoId: String) async throws -> String {
         let extractor = HybridHookExtractor()
         return try await withCheckedThrowingContinuation { continuation in
             extractor.continuation = continuation
-            // Strong self-reference to prevent deallocation during async work
             extractor.selfRetain = extractor
             extractor.start(videoId: videoId)
         }
@@ -87,8 +85,8 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     private func start(videoId: String) {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        // Prevent double audio — mute invisible WebView
-        config.mediaTypesRequiringUserActionForPlayback = .all
+        // 🔧 v51.3: ALLOW autoplay — YouTube needs to start playing to request .m3u8
+        config.mediaTypesRequiringUserActionForPlayback = []
 
         // JS hook: intercept fetch/XHR for googlevideo.com or .m3u8 URLs
         let hookScript = WKUserScript(source: """
@@ -139,9 +137,6 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                     if (src && checkURL(src)) {
                         window.webkit.messageHandlers.hook.postMessage({type: 'video', url: src});
                     }
-                    // Mute to prevent double audio
-                    videos[i].muted = true;
-                    videos[i].volume = 0;
                 }
             }, 500);
         })();
@@ -153,11 +148,21 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
         webView.navigationDelegate = self
+        // 🔧 v51.3: Native mute — allows autoplay but silences audio
+        webView.isMuted = true
         self.webView = webView
 
         print("📺 HybridHookExtractor: loading watch page for \(videoId)")
         let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
         webView.load(URLRequest(url: url))
+
+        // 🔧 v51.3: Internal timeout — guarantees continuation.resume
+        timeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard !Task.isCancelled else { return }
+            print("⏰ HybridHookExtractor: 15s timeout — finishing with error")
+            self?.finish(with: .failure(YouTubeExtractorError.timedOut))
+        }
     }
 
     // MARK: - WKScriptMessageHandler
@@ -196,6 +201,10 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     private func finish(with result: Result<String, Error>) {
         guard !isFinished else { return }
         isFinished = true
+
+        // Cancel timeout
+        timeoutTask?.cancel()
+        timeoutTask = nil
 
         // Cleanup WebView completely
         webView?.stopLoading()
@@ -242,25 +251,5 @@ enum YouTubeExtractorError: LocalizedError {
         case .noStreamFound: return "Не удалось перехватить URL видеопотока"
         case .invalidResponse: return "Неверный ответ от YouTube"
         }
-    }
-}
-
-// MARK: - Timeout helper
-
-func withTimeout<T: Sendable>(
-    _ seconds: TimeInterval,
-    operation: @escaping @Sendable () async throws -> T
-) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            return try await operation()
-        }
-        group.addTask {
-            try await Task.sleep(for: .seconds(seconds))
-            throw YouTubeExtractorError.timedOut
-        }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
     }
 }

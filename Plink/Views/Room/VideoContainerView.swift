@@ -1139,6 +1139,11 @@ struct WebVideoView: UIViewRepresentable {
             if context.coordinator.webView == nil {
                 context.coordinator.webView = uiView
             }
+            // 🔧 v54 (Gemini): Nudge WebKit to restore render after background
+            DispatchQueue.main.async {
+                uiView.setNeedsLayout()
+                uiView.layoutIfNeeded()
+            }
             return
         }
 

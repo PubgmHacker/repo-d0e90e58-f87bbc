@@ -1013,12 +1013,86 @@ final class PlayerUIView: UIView {
 // rotation but does NOT reload the page. The WebView persists across
 // rotation because SwiftUI keeps the same UIView instance.
 
-struct WebVideoView: UIViewRepresentable {
+// MARK: - VideoHostController (v76 — immortal UIViewController container)
+//
+// 🔧 v76 (Gemini): Host WKWebView inside UIViewController instead of UIView.
+// UIViewController has its own lifecycle independent of SwiftUI's view
+// rebuilding. When SwiftUI recreates WebVideoView (the representable),
+// it "adopts" the existing VideoHostController — the WKWebView inside
+// is NEVER removed from the view hierarchy.
+
+@MainActor
+final class VideoHostController: UIViewController {
+    private var hostedWebView: WKWebView?
+    weak var coordinator: WebVideoView.Coordinator?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        attachWebView()
+    }
+
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        hostedWebView?.frame = view.bounds
+    }
+
+    /// Attach the singleton WKWebView to this controller's view.
+    /// Called once on viewDidLoad. The WKWebView stays attached for the
+    /// lifetime of this controller — we NEVER remove it.
+    func attachWebView() {
+        // Ensure singleton exists
+        WebViewControl.shared.ensureWebViewCreated()
+        let webView = WebViewControl.shared.webView!
+
+        // If already attached, don't re-attach
+        if webView.superview === view { return }
+
+        // Remove from old parent if any (only if different)
+        if webView.superview != nil && webView.superview !== view {
+            // 🔧 v76: DON'T call removeFromSuperview! This kills GPU.
+            // Just add to our view — UIKit handles reparenting internally.
+        }
+
+        // Add to our view
+        view.addSubview(webView)
+        webView.frame = view.bounds
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        hostedWebView = webView
+
+        // Set up coordinator + navigation delegate + plinkBridge
+        if let coord = coordinator {
+            if coord.webView == nil {
+                coord.webView = webView
+            }
+            webView.navigationDelegate = coord
+            let ucc = webView.configuration.userContentController
+            ucc.removeScriptMessageHandler(forName: "plinkBridge")
+            ucc.add(coord, name: "plinkBridge")
+        }
+
+        print("📺 v76: VideoHostController.attachWebView — WKWebView attached (immortal)")
+    }
+
+    /// Get the hosted WKWebView (for updateUIViewController to access)
+    var webView: WKWebView? {
+        return hostedWebView ?? WebViewControl.shared.webView
+    }
+}
+
+// MARK: - WebVideoView (UIViewControllerRepresentable — v76)
+//
+// 🔧 v76 (Gemini): Changed from UIViewRepresentable to UIViewControllerRepresentable.
+// UIViewController has a stable lifecycle — SwiftUI "adopts" the existing
+// controller instead of recreating it. The WKWebView inside is NEVER
+// removed from the view hierarchy when SwiftUI rebuilds.
+
+struct WebVideoView: UIViewControllerRepresentable {
     let url: URL?  // 🔧 v70: URL? — if nil, don't load anything (preserves prewarm)
     var onTimeUpdate: (TimeInterval) -> Void
 
-    func makeUIView(context: Context) -> WKWebView {
-        // 🔧 v35: Configure AVAudioSession for background playback.
+    func makeUIViewController(context: Context) -> VideoHostController {
+        // Configure AVAudioSession for background playback.
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
             try AVAudioSession.sharedInstance().setActive(true)
@@ -1026,30 +1100,71 @@ struct WebVideoView: UIViewRepresentable {
             print("⚠️ v35: AVAudioSession config failed: \(error)")
         }
 
-        print("🔧🔧🔧 v72 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
+        print("🔧🔧🔧 v76 makeUIViewController CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
 
-        // 🔧 v71: Use the SINGLETON webView. prewarm() already
-        // initialized it and loaded the embed URL. We just adopt it here.
-        WebViewControl.shared.ensureWebViewCreated()
-        let webView = WebViewControl.shared.webView!
-
-        // Set up Coordinator references
-        if context.coordinator.webView == nil {
-            context.coordinator.webView = webView
-        }
-        webView.navigationDelegate = context.coordinator
-
-        // Register plinkBridge JS message handler (for YouTube IFrame API callbacks)
-        let userContentController = webView.configuration.userContentController
-        userContentController.removeScriptMessageHandler(forName: "plinkBridge")
-        userContentController.add(context.coordinator, name: "plinkBridge")
-
-        // 🔧 v72: NO reactivate here! The global didBecomeActive observer in
-        // WebViewControl handles all reactivation. This prevents duplicate
-        // reactivate calls and keeps makeUIView minimal.
-
-        return webView
+        let controller = VideoHostController()
+        controller.coordinator = context.coordinator
+        return controller
     }
+
+    func updateUIViewController(_ uiViewController: VideoHostController, context: Context) {
+        // Ensure WKWebView is attached (idempotent — only attaches once)
+        uiViewController.attachWebView()
+
+        let webView = uiViewController.webView!
+
+        // 🔧 v71: This is where video loading happens!
+        guard let url = url else {
+            // URL is nil (mediaURL was empty). Don't load anything.
+            print("📺 v76: updateUIViewController — url is nil, waiting for socket (no load)")
+            return
+        }
+
+        let urlString = url.absoluteString
+        let isYouTube = urlString.contains("youtube.com/embed/") ||
+                         urlString.contains("youtube-nocookie.com/embed/") ||
+                         urlString.contains("youtu.be/")
+
+        if isYouTube {
+            // Check if prewarm already loaded this video
+            let currentURL = webView.url?.absoluteString ?? ""
+            let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
+
+            if currentURL.contains(videoId) || currentURL.contains(videoId.replacingOccurrences(of: "-", with: "")) {
+                // Already loaded by prewarm — don't reload!
+                print("📺 v76: updateUIViewController — URL matches prewarm (videoId=\(videoId)), skipping load")
+                if context.coordinator.webView == nil {
+                    context.coordinator.webView = webView
+                }
+                DispatchQueue.main.async {
+                    webView.setNeedsLayout()
+                    webView.layoutIfNeeded()
+                }
+                return
+            }
+
+            // Not yet loaded — load it now via Coordinator.loadVideoOnce
+            print("📺 v76: updateUIViewController — loading YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = webView
+            }
+            context.coordinator.loadVideoOnce(id: videoId, webView: webView)
+            return
+        }
+
+        // Non-YouTube: only reload if URL genuinely changed
+        let videoId = url.lastPathComponent
+        if let currentURL = webView.url?.absoluteString, currentURL.contains(videoId) {
+            return
+        }
+        if webView.isLoading {
+            return
+        }
+        print("📺 v76: updateUIViewController — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
+        webView.load(URLRequest(url: url))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     /// 🔧 v35: custom HTML with YouTube IFrame API via loadHTMLString.
     /// Bypasses error 153 because the IFrame API script runs in OUR page
@@ -1192,66 +1307,6 @@ struct WebVideoView: UIViewRepresentable {
         </html>
         """
     }
-
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        // 🔧 v71 (Gemini): This is where video loading happens!
-        // makeUIView just returns the singleton (prewarm may have already loaded).
-        // When the socket sends the URL, SwiftUI calls updateUIView with the new url.
-        // We load it ONLY if it's not already loaded (protects prewarm cache).
-
-        guard let url = url else {
-            // URL is nil (mediaURL was empty). Don't load anything.
-            print("📺 v71: updateUIView — url is nil, waiting for socket (no load)")
-            return
-        }
-
-        let urlString = url.absoluteString
-        let isYouTube = urlString.contains("youtube.com/embed/") ||
-                         urlString.contains("youtube-nocookie.com/embed/") ||
-                         urlString.contains("youtu.be/")
-
-        if isYouTube {
-            // Check if prewarm already loaded this video
-            let currentURL = uiView.url?.absoluteString ?? ""
-            let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
-
-            if currentURL.contains(videoId) || currentURL.contains(videoId.replacingOccurrences(of: "-", with: "")) {
-                // Already loaded by prewarm — don't reload!
-                print("📺 v71: updateUIView — URL matches prewarm (videoId=\(videoId)), skipping load")
-                // Ensure coordinator has the webView reference
-                if context.coordinator.webView == nil {
-                    context.coordinator.webView = uiView
-                }
-                // Nudge WebKit to restore render after background
-                DispatchQueue.main.async {
-                    uiView.setNeedsLayout()
-                    uiView.layoutIfNeeded()
-                }
-                return
-            }
-
-            // Not yet loaded — load it now via Coordinator.loadVideoOnce
-            print("📺 v71: updateUIView — loading YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
-            if context.coordinator.webView == nil {
-                context.coordinator.webView = uiView
-            }
-            context.coordinator.loadVideoOnce(id: videoId, webView: uiView)
-            return
-        }
-
-        // Non-YouTube: only reload if URL genuinely changed
-        let videoId = url.lastPathComponent
-        if let currentURL = uiView.url?.absoluteString, currentURL.contains(videoId) {
-            return
-        }
-        if uiView.isLoading {
-            return
-        }
-        print("📺 v71: updateUIView — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
-        uiView.load(URLRequest(url: url))
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
 
     // 🔧 v30.1: Coordinator is now NSObject + WKScriptMessageHandler so it can
     // receive messages from the YouTube IFrame API via the plinkBridge handler.

@@ -737,18 +737,18 @@ struct VideoContainerView: View {
 
     @ViewBuilder
     private func webVideoView() -> some View {
-        if let url = URL(string: mediaURL) {
-            // 🔧 v32.10: WebVideoView calls onTimeUpdate when video.currentTime changes.
-            // We forward this to a NEW method updateCurrentTimeFromWebView() that
-            // ONLY updates the published currentTime — does NOT seek the player.
-            // This prevents the feedback loop where timeupdate → seek → timeupdate.
-            // onSeek is now ONLY called for user-initiated seeks (seek bar, ±10s).
-            // 🔧 v34.25: NO explicit frame — parent controls sizing via .frame(height:)
-            WebVideoView(url: url) { time in
-                WebViewControl.shared.handleTimeUpdate(time)
-            }
-        } else {
-            VideoPlaceholder()
+        // 🔧 v69 (Gemini): ALWAYS render WebVideoView — never use if/else on
+        // mediaURL. The old code:
+        //   if let url = URL(string: mediaURL) { WebVideoView(url: url) } else { VideoPlaceholder() }
+        // would remove WebVideoView when mediaURL was empty → makeUIView called
+        // again when mediaURL came back → WKWebView recreated → GPU crash.
+        //
+        // v69: Always create WebVideoView. If mediaURL is empty, pass a dummy
+        // URL (about:blank). WebVideoView's makeUIView will create the WKWebView
+        // once, and updateUIView will handle URL changes without recreating.
+        let url = URL(string: mediaURL) ?? URL(string: "about:blank")!
+        return WebVideoView(url: url) { time in
+            WebViewControl.shared.handleTimeUpdate(time)
         }
     }
 }
@@ -1016,64 +1016,40 @@ struct WebVideoView: UIViewRepresentable {
             // to reload, but we need to bypass its "already loaded" guard.
             // See loadVideoOnceForceReload below.
         } else if let existing = WebViewControl.shared.webView {
-            // 🔧 v66 (Gemini): Safe Container — DON'T detach WKWebView if app
-            // is in background/transition. iOS refuses GPU context
-            // ("CARenderServer failed bootstrap look up, Null Context server
-            // port!") when app is not .active. The old v53 code called
-            // removeFromSuperview() unconditionally, which triggered the
-            // detach/attach cycle during shade open/close → permanent black
-            // screen (audio continues, GPU dead).
+            // 🔧 v69 (Gemini): NEVER call removeFromSuperview(). ANY reparenting
+            // kills the GPU context (CARenderServer crash), even when app is
+            // .active. v66 tried to skip detach only when app was inactive,
+            // but logs showed makeUIView firing AFTER appDidBecomeActive (app
+            // was .active) → v66 detached → GPU crash.
             //
-            // v66 SOLUTION: Only detach + re-attach when app is .active.
-            // If app is in background/transition, return the WKWebView as-is
-            // WITHOUT calling removeFromSuperview(). SwiftUI will handle the
-            // reparenting itself — but since we don't force-detach, the GPU
-            // context stays alive.
+            // v69 SOLUTION: Just return the existing WKWebView as-is. DON'T
+            // detach it. SwiftUI handles reparenting internally without killing
+            // the GPU context — but only if WE don't force-detach first.
+            //
+            // The key insight: removeFromSuperview() is what kills GPU. If we
+            // never call it, SwiftUI's internal reparenting is safe.
             let appState = UIApplication.shared.applicationState
-            print("📺 v66: reusing existing WKWebView (appState=\(appState.rawValue))")
+            print("📺 v69: reusing existing WKWebView (appState=\(appState.rawValue)) — NO detach (GPU preserved)")
 
+            if isYouTube || isBackendPlayer {
+                existing.navigationDelegate = context.coordinator
+            }
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = existing
+            }
+            if isYouTube || isBackendPlayer {
+                let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
+                context.coordinator.loadVideoOnce(id: videoId, webView: existing)
+            }
+
+            // Schedule reactivate on next run loop — but ONLY if app is active.
+            // If app is not active, defer to didBecomeActiveNotification.
+            let existingRef = existing
             if appState == .active {
-                // App is active — safe to detach/reattach + reactivate GPU
-                existing.removeFromSuperview()
-                print("📺 v66: app active — detached from old parent, will reactivate GPU")
-                if isYouTube || isBackendPlayer {
-                    existing.navigationDelegate = context.coordinator
-                }
-                if context.coordinator.webView == nil {
-                    context.coordinator.webView = existing
-                }
-                if isYouTube || isBackendPlayer {
-                    let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
-                    context.coordinator.loadVideoOnce(id: videoId, webView: existing)
-                }
-                // Schedule reactivate on next run loop (after view is in hierarchy)
-                let existingRef = existing
                 DispatchQueue.main.async {
                     WebViewControl.shared.reactivate(webView: existingRef)
                 }
             } else {
-                // App is in background/transition — DON'T detach!
-                // Just set up coordinator references, skip removeFromSuperview.
-                // SwiftUI will reparent the view itself without killing GPU.
-                print("📺 v66: app NOT active — skipping detach (GPU context preserved)")
-                if isYouTube || isBackendPlayer {
-                    existing.navigationDelegate = context.coordinator
-                }
-                if context.coordinator.webView == nil {
-                    context.coordinator.webView = existing
-                }
-                if isYouTube || isBackendPlayer {
-                    let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
-                    context.coordinator.loadVideoOnce(id: videoId, webView: existing)
-                }
-                // 🔧 v66: Schedule reactivate for when app becomes active
-                // (didBecomeActiveNotification). This fires after the shade
-                // animation completes, so GPU context is available.
-                // 🔧 v67: Add 0.1s delay after didBecomeActive to ensure iOS
-                // has FULLY deployed the app (animation complete, GPU ready).
-                // Without the delay, reactivate() may fire too early and the
-                // Frame Nudge won't wake the video decoder.
-                let existingRef = existing
                 context.coordinator.activationObserver = NotificationCenter.default.addObserver(
                     forName: UIApplication.didBecomeActiveNotification,
                     object: nil,

@@ -1265,10 +1265,102 @@ struct WebVideoView: UIViewRepresentable {
             print("📱 v47.4: appWillResignActive — no-op (video keeps playing)")
         }
 
+        /// 🔧 v57 (Gemini): WebKit GPU Repaint & Resume Hack.
+        ///
+        /// PROBLEM: When the user opens Control Center / notification shade, iOS
+        /// in order to save battery revokes the WKWebView's GPU render context.
+        /// When the user closes the shade and returns to the app, WebKit sometimes
+        /// "forgets" to repaint the <video> element — leaving a black screen or a
+        /// frozen last frame. iOS also internally pauses the video element.
+        /// This is a well-known Apple WebKit bug, NOT a code issue in our sync layer.
+        ///
+        /// SOLUTION: Two-pronged nudge when returning to active state:
+        ///   1. Swift: setNeedsLayout + layoutIfNeeded on the WKWebView's layer
+        ///      (forces UIKit to re-composite the layer hierarchy).
+        ///   2. JS: Micro-zoom trick — change body.style.zoom to 1.0000001 then
+        ///      back to 1 after 50ms. This is invisible to the human eye but for
+        ///      the WebKit engine it's a signal: "page layout changed, repaint
+        ///      every pixel via the GPU". This forces WebKit to rebind <video>
+        ///      to the Metal/OpenGL composite layer.
+        ///   3. JS: Check if video.paused is true (iOS may have paused it). If so,
+        ///      call playVideo() or video.play() to resume.
         @objc private func appDidBecomeActive() {
-            // 🔧 v47.4: NO-OP. No micro-seeks, no pauses, no reloads.
-            // The video should just keep playing naturally.
-            print("📱 v47.4: appDidBecomeActive — no-op")
+            guard let webView = webView else {
+                print("📱 v57: appDidBecomeActive — no webView, skipping")
+                return
+            }
+
+            print("📱 v57: appDidBecomeActive — forcing GPU repaint + video resume")
+
+            // ── 1. Swift: nudge UIKit to re-composite the WKWebView layer ──
+            webView.setNeedsLayout()
+            webView.layoutIfNeeded()
+            // Also nudge the underlying layer — sometimes setNeedsLayout alone
+            // isn't enough to wake up the GPU composite.
+            webView.layer.setNeedsDisplay()
+            webView.layer.setNeedsLayout()
+
+            // ── 2. JS Repaint Hack (micro-zoom) + video.play() resume ──
+            let repaintJS = """
+            (function() {
+                try {
+                    // Micro-zoom: forces WebKit to fully repaint all GPU composite
+                    // layers. Change is by one-millionth — invisible to the eye.
+                    document.body.style.zoom = 1.0000001;
+                    setTimeout(function() {
+                        document.body.style.zoom = 1;
+                    }, 50);
+
+                    // Also force a reflow on the video element itself (belt + suspenders)
+                    var video = document.querySelector('video');
+                    if (video) {
+                        // Toggle display:none → '' to force re-attach to GPU pipeline
+                        var oldDisplay = video.style.display;
+                        video.style.display = 'none';
+                        // Reading offsetHeight forces synchronous reflow
+                        void video.offsetHeight;
+                        video.style.display = oldDisplay;
+
+                        // Check if iOS paused the video in background — resume if so
+                        if (video.paused) {
+                            console.log('[Plink v57] Video was paused by iOS — resuming');
+                            if (typeof window.playVideo === 'function') {
+                                window.playVideo();
+                            } else if (window.player && typeof window.player.playVideo === 'function') {
+                                window.player.playVideo();
+                            } else {
+                                video.play().catch(function(e) {
+                                    console.log('[Plink v57] Play resume failed: ' + e);
+                                });
+                            }
+                        }
+
+                        // Force a timeupdate event so SyncEngine re-syncs UI
+                        if (typeof window._plinkNotifyTime === 'function') {
+                            window._plinkNotifyTime(video.currentTime);
+                        }
+                    }
+                } catch (e) {
+                    console.log('[Plink v57] Repaint error: ' + e);
+                }
+            })();
+            """
+            webView.evaluateJavaScript(repaintJS, completionHandler: nil)
+
+            // ── 3. Schedule a follow-up repaint after 150ms ──
+            // Sometimes the first repaint isn't enough — the GPU context is still
+            // being re-acquired. A second nudge a bit later catches that case.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self, let webView = self.webView else { return }
+                webView.evaluateJavaScript("""
+                (function() {
+                    try {
+                        document.body.style.zoom = 1.0000001;
+                        setTimeout(function() { document.body.style.zoom = 1; }, 30);
+                    } catch (e) {}
+                })();
+                """, completionHandler: nil)
+            }
         }
 
         /// 🔧 v42: Background handling.

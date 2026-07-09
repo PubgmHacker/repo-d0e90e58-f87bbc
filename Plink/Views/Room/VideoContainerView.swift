@@ -1028,10 +1028,21 @@ final class PlayerUIView: UIView {
 // the same controller → same view → same WKWebView → NO GPU crash.
 
 @MainActor
-final class VideoHostController: UIViewController {
+final class VideoHostController: UIViewController, WKScriptMessageHandler {
     static let shared = VideoHostController()
 
     weak var coordinator: WebVideoView.Coordinator?
+
+    /// 🔧 v88 (Gemini): WKScriptMessageHandler for JS→Swift log bridging.
+    /// JS code calls window.webkit.messageHandlers.plinkLogger.postMessage(msg)
+    /// and we print it to Xcode console. This lets us see what's happening
+    /// inside WKWebView (console.log doesn't show in Xcode by default).
+    func userContentController(_ userContentController: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        if message.name == "plinkLogger" {
+            print("📺 JS_LOG: \(message.body)")
+        }
+    }
 
     /// 🔧 v77: Override loadView() to create the view ONCE with WKWebView
     /// already attached. This view lives for the lifetime of the singleton
@@ -1087,9 +1098,9 @@ final class VideoHostController: UIViewController {
 
             if type == .ended {
                 print("⚡ v80: AVAudioSession interruption ENDED — forcing resume")
-                // 🔧 v84: Increase delay to 800ms — WebContent process needs
-                // to exit 'Suspended' state before we can recover the renderer.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                // 🔧 v88: Increase delay to 1.0s — audio session needs time to
+                // fully switch back from interrupted state before we can resume.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     self.forceResumePlayback()
                 }
             }
@@ -1117,54 +1128,55 @@ final class VideoHostController: UIViewController {
             print("⚠️ v87: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v87: Simplified JS with PLINK_DEBUG logs + setTimeout for decoder reset
+        // 🔧 v88 (Gemini): Aggressive retry loop with JS→Swift log bridge.
+        // Uses window.webkit.messageHandlers.plinkLogger.postMessage() to send
+        // logs to Xcode console (console.log doesn't show in Xcode by default).
+        // Retries every 500ms up to 5 attempts.
         let js = """
         (function() {
+            function log(msg) {
+                try { window.webkit.messageHandlers.plinkLogger.postMessage(msg); } catch(e) {}
+            }
             try {
                 var video = document.querySelector('video');
-                if (!video) {
-                    console.log('PLINK_DEBUG: Video element NOT found');
-                    return;
-                }
-                console.log('PLINK_DEBUG: Video state=' + video.readyState + ', paused=' + video.paused + ', duration=' + video.duration + ', currentTime=' + video.currentTime);
+                if (!video) { log('No video element'); return; }
 
-                // If stuck (paused or buffering)
-                if (video.paused || video.readyState < 3) {
-                    console.log('PLINK_DEBUG: Stuck — pause + rate reset + delayed play');
-                    video.pause();
-                    video.playbackRate = 1.0;
-                    video.muted = false;
+                log('forceResume START — state=' + video.readyState + ', paused=' + video.paused + ', duration=' + video.duration + ', currentTime=' + video.currentTime);
 
-                    // Delay 100ms before play — gives decoder time to reset
-                    setTimeout(function() {
-                        video.play().then(function() {
-                            console.log('PLINK_DEBUG: Play SUCCESS');
-                        }).catch(function(e) {
-                            console.log('PLINK_DEBUG: Play failed, forcing rate trick: ' + e);
+                var attempts = 0;
+                var interval = setInterval(function() {
+                    attempts++;
+                    log('Attempt ' + attempts + ': state=' + video.readyState + ', paused=' + video.paused + ', netState=' + video.networkState);
+
+                    if (!video.paused && video.readyState >= 3) {
+                        log('SUCCESS: Playing! state=' + video.readyState);
+                        clearInterval(interval);
+                    } else if (attempts > 5) {
+                        log('GIVING UP: State stuck at readyState=' + video.readyState + ', paused=' + video.paused);
+                        clearInterval(interval);
+                    } else {
+                        // Try to wake up decoder
+                        video.play().catch(function() {
+                            log('Attempt ' + attempts + ': play() failed, trying rate trick');
                             video.playbackRate = 0.99;
-                            video.play().then(function() {
-                                console.log('PLINK_DEBUG: Rate trick SUCCESS');
-                                setTimeout(function() {
-                                    video.playbackRate = 1.0;
-                                    console.log('PLINK_DEBUG: Rate restored to 1.0');
-                                }, 500);
-                            }).catch(function(e2) {
-                                console.log('PLINK_DEBUG: Rate trick also failed: ' + e2);
+                            video.play().catch(function(e2) {
+                                log('Attempt ' + attempts + ': rate trick failed: ' + e2);
                             });
                         });
-                    }, 100);
-                } else {
-                    console.log('PLINK_DEBUG: Video not stuck — just nudging GPU');
-                }
+                    }
+                }, 500);
 
-                // GPU nudge
-                video.style.transform = 'translateZ(0)';
-                video.style.willChange = 'transform';
-                video.style.backfaceVisibility = 'hidden';
-                setTimeout(function() { video.style.transform = 'none'; }, 50);
-                window.dispatchEvent(new Event('resize'));
+                // Initial nudge
+                video.pause();
+                video.playbackRate = 1.0;
+                video.muted = false;
+                setTimeout(function() {
+                    video.play().catch(function(e) {
+                        log('Initial play failed: ' + e);
+                    });
+                }, 100);
             } catch(e) {
-                console.log('PLINK_DEBUG: JS Error: ' + e);
+                log('JS Error: ' + e);
             }
         })();
         """
@@ -1228,6 +1240,10 @@ final class VideoHostController: UIViewController {
         let ucc = webView.configuration.userContentController
         ucc.removeScriptMessageHandler(forName: "plinkBridge")
         ucc.add(coord, name: "plinkBridge")
+
+        // 🔧 v88: Register plinkLogger message handler for JS→Swift log bridging
+        ucc.removeScriptMessageHandler(forName: "plinkLogger")
+        ucc.add(self, name: "plinkLogger")
     }
 
     /// Get the hosted WKWebView

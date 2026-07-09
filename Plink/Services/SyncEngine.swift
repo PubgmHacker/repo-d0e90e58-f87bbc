@@ -417,6 +417,18 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         // Ignore echoes of our own commands (server broadcasts to all incl. sender)
         guard message.senderID != userID else { return }
 
+        // 🔧 v49 (Gemini audit fix #1): Validate mediaItemID to prevent race conditions.
+        // If a play/pause/seek command arrives for a DIFFERENT video than what's
+        // currently loaded, ignore it — it's a stale command from before video change.
+        if message.command == .play || message.command == .pause || message.command == .seek {
+            if let currentId = currentMediaItem?.id,
+               let messageId = message.mediaItem?.id,
+               currentId != messageId {
+                Logger.sync.warn("🔍 Ignoring stale command for old media (current=\(currentId), got=\(messageId))")
+                return
+            }
+        }
+
         switch message.command {
         case .play:
             handlePlay(message)

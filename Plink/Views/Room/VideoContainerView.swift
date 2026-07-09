@@ -93,6 +93,14 @@ final class WebViewControl {
             return
         }
 
+        // 🔧 v62: If prewarming a DIFFERENT video, discard the old prewarmed
+        // WKWebView first (it's stale — user changed their mind).
+        if prewarmedWebView != nil && loadedVideoId != videoId {
+            print("🔥 v62: prewarm — discarding stale prewarmed WKWebView (was videoId=\(loadedVideoId ?? "?"))")
+            prewarmedWebView?.stopLoading()
+            prewarmedWebView = nil
+        }
+
         print("🔥 v61: prewarm(videoId=\(videoId)) — creating hidden WKWebView + loading m.youtube.com")
 
         // Create config matching what WebVideoView.makeUIView uses
@@ -154,6 +162,98 @@ final class WebViewControl {
             print("🔥 v61: discardPrewarm — releasing prewarmed WKWebView")
             prewarmedWebView?.stopLoading()
             prewarmedWebView = nil
+        }
+    }
+
+    // MARK: - 🔧 v62 (Gemini): Player Reactivation
+    //
+    // When a prewarmed WKWebView is adopted by RoomView.makeUIView and added
+    // to the SwiftUI view hierarchy, its internal WKCompositingView sometimes
+    // "falls asleep" — it thinks it's no longer on screen and stops rendering
+    // video, leaving a black screen even though audio may still play.
+    //
+    // reactivate() forces WebKit to "wake up" the rendering pipeline:
+    //   1. setNeedsDisplay() — pings the UIKit layer hierarchy
+    //   2. JS resize event — forces WebKit to recompute viewport + repaint
+    //   3. video.style.display = 'none' → force reflow → restore — forces the
+    //      <video> element to re-attach to the GPU composite layer
+    //   4. video.play() if paused — iOS sometimes pauses video on hierarchy change
+    //
+    // Call this from makeUIView via DispatchQueue.main.async AFTER the webView
+    // has been added to the SwiftUI hierarchy (so setNeedsDisplay has somewhere
+    // to send its invalidation to).
+    func reactivate(webView: WKWebView) {
+        print("⚡ v62: reactivate — forcing GPU repaint + video play")
+
+        // 1. Ping UIKit layer hierarchy
+        webView.setNeedsDisplay()
+        webView.setNeedsLayout()
+        webView.layoutIfNeeded()
+        webView.layer.setNeedsDisplay()
+        webView.layer.setNeedsLayout()
+
+        // 2. JS: dispatch resize event + force video reflow + resume if paused
+        let js = """
+        (function() {
+            try {
+                // Force WebKit to recompute viewport + repaint all layers
+                window.dispatchEvent(new Event('resize'));
+
+                var video = document.querySelector('video');
+                if (video) {
+                    // Force reflow: toggle display:none → read offsetHeight → restore
+                    var oldDisplay = video.style.display;
+                    video.style.display = 'none';
+                    void video.offsetHeight;  // forces synchronous reflow
+                    video.style.display = oldDisplay || 'block';
+
+                    // iOS may have paused the video during hierarchy change — resume
+                    if (video.paused) {
+                        console.log('[Plink v62] Video was paused by hierarchy change — resuming');
+                        if (typeof window.playVideo === 'function') {
+                            window.playVideo();
+                        } else if (window.player && typeof window.player.playVideo === 'function') {
+                            window.player.playVideo();
+                        } else {
+                            video.play().catch(function(e) {
+                                console.log('[Plink v62] Play resume failed: ' + e);
+                            });
+                        }
+                    }
+
+                    // Also nudge #movie_player to re-attach to GPU pipeline
+                    var moviePlayer = document.querySelector('#movie_player');
+                    if (moviePlayer) {
+                        var oldPos = moviePlayer.style.position;
+                        moviePlayer.style.position = 'absolute';
+                        void moviePlayer.offsetHeight;
+                        moviePlayer.style.position = oldPos || 'fixed';
+                    }
+                }
+            } catch(e) {
+                console.log('[Plink v62] reactivate error: ' + e);
+            }
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
+
+        // 3. Schedule a second reactivate after 300ms — sometimes the first
+        // nudge isn't enough (GPU context is still being re-acquired).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, let webView = self.webView, webView === self.webView else { return }
+            webView.evaluateJavaScript("""
+            (function() {
+                try {
+                    window.dispatchEvent(new Event('resize'));
+                    var video = document.querySelector('video');
+                    if (video && video.paused) {
+                        if (typeof window.playVideo === 'function') window.playVideo();
+                        else if (window.player && typeof window.player.playVideo === 'function') window.player.playVideo();
+                        else video.play().catch(function(){});
+                    }
+                } catch(e) {}
+            })();
+            """, completionHandler: nil)
         }
     }
 
@@ -1030,6 +1130,7 @@ struct WebVideoView: UIViewRepresentable {
         // 🔧 v61 (Gemini): Try to consume a prewarmed WKWebView first.
         // If RoomCreationView prewarmed the player, we adopt that instance
         // — zero-latency init, player already loaded.
+        let didConsumePrewarm: Bool
         if let prewarmed = WebViewControl.shared.consumePrewarmed() {
             webView = prewarmed
             // Re-attach navigation delegate so Coordinator callbacks fire
@@ -1042,13 +1143,25 @@ struct WebVideoView: UIViewRepresentable {
             }
             WebViewControl.shared.register(webView)
             print("📺 v61: makeUIView consumed prewarmed WKWebView — videoId=\(WebViewControl.shared.loadedVideoId ?? "?")")
-            return webView
+            didConsumePrewarm = true
+        } else {
+            webView = WKWebView(frame: .zero, configuration: config)
+            webView.scrollView.isScrollEnabled = false
+            webView.isOpaque = false
+            webView.backgroundColor = .clear  // 🔧 v61: .clear instead of .black (Native Experience)
+            didConsumePrewarm = false
         }
 
-        webView = WKWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = false
-        webView.isOpaque = false
-        webView.backgroundColor = .clear  // 🔧 v61: .clear instead of .black (Native Experience)
+        // 🔧 v62 (Gemini): After makeUIView returns, the webView is added to
+        // the SwiftUI hierarchy. We schedule reactivate() on the next run loop
+        // so it runs AFTER the view is in the hierarchy. This forces WebKit to
+        // re-attach to the GPU pipeline (especially important for prewarmed
+        // instances that were off-screen during loading).
+        let webViewRef = webView
+        DispatchQueue.main.async {
+            WebViewControl.shared.reactivate(webView: webViewRef)
+        }
+        _ = didConsumePrewarm  // suppress unused warning
 
         // 🔧 v34.34: NO customUserAgent — real WKWebView UA (what m.youtube.com expects).
         // Embed required fake Safari UA, but m.youtube.com works with real WKWebView UA.

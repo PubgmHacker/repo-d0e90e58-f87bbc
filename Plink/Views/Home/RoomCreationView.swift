@@ -96,11 +96,18 @@ struct RoomCreationView: View {
             }
         }
         .preferredColorScheme(.dark)
-        // 🔧 v61: If user dismisses RoomCreationView without creating a room,
-        // discard any prewarmed WKWebView to free memory.
-        .onDisappear {
-            WebViewControl.shared.discardPrewarm()
-        }
+        // 🔧 v62: REMOVED discardPrewarm from onDisappear.
+        //
+        // BUG: onDisappear fires when the user CREATES a room (RoomCreationView
+        // is dismissed to show RoomView). At that point, the prewarmed WKWebView
+        // is destroyed BEFORE RoomView's makeUIView can consumePrewarmed() it.
+        // Result: makeUIView falls back to creating a new WKWebView, but
+        // loadedVideoId is still set from prewarm → loadVideoOnce skips the load
+        // → black screen.
+        //
+        // The prewarmed WKWebView is now consumed by RoomView.makeUIView when
+        // a room is created, OR released when WebViewControl.shared is
+        // deallocated (app exit) OR replaced by a new prewarm() call.
         .sheet(isPresented: $showPaywallForLimit) {
             PaywallView(
                 onPurchase: { showPaywallForLimit = false },

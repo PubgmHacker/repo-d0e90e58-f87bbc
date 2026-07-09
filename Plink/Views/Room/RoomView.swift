@@ -752,47 +752,53 @@ private struct VideoSectionContent: View {
     let videoPlaceholder: () -> AnyView
 
     var body: some View {
-        // 🔧 v75 (Gemini): NO dynamic .opacity() on VideoContainerView!
-        // v73/v74 used .opacity(hasMedia ? 1.0 : 0.01) which caused
-        // AttributeGraph cycle detected → SwiftUI rebuilt entire tree →
-        // makeUIView called twice → CARenderServer crash.
+        // 🔧 v90 (Gemini): God-Mode Player Architecture
         //
-        // v75: VideoContainerView is ALWAYS opacity 1.0. The placeholder
-        // overlay is shown ON TOP (zIndex 10) when no media. The player
-        // is always visible underneath — but since the placeholder covers
-        // it with Color.black, the user doesn't see the empty player.
+        // For .directStream (AVPlayer): use PlayerSlotView (transparent proxy
+        // that reports frame to PlayerWindowContainer's UIWindow). The actual
+        // AVPlayer lives OUTSIDE SwiftUI — in a separate UIWindow.
+        // SwiftUI CANNOT kill, recreate, or interrupt it.
+        //
+        // For .webview (fallback): use the old VideoContainerView (WKWebView).
+        // This path is only taken when ExtractionBridge fails (DRM, timeout).
+        //
+        // No .opacity() tricks, no .id() hacks — just two separate paths.
         ZStack {
-            // Player is ALWAYS rendered, ALWAYS opacity 1.0 — NO dynamic opacity
-            VideoContainerView(
-                mediaURL: syncEngine.currentMediaItem?.streamURL ?? "",
-                playbackMode: syncEngine.currentMediaItem?.effectivePlaybackMode ?? .webview,
-                isPlaying: syncEngine.isPlaying,
-                currentTime: syncEngine.currentTime,
-                duration: syncEngine.duration,
-                onTogglePlay: { syncEngine.togglePlayPause() },
-                onSeek: { pos in syncEngine.seek(to: pos) }
-            )
-            .id("eternal_video_container")  // 🔧 v73: LOCK identity — never recreate
-            .zIndex(0)
-            .onAppear {
-                if let mediaItem = syncEngine.currentMediaItem {
-                    print("🎬 v75: VideoSectionContent — VideoContainerView in hierarchy (always present), streamURL=\(mediaItem.streamURL.prefix(80))")
+            if let mediaItem = syncEngine.currentMediaItem,
+               !mediaItem.streamURL.isEmpty {
+                if mediaItem.effectivePlaybackMode == .directStream {
+                    // 🔧 v90: AVPlayer mode — PlayerSlotView (frame proxy)
+                    PlayerSlotView()
+                        .zIndex(0)
+                        .onAppear {
+                            print("🎬 v90: PlayerSlotView appeared — AVPlayer mode")
+                            NativePlayerEngine.shared.attach()
+                            NativePlayerEngine.shared.loadAndPlay(streamURL: mediaItem.streamURL)
+                        }
+                        .onDisappear {
+                            print("🎬 v90: PlayerSlotView disappeared — detaching")
+                            NativePlayerEngine.shared.detach()
+                        }
+                } else {
+                    // 🔧 v90: WebView fallback mode — old VideoContainerView
+                    VideoContainerView(
+                        mediaURL: mediaItem.streamURL,
+                        playbackMode: mediaItem.effectivePlaybackMode,
+                        isPlaying: syncEngine.isPlaying,
+                        currentTime: syncEngine.currentTime,
+                        duration: syncEngine.duration,
+                        onTogglePlay: { syncEngine.togglePlayPause() },
+                        onSeek: { pos in syncEngine.seek(to: pos) }
+                    )
+                    .id("eternal_video_container")
+                    .zIndex(0)
                 }
-            }
-
-            // Placeholder shown ON TOP when no media loaded yet
-            if !hasMedia {
+            } else {
+                // No media loaded yet — show placeholder
                 videoPlaceholder()
                     .zIndex(10)
             }
         }
-    }
-
-    /// True when there's a media item with a non-empty streamURL.
-    private var hasMedia: Bool {
-        guard let mediaItem = syncEngine.currentMediaItem,
-              !mediaItem.streamURL.isEmpty else { return false }
-        return true
     }
 }
 

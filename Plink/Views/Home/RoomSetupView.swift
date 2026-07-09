@@ -416,15 +416,14 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v61 (Gemini): WebView-first architecture.
-            // We no longer attempt YouTube URL extraction. YouTube updates its
-            // BotGuard signatures every ~48 hours, breaking extractors. The
-            // embed URL via WKWebView is stable, passes Google's checks
-            // automatically, and works for all videos including DRM/age-restricted.
+            // 🔧 v90 (Gemini): Extraction Bridge → NativePlayerEngine (AVPlayer)
             //
-            // All YouTube videos go through .youtube source (WebView mode).
-            // The prewarmed WKWebView from RoomCreationView is adopted by
-            // RoomView's makeUIView for zero-latency init.
+            // v90: We use a headless WKWebView (ExtractionBridge) to scrape
+            // the direct stream URL from YouTube's HTML. The URL is then
+            // played by NativePlayerEngine (AVPlayer) in a separate UIWindow.
+            //
+            // If extraction fails (DRM, age-restricted, timeout), we fall back
+            // to WebView mode (.youtube source) — the old WKWebView approach.
             let finalStreamURL: String
             let finalSource: MediaItem.MediaSource
             let finalDuration: TimeInterval?
@@ -438,18 +437,27 @@ struct RoomSetupView: View {
                     return
                 }
 
-                // 🔧 v61: ALWAYS use embed URL + WebView mode. No extraction.
-                // Pre-warming was already started by RoomCreationView, so by
-                // the time RoomView's makeUIView runs, the player is loaded.
-                var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
-                embedComponents.queryItems = [
-                    URLQueryItem(name: "playsinline", value: "1"),
-                    URLQueryItem(name: "rel", value: "0"),
-                ]
-                finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
-                finalSource = .youtube  // WebView mode
-                finalDuration = nil
-                print("🔧 RoomSetupView v61: WebView-first — embed URL='\(finalStreamURL.prefix(80))' (no extraction)")
+                // 🔧 v90: Try ExtractionBridge first (AVPlayer mode)
+                do {
+                    print("🔧 RoomSetupView v90: calling ExtractionBridge for videoId='\(videoId)'")
+                    let streamInfo = try await ExtractionBridge.shared.extract(videoId: videoId)
+                    finalStreamURL = streamInfo.streamURL
+                    finalSource = .url  // AVPlayer mode!
+                    finalDuration = streamInfo.duration > 0 ? streamInfo.duration : nil
+                    print("✅ RoomSetupView v90: extraction succeeded — AVPlayer mode, URL prefix=\(finalStreamURL.prefix(60))")
+                } catch {
+                    // 🔧 v90: Fallback to WebView mode if extraction fails
+                    print("⚠️ RoomSetupView v90: extraction failed (\(error.localizedDescription)) — falling back to WebView mode")
+                    var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+                    embedComponents.queryItems = [
+                        URLQueryItem(name: "playsinline", value: "1"),
+                        URLQueryItem(name: "rel", value: "0"),
+                    ]
+                    finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
+                    finalSource = .youtube  // WebView mode (fallback)
+                    finalDuration = nil
+                    print("🔧 RoomSetupView v90: fallback to embed URL='\(finalStreamURL.prefix(80))'")
+                }
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

@@ -102,11 +102,22 @@ final class WebViewControl {
 
         // Inject the same CSS hide script as the active player uses
         let youtubeCssScript = WKUserScript(
-            source: WebVideoView.Coordinator.youtubeHideCSS,
+            source: WebVideoView.youtubeHideCSS,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         )
         config.userContentController.addUserScript(youtubeCssScript)
+
+        // 🔧 v61: Native Experience — hide everything except <video>.
+        // Must be injected in prewarm too, so the prewarmed WKWebView already
+        // has it applied when makeUIView adopts it (makeUIView won't re-inject
+        // scripts on the consumed instance).
+        let nativeExperienceScript = WKUserScript(
+            source: WebVideoView.nativeExperienceScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(nativeExperienceScript)
 
         // Create the prewarmed WKWebView
         let prewarmed = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)

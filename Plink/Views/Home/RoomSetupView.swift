@@ -437,20 +437,20 @@ struct RoomSetupView: View {
                 }
 
                 do {
-                    print("🔧 RoomSetupView v45: calling iOS YouTubeExtractor for videoId='\(videoId)'")
-                    let streamInfo = try await YouTubeExtractor.shared.extract(videoId: videoId)
+                    print("🔧 RoomSetupView v48: calling iOS YouTubeExtractor for videoId='\(videoId)'")
+                    // 🔧 v48.2: 15-second timeout — if XCDYouTubeKit hangs,
+                    // show error instead of infinite loading.
+                    let streamInfo = try await withTimeout(15, operation: {
+                        try await YouTubeExtractor.shared.extract(videoId: videoId)
+                    })
                     finalStreamURL = streamInfo.streamURL
                     finalSource = .url  // direct stream, not youtube embed
                     finalDuration = streamInfo.duration
-                    print("✅ RoomSetupView v45: iOS extraction succeeded, extractor=\(streamInfo.extractor)")
+                    print("✅ RoomSetupView v48: iOS extraction succeeded, extractor=\(streamInfo.extractor)")
                 } catch {
-                    // 🔧 v45.2: NO WebView fallback — AVPlayer only.
-                    // If extraction fails, show error to user instead of
-                    // falling back to WebView (which has reload issues,
-                    // no PiP, bot detection, etc).
-                    print("❌ RoomSetupView v45: iOS extraction failed (\(error.localizedDescription)) — NO fallback, showing error")
+                    print("❌ RoomSetupView v48: iOS extraction failed (\(error.localizedDescription)) — NO fallback, showing error")
                     await MainActor.run {
-                        errorMessage = "Не удалось извлечь видео. Попробуйте другое видео или повторите позже."
+                        errorMessage = "Не удалось извлечь видео: \(error.localizedDescription)"
                         isCreating = false
                     }
                     return
@@ -617,5 +617,23 @@ struct RoomSetupView: View {
         }
 
         return nil
+    }
+}
+
+// MARK: - Timeout helper
+func withTimeout<T>(_ seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            throw URLError(.timedOut)
+        }
+        guard let result = try await group.next() else {
+            throw URLError(.timedOut)
+        }
+        group.cancelAll()
+        return result
     }
 }

@@ -78,26 +78,31 @@ final class NativePlayerEngine: ObservableObject {
         let finalURL: URL
 
         if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
-            // 🔧 v94: Route through StreamRelay backend
-            // Backend URL: https://plink-backend.../api/media/stream?url=ENCOD(googlevideoURL)&token=JWT
+            // 🔧 v94.11: Base64-encode the stream URL to avoid AVPlayer URL parsing issues.
+            // AVPlayer is very picky about long URLs with & and % — double-encoding
+            // can break AVFoundation. Base64 produces a clean alphanumeric string
+            // that AVPlayer handles without issues.
             let backendBase = "https://plink-backend-production-ef31.up.railway.app"
-            // 🔧 v94.2: Use URLComponents to properly encode the googlevideo URL.
-            // .urlQueryAllowed does NOT encode & — which breaks query parsing.
-            // URLComponents handles encoding correctly.
             let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
+
+            // Base64-encode the googlevideo URL
+            let b64url = (streamURL.data(using: .utf8) ?? Data()).base64EncodedString()
+
+            // Build clean URL: /api/media/stream?b64url=...&token=...
+            // Base64 string is pure alphanumeric + / + = — URL-safe enough for AVPlayer
             var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
             relayComponents.queryItems = [
-                URLQueryItem(name: "url", value: streamURL),
+                URLQueryItem(name: "b64url", value: b64url),
                 URLQueryItem(name: "token", value: token)
             ]
 
             guard let relayURL = relayComponents.url else {
-                print("⚠️ v94: Failed to create StreamRelay URL")
+                print("⚠️ v94.11: Failed to create StreamRelay URL")
                 return
             }
 
             finalURL = relayURL
-            print("🎬 v94: StreamRelay — routing through backend: \(relayURL.absoluteString.prefix(80))...")
+            print("🎬 v94.11: StreamRelay — routing through backend (base64 encoded, length=\(b64url.count))")
         } else {
             // Non-YouTube URL — play directly (no relay needed)
             finalURL = url

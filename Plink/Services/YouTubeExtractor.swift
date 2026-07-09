@@ -128,7 +128,7 @@ final class YouTubeExtractor {
         return nil
     }
 
-    // MARK: - Step 2: POST to youtubei/v1/player
+    // MARK: - Step 2: POST to youtubei/v1/player (TVHTML5 client)
 
     private func postPlayerAPI(
         videoId: String,
@@ -136,13 +136,16 @@ final class YouTubeExtractor {
         cookies: [HTTPCookie]
     ) async throws -> StreamInfo {
 
-        let apiUrl = URL(string: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false")!
+        // 🔧 v50.1 (Gemini): TVHTML5 client — no BotGuard, no signatureCipher.
+        // IOS client returns FAILED_PRECONDITION (web cookies + mobile profile mismatch).
+        // TVHTML5 (Smart TV) is forgiving: accepts web cookies, no API key needed.
+        let apiUrl = URL(string: "https://www.youtube.com/youtubei/v1/player")!
         var request = URLRequest(url: apiUrl)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(
-            "com.google.ios.youtube/19.29.1 (iPhone15,3; U; CPU iOS 17_0 like Mac OS X)",
+            "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/531.2+ (KHTML, like Gecko) WebBrowser/1.0 SmartTV Safari/531.2+",
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
@@ -151,16 +154,17 @@ final class YouTubeExtractor {
         // Generate cpn (Client Playback Nonce) — 16 random alphanumeric chars
         let cpn = generateCPN()
 
-        // Build payload with IOS client + visitorData + cpn
+        // 🔧 v50.1: TVHTML5 payload (Smart TV profile)
         var clientDict: [String: Any] = [
-            "clientName": "IOS",
-            "clientVersion": "19.29.1",
-            "deviceMake": "Apple",
-            "deviceModel": "iPhone15,3",
+            "clientName": "TVHTML5",
+            "clientVersion": "7.20230407.00.00",
+            "deviceMake": "Samsung",
+            "deviceModel": "SmartTV",
+            "userAgent": "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/531.2+ (KHTML, like Gecko) WebBrowser/1.0 SmartTV Safari/531.2+",
+            "osName": "Tizen",
+            "osVersion": "4.0",
             "hl": "en",
-            "gl": "US",
-            "osName": "iOS",
-            "osVersion": "17.5.1"
+            "gl": "US"
         ]
         if let visitorData = visitorData {
             clientDict["visitorData"] = visitorData
@@ -171,7 +175,7 @@ final class YouTubeExtractor {
             "videoId": videoId,
             "playbackContext": [
                 "contentPlaybackContext": [
-                    "signatureTimestamp": 20100
+                    "signatureTimestamp": 19900
                 ]
             ],
             "cpn": cpn

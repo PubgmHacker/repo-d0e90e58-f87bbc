@@ -752,17 +752,17 @@ private struct VideoSectionContent: View {
     let videoPlaceholder: () -> AnyView
 
     var body: some View {
-        // 🔧 v73 (Gemini): ROOT-LEVEL IMMORTAL ZStack. VideoContainerView is
-        // ALWAYS in the hierarchy — NEVER conditionally removed. The old
-        // if/else code would remove VideoContainerView when currentMediaItem
-        // became nil (socket drop) → makeUIView called again → GPU crash.
+        // 🔧 v75 (Gemini): NO dynamic .opacity() on VideoContainerView!
+        // v73/v74 used .opacity(hasMedia ? 1.0 : 0.01) which caused
+        // AttributeGraph cycle detected → SwiftUI rebuilt entire tree →
+        // makeUIView called twice → CARenderServer crash.
         //
-        // v73 adds .id("eternal_video_container") to lock VideoContainerView
-        // identity — SwiftUI NEVER recreates it, even when mediaURL/playbackMode
-        // change. Combined with .id("eternal_web_player") on WebVideoView,
-        // the entire video view tree is now immortal.
+        // v75: VideoContainerView is ALWAYS opacity 1.0. The placeholder
+        // overlay is shown ON TOP (zIndex 10) when no media. The player
+        // is always visible underneath — but since the placeholder covers
+        // it with Color.black, the user doesn't see the empty player.
         ZStack {
-            // Player is ALWAYS rendered — never conditionally removed
+            // Player is ALWAYS rendered, ALWAYS opacity 1.0 — NO dynamic opacity
             VideoContainerView(
                 mediaURL: syncEngine.currentMediaItem?.streamURL ?? "",
                 playbackMode: syncEngine.currentMediaItem?.effectivePlaybackMode ?? .webview,
@@ -773,11 +773,10 @@ private struct VideoSectionContent: View {
                 onSeek: { pos in syncEngine.seek(to: pos) }
             )
             .id("eternal_video_container")  // 🔧 v73: LOCK identity — never recreate
-            .opacity(hasMedia ? 1.0 : 0.01)
-            .allowsHitTesting(hasMedia)
+            .zIndex(0)
             .onAppear {
                 if let mediaItem = syncEngine.currentMediaItem {
-                    print("🎬 v73: VideoSectionContent — VideoContainerView in hierarchy (always present), streamURL=\(mediaItem.streamURL.prefix(80))")
+                    print("🎬 v75: VideoSectionContent — VideoContainerView in hierarchy (always present), streamURL=\(mediaItem.streamURL.prefix(80))")
                 }
             }
 

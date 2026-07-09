@@ -719,46 +719,36 @@ struct VideoContainerView: View {
     @State private var isYouTubeReady = false
 
     var body: some View {
-        // 🔧 v74 (Gemini): STATIC HIERARCHY — NO switch, NO if/else around
-        // WebVideoView. The old code had:
-        //   switch playbackMode { case .directStream: ... case .webview: webVideoView() }
-        //   if playbackMode == .webview && !isYouTubeReady { ... }
-        // These conditionals changed the view tree structure → SwiftUI
-        // recreated WebVideoView → makeUIView called → GPU crash.
+        // 🔧 v75 (Gemini): NO dynamic .opacity() — it caused AttributeGraph
+        // cycle detected error → SwiftUI rebuilt the entire view tree →
+        // makeUIView called twice → CARenderServer crash.
         //
-        // v74: WebVideoView is ALWAYS rendered (zIndex 0). Loading overlay
-        // is ALWAYS rendered but hidden via opacity (zIndex 10). DirectStream
-        // view is ALWAYS rendered but hidden via opacity (zIndex 1).
-        // No conditionals = no view tree changes = no makeUIView re-calls.
+        // v75: WebVideoView is ALWAYS rendered, ALWAYS visible (opacity 1.0).
+        // Loading overlay is shown/hidden via .opacity() on the OVERLAY only
+        // (not on the player). The overlay doesn't affect player geometry.
+        // DirectStream is NOT rendered (YouTube uses webview mode only).
         ZStack {
-            Color.black.opacity(0.3)
+            Color.black
 
-            // 🔧 v74: WebVideoView ALWAYS rendered — opacity controls visibility
+            // 🔧 v75: WebVideoView ALWAYS rendered, ALWAYS opacity 1.0
+            // No dynamic opacity = no AttributeGraph cycle
             webVideoView()
                 .zIndex(0)
-                .opacity(playbackMode == .webview ? 1.0 : 0.0)
 
-            // 🔧 v74: DirectStream ALWAYS rendered — opacity controls visibility
-            directStreamView()
-                .zIndex(1)
-                .opacity(playbackMode == .directStream ? 1.0 : 0.0)
-
-            // 🔧 v74: Loading overlay ALWAYS rendered — opacity controls visibility
-            Color.black
-                .overlay(
-                    ProgressView()
-                        .tint(.white)
-                        .scaleEffect(1.2)
-                )
-                .zIndex(10)
-                .opacity((playbackMode == .webview && !isYouTubeReady) ? 1.0 : 0.0)
-                .allowsHitTesting(playbackMode == .webview && !isYouTubeReady)
-        }
-        // 🔧 v34.25: fill whatever frame the parent gives us.
-        .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
-            withAnimation(.easeInOut(duration: 0.3)) {
-                isYouTubeReady = true
+            // 🔧 v75: Loading overlay — opacity controlled, but doesn't affect player
+            if !isYouTubeReady {
+                Color.black
+                    .overlay(
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.2)
+                    )
+                    .zIndex(10)
+                    .allowsHitTesting(true)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
+            isYouTubeReady = true
         }
     }
 

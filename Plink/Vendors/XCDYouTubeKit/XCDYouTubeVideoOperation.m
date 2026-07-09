@@ -196,10 +196,24 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                                 NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
                                 NSLog(@"[XCDYouTubeKit] youtubei POST response: HTTP %ld, data.length=%lu", (long)httpResponse.statusCode, (unsigned long)data.length);
                                 
+                                // 🔧 v49.2 (Gemini fix): Log HTTP 4xx/5xx error body for debugging
+                                if (httpResponse.statusCode >= 400)
+                                {
+                                        NSString *errorBody = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                                        NSLog(@"[XCDYouTubeKit] HTTP %ld Error Body: %@", (long)httpResponse.statusCode, errorBody);
+                                        NSMutableDictionary *errInfo = [NSMutableDictionary dictionary];
+                                        errInfo[NSLocalizedDescriptionKey] = [NSString stringWithFormat:@"YouTube API returned HTTP %ld", (long)httpResponse.statusCode];
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:errInfo];
+                                        [self finishWithError];
+                                        return;
+                                }
+                                
                                 if (data.length == 0)
                                 {
                                         NSLog(@"[XCDYouTubeKit] youtubei POST returned empty response");
-                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorEmptyResponse userInfo:nil];
+                                        NSMutableDictionary *errInfo = [NSMutableDictionary dictionary];
+                                        errInfo[NSLocalizedDescriptionKey] = @"Empty response from YouTube";
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorEmptyResponse userInfo:errInfo];
                                         [self finishWithError];
                                         return;
                                 }
@@ -209,13 +223,18 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                                 if (jsonError || !responseDict)
                                 {
                                         NSLog(@"[XCDYouTubeKit] youtubei POST JSON parse error: %@", jsonError.localizedDescription);
-                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:@{NSLocalizedDescriptionKey: @"JSON parse error"}];
+                                        NSMutableDictionary *errInfo = [NSMutableDictionary dictionary];
+                                        errInfo[NSLocalizedDescriptionKey] = @"JSON parse error";
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:errInfo];
                                         [self finishWithError];
                                         return;
                                 }
                                 
                                 // Check playability status
                                 NSDictionary *playability = responseDict[@"playabilityStatus"];
+                                if (!playability) {
+                                        playability = @{};
+                                }
                                 NSString *status = playability[@"status"];
                                 if (!status) {
                                         status = @"UNKNOWN";
@@ -229,8 +248,10 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                                                 reason = [NSString stringWithFormat:@"Video not playable (status: %@)", status];
                                         }
                                         NSLog(@"[XCDYouTubeKit] youtubei video not playable: %@", reason);
-                                        // 🔧 v49.1: Fix crash — don't pass nil to NSDictionary
-                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:@{NSLocalizedDescriptionKey: reason}];
+                                        // 🔧 v49.2 (Gemini fix): Safe dictionary creation — never nil
+                                        NSMutableDictionary *errInfo = [NSMutableDictionary dictionary];
+                                        errInfo[NSLocalizedDescriptionKey] = reason;
+                                        self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:errInfo];
                                         [self finishWithError];
                                         return;
                                 }

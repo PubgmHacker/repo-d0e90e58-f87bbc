@@ -1083,8 +1083,9 @@ final class VideoHostController: UIViewController {
 
             if type == .ended {
                 print("⚡ v80: AVAudioSession interruption ENDED — forcing resume")
-                // Give iOS 200ms to settle before forcing resume
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                // 🔧 v83: Increase delay to 500ms — WebContent process needs
+                // time to wake up after background. 200ms was too early.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.forceResumePlayback()
                 }
             }
@@ -1106,77 +1107,53 @@ final class VideoHostController: UIViewController {
             print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v82: Improved Hard Buffering Reset JS
-        // v81 had: clear src, load, restore src, seek, play
-        // v82 adds: video.pause() BEFORE clearing src (stops buffering attempts)
-        //           + requestAnimationFrame (waits for decoder to settle)
+        // 🔧 v83 (Gemini): Seek Flush strategy — LESS invasive than Hard Reset.
+        // Instead of clearing src (which breaks YouTube's player), just seek
+        // to currentTime + 0.1 and play. This forces the decoder to request
+        // new segments, kicking it out of state=3 deadlock.
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
                 if (!video) {
-                    console.log('[Plink v82] No video element found');
+                    console.log('[Plink v83] No video element found');
                     return;
                 }
 
-                console.log('[Plink v82] forceResumePlayback — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
+                console.log('[Plink v83] forceResumePlayback — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
 
-                // Check if stuck in buffering (readyState < 3 = HAVE_FUTURE_DATA)
-                if (video.paused && video.readyState < 3) {
-                    console.log('[Plink v82] STUCK in buffering — performing Hard Reset');
+                // Seek Flush strategy: if stuck in buffering (readyState < 3),
+                // seek forward 0.1s to force decoder to request new segments
+                if (video.readyState < 3) {
+                    console.log('[Plink v83] Buffering deadlock — Seek Flush');
+                    var curr = video.currentTime;
+                    // Seek +0.1s — forces decoder to pull new data
+                    video.currentTime = curr + 0.1;
+                    console.log('[Plink v83] Seeked to ' + (curr + 0.1) + ' — forcing decoder flush');
 
-                    // Try YouTube API first (if available)
-                    if (typeof window.playVideo === 'function') {
-                        window.playVideo();
-                    }
-
-                    // Hard reset: save current src + currentTime
-                    var oldSrc = video.src;
-                    var savedTime = video.currentTime;
-                    console.log('[Plink v82] Hard Reset: src=' + (oldSrc || 'none').substring(0, 60) + ', time=' + savedTime);
-
-                    // 1. Pause FIRST — stops buffering attempts
-                    video.pause();
-
-                    // 2. Clear src — throws out old broken buffer from GPU memory
-                    video.removeAttribute('src');
-                    video.load();  // forces decoder reset
-
-                    // 3. Wait one animation frame before restoring
-                    requestAnimationFrame(function() {
-                        if (oldSrc) {
-                            video.src = oldSrc;
-                            video.load();
-                        }
-
-                        // 4. Seek back + play after another frame
-                        requestAnimationFrame(function() {
-                            try {
-                                video.currentTime = savedTime;
-                            } catch(e) {
-                                console.log('[Plink v82] Seek failed: ' + e);
-                            }
-                            video.play().then(function() {
-                                console.log('[Plink v82] Hard Reset SUCCESS — playing from ' + savedTime);
-                            }).catch(function(e) {
-                                console.log('[Plink v82] Play after reset failed: ' + e);
+                    // Play after 100ms (let seek complete)
+                    setTimeout(function() {
+                        if (typeof window.playVideo === 'function') {
+                            window.playVideo();
+                        } else {
+                            video.play().catch(function(e) {
+                                console.log('[Plink v83] Play after seek failed: ' + e);
                             });
-                        });
-                    });
+                        }
+                        console.log('[Plink v83] Play called after Seek Flush');
+                    }, 100);
                 } else if (video.paused) {
-                    // Simple resume — not stuck in buffering
-                    console.log('[Plink v82] Simple resume (not buffering)');
+                    // Simple resume — not buffering, just paused
+                    console.log('[Plink v83] Simple resume (paused, not buffering)');
                     if (typeof window.playVideo === 'function') {
                         window.playVideo();
-                    } else if (window.player && typeof window.player.playVideo === 'function') {
-                        window.player.playVideo();
                     } else {
                         video.play().catch(function(e) {
-                            console.log('[Plink v82] Play failed: ' + e);
+                            console.log('[Plink v83] Play failed: ' + e);
                         });
                     }
                 } else {
-                    console.log('[Plink v82] Video not paused — just nudging GPU');
+                    console.log('[Plink v83] Video not paused — just nudging GPU');
                 }
 
                 // Nudge GPU with translateZ
@@ -1186,7 +1163,7 @@ final class VideoHostController: UIViewController {
                 // Dispatch resize
                 window.dispatchEvent(new Event('resize'));
             } catch(e) {
-                console.log('[Plink v82] forceResumePlayback error: ' + e);
+                console.log('[Plink v83] forceResumePlayback error: ' + e);
             }
         })();
         """

@@ -752,25 +752,55 @@ private struct VideoSectionContent: View {
     let videoPlaceholder: () -> AnyView
 
     var body: some View {
-        Group {
-            if let mediaItem = syncEngine.currentMediaItem,
-               !mediaItem.streamURL.isEmpty {
-                VideoContainerView(
-                    mediaURL: mediaItem.streamURL,
-                    playbackMode: mediaItem.effectivePlaybackMode,
-                    isPlaying: syncEngine.isPlaying,
-                    currentTime: syncEngine.currentTime,
-                    duration: syncEngine.duration,
-                    onTogglePlay: { syncEngine.togglePlayPause() },
-                    onSeek: { pos in syncEngine.seek(to: pos) }
-                )
-                .onAppear {
-                    print("🎬 v38: VideoSectionContent — rendering VideoContainerView for streamURL=\(mediaItem.streamURL.prefix(80))")
+        // 🔧 v65 (Gemini): CRITICAL — VideoContainerView must NEVER be removed
+        // from the view hierarchy while in the room. Use ZStack + opacity instead
+        // of if/else.
+        //
+        // ROOT CAUSE of black screen bug:
+        // When the user opens Control Center, the app goes inactive. WS
+        // disconnects → reconnects → SyncEngine state changes → SwiftUI
+        // re-evaluates VideoSectionContent. The OLD if/else code:
+        //   if currentMediaItem != nil { VideoContainerView } else { placeholder }
+        // would briefly remove VideoContainerView and re-add it → makeUIView
+        // called → WKWebView detached from parent → iOS refuses GPU context
+        // ("app in background, CARenderServer failed bootstrap, Null Context
+        // server port!") → PERMANENT black screen, audio continues.
+        //
+        // FIX: VideoContainerView is ALWAYS in the hierarchy. When there's no
+        // media, we set opacity to 0.01 (NOT 0 — opacity 0 lets iOS kill the
+        // GPU context too). The placeholder is shown ON TOP via ZStack.
+        ZStack {
+            // Player is ALWAYS rendered — never conditionally removed
+            VideoContainerView(
+                mediaURL: syncEngine.currentMediaItem?.streamURL ?? "",
+                playbackMode: syncEngine.currentMediaItem?.effectivePlaybackMode ?? .webview,
+                isPlaying: syncEngine.isPlaying,
+                currentTime: syncEngine.currentTime,
+                duration: syncEngine.duration,
+                onTogglePlay: { syncEngine.togglePlayPause() },
+                onSeek: { pos in syncEngine.seek(to: pos) }
+            )
+            // 🔧 v65: opacity 0.01 when no media (NOT 0 — 0 lets iOS kill GPU).
+            // opacity 1.0 when media is loaded and ready.
+            .opacity(hasMedia ? 1.0 : 0.01)
+            .onAppear {
+                if let mediaItem = syncEngine.currentMediaItem {
+                    print("🎬 v65: VideoSectionContent — VideoContainerView in hierarchy (always present), streamURL=\(mediaItem.streamURL.prefix(80))")
                 }
-            } else {
+            }
+
+            // Placeholder shown ON TOP when no media loaded yet
+            if !hasMedia {
                 videoPlaceholder()
             }
         }
+    }
+
+    /// True when there's a media item with a non-empty streamURL.
+    private var hasMedia: Bool {
+        guard let mediaItem = syncEngine.currentMediaItem,
+              !mediaItem.streamURL.isEmpty else { return false }
+        return true
     }
 }
 

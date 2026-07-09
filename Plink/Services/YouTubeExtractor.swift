@@ -90,6 +90,10 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
 
         // JS hook: intercept fetch/XHR for googlevideo.com or .m3u8 URLs
         let hookScript = WKUserScript(source: """
+        // 🔧 v51.4 (Gemini): Spoof Page Visibility API
+        Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+        Object.defineProperty(document, 'hidden', { get: () => false });
+
         (function() {
             function checkURL(url) {
                 if (typeof url !== 'string') return false;
@@ -146,9 +150,26 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
 
         config.userContentController.addUserScript(hookScript)
+
+        // 🔧 v51.4 (Gemini): Aggressive autoplay script at documentEnd
+        let autoplayScript = WKUserScript(source: """
+        setInterval(function() {
+            var video = document.querySelector('video');
+            if (video && video.paused) {
+                video.play().catch(function(e) {});
+            }
+            var playButton = document.querySelector('.ytp-large-play-button') || document.querySelector('.ytp-play-button');
+            if (playButton) {
+                playButton.click();
+            }
+        }, 500);
+        """, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        config.userContentController.addUserScript(autoplayScript)
+
         config.userContentController.add(self, name: "hook")
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        // 🔧 v51.4 (Gemini): Real frame size — WebKit throttles zero-size views
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
         webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
         webView.navigationDelegate = self
         // 🔧 v51.3: Mute via JS (webView.isMuted is not available in all iOS versions)

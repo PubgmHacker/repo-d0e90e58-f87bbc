@@ -56,11 +56,15 @@ final class WebViewControl {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self = self, let webView = self.webView else { return }
-            // Give iOS 100ms to deploy the UI before reactivate
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                print("⚡ v72: Global reactivate triggered (didBecomeActive)")
-                self.reactivate(webView: webView)
+            // 🔧 v82: Wrap in Task { @MainActor } — the closure is @Sendable
+            // but WebViewControl is @MainActor-isolated
+            Task { @MainActor [weak self] in
+                guard let self = self, let webView = self.webView else { return }
+                // Give iOS 100ms to deploy the UI before reactivate
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    print("⚡ v72: Global reactivate triggered (didBecomeActive)")
+                    self.reactivate(webView: webView)
+                }
             }
         }
     }
@@ -1102,71 +1106,77 @@ final class VideoHostController: UIViewController {
             print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v81: Hard Buffering Reset JS
-        // If video is stuck in buffering (readyState < 3), reset src to force
-        // the decoder to reload. This is the ONLY way to kick YouTube out of
-        // state=3 deadlock.
+        // 🔧 v82: Improved Hard Buffering Reset JS
+        // v81 had: clear src, load, restore src, seek, play
+        // v82 adds: video.pause() BEFORE clearing src (stops buffering attempts)
+        //           + requestAnimationFrame (waits for decoder to settle)
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
                 if (!video) {
-                    console.log('[Plink v81] No video element found');
+                    console.log('[Plink v82] No video element found');
                     return;
                 }
 
-                console.log('[Plink v81] forceResumePlayback — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
+                console.log('[Plink v82] forceResumePlayback — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
 
                 // Check if stuck in buffering (readyState < 3 = HAVE_FUTURE_DATA)
-                // networkState 2 = NETWORK_LOADING
                 if (video.paused && video.readyState < 3) {
-                    console.log('[Plink v81] STUCK in buffering — performing Hard Reset');
+                    console.log('[Plink v82] STUCK in buffering — performing Hard Reset');
 
                     // Try YouTube API first (if available)
                     if (typeof window.playVideo === 'function') {
                         window.playVideo();
                     }
 
-                    // Hard reset: save current src, clear it, reload, restore
-                    var currentSrc = video.src;
-                    var currentCurrentTime = video.currentTime;
-                    console.log('[Plink v81] Hard Reset: src=' + (currentSrc || 'none').substring(0, 60) + ', time=' + currentCurrentTime);
+                    // Hard reset: save current src + currentTime
+                    var oldSrc = video.src;
+                    var savedTime = video.currentTime;
+                    console.log('[Plink v82] Hard Reset: src=' + (oldSrc || 'none').substring(0, 60) + ', time=' + savedTime);
 
-                    // Clear src + load (forces decoder reset)
+                    // 1. Pause FIRST — stops buffering attempts
+                    video.pause();
+
+                    // 2. Clear src — throws out old broken buffer from GPU memory
                     video.removeAttribute('src');
-                    video.load();
+                    video.load();  // forces decoder reset
 
-                    // Restore src after 100ms + play
-                    setTimeout(function() {
-                        if (currentSrc) {
-                            video.src = currentSrc;
+                    // 3. Wait one animation frame before restoring
+                    requestAnimationFrame(function() {
+                        if (oldSrc) {
+                            video.src = oldSrc;
                             video.load();
                         }
-                        // Seek back to where we were + play
-                        setTimeout(function() {
+
+                        // 4. Seek back + play after another frame
+                        requestAnimationFrame(function() {
                             try {
-                                video.currentTime = currentCurrentTime;
-                            } catch(e) {}
-                            video.play().catch(function(e) {
-                                console.log('[Plink v81] Play after reset failed: ' + e);
+                                video.currentTime = savedTime;
+                            } catch(e) {
+                                console.log('[Plink v82] Seek failed: ' + e);
+                            }
+                            video.play().then(function() {
+                                console.log('[Plink v82] Hard Reset SUCCESS — playing from ' + savedTime);
+                            }).catch(function(e) {
+                                console.log('[Plink v82] Play after reset failed: ' + e);
                             });
-                            console.log('[Plink v81] Hard Reset complete — playing from ' + currentCurrentTime);
-                        }, 200);
-                    }, 100);
+                        });
+                    });
                 } else if (video.paused) {
                     // Simple resume — not stuck in buffering
-                    console.log('[Plink v81] Simple resume (not buffering)');
+                    console.log('[Plink v82] Simple resume (not buffering)');
                     if (typeof window.playVideo === 'function') {
                         window.playVideo();
                     } else if (window.player && typeof window.player.playVideo === 'function') {
                         window.player.playVideo();
                     } else {
                         video.play().catch(function(e) {
-                            console.log('[Plink v81] Play failed: ' + e);
+                            console.log('[Plink v82] Play failed: ' + e);
                         });
                     }
                 } else {
-                    console.log('[Plink v81] Video not paused — just nudging GPU');
+                    console.log('[Plink v82] Video not paused — just nudging GPU');
                 }
 
                 // Nudge GPU with translateZ
@@ -1176,7 +1186,7 @@ final class VideoHostController: UIViewController {
                 // Dispatch resize
                 window.dispatchEvent(new Event('resize'));
             } catch(e) {
-                console.log('[Plink v81] forceResumePlayback error: ' + e);
+                console.log('[Plink v82] forceResumePlayback error: ' + e);
             }
         })();
         """
@@ -1184,7 +1194,7 @@ final class VideoHostController: UIViewController {
 
         // Retry after 1s — if hard reset didn't work, try simple play again
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self = self, let webView = WebViewControl.shared.webView else { return }
+            guard self != nil, let webView = WebViewControl.shared.webView else { return }
             webView.evaluateJavaScript("""
             (function() {
                 try {
@@ -1297,7 +1307,6 @@ struct WebVideoView: UIViewControllerRepresentable {
 
         if isYouTube {
             // Check if prewarm already loaded this video
-            let currentURL = webView.url?.absoluteString ?? ""
             let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
 
             // 🔧 v79: Use shouldLoadVideoId — if same video, skip entirely

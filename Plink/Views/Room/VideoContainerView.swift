@@ -719,33 +719,42 @@ struct VideoContainerView: View {
     @State private var isYouTubeReady = false
 
     var body: some View {
-        // 🔧 v34.25: REMOVED inner GeometryReader.
-        // The parent (videoSection in RoomView) already sets .frame(height: videoHeight).
-        // Inner GeometryReader caused double layout pass on rotation → SwiftUI
-        // re-evaluated WebVideoView identity → makeUIView called again →
-        // WKWebView recreated → video reset.
+        // 🔧 v74 (Gemini): STATIC HIERARCHY — NO switch, NO if/else around
+        // WebVideoView. The old code had:
+        //   switch playbackMode { case .directStream: ... case .webview: webVideoView() }
+        //   if playbackMode == .webview && !isYouTubeReady { ... }
+        // These conditionals changed the view tree structure → SwiftUI
+        // recreated WebVideoView → makeUIView called → GPU crash.
+        //
+        // v74: WebVideoView is ALWAYS rendered (zIndex 0). Loading overlay
+        // is ALWAYS rendered but hidden via opacity (zIndex 10). DirectStream
+        // view is ALWAYS rendered but hidden via opacity (zIndex 1).
+        // No conditionals = no view tree changes = no makeUIView re-calls.
         ZStack {
             Color.black.opacity(0.3)
 
-            switch playbackMode {
-            case .directStream:
-                directStreamView()
-            case .webview:
-                webVideoView()
-            }
+            // 🔧 v74: WebVideoView ALWAYS rendered — opacity controls visibility
+            webVideoView()
+                .zIndex(0)
+                .opacity(playbackMode == .webview ? 1.0 : 0.0)
 
-            if playbackMode == .webview && !isYouTubeReady {
-                Color.black
-                    .overlay(
-                        ProgressView()
-                            .tint(.white)
-                            .scaleEffect(1.2)
-                    )
-                    .transition(.opacity)
-            }
+            // 🔧 v74: DirectStream ALWAYS rendered — opacity controls visibility
+            directStreamView()
+                .zIndex(1)
+                .opacity(playbackMode == .directStream ? 1.0 : 0.0)
+
+            // 🔧 v74: Loading overlay ALWAYS rendered — opacity controls visibility
+            Color.black
+                .overlay(
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.2)
+                )
+                .zIndex(10)
+                .opacity((playbackMode == .webview && !isYouTubeReady) ? 1.0 : 0.0)
+                .allowsHitTesting(playbackMode == .webview && !isYouTubeReady)
         }
         // 🔧 v34.25: fill whatever frame the parent gives us.
-        // No explicit width/height — parent controls sizing.
         .onReceive(NotificationCenter.default.publisher(for: .youtubePlayerReady)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
                 isYouTubeReady = true
@@ -757,6 +766,8 @@ struct VideoContainerView: View {
 
     @ViewBuilder
     private func directStreamView() -> some View {
+        // 🔧 v74: STATIC — no if/else. Always render VideoPlayerRepresentable
+        // (or placeholder). Opacity in body controls visibility.
         if let url = URL(string: mediaURL) {
             // 🔧 FIX H3: Use SyncEngine's AVPlayer directly (was: created own AVPlayer).
             // SyncEngine.player is the source of truth — it applies play/pause/seek

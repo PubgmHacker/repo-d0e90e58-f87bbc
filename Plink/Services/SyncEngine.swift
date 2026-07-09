@@ -87,8 +87,24 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
     // MARK: - Constants
 
     private enum Constants {
-        static let driftThreshold: TimeInterval = 0.5        // 500ms — visible desync
-        static let hardResyncThreshold: TimeInterval = 1.5   // 1.5s — force reseek
+        /// 🔧 v56 (Gemini): Soft Sync — never seek if |local - server| < this threshold.
+        /// Seeking flushes the player's forward buffer (YouTube googlevideo: ~5s to rebuffer).
+        /// WS reconnects on shade open / Control Center pull → server sends current state →
+        /// if we seek to "compensated" position, the entire buffer is gone → 5-second freeze.
+        /// With soft sync, we just let the player continue from its buffer; the small delta
+        /// is invisible to the user. The player will catch up naturally.
+        static let softSyncThreshold: TimeInterval = 3.0   // 3.0s — Gemini spec
+
+        /// 🔧 v56: driftThreshold raised from 0.5s to 3.0s (== softSyncThreshold).
+        /// Below this we don't touch the player at all. No more "soft correction" seek.
+        static let driftThreshold: TimeInterval = 3.0       // was 0.5s
+
+        /// 🔧 v56: hardResyncThreshold raised from 1.5s to 6.0s.
+        /// Only request fresh state from host when drift is genuinely large (real seek
+        /// by another participant, or massive buffer stall). The 6.0s gives enough
+        /// headroom for WS reconnect jitter to NOT trigger state requests.
+        static let hardResyncThreshold: TimeInterval = 6.0  // was 1.5s
+
         static let seekTolerance: TimeInterval = 0.05         // 50ms — don't reseek for tiny diffs
         static let stateBroadcastInterval: TimeInterval = 2.0
         static let driftCheckInterval: TimeInterval = 1.0
@@ -519,6 +535,13 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     /// Compare local playback position against the extrapolated host position.
     /// If drift exceeds threshold, self-correct (participant) or request state (host).
+    ///
+    /// 🔧 v56 (Gemini): NO MORE seekSilently for "soft correction". The previous code
+    /// called seekSilently whenever drift > 0.5s — this triggered a tolerant seek every
+    /// few seconds, flushing the buffer repeatedly. Now we only request fresh state
+    /// from host when drift > hardResyncThreshold (6.0s). Below that, the player just
+    /// keeps playing from its buffer. The periodic state pulses from host (every 2s)
+    /// will pull us back into alignment via the soft-sync logic in handleSeek.
     private func checkDrift() {
         guard lastSyncEventTime > 0 else { return }
 
@@ -538,19 +561,23 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         // Surface telemetry
         estimatedRTTms = Int(estimatedRTT * 1000)
 
-        // Hard resync: participant drifted way off — request fresh state from host
+        // 🔧 v56: Only request fresh state when drift is genuinely large (> 6.0s).
+        // The hardResyncThreshold was raised from 1.5s to 6.0s so that:
+        // - WS reconnect jitter (typically 1-3s) doesn't trigger state requests
+        // - Real out-of-sync (> 6s) still triggers a fresh state pull from host
         if !isHost && drift > Constants.hardResyncThreshold {
-            Logger.sync.warn("Hard drift: \(String(format: "%.0f", driftMs))ms — requesting state from host")
+            Logger.sync.warn("Hard drift: \(String(format: "%.0f", driftMs))ms — requesting state from host (v56: soft sync, no seek)")
             requestStateFromHost()
             return
         }
 
-        // Soft correction: small drift, nudge locally without a visible jump
-        if !isHost && drift > Constants.driftThreshold && drift <= Constants.hardResyncThreshold {
-            Logger.sync.info("Soft drift: \(String(format: "%.0f", driftMs))ms — self-correcting to \(String(format: "%.2f", extrapolatedHostTime))s")
-            seekSilently(to: extrapolatedHostTime, preserveRate: isPlaying)
-            lastCompensationMs = Int(driftMs)
-        }
+        // 🔧 v56: REMOVED the "soft correction" seekSilently branch.
+        // Drift between driftThreshold (3.0s) and hardResyncThreshold (6.0s) is now
+        // absorbed naturally — the player keeps playing, the next state pulse from
+        // host (every 2s) will pull us back into alignment via handleSeek's soft-sync
+        // logic (which doesn't seek if delta < 3.0s).
+        //
+        // Drift < driftThreshold (3.0s) is considered perfect sync.
     }
 
     // MARK: - Latency-Compensated Command Handlers
@@ -575,36 +602,38 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         lastCompensationMs = compensationMs
         recordSyncPoint(mediaTime: compensatedTarget, isPlaying: true, serverTime: currentServerTime)
 
-        Logger.sync.info("▶️ PLAY  host@\(fmt(eventMediaTime))s → seek to \(fmt(compensatedTarget))s (+\(compensationMs)ms latency, RTT \(Int(estimatedRTT*1000))ms)")
+        // 🔧 v56: Compute delta BEFORE deciding whether to seek.
+        let timeDelta = abs(currentTime - compensatedTarget)
+        Logger.sync.info("▶️ PLAY  host@\(fmt(eventMediaTime))s → target \(fmt(compensatedTarget))s (delta=\(fmt(timeDelta))s, +\(compensationMs)ms RTT, soft-sync threshold=\(Constants.softSyncThreshold)s)")
 
         // 🔧 v34: WEBVIEW mode — control YouTube player via JS bridge
         if player == nil {
             isPlaying = true
-            // Seek to compensated position first, then play
-            if abs(currentTime - compensatedTarget) > 1.0 {
+            // 🔧 v56: Soft Sync — only seek WebView if delta > 3.0s
+            if timeDelta > Constants.softSyncThreshold {
+                Logger.sync.info("⏩ WebView: delta > 3.0s — seeking to \(fmt(compensatedTarget))s")
                 WebViewControl.shared.seek(to: compensatedTarget)
                 currentTime = compensatedTarget
+            } else {
+                Logger.sync.info("⏩ WebView: delta < 3.0s — soft sync, just playing (no seek)")
             }
             WebViewControl.shared.play()
             return
         }
 
-        // 🔧 FAST PATH: If we're already playing and within tolerance, do nothing
-        // (avoids stutter on rapid play/pause toggles)
-        if isPlaying && abs(currentTime - compensatedTarget) < Constants.seekTolerance {
-            return
-        }
-
-        // 🔧 FAST PATH: If drift is small (< 2s), just play without seeking —
-        // the drift monitor will self-correct within a few seconds.
-        // This avoids the "seek then play" stutter that was causing delay.
-        if abs(currentTime - compensatedTarget) < 2.0 {
+        // 🔧 v56: Soft Sync — if delta < 3.0s, just press play. DO NOT SEEK.
+        // Seeking flushes the AVPlayer forward buffer → 5-second freeze visible
+        // to the user. The small delta is imperceptible and the player will
+        // catch up naturally.
+        if timeDelta < Constants.softSyncThreshold {
+            Logger.sync.info("⏩ AVPlayer: delta < 3.0s — soft sync, just playing (no seek, buffer preserved)")
             player?.play()
             isPlaying = true
             return
         }
 
-        // Large drift — seek to compensated position, then play
+        // Large drift (> 3.0s) — genuine seek needed (host jumped or we stalled badly)
+        Logger.sync.info("⏩ AVPlayer: delta > 3.0s — hard seek to \(fmt(compensatedTarget))s")
         player?.seek(to: CMTime(seconds: compensatedTarget, preferredTimescale: 600)) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
@@ -617,17 +646,26 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
 
     /// PAUSE command received.
     /// 🔧 IMMEDIATE: Pause instantly for zero-latency visual sync.
-    /// Seek to exact frame happens after pause (non-blocking).
+    /// 🔧 v56: Soft Sync — skip the seek entirely if delta < 3.0s. The old code
+    /// always did `seek(to: eventMediaTime, toleranceBefore: .zero, toleranceAfter: .zero)`
+    /// which flushes the buffer with zero tolerance. On WS reconnect, every
+    /// periodic state pulse (which uses .seek as envelope) was triggering a
+    /// harsh zero-tolerance seek → 5s freeze. Now we only seek if drift is large.
     private func handlePause(_ message: SyncMessage) {
         let eventMediaTime = message.mediaTime ?? currentTime
         recordSyncPoint(mediaTime: eventMediaTime, isPlaying: false, serverTime: message.timestamp)
 
-        Logger.sync.info("⏸️ PAUSE at \(fmt(eventMediaTime))s")
+        let timeDelta = abs(currentTime - eventMediaTime)
+        Logger.sync.info("⏸️ PAUSE at \(fmt(eventMediaTime))s (delta=\(fmt(timeDelta))s)")
 
         // 🔧 v34: WEBVIEW mode — pause YouTube player via JS bridge
         if player == nil {
             isPlaying = false
-            currentTime = eventMediaTime
+            // 🔧 v56: Soft Sync — only seek if delta > 3.0s
+            if timeDelta > Constants.softSyncThreshold {
+                currentTime = eventMediaTime
+                WebViewControl.shared.seek(to: eventMediaTime)
+            }
             WebViewControl.shared.pause()
             return
         }
@@ -635,11 +673,18 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         // 🔧 IMMEDIATE pause — no waiting for seek completion
         player?.pause()
         isPlaying = false
-        currentTime = eventMediaTime
 
-        // Seek to exact paused frame (async, non-blocking)
-        player?.seek(to: CMTime(seconds: eventMediaTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            Task { @MainActor in self?.currentTime = eventMediaTime }
+        // 🔧 v56: Soft Sync — only seek to exact paused frame if delta > 3.0s.
+        // For small deltas, the displayed frame is already close enough; seeking
+        // with tolerance .zero flushes the buffer and stalls recovery.
+        if timeDelta > Constants.softSyncThreshold {
+            Logger.sync.info("⏸️ delta > 3.0s — seeking to exact paused frame \(fmt(eventMediaTime))s")
+            player?.seek(to: CMTime(seconds: eventMediaTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                Task { @MainActor in self?.currentTime = eventMediaTime }
+            }
+        } else {
+            // Small delta — just update currentTime to match server, no seek
+            currentTime = eventMediaTime
         }
     }
 
@@ -661,9 +706,9 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         let eventServerTime = message.timestamp
         let elapsedSinceEvent = max(0, currentServerTime - eventServerTime)
 
-        // 🔧 v56 (Gemini): Soft Sync — don't seek if delta < 2.5 seconds.
-        // Small deltas are from normal drift, not real seeks. Seeking
-        // causes YouTube to flush its buffer → 5-second freeze.
+        // 🔧 v56 (Gemini): Soft Sync — don't seek if delta < 3.0s (Constants.softSyncThreshold).
+        // Small deltas are from normal drift / WS reconnect state pulses, not real seeks.
+        // Seeking causes YouTube/AVPlayer to flush its forward buffer → 5-second freeze.
         let compensatedTarget: TimeInterval
         if isPlaying {
             compensatedTarget = min(eventMediaTime + elapsedSinceEvent, duration > 0 ? duration : .infinity)
@@ -672,14 +717,16 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         }
 
         let timeDelta = abs(currentTime - compensatedTarget)
-        if timeDelta < 2.5 {
-            // 🔧 v56: Within 2.5s — soft sync, NO seek. Just update recorded time.
+        if timeDelta < Constants.softSyncThreshold {
+            // 🔧 v56: Within 3.0s — soft sync, NO seek. Just update recorded time.
+            // The player continues playing from its buffer; the small drift is
+            // imperceptible and will be absorbed by the next state pulse.
             recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
-            Logger.sync.info("⏩ SKIP seek (delta=\(fmt(timeDelta))s < 2.5s) — soft sync")
+            Logger.sync.info("⏩ SKIP seek (delta=\(fmt(timeDelta))s < \(Constants.softSyncThreshold)s) — soft sync, buffer preserved")
             return
         }
 
-        // Real seek needed (delta > 2.5s)
+        // Real seek needed (delta > 3.0s)
         recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
         Logger.sync.info("⏩ SEEK host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s [delta=\(fmt(timeDelta))s]")
 
@@ -719,9 +766,16 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
             : hostMediaTime
 
         let drift = abs(currentTime - target)
-        if drift > Constants.driftThreshold {
-            Logger.sync.warn("State response: correcting \(String(format: "%.0f", drift*1000))ms → \(fmt(target))s")
+        // 🔧 v56: Soft Sync — only seek if drift > 3.0s. The previous code seeked
+        // whenever drift > 0.5s (Constants.driftThreshold old value). On WS reconnect,
+        // this would trigger a seek that flushes the buffer.
+        if drift > Constants.softSyncThreshold {
+            Logger.sync.warn("State response: correcting \(String(format: "%.0f", drift*1000))ms → \(fmt(target))s (delta > 3.0s)")
             seekSilently(to: target, preserveRate: hostPlaying)
+            recordSyncPoint(mediaTime: target, isPlaying: hostPlaying, serverTime: currentServerTime)
+        } else {
+            // 🔧 v56: Small drift — soft sync, just record the sync point without seeking
+            Logger.sync.info("State response: drift=\(String(format: "%.0f", drift*1000))ms < 3.0s — soft sync, no seek")
             recordSyncPoint(mediaTime: target, isPlaying: hostPlaying, serverTime: currentServerTime)
         }
     }

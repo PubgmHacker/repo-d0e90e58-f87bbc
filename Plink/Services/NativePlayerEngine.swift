@@ -81,19 +81,23 @@ final class NativePlayerEngine: ObservableObject {
             // 🔧 v94: Route through StreamRelay backend
             // Backend URL: https://plink-backend.../api/media/stream?url=ENCOD(googlevideoURL)&token=JWT
             let backendBase = "https://plink-backend-production-ef31.up.railway.app"
-            let encodedURL = streamURL.addingPercentEncoding(
-                withAllowedCharacters: .urlQueryAllowed
-            ) ?? streamURL
+            // 🔧 v94.2: Use URLComponents to properly encode the googlevideo URL.
+            // .urlQueryAllowed does NOT encode & — which breaks query parsing.
+            // URLComponents handles encoding correctly.
             let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
-            let relayURLString = "\(backendBase)/api/media/stream?url=\(encodedURL)&token=\(token)"
+            var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
+            relayComponents.queryItems = [
+                URLQueryItem(name: "url", value: streamURL),
+                URLQueryItem(name: "token", value: token)
+            ]
 
-            guard let relayURL = URL(string: relayURLString) else {
+            guard let relayURL = relayComponents.url else {
                 print("⚠️ v94: Failed to create StreamRelay URL")
                 return
             }
 
             finalURL = relayURL
-            print("🎬 v94: StreamRelay — routing through backend: \(relayURLString.prefix(80))...")
+            print("🎬 v94: StreamRelay — routing through backend: \(relayURL.absoluteString.prefix(80))...")
         } else {
             // Non-YouTube URL — play directly (no relay needed)
             finalURL = url

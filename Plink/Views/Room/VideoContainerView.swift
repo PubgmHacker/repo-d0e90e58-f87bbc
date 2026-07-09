@@ -1013,79 +1013,92 @@ final class PlayerUIView: UIView {
 // rotation but does NOT reload the page. The WebView persists across
 // rotation because SwiftUI keeps the same UIView instance.
 
-// MARK: - VideoHostController (v76 — immortal UIViewController container)
+// MARK: - VideoHostController (v77 — SINGLETON UIViewController)
 //
-// 🔧 v76 (Gemini): Host WKWebView inside UIViewController instead of UIView.
-// UIViewController has its own lifecycle independent of SwiftUI's view
-// rebuilding. When SwiftUI recreates WebVideoView (the representable),
-// it "adopts" the existing VideoHostController — the WKWebView inside
-// is NEVER removed from the view hierarchy.
+// 🔧 v77 (Gemini): VideoHostController is now a SINGLETON. makeUIViewController
+// ALWAYS returns VideoHostController.shared — the SAME instance every time.
+// SwiftUI cannot recreate it because it never creates it in the first place.
+//
+// The WKWebView is attached to the controller's view via loadView() ONCE
+// and NEVER removed. When SwiftUI calls makeUIViewController again, it gets
+// the same controller → same view → same WKWebView → NO GPU crash.
 
 @MainActor
 final class VideoHostController: UIViewController {
-    private var hostedWebView: WKWebView?
+    static let shared = VideoHostController()
+
     weak var coordinator: WebVideoView.Coordinator?
+
+    /// 🔧 v77: Override loadView() to create the view ONCE with WKWebView
+    /// already attached. This view lives for the lifetime of the singleton
+    /// (i.e., forever). SwiftUI "adopts" this view — it can never recreate it.
+    override func loadView() {
+        // Ensure singleton WKWebView exists
+        WebViewControl.shared.ensureWebViewCreated()
+        let webView = WebViewControl.shared.webView!
+
+        // Create the host view
+        let hostView = UIView()
+        hostView.backgroundColor = .black
+
+        // Attach WKWebView to hostView ONCE
+        webView.frame = hostView.bounds
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        hostView.addSubview(webView)
+
+        // Set this as the controller's view
+        self.view = hostView
+
+        print("📺 v77: VideoHostController.loadView — WKWebView attached to singleton view (IMMORTAL)")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
-        attachWebView()
+        // Set up coordinator + navigation delegate + plinkBridge
+        setupCoordinator()
     }
 
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        hostedWebView?.frame = view.bounds
+        // Keep WKWebView frame in sync with view bounds
+        WebViewControl.shared.webView?.frame = view.bounds
     }
 
-    /// Attach the singleton WKWebView to this controller's view.
-    /// Called once on viewDidLoad. The WKWebView stays attached for the
-    /// lifetime of this controller — we NEVER remove it.
-    func attachWebView() {
-        // Ensure singleton exists
-        WebViewControl.shared.ensureWebViewCreated()
-        let webView = WebViewControl.shared.webView!
+    /// Set up coordinator references + navigation delegate + plinkBridge.
+    /// Called from viewDidLoad AND updateUIViewController (idempotent).
+    func setupCoordinator() {
+        guard let coord = coordinator, let webView = WebViewControl.shared.webView else { return }
 
-        // If already attached, don't re-attach
-        if webView.superview === view { return }
-
-        // Remove from old parent if any (only if different)
-        if webView.superview != nil && webView.superview !== view {
-            // 🔧 v76: DON'T call removeFromSuperview! This kills GPU.
-            // Just add to our view — UIKit handles reparenting internally.
+        if coord.webView == nil {
+            coord.webView = webView
         }
+        webView.navigationDelegate = coord
 
-        // Add to our view
-        view.addSubview(webView)
-        webView.frame = view.bounds
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        hostedWebView = webView
-
-        // Set up coordinator + navigation delegate + plinkBridge
-        if let coord = coordinator {
-            if coord.webView == nil {
-                coord.webView = webView
-            }
-            webView.navigationDelegate = coord
-            let ucc = webView.configuration.userContentController
-            ucc.removeScriptMessageHandler(forName: "plinkBridge")
-            ucc.add(coord, name: "plinkBridge")
-        }
-
-        print("📺 v76: VideoHostController.attachWebView — WKWebView attached (immortal)")
+        let ucc = webView.configuration.userContentController
+        ucc.removeScriptMessageHandler(forName: "plinkBridge")
+        ucc.add(coord, name: "plinkBridge")
     }
 
-    /// Get the hosted WKWebView (for updateUIViewController to access)
+    /// Get the hosted WKWebView
     var webView: WKWebView? {
-        return hostedWebView ?? WebViewControl.shared.webView
+        return WebViewControl.shared.webView
+    }
+
+    /// 🔧 v77: Private init — only accessible via .shared
+    private override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+        super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented — use VideoHostController.shared")
     }
 }
 
-// MARK: - WebVideoView (UIViewControllerRepresentable — v76)
+// MARK: - WebVideoView (UIViewControllerRepresentable — v77 singleton)
 //
-// 🔧 v76 (Gemini): Changed from UIViewRepresentable to UIViewControllerRepresentable.
-// UIViewController has a stable lifecycle — SwiftUI "adopts" the existing
-// controller instead of recreating it. The WKWebView inside is NEVER
-// removed from the view hierarchy when SwiftUI rebuilds.
+// 🔧 v77 (Gemini): makeUIViewController returns VideoHostController.shared.
+// SwiftUI ALWAYS gets the same instance — it can never recreate it.
+// dismantleUIViewController does NOTHING — the view is never removed.
 
 struct WebVideoView: UIViewControllerRepresentable {
     let url: URL?  // 🔧 v70: URL? — if nil, don't load anything (preserves prewarm)
@@ -1100,23 +1113,26 @@ struct WebVideoView: UIViewControllerRepresentable {
             print("⚠️ v35: AVAudioSession config failed: \(error)")
         }
 
-        print("🔧🔧🔧 v76 makeUIViewController CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
+        print("🔧🔧🔧 v77 makeUIViewController CALLED — returning VideoHostController.shared (SINGLETON)")
 
-        let controller = VideoHostController()
+        // 🔧 v77: Return the SINGLETON — always the same instance!
+        let controller = VideoHostController.shared
         controller.coordinator = context.coordinator
+        controller.setupCoordinator()
         return controller
     }
 
     func updateUIViewController(_ uiViewController: VideoHostController, context: Context) {
-        // Ensure WKWebView is attached (idempotent — only attaches once)
-        uiViewController.attachWebView()
+        // Ensure coordinator is set up (idempotent)
+        uiViewController.coordinator = context.coordinator
+        uiViewController.setupCoordinator()
 
         let webView = uiViewController.webView!
 
         // 🔧 v71: This is where video loading happens!
         guard let url = url else {
             // URL is nil (mediaURL was empty). Don't load anything.
-            print("📺 v76: updateUIViewController — url is nil, waiting for socket (no load)")
+            print("📺 v77: updateUIViewController — url is nil, waiting for socket (no load)")
             return
         }
 
@@ -1132,7 +1148,7 @@ struct WebVideoView: UIViewControllerRepresentable {
 
             if currentURL.contains(videoId) || currentURL.contains(videoId.replacingOccurrences(of: "-", with: "")) {
                 // Already loaded by prewarm — don't reload!
-                print("📺 v76: updateUIViewController — URL matches prewarm (videoId=\(videoId)), skipping load")
+                print("📺 v77: updateUIViewController — URL matches prewarm (videoId=\(videoId)), skipping load")
                 if context.coordinator.webView == nil {
                     context.coordinator.webView = webView
                 }
@@ -1144,7 +1160,7 @@ struct WebVideoView: UIViewControllerRepresentable {
             }
 
             // Not yet loaded — load it now via Coordinator.loadVideoOnce
-            print("📺 v76: updateUIViewController — loading YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
+            print("📺 v77: updateUIViewController — loading YouTube videoId='\(videoId)', url='\(urlString.prefix(60))'")
             if context.coordinator.webView == nil {
                 context.coordinator.webView = webView
             }
@@ -1160,8 +1176,16 @@ struct WebVideoView: UIViewControllerRepresentable {
         if webView.isLoading {
             return
         }
-        print("📺 v76: updateUIViewController — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
+        print("📺 v77: updateUIViewController — non-YouTube URL changed, loading \(url.absoluteString.prefix(60))")
         webView.load(URLRequest(url: url))
+    }
+
+    /// 🔧 v77: dismantleUIViewController — do NOTHING!
+    /// When SwiftUI removes WebVideoView from the hierarchy, it calls this.
+    /// We deliberately do NOT remove the view or clean up — the singleton
+    /// controller's view stays alive with the WKWebView attached.
+    func dismantleUIViewController(_ uiViewController: VideoHostController, coordinator: Coordinator) {
+        print("📺 v77: dismantleUIViewController — NO-OP (singleton view preserved)")
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }

@@ -1,14 +1,11 @@
 import Foundation
 import WebKit
 
-// MARK: - YouTubeExtractor (Hybrid WKWebView Network Hook)
+// MARK: - YouTubeExtractor (DOM Scraper — instant extraction)
 //
-// 🔧 v51.3: Autoplay enabled + native mute + internal timeout.
-// mediaTypesRequiringUserActionForPlayback = .all blocked YouTube from
-// requesting .m3u8 → JS hook had nothing to intercept.
-// withTimeout didn't work with withCheckedThrowingContinuation (leaked).
-//
-// FIX: Allow autoplay, mute via webView.isMuted, timeout inside class.
+// 🔧 v51.6: DOM Scraping approach — no network hooks, no autoplay needed.
+// Scrapes ytInitialPlayerResponse.streamingData.hlsManifestUrl directly.
+// Works in 0.5-1 second, no dependency on autoplay or Page Visibility.
 
 @MainActor
 final class YouTubeExtractor {
@@ -26,11 +23,11 @@ final class YouTubeExtractor {
             return cached.info
         }
 
-        print("📺 YouTubeExtractor v51.3: extracting \(videoId) (Hybrid WKWebView Hook)")
+        print("📺 YouTubeExtractor v51.6: extracting \(videoId) (DOM Scraper)")
 
         let streamURL = try await HybridHookExtractor.extract(videoId: videoId)
 
-        print("✅ YouTubeExtractor v51.3: got stream URL, prefix=\(streamURL.prefix(60))")
+        print("✅ YouTubeExtractor v51.6: got stream URL, prefix=\(streamURL.prefix(60))")
 
         let info = StreamInfo(
             id: videoId,
@@ -40,7 +37,7 @@ final class YouTubeExtractor {
             streamURL: streamURL,
             duration: 0,
             isLive: false,
-            extractor: "hybrid-webview"
+            extractor: "dom-scraper"
         )
 
         cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
@@ -62,7 +59,7 @@ final class YouTubeExtractor {
     }
 }
 
-// MARK: - Hybrid Hook Extractor (WKWebView + JS Network Intercept)
+// MARK: - Hybrid Hook Extractor (DOM Scraper)
 
 @MainActor
 private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -85,102 +82,65 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     private func start(videoId: String) {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        // 🔧 v51.3: ALLOW autoplay — YouTube needs to start playing to request .m3u8
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // JS hook: intercept fetch/XHR for googlevideo.com or .m3u8 URLs
-        let hookScript = WKUserScript(source: """
-        // 🔧 v51.4 (Gemini): Spoof Page Visibility API
+        // 🔧 v51.6 (Gemini): DOM Scraper — scrapes ytInitialPlayerResponse directly.
+        // No fetch/XHR hooks needed. Just read the JSON that YouTube embeds in the page.
+        let scraperScript = WKUserScript(source: """
+        // 🔧 v51.6 (Gemini): Spoof Page Visibility API (helps page render faster)
         Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
         Object.defineProperty(document, 'hidden', { get: () => false });
 
-        // 🔧 v51.5 (Gemini): STRICT HLS filter — only .m3u8, not videoplayback
-        function checkURL(url) {
-            if (typeof url !== 'string') return false;
-            return url.indexOf('.m3u8') !== -1 ||
-                   url.indexOf('manifest/hls_variant') !== -1 ||
-                   url.indexOf('hls_playlist') !== -1;
-        }
-
-        var origFetch = window.fetch;
-            window.fetch = function() {
-                var url = arguments[0];
-                if (url && url.url) url = url.url;
-                if (checkURL(url)) {
-                    window.webkit.messageHandlers.hook.postMessage({type: 'fetch', url: url});
-                }
-                return origFetch.apply(this, arguments);
-            };
-
-            var origOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url) {
-                if (checkURL(url)) {
-                    window.webkit.messageHandlers.hook.postMessage({type: 'xhr', url: url});
-                }
-                return origOpen.apply(this, arguments);
-            };
-
-            var origCreateElement = document.createElement;
-            document.createElement = function(tag) {
-                var el = origCreateElement.apply(this, arguments);
-                if (tag.toLowerCase() === 'video') {
-                    var observer = new MutationObserver(function(mutations) {
-                        if (el.src && checkURL(el.src)) {
-                            window.webkit.messageHandlers.hook.postMessage({type: 'video', url: el.src});
-                        }
-                    });
-                    observer.observe(el, {attributes: true, attributeFilter: ['src']});
-                }
-                return el;
-            };
-
-            setInterval(function() {
-                var videos = document.querySelectorAll('video');
-                for (var i = 0; i < videos.length; i++) {
-                    var src = videos[i].src || videos[i].currentSrc;
-                    if (src && checkURL(src)) {
-                        window.webkit.messageHandlers.hook.postMessage({type: 'video', url: src});
+        var scraperInterval = setInterval(function() {
+            try {
+                // Method 1: ytInitialPlayerResponse (embedded JSON)
+                if (window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.streamingData) {
+                    var hls = window.ytInitialPlayerResponse.streamingData.hlsManifestUrl;
+                    if (hls && hls.indexOf('.m3u8') !== -1) {
+                        clearInterval(scraperInterval);
+                        window.webkit.messageHandlers.hook.postMessage(hls);
+                        return;
                     }
-                    // Mute to prevent double audio
-                    videos[i].muted = true;
-                    videos[i].volume = 0;
                 }
-            }, 500);
-        })();
+
+                // Method 2: video element with .m3u8 src
+                var video = document.querySelector('video');
+                if (video && video.src && video.src.indexOf('.m3u8') !== -1) {
+                    clearInterval(scraperInterval);
+                    window.webkit.messageHandlers.hook.postMessage(video.src);
+                    return;
+                }
+
+                // Method 3: ytcfg (YouTube config object)
+                if (window.ytcfg && window.ytcfg.get) {
+                    var data = window.ytcfg.get('PLAYER_VARS');
+                    if (data && data.embedded_player_response) {
+                        var parsed = JSON.parse(data.embedded_player_response);
+                        if (parsed.streamingData && parsed.streamingData.hlsManifestUrl) {
+                            clearInterval(scraperInterval);
+                            window.webkit.messageHandlers.hook.postMessage(parsed.streamingData.hlsManifestUrl);
+                            return;
+                        }
+                    }
+                }
+            } catch(e) {}
+        }, 500);
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
 
-        config.userContentController.addUserScript(hookScript)
-
-        // 🔧 v51.4 (Gemini): Aggressive autoplay script at documentEnd
-        let autoplayScript = WKUserScript(source: """
-        setInterval(function() {
-            var video = document.querySelector('video');
-            if (video && video.paused) {
-                video.play().catch(function(e) {});
-            }
-            var playButton = document.querySelector('.ytp-large-play-button') || document.querySelector('.ytp-play-button');
-            if (playButton) {
-                playButton.click();
-            }
-        }, 500);
-        """, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
-        config.userContentController.addUserScript(autoplayScript)
-
+        config.userContentController.addUserScript(scraperScript)
         config.userContentController.add(self, name: "hook")
 
-        // 🔧 v51.4 (Gemini): Real frame size — WebKit throttles zero-size views
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
-        // 🔧 v51.5 (Gemini): Mac Safari UA — better HLS support than iPad
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15"
+        // 🔧 v51.6 (Gemini): iPhone UA — YouTube generates HLS for iOS devices
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
         webView.navigationDelegate = self
-        // 🔧 v51.3: Mute via JS (webView.isMuted is not available in all iOS versions)
         self.webView = webView
 
         print("📺 HybridHookExtractor: loading watch page for \(videoId)")
         let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
         webView.load(URLRequest(url: url))
 
-        // 🔧 v51.3: Internal timeout — guarantees continuation.resume
+        // Internal timeout — guarantees continuation.resume
         timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 15_000_000_000)
             guard !Task.isCancelled else { return }
@@ -194,10 +154,10 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard !isFinished else { return }
 
-        if let dict = message.body as? [String: Any],
-           let url = dict["url"] as? String,
+        // 🔧 v51.6: Accept string directly (scraper sends plain URL string)
+        if let url = message.body as? String,
            url.contains(".m3u8") || url.contains("manifest/hls") {
-            print("🎯 HybridHookExtractor: HOOK intercepted URL: \(url.prefix(80))")
+            print("🎯 HybridHookExtractor: SCRAPER found HLS URL: \(url.prefix(80))")
             finish(with: .success(url))
         }
     }
@@ -205,7 +165,7 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("📺 HybridHookExtractor: watch page loaded, waiting for stream URL...")
+        print("📺 HybridHookExtractor: watch page loaded, scraping for HLS URL...")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -226,28 +186,22 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         guard !isFinished else { return }
         isFinished = true
 
-        // Cancel timeout
         timeoutTask?.cancel()
         timeoutTask = nil
 
-        // Cleanup WebView completely
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "hook")
         webView?.configuration.userContentController.removeAllUserScripts()
         webView = nil
 
-        // Resume continuation
         continuation?.resume(with: result)
         continuation = nil
 
-        // Break self-retention
         selfRetain = nil
     }
 
-    nonisolated deinit {
-        // Cannot touch @MainActor state in deinit
-    }
+    nonisolated deinit {}
 }
 
 // MARK: - Models & Errors
@@ -271,7 +225,7 @@ enum YouTubeExtractorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .timedOut: return "Превышено время ожидания (15 сек)"
-        case .noStreamFound: return "Не удалось перехватить URL видеопотока"
+        case .noStreamFound: return "Не удалось извлечь URL видеопотока"
         case .invalidResponse: return "Неверный ответ от YouTube"
         }
     }

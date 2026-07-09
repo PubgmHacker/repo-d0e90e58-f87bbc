@@ -45,7 +45,7 @@ final class YouTubeExtractor {
             }
         }
 
-        let streamURLs = video.streamURLs ?? [:]
+        let streamURLs = video.streamURLs
 
         // Priority: HD720 > medium360 > small240
         // These are MUXED streams (video+audio combined) — AVPlayer plays them natively.
@@ -59,14 +59,22 @@ final class YouTubeExtractor {
             throw YouTubeExtractorError.noFormats
         }
 
-        let quality = streamURLs.first(where: { $0.value == streamURL })?.key ?? 0
+        let quality = streamURLs.first(where: { $0.value == streamURL })?.key as? Int ?? 0
         print("✅ YouTubeExtractor: succeeded, quality=\(quality)p, URL prefix=\(streamURL.absoluteString.prefix(60))")
+
+        // thumbnailURL is deprecated, use thumbnailURLs if available
+        let thumbnailString: String
+        if let thumbURL = video.thumbnailURL {
+            thumbnailString = thumbURL.absoluteString
+        } else {
+            thumbnailString = "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg"
+        }
 
         let info = StreamInfo(
             id: videoId,
-            title: video.title ?? "Unknown",
-            author: video.author ?? "Unknown",
-            thumbnailURL: video.thumbnailURL?.absoluteString ?? "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg",
+            title: video.title,
+            author: video.author,
+            thumbnailURL: thumbnailString,
             streamURL: streamURL.absoluteString,
             duration: video.duration,
             isLive: false,

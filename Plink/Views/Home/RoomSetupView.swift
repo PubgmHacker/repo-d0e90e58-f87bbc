@@ -437,26 +437,35 @@ struct RoomSetupView: View {
                     return
                 }
 
-                // 🔧 v90: Try ExtractionBridge first (AVPlayer mode)
+                // 🔧 v93: Try PipedClient first (API extraction, no WKWebView needed)
                 do {
-                    print("🔧 RoomSetupView v90: calling ExtractionBridge for videoId='\(videoId)'")
-                    let streamInfo = try await ExtractionBridge.shared.extract(videoId: videoId)
+                    print("🔧 RoomSetupView v93: calling PipedClient for videoId='\(videoId)'")
+                    let streamInfo = try await PipedClient.shared.extract(videoId: videoId)
                     finalStreamURL = streamInfo.streamURL
                     finalSource = .url  // AVPlayer mode!
                     finalDuration = streamInfo.duration > 0 ? streamInfo.duration : nil
-                    print("✅ RoomSetupView v90: extraction succeeded — AVPlayer mode, URL prefix=\(finalStreamURL.prefix(60))")
+                    print("✅ RoomSetupView v93: Piped extraction succeeded — AVPlayer mode, URL prefix=\(finalStreamURL.prefix(60))")
                 } catch {
-                    // 🔧 v90: Fallback to WebView mode if extraction fails
-                    print("⚠️ RoomSetupView v90: extraction failed (\(error.localizedDescription)) — falling back to WebView mode")
-                    var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
-                    embedComponents.queryItems = [
-                        URLQueryItem(name: "playsinline", value: "1"),
-                        URLQueryItem(name: "rel", value: "0"),
-                    ]
-                    finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
-                    finalSource = .youtube  // WebView mode (fallback)
-                    finalDuration = nil
-                    print("🔧 RoomSetupView v90: fallback to embed URL='\(finalStreamURL.prefix(80))'")
+                    // 🔧 v93: Fallback to ExtractionBridge (WKWebView scraper)
+                    print("⚠️ RoomSetupView v93: Piped failed (\(error.localizedDescription)) — trying ExtractionBridge")
+                    do {
+                        let streamInfo = try await ExtractionBridge.shared.extract(videoId: videoId)
+                        finalStreamURL = streamInfo.streamURL
+                        finalSource = .url
+                        finalDuration = streamInfo.duration > 0 ? streamInfo.duration : nil
+                        print("✅ RoomSetupView v93: ExtractionBridge succeeded — AVPlayer mode")
+                    } catch {
+                        // 🔧 v93: Final fallback to WebView mode
+                        print("⚠️ RoomSetupView v93: ExtractionBridge also failed (\(error.localizedDescription)) — WebView fallback")
+                        var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+                        embedComponents.queryItems = [
+                            URLQueryItem(name: "playsinline", value: "1"),
+                            URLQueryItem(name: "rel", value: "0"),
+                        ]
+                        finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
+                        finalSource = .youtube  // WebView mode (fallback)
+                        finalDuration = nil
+                    }
                 }
             } else {
                 finalStreamURL = contentURL

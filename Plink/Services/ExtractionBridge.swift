@@ -29,6 +29,9 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         let streamURL: String
         let title: String
         let duration: TimeInterval
+        /// 🔧 v92: Cookies captured during extraction — needed by AVPlayer
+        /// to avoid 403 Forbidden from YouTube.
+        let cookies: [HTTPCookie]
     }
 
     enum ExtractionError: LocalizedError {
@@ -50,9 +53,14 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
     private var isFinished = false
     private var timeoutTask: Task<Void, Never>?
 
+    /// 🔧 v92: Last captured cookies — stored so RoomView can pass them
+    /// to NativePlayerEngine when loading the stream URL.
+    private(set) var lastCookies: [HTTPCookie] = []
+
     /// Extract direct stream URL from YouTube video.
     /// Creates a temporary headless WKWebView, scrapes HTML, returns StreamInfo.
     /// WKWebView is released after extraction (not kept as singleton).
+    /// Also captures cookies for use by NativePlayerEngine's ResourceLoader.
     func extract(videoId: String) async throws -> StreamInfo {
         // Reset state
         isFinished = false
@@ -62,6 +70,11 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         timeoutTask?.cancel()
         timeoutTask = nil
 
+        // 🔧 v92: Use DEFAULT (persistent) data store so cookies are shared
+        // with AVPlayer's URLSession. YouTube requires matching cookies
+        // between extraction and playback — otherwise 403 Forbidden.
+        let cookieStore = WKWebsiteDataStore.default()
+
         return try await withCheckedThrowingContinuation { cont in
             self.continuation = cont
 
@@ -69,10 +82,8 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
             config.allowsInlineMediaPlayback = true
             config.mediaTypesRequiringUserActionForPlayback = []
 
-            // 🔧 v90: Use default (nonPersistent) cookie store — Gemini recommendation:
-            // Don't persist cookies across sessions to avoid consent wall issues.
-            // Each extraction starts fresh.
-            config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+            // 🔧 v92: Use persistent store — cookies shared with AVPlayer
+            config.websiteDataStore = cookieStore
 
             // Scraper script — injected at documentEnd
             let scraperScript = WKUserScript(
@@ -119,11 +130,28 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
             // Accept googlevideo.com (MP4) or .m3u8 (HLS)
             if url.contains("googlevideo.com") || url.contains(".m3u8") {
                 print("✅ v90: ExtractionBridge — found URL: \(url.prefix(80))")
-                finish(with: .success(StreamInfo(
-                    streamURL: url,
-                    title: "",
-                    duration: 0
-                )))
+
+                // 🔧 v92: Capture cookies before finishing.
+                // YouTube requires matching cookies between extraction and playback.
+                // Without cookies, AVPlayer gets 403 Forbidden.
+                guard let webView = self.webView else {
+                    finish(with: .success(StreamInfo(
+                        streamURL: url, title: "", duration: 0, cookies: []
+                    )))
+                    return
+                }
+
+                webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
+                    guard let self else { return }
+                    print("🍪 v92: Captured \(cookies.count) cookies from YouTube")
+                    self.lastCookies = cookies  // 🔧 v92: Store for NativePlayerEngine
+                    self.finish(with: .success(StreamInfo(
+                        streamURL: url,
+                        title: "",
+                        duration: 0,
+                        cookies: cookies
+                    )))
+                }
             }
         }
     }

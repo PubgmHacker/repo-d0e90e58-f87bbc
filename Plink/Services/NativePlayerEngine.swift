@@ -69,7 +69,8 @@ final class NativePlayerEngine: ObservableObject {
     /// For googlevideo.com URLs, uses AVAssetResourceLoaderDelegate to inject
     /// User-Agent + Referer headers into EVERY request (including Range requests).
     /// AVURLAssetHTTPHeaderFieldsKey doesn't work reliably for Range requests.
-    func loadAndPlay(streamURL: String) {
+    /// 🔧 v92: Also passes cookies from ExtractionBridge to avoid 403.
+    func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = []) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
             return
@@ -91,7 +92,7 @@ final class NativePlayerEngine: ObservableObject {
                 return
             }
 
-            let loaderDelegate = YouTubeResourceLoaderDelegate(originalURL: url)
+            let loaderDelegate = YouTubeResourceLoaderDelegate(originalURL: url, cookies: cookies)
             resourceLoaderDelegate = loaderDelegate
 
             let urlAsset = AVURLAsset(url: proxyURL, options: [
@@ -285,8 +286,12 @@ final class YouTubeResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelega
     /// YouTube headers that must match the extraction request
     private let headers: [String: String]
 
-    init(originalURL: URL) {
+    /// Cookies captured during extraction (v92)
+    private let cookies: [HTTPCookie]
+
+    init(originalURL: URL, cookies: [HTTPCookie] = []) {
         self.originalURL = originalURL
+        self.cookies = cookies
         self.headers = [
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) " +
                           "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 " +
@@ -294,13 +299,19 @@ final class YouTubeResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelega
             "Referer": "https://www.youtube.com/",
             "Origin": "https://www.youtube.com"
         ]
+
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = headers
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 30
+        // 🔧 v92: Set cookies on the session config so they're sent with EVERY request
+        config.httpCookieStorage?.setCookies(cookies, for: originalURL, mainDocumentURL: originalURL)
+        config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
         self.session = URLSession(configuration: config)
+
         super.init()
-        print("🔧 v91: YouTubeResourceLoaderDelegate created for \(originalURL.host ?? "?")")
+        print("🔧 v92: YouTubeResourceLoaderDelegate created — \(cookies.count) cookies, host=\(originalURL.host ?? "?")")
     }
 
     func resourceLoader(

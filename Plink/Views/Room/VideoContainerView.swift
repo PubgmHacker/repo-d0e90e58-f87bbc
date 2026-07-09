@@ -1088,9 +1088,10 @@ final class VideoHostController: UIViewController {
         print("📺 v80: AudioInterruptionObserver registered")
     }
 
-    /// 🔧 v80 (Gemini): Force resume playback after audio interruption ends.
+    /// 🔧 v81 (Gemini): Force resume playback with Hard Buffering Reset.
     /// YouTube player gets stuck in state=3 (buffering) after Control Center.
-    /// We force video.play() to kick it out of buffering.
+    /// Simple play() doesn't work — YouTube's internal state machine is stuck.
+    /// We reset video.src to force the decoder to reload from scratch.
     func forceResumePlayback() {
         guard let webView = WebViewControl.shared.webView else { return }
 
@@ -1101,50 +1102,95 @@ final class VideoHostController: UIViewController {
             print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
         }
 
-        // Force resume via JS — call play() multiple times with delays
+        // 🔧 v81: Hard Buffering Reset JS
+        // If video is stuck in buffering (readyState < 3), reset src to force
+        // the decoder to reload. This is the ONLY way to kick YouTube out of
+        // state=3 deadlock.
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
-                if (video) {
-                    console.log('[Plink v80] forceResumePlayback — video.paused=' + video.paused + ', readyState=' + video.readyState + ', currentTime=' + video.currentTime);
+                if (!video) {
+                    console.log('[Plink v81] No video element found');
+                    return;
+                }
 
-                    // Force play
-                    if (video.paused) {
-                        if (typeof window.playVideo === 'function') {
-                            window.playVideo();
-                        } else if (window.player && typeof window.player.playVideo === 'function') {
-                            window.player.playVideo();
-                        } else {
-                            video.play().catch(function(e) {
-                                console.log('[Plink v80] Play failed: ' + e);
-                            });
-                        }
+                console.log('[Plink v81] forceResumePlayback — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
+
+                // Check if stuck in buffering (readyState < 3 = HAVE_FUTURE_DATA)
+                // networkState 2 = NETWORK_LOADING
+                if (video.paused && video.readyState < 3) {
+                    console.log('[Plink v81] STUCK in buffering — performing Hard Reset');
+
+                    // Try YouTube API first (if available)
+                    if (typeof window.playVideo === 'function') {
+                        window.playVideo();
                     }
 
-                    // Also nudge GPU with translateZ
-                    video.style.transform = 'translateZ(0)';
-                    setTimeout(function() { video.style.transform = 'none'; }, 50);
+                    // Hard reset: save current src, clear it, reload, restore
+                    var currentSrc = video.src;
+                    var currentCurrentTime = video.currentTime;
+                    console.log('[Plink v81] Hard Reset: src=' + (currentSrc || 'none').substring(0, 60) + ', time=' + currentCurrentTime);
 
-                    // Dispatch resize
-                    window.dispatchEvent(new Event('resize'));
+                    // Clear src + load (forces decoder reset)
+                    video.removeAttribute('src');
+                    video.load();
+
+                    // Restore src after 100ms + play
+                    setTimeout(function() {
+                        if (currentSrc) {
+                            video.src = currentSrc;
+                            video.load();
+                        }
+                        // Seek back to where we were + play
+                        setTimeout(function() {
+                            try {
+                                video.currentTime = currentCurrentTime;
+                            } catch(e) {}
+                            video.play().catch(function(e) {
+                                console.log('[Plink v81] Play after reset failed: ' + e);
+                            });
+                            console.log('[Plink v81] Hard Reset complete — playing from ' + currentCurrentTime);
+                        }, 200);
+                    }, 100);
+                } else if (video.paused) {
+                    // Simple resume — not stuck in buffering
+                    console.log('[Plink v81] Simple resume (not buffering)');
+                    if (typeof window.playVideo === 'function') {
+                        window.playVideo();
+                    } else if (window.player && typeof window.player.playVideo === 'function') {
+                        window.player.playVideo();
+                    } else {
+                        video.play().catch(function(e) {
+                            console.log('[Plink v81] Play failed: ' + e);
+                        });
+                    }
+                } else {
+                    console.log('[Plink v81] Video not paused — just nudging GPU');
                 }
+
+                // Nudge GPU with translateZ
+                video.style.transform = 'translateZ(0)';
+                setTimeout(function() { video.style.transform = 'none'; }, 50);
+
+                // Dispatch resize
+                window.dispatchEvent(new Event('resize'));
             } catch(e) {
-                console.log('[Plink v80] forceResumePlayback error: ' + e);
+                console.log('[Plink v81] forceResumePlayback error: ' + e);
             }
         })();
         """
         webView.evaluateJavaScript(js, completionHandler: nil)
 
-        // Retry after 500ms — sometimes first attempt doesn't work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // Retry after 1s — if hard reset didn't work, try simple play again
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self = self, let webView = WebViewControl.shared.webView else { return }
             webView.evaluateJavaScript("""
             (function() {
                 try {
                     var video = document.querySelector('video');
                     if (video && video.paused) {
-                        console.log('[Plink v80] Retry: video still paused, calling play again');
+                        console.log('[Plink v81] Retry after 1s: video still paused, calling play');
                         if (typeof window.playVideo === 'function') window.playVideo();
                         else video.play().catch(function(){});
                     }
@@ -1209,10 +1255,20 @@ struct WebVideoView: UIViewControllerRepresentable {
             print("⚠️ v35: AVAudioSession config failed: \(error)")
         }
 
-        print("🔧🔧🔧 v77 makeUIViewController CALLED — returning VideoHostController.shared (SINGLETON)")
+        print("🔧🔧🔧 v81 makeUIViewController CALLED — returning VideoHostController.shared (SINGLETON)")
 
         // 🔧 v77: Return the SINGLETON — always the same instance!
         let controller = VideoHostController.shared
+
+        // 🔧 v81 (Gemini): If controller already has a parent, DON'T touch it!
+        // This prevents SwiftUI from re-adding the controller to the hierarchy
+        // which could trigger view recreation.
+        if controller.parent != nil {
+            print("📺 v81: Controller already has parent — returning as-is (no changes)")
+            controller.coordinator = context.coordinator
+            return controller
+        }
+
         controller.coordinator = context.coordinator
         controller.setupCoordinator()
         return controller

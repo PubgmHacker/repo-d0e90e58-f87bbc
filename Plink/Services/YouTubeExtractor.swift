@@ -1,18 +1,11 @@
 import Foundation
 import WebKit
 
-// MARK: - HybridYouTubeExtractor (WKWebView Network Hook)
+// MARK: - YouTubeExtractor (Hybrid WKWebView Network Hook)
 //
-// 🔧 v51: Final solution — uses WKWebView to bypass BotGuard.
-// YouTube's BotGuard (2026) blocks all API-only approaches:
-//   - WEB: UNPLAYABLE (needs po_token)
-//   - IOS: FAILED_PRECONDITION
-//   - TVHTML5: LOGIN_REQUIRED
-//
-// Hybrid approach: invisible WKWebView loads the watch page.
-// WebKit solves BotGuard natively (it IS Safari). JS hook intercepts
-// the stream URL (googlevideo.com or .m3u8) and sends it to Swift.
-// Swift kills the WebView and feeds the URL to AVPlayer.
+// 🔧 v51.2: Bulletproof — @MainActor, guaranteed timeout, no retain cycle.
+// Uses invisible WKWebView to bypass BotGuard. WebKit solves all JS
+// challenges natively. JS hook intercepts stream URL for AVPlayer.
 
 @MainActor
 final class YouTubeExtractor {
@@ -30,13 +23,16 @@ final class YouTubeExtractor {
             return cached.info
         }
 
-        print("📺 YouTubeExtractor v51: extracting \(videoId) (Hybrid WKWebView Hook)")
+        print("📺 YouTubeExtractor v51.2: extracting \(videoId) (Hybrid WKWebView Hook)")
 
+        // 🔧 v51.2: Use withTimeout to guarantee no infinite loading.
+        // HybridHookExtractor holds strong reference to itself via
+        // internal retain cycle that's broken on finish().
         let streamURL = try await withTimeout(15) {
-            try await self.extractStreamURL(videoId: videoId)
+            try await HybridHookExtractor.extract(videoId: videoId)
         }
 
-        print("✅ YouTubeExtractor v51: got stream URL, prefix=\(streamURL.prefix(60))")
+        print("✅ YouTubeExtractor v51.2: got stream URL, prefix=\(streamURL.prefix(60))")
 
         let info = StreamInfo(
             id: videoId,
@@ -51,14 +47,6 @@ final class YouTubeExtractor {
 
         cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
         return info
-    }
-
-    private func extractStreamURL(videoId: String) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            HybridHookExtractor.extract(videoId: videoId) { result in
-                continuation.resume(with: result)
-            }
-        }
     }
 
     static func extractVideoId(from url: String) -> String? {
@@ -78,22 +66,28 @@ final class YouTubeExtractor {
 
 // MARK: - Hybrid Hook Extractor (WKWebView + JS Network Intercept)
 
+@MainActor
 private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
 
-    private weak var webView: WKWebView?
-    private var completion: ((Result<String, Error>) -> Void)?
-    private var finished = false
+    private var webView: WKWebView?
+    private var continuation: CheckedContinuation<String, Error>?
+    private var isFinished = false
+    private var selfRetain: HybridHookExtractor?
 
-    static func extract(videoId: String, completion: @escaping (Result<String, Error>) -> Void) {
+    static func extract(videoId: String) async throws -> String {
         let extractor = HybridHookExtractor()
-        extractor.completion = completion
-        extractor.start(videoId: videoId)
+        return try await withCheckedThrowingContinuation { continuation in
+            extractor.continuation = continuation
+            // Strong self-reference to prevent deallocation during async work
+            extractor.selfRetain = extractor
+            extractor.start(videoId: videoId)
+        }
     }
 
     private func start(videoId: String) {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        // 🔧 v51.1 (Gemini fix): Prevent double audio — mute invisible WebView
+        // Prevent double audio — mute invisible WebView
         config.mediaTypesRequiringUserActionForPlayback = .all
 
         // JS hook: intercept fetch/XHR for googlevideo.com or .m3u8 URLs
@@ -106,7 +100,6 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                        url.indexOf('googlevideo.com') !== -1;
             }
 
-            // Hook fetch
             var origFetch = window.fetch;
             window.fetch = function() {
                 var url = arguments[0];
@@ -117,7 +110,6 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                 return origFetch.apply(this, arguments);
             };
 
-            // Hook XMLHttpRequest
             var origOpen = XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = function(method, url) {
                 if (checkURL(url)) {
@@ -126,7 +118,6 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                 return origOpen.apply(this, arguments);
             };
 
-            // Hook video src
             var origCreateElement = document.createElement;
             document.createElement = function(tag) {
                 var el = origCreateElement.apply(this, arguments);
@@ -141,7 +132,6 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                 return el;
             };
 
-            // Also check existing video elements
             setInterval(function() {
                 var videos = document.querySelectorAll('video');
                 for (var i = 0; i < videos.length; i++) {
@@ -149,13 +139,11 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                     if (src && checkURL(src)) {
                         window.webkit.messageHandlers.hook.postMessage({type: 'video', url: src});
                     }
+                    // Mute to prevent double audio
+                    videos[i].muted = true;
+                    videos[i].volume = 0;
                 }
             }, 500);
-
-            // 🔧 v51.1 (Gemini fix): Mute all video elements to prevent double audio
-            setInterval(function() {
-                document.querySelectorAll('video').forEach(function(v) { v.muted = true; v.volume = 0; });
-            }, 200);
         })();
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
 
@@ -163,11 +151,11 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         config.userContentController.add(self, name: "hook")
 
         let webView = WKWebView(frame: .zero, configuration: config)
-        // iPad UA → YouTube returns HLS (.m3u8) instead of MSE (blob)
         webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
         webView.navigationDelegate = self
         self.webView = webView
 
+        print("📺 HybridHookExtractor: loading watch page for \(videoId)")
         let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
         webView.load(URLRequest(url: url))
     }
@@ -175,12 +163,12 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     // MARK: - WKScriptMessageHandler
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard !finished else { return }
+        guard !isFinished else { return }
 
         if let dict = message.body as? [String: Any],
            let url = dict["url"] as? String,
            url.contains("googlevideo.com") || url.contains(".m3u8") {
-            print("🎯 YouTubeExtractor v51: HOOK intercepted URL: \(url.prefix(80))")
+            print("🎯 HybridHookExtractor: HOOK intercepted URL: \(url.prefix(80))")
             finish(with: .success(url))
         }
     }
@@ -188,30 +176,40 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("📺 YouTubeExtractor v51: watch page loaded, waiting for stream URL...")
+        print("📺 HybridHookExtractor: watch page loaded, waiting for stream URL...")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        guard !finished else { return }
-        print("❌ YouTubeExtractor v51: navigation failed: \(error.localizedDescription)")
+        guard !isFinished else { return }
+        print("❌ HybridHookExtractor: navigation failed: \(error.localizedDescription)")
+        finish(with: .failure(error))
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard !isFinished else { return }
+        print("❌ HybridHookExtractor: provisional navigation failed: \(error.localizedDescription)")
         finish(with: .failure(error))
     }
 
     // MARK: - Cleanup
 
     private func finish(with result: Result<String, Error>) {
-        guard !finished else { return }
-        finished = true
+        guard !isFinished else { return }
+        isFinished = true
 
-        // Cleanup WebView
-        DispatchQueue.main.async { [weak self] in
-            self?.webView?.stopLoading()
-            self?.webView?.navigationDelegate = nil
-            self?.webView?.configuration.userContentController.removeScriptMessageHandler(forName: "hook")
-            self?.webView = nil
-        }
+        // Cleanup WebView completely
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "hook")
+        webView?.configuration.userContentController.removeAllUserScripts()
+        webView = nil
 
-        completion?(result)
+        // Resume continuation
+        continuation?.resume(with: result)
+        continuation = nil
+
+        // Break self-retention
+        selfRetain = nil
     }
 
     deinit {

@@ -69,6 +69,16 @@ struct RoomCreationView: View {
                         // Через item: значения передаются напрямую как параметр closure.
                         // 🔧 v33: forward thumbnailURL to RoomSetupView.
                         print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)', thumbnailURL='\(thumbnailURL ?? "nil")'")
+
+                        // 🔧 v61 (Gemini): Zero-Latency Init — prewarm the WKWebView
+                        // immediately when user selects a YouTube video. By the time
+                        // RoomView's makeUIView runs, the player is already loaded.
+                        if service == .youtube,
+                           let videoId = YouTubeExtractor.extractVideoId(from: contentURL) {
+                            print("🔥 v61: prewarming WKWebView for videoId='\(videoId)'")
+                            WebViewControl.shared.prewarm(videoId: videoId)
+                        }
+
                         roomSetupConfig = RoomSetupConfig(
                             service: service,
                             contentURL: contentURL,
@@ -86,6 +96,11 @@ struct RoomCreationView: View {
             }
         }
         .preferredColorScheme(.dark)
+        // 🔧 v61: If user dismisses RoomCreationView without creating a room,
+        // discard any prewarmed WKWebView to free memory.
+        .onDisappear {
+            WebViewControl.shared.discardPrewarm()
+        }
         .sheet(isPresented: $showPaywallForLimit) {
             PaywallView(
                 onPurchase: { showPaywallForLimit = false },

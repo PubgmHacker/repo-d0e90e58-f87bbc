@@ -52,6 +52,100 @@ final class WebViewControl {
         self.didFallbackToFullPage = false
     }
 
+    // MARK: - 🔧 v61 (Gemini): Pre-warming API
+    //
+    // Zero-Latency Init: when the user opens RoomCreationView and selects a
+    // YouTube video, we IMMEDIATELY create a hidden WKWebView and start
+    // loading the embed URL. By the time the user taps "Create Room" and
+    // RoomView's makeUIView runs, the player is already initialized, logged
+    // in, and buffered. The user sees instant playback — no 3-5s loading.
+    //
+    // How it works:
+    //   1. RoomCreationView calls WebViewControl.shared.prewarm(videoId:)
+    //   2. We create a WKWebView with the same config as WebVideoView uses
+    //   3. We load m.youtube.com/watch?v=ID in it (off-screen, no parent view)
+    //   4. When RoomView's makeUIView runs, it sees existing webView != nil
+    //      → reuses the pre-warmed instance → no cold-start delay
+    //
+    // The prewarmedWebView is consumed by makeUIView via register() — it
+    // becomes the active player. If the user cancels room creation, the
+    // prewarmed instance is released when WebViewControl is deallocated or
+    // when a different video is prewarmed.
+
+    /// Pre-warmed WKWebView instance, waiting to be adopted by RoomView.
+    private var prewarmedWebView: WKWebView?
+
+    /// Pre-warm the player for a YouTube video.
+    /// Call this when the user selects a video in RoomCreationView.
+    /// The WKWebView starts loading m.youtube.com/watch?v=ID immediately.
+    /// When RoomView's makeUIView runs, it will reuse this instance.
+    func prewarm(videoId: String) {
+        // Don't prewarm the same video twice
+        if let existing = prewarmedWebView,
+           loadedVideoId == videoId {
+            print("🔥 v61: prewarm(videoId=\(videoId)) — already prewarmed, skipping")
+            return
+        }
+
+        // Don't prewarm if there's already an active player using this video
+        if webView != nil && loadedVideoId == videoId {
+            print("🔥 v61: prewarm(videoId=\(videoId)) — active player already has this video, skipping")
+            return
+        }
+
+        print("🔥 v61: prewarm(videoId=\(videoId)) — creating hidden WKWebView + loading m.youtube.com")
+
+        // Create config matching what WebVideoView.makeUIView uses
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+
+        // Inject the same CSS hide script as the active player uses
+        let youtubeCssScript = WKUserScript(
+            source: WebVideoView.Coordinator.youtubeHideCSS,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(youtubeCssScript)
+
+        // Create the prewarmed WKWebView
+        let prewarmed = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
+        prewarmed.scrollView.isScrollEnabled = false
+        prewarmed.isOpaque = false
+        prewarmed.backgroundColor = .clear  // 🔧 v61: .clear instead of .black
+
+        // Start loading m.youtube.com/watch?v=ID
+        let url = URL(string: "https://m.youtube.com/watch?v=\(videoId)")!
+        prewarmed.load(URLRequest(url: url))
+
+        // Store it — makeUIView will pick it up via consumePrewarmed()
+        prewarmedWebView = prewarmed
+        loadedVideoId = videoId  // mark as loaded so makeUIView doesn't reload
+
+        print("🔥 v61: prewarm complete — WKWebView loading in background, will be adopted by RoomView.makeUIView")
+    }
+
+    /// Called by WebVideoView.makeUIView to consume the prewarmed WKWebView.
+    /// Returns the prewarmed instance if one is available, otherwise nil
+    /// (makeUIView will create a fresh WKWebView as before).
+    func consumePrewarmed() -> WKWebView? {
+        let prewarmed = prewarmedWebView
+        prewarmedWebView = nil
+        if prewarmed != nil {
+            print("🔥 v61: consumePrewarmed — adopting prewarmed WKWebView (zero-latency init)")
+        }
+        return prewarmed
+    }
+
+    /// Discard any prewarmed WKWebView (e.g. when user cancels room creation).
+    func discardPrewarm() {
+        if prewarmedWebView != nil {
+            print("🔥 v61: discardPrewarm — releasing prewarmed WKWebView")
+            prewarmedWebView?.stopLoading()
+            prewarmedWebView = nil
+        }
+    }
+
     /// 🔧 v32.10: handle time updates from <video> element.
     /// Calls onTimeUpdate callback — does NOT seek the player.
     func handleTimeUpdate(_ time: TimeInterval) {
@@ -909,12 +1003,41 @@ struct WebVideoView: UIViewRepresentable {
                 forMainFrameOnly: false
             )
             config.userContentController.addUserScript(youtubeCssScript)
+
+            // 🔧 v61 (Gemini): Native Experience — hide everything except <video>.
+            // Runs on document.ready. Injected at .atDocumentEnd so it fires
+            // after the DOM is ready, then retries at 1s/2s/3s.
+            let nativeExperienceScript = WKUserScript(
+                source: Self.nativeExperienceScript,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(nativeExperienceScript)
         }
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView: WKWebView
+        // 🔧 v61 (Gemini): Try to consume a prewarmed WKWebView first.
+        // If RoomCreationView prewarmed the player, we adopt that instance
+        // — zero-latency init, player already loaded.
+        if let prewarmed = WebViewControl.shared.consumePrewarmed() {
+            webView = prewarmed
+            // Re-attach navigation delegate so Coordinator callbacks fire
+            webView.navigationDelegate = context.coordinator
+            // Re-register the JS bridge handler (prewarmed instance doesn't have it)
+            webView.configuration.userContentController.add(context.coordinator, name: "plinkBridge")
+            // Adopt in Coordinator
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = webView
+            }
+            WebViewControl.shared.register(webView)
+            print("📺 v61: makeUIView consumed prewarmed WKWebView — videoId=\(WebViewControl.shared.loadedVideoId ?? "?")")
+            return webView
+        }
+
+        webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
         webView.isOpaque = false
-        webView.backgroundColor = .black
+        webView.backgroundColor = .clear  // 🔧 v61: .clear instead of .black (Native Experience)
 
         // 🔧 v34.34: NO customUserAgent — real WKWebView UA (what m.youtube.com expects).
         // Embed required fake Safari UA, but m.youtube.com works with real WKWebView UA.
@@ -1949,6 +2072,65 @@ struct WebVideoView: UIViewRepresentable {
         ].join('\\n');
         (document.head || document.documentElement).appendChild(style);
         console.log('[Plink v39] CSS injected at documentStart (YouTube UI hidden)');
+    })();
+    """
+
+    /// 🔧 v61 (Gemini): Native Experience — hide everything except <video>.
+    /// Runs on document.ready (DOMContentLoaded). Aggressively removes
+    /// every element that isn't the <video> tag or its parent #movie_player.
+    /// This is the "nuclear" approach: even if YouTube adds new UI elements
+    /// we don't know about, they get hidden.
+    static let nativeExperienceScript: String = """
+    (function() {
+        function plinkNativeExperience() {
+            try {
+                var video = document.querySelector('video');
+                if (!video) {
+                    // Video not ready yet — retry in 500ms
+                    setTimeout(plinkNativeExperience, 500);
+                    return;
+                }
+
+                // Hide EVERYTHING except video, #movie_player, and its essential children
+                var bodyChildren = document.body.children;
+                for (var i = 0; i < bodyChildren.length; i++) {
+                    var child = bodyChildren[i];
+                    // Keep #movie_player (YouTube's player container)
+                    if (child.id === 'movie_player' || child.id === 'player' || child.tagName === 'VIDEO') continue;
+                    // Keep scripts and styles (don't break JS execution)
+                    if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE') continue;
+                    // Hide everything else
+                    try {
+                        child.style.display = 'none !important';
+                        child.style.visibility = 'hidden !important';
+                        child.style.opacity = '0 !important';
+                        child.style.position = 'absolute !important';
+                        child.style.left = '-9999px !important';
+                    } catch(e) {}
+                }
+
+                // Force #movie_player and <video> to fill viewport
+                var moviePlayer = document.querySelector('#movie_player') || video.parentElement;
+                if (moviePlayer) {
+                    moviePlayer.style.cssText = 'position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;';
+                }
+                video.style.cssText = 'position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;object-fit:contain!important;z-index:2147483647!important;background:#000!important;';
+
+                console.log('[Plink v61] Native Experience applied — only <video> visible');
+            } catch(e) {
+                console.log('[Plink v61] Native Experience error: ' + e);
+            }
+        }
+
+        // Run on DOMContentLoaded (document.ready) + as fallback after 1s, 2s, 3s
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', plinkNativeExperience);
+        } else {
+            plinkNativeExperience();
+        }
+        setTimeout(plinkNativeExperience, 1000);
+        setTimeout(plinkNativeExperience, 2000);
+        setTimeout(plinkNativeExperience, 3000);
     })();
     """
 

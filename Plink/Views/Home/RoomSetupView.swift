@@ -416,13 +416,15 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v45: YouTube extraction moved to iOS side.
-            // Backend (Railway) IP is blocked by YouTube — all extraction
-            // methods fail on the server. iPhone has residential IP that
-            // YouTube doesn't block.
+            // 🔧 v61 (Gemini): WebView-first architecture.
+            // We no longer attempt YouTube URL extraction. YouTube updates its
+            // BotGuard signatures every ~48 hours, breaking extractors. The
+            // embed URL via WKWebView is stable, passes Google's checks
+            // automatically, and works for all videos including DRM/age-restricted.
             //
-            // YouTubeExtractor calls youtubei.googleapis.com directly from iOS,
-            // gets HLS manifest URL or muxed format URL, returns to AVPlayer.
+            // All YouTube videos go through .youtube source (WebView mode).
+            // The prewarmed WKWebView from RoomCreationView is adopted by
+            // RoomView's makeUIView for zero-latency init.
             let finalStreamURL: String
             let finalSource: MediaItem.MediaSource
             let finalDuration: TimeInterval?
@@ -436,30 +438,18 @@ struct RoomSetupView: View {
                     return
                 }
 
-                do {
-                    print("🔧 RoomSetupView v60: calling YouTubeExtractor (Regex DOM Scraper — MP4) for videoId='\(videoId)'")
-                    let streamInfo = try await YouTubeExtractor.shared.extract(videoId: videoId)
-                    finalStreamURL = streamInfo.streamURL
-                    finalSource = .url  // direct stream, not youtube embed
-                    finalDuration = streamInfo.duration
-                    print("✅ RoomSetupView v60: extraction succeeded, extractor=\(streamInfo.extractor), URL prefix=\(finalStreamURL.prefix(60))")
-                } catch {
-                    // 🔧 v52 (Gemini): GRACEFUL FALLBACK — don't show error.
-                    // If extraction fails (DRM, age-restricted, timeout), fall
-                    // back to WebView mode. User still watches the video,
-                    // just through WKWebView instead of AVPlayer.
-                    print("⚠️ RoomSetupView v52: extraction failed (\(error.localizedDescription)) — falling back to WebView mode")
-                    let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? videoId
-                    var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
-                    embedComponents.queryItems = [
-                        URLQueryItem(name: "playsinline", value: "1"),
-                        URLQueryItem(name: "rel", value: "0"),
-                    ]
-                    finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
-                    finalSource = .youtube  // WebView mode
-                    finalDuration = nil
-                    print("🔧 RoomSetupView v52: fallback to embed URL='\(finalStreamURL.prefix(80))'")
-                }
+                // 🔧 v61: ALWAYS use embed URL + WebView mode. No extraction.
+                // Pre-warming was already started by RoomCreationView, so by
+                // the time RoomView's makeUIView runs, the player is loaded.
+                var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+                embedComponents.queryItems = [
+                    URLQueryItem(name: "playsinline", value: "1"),
+                    URLQueryItem(name: "rel", value: "0"),
+                ]
+                finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
+                finalSource = .youtube  // WebView mode
+                finalDuration = nil
+                print("🔧 RoomSetupView v61: WebView-first — embed URL='\(finalStreamURL.prefix(80))' (no extraction)")
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

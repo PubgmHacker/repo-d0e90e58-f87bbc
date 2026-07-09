@@ -222,18 +222,19 @@ final class WebViewControl {
     // has been added to the SwiftUI hierarchy (so setNeedsDisplay has somewhere
     // to send its invalidation to).
     func reactivate(webView: WKWebView) {
-        print("⚡ v68: reactivate — AutoLayout + translateZ(0) GPU trigger + Frame Nudge")
-        print("⚡ v68: webView frame is \(webView.frame), layer frame is \(webView.layer.frame), superview: \(String(describing: webView.superview))")
+        print("⚡ v78: reactivate — translateZ(0) + Frame Nudge ONLY (NO micro-seek!)")
+        print("⚡ v78: webView frame is \(webView.frame), layer frame is \(webView.layer.frame), superview: \(String(describing: webView.superview))")
 
-        // ─── 1. Force WKWebView to fill its superview via AutoLayout ───
-        // v68 fix: when makeUIView is called during WS reconnect (background),
-        // the container may have 0x0 frame. autoresizingMask doesn't reliably
-        // scale the WKWebView back up after background return. AutoLayout
-        // constraints "nail" the webView to its superview edges so it always
-        // fills the container regardless of when the container gets its size.
+        // ─── 1. AVAudioSession reactivation (Gemini v78 spec) ───
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ v78: AVAudioSession reactivation failed: \(error)")
+        }
+
+        // ─── 2. AutoLayout to fill superview ───
         if let superview = webView.superview {
             webView.translatesAutoresizingMaskIntoConstraints = false
-            // Deactivate any old constraints that might conflict
             NSLayoutConstraint.deactivate(
                 superview.constraints.filter { constraint in
                     (constraint.firstItem === webView || constraint.secondItem === webView)
@@ -247,7 +248,6 @@ final class WebViewControl {
             ])
             superview.setNeedsLayout()
             superview.layoutIfNeeded()
-            print("⚡ v68: AutoLayout constraints activated — webView now fills superview \(superview.frame)")
         }
 
         // Ping UIKit layer
@@ -257,15 +257,13 @@ final class WebViewControl {
         webView.layer.setNeedsDisplay()
         webView.layer.setNeedsLayout()
 
-        // ─── 2. CoreAnimation Frame Nudge (1px resize) ───
-        // Change the webView frame by 1 pixel to force CoreAnimation to
-        // recreate the graphics buffer.
+        // ─── 3. CoreAnimation Frame Nudge (1px resize) ───
         let originalFrame = webView.frame
         let nudgedFrame = CGRect(
             x: originalFrame.origin.x,
             y: originalFrame.origin.y,
             width: max(originalFrame.width, 1),
-            height: originalFrame.height + 1  // +1px forces buffer recreation
+            height: originalFrame.height + 1
         )
         webView.frame = nudgedFrame
 
@@ -273,10 +271,10 @@ final class WebViewControl {
             guard self != nil else { return }
             webView.frame = originalFrame
 
-            // ─── 3. JS: translateZ(0) GPU trigger + micro-seek ───
-            // translateZ(0) is THE system trigger that forces WebKit to
-            // re-render the layer on the GPU. It rebuilds the
-            // AVSampleBufferDisplayLayer that detached during background.
+            // ─── 4. JS: translateZ(0) GPU trigger ONLY — NO micro-seek! ───
+            // v78: Removed micro-seek (video.currentTime = curr + 0.001) because
+            // it caused YouTube to go to state=3 (buffering) and never recover.
+            // translateZ(0) + resize event is enough to wake the decoder.
             let js = """
             (function() {
                 try {
@@ -289,48 +287,40 @@ final class WebViewControl {
                         video.style.display = oldDisplay || 'block';
 
                         // 2. Hardware Acceleration Trigger (CoreAnimation layer rebuild)
-                        // translateZ(0) forces WebKit to create a new GPU layer
                         video.style.transform = 'translateZ(0)';
 
-                        // 3. Micro-seek to flush frozen decoder frames
-                        if (!video.paused) {
-                            var curr = video.currentTime;
-                            if (curr + 0.001 < video.duration) {
-                                video.currentTime = curr + 0.001;
-                                console.log('[Plink v68] Micro-seek to ' + (curr + 0.001) + ' (decoder flush)');
-                            }
-                        } else {
-                            // Video was paused by iOS — resume
-                            console.log('[Plink v68] Video was paused — resuming');
+                        // 3. Resume if paused — but DON'T micro-seek!
+                        if (video.paused) {
+                            console.log('[Plink v78] Video was paused — resuming');
                             if (typeof window.playVideo === 'function') {
                                 window.playVideo();
                             } else if (window.player && typeof window.player.playVideo === 'function') {
                                 window.player.playVideo();
                             } else {
                                 video.play().catch(function(e) {
-                                    console.log('[Plink v68] Play resume failed: ' + e);
+                                    console.log('[Plink v78] Play resume failed: ' + e);
                                 });
                             }
                         }
                     }
 
-                    // Ping the document body too — forces overall GPU layer rebuild
+                    // Ping the document body too
                     document.body.style.transform = 'translateZ(0)';
                     setTimeout(function() {
                         document.body.style.transform = 'none';
                     }, 50);
 
-                    // Dispatch resize event
+                    // Dispatch resize event — forces WebKit viewport recompute
                     window.dispatchEvent(new Event('resize'));
                 } catch(e) {
-                    console.log('[Plink v68] reactivate error: ' + e);
+                    console.log('[Plink v78] reactivate error: ' + e);
                 }
             })();
             """
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
-        // ─── 4. Second Frame Nudge after 300ms ───
+        // ─── 5. Second Frame Nudge after 300ms ───
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self, let activeWebView = self.webView, activeWebView === webView else { return }
             let frame = activeWebView.frame

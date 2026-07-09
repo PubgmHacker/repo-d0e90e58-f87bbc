@@ -41,6 +41,10 @@ final class WebViewControl {
     /// 🔧 v32.10: callback for time updates from WebView (NOT seeks).
     /// Wired up by RoomViewModel to call syncEngine.updateCurrentTimeFromWebView().
     var onTimeUpdate: ((TimeInterval) -> Void)?
+    /// 🔧 v85: Flag set by forceResumePlayback() to signal that after page
+    /// reload (Renderer Recovery), the page should auto-play the video.
+    /// Checked by the autoPlayAfterRecoveryScript injected at documentEnd.
+    var pendingAutoPlay = false
 
     /// 🔧 v72 (Gemini): Global didBecomeActive observer for reactivate.
     /// Fires every time the app returns to active state. Calls reactivate()
@@ -1107,50 +1111,57 @@ final class VideoHostController: UIViewController {
             print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v84 (Gemini): Renderer Recovery — window.location.replace()
-        // v83 Seek Flush (currentTime + 0.1) didn't work because the
-        // WebProcess graphics context was damaged (markAllLayersVolatile: Failed).
-        // Simple play() and seek() can't fix a damaged renderer.
+        // 🔧 v85 (Gemini): Event-Driven Renderer Recovery
+        // v84 problem: after window.location.replace(), the page reloads but
+        // video element is created with duration=0. play() called too early
+        // → state=3 (buffering) deadlock.
         //
-        // v84: Use window.location.replace(embedUrl) to SOFT reload the page.
-        // This forces WKWebView to rebuild the YouTube JS engine WITHOUT
-        // destroying the WebView instance (no GPU crash). The graphics
-        // context stays attached, but the player reinitializes fresh.
+        // v85 solution:
+        // 1. Set pendingAutoPlay flag (signals page load to auto-play)
+        // 2. window.location.replace() reloads the page
+        // 3. A WKUserScript (injected at documentEnd) detects pendingAutoPlay
+        //    and waits for 'durationchange' event before calling play()
+        // 4. 2s fail-safe: if durationchange doesn't fire, force play()
+
+        // Set flag for the page-reload auto-play
+        WebViewControl.shared.pendingAutoPlay = true
+
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
                 if (!video) {
-                    console.log('[Plink v84] No video element found');
+                    console.log('[Plink v85] No video element found');
                     return;
                 }
 
-                console.log('[Plink v84] Renderer Recovery — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
+                console.log('[Plink v85] Renderer Recovery — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime);
 
                 // Check if stuck in buffering (readyState < 3 = HAVE_FUTURE_DATA)
                 if (video.readyState < 3 || video.paused) {
-                    console.log('[Plink v84] CRITICAL: Renderer zombie detected. Performing Soft Reset.');
+                    console.log('[Plink v85] CRITICAL: Renderer zombie detected. Performing Soft Reset.');
 
-                    // 1. Kill old context — clear video src
+                    // 1. Kill old context
                     video.pause();
                     video.removeAttribute('src');
                     video.load();
 
-                    // 2. Get current embed URL (window.location.href)
+                    // 2. Get current embed URL
                     var embedUrl = window.location.href;
-                    console.log('[Plink v84] Soft reloading page: ' + embedUrl.substring(0, 80));
+                    console.log('[Plink v85] Soft reloading page: ' + embedUrl.substring(0, 80));
 
-                    // 3. window.location.replace() — soft reload, no new history entry
-                    // This forces WKWebView to rebuild YouTube JS engine
-                    // WITHOUT destroying the WebView instance (GPU context preserved)
+                    // 3. window.location.replace() — soft reload
+                    // The pendingAutoPlay flag is set in Swift — when the page
+                    // finishes reloading, the WKUserScript will detect it and
+                    // wait for durationchange before calling play().
                     window.location.replace(embedUrl);
 
-                    console.log('[Plink v84] Renderer Recovery initiated — page reloading...');
+                    console.log('[Plink v85] Renderer Recovery initiated — page reloading...');
                 } else {
-                    console.log('[Plink v84] Video playing normally — no recovery needed');
+                    console.log('[Plink v85] Video playing normally — no recovery needed');
                 }
             } catch(e) {
-                console.log('[Plink v84] Renderer Recovery error: ' + e);
+                console.log('[Plink v85] Renderer Recovery error: ' + e);
             }
         })();
         """
@@ -1962,19 +1973,53 @@ struct WebVideoView: UIViewControllerRepresentable {
                     window.getDuration = function() { return video.duration || 0; };
 
                     console.log("[Plink v32.2] Video bridge ready — try autoplay");
-                    // v32.2: try UNMUTED autoplay first. iOS blocks this for
-                    // WKWebView in some cases but allows it in others (depending
-                    // on user gesture history). If it fails, fall back to muted.
+                    // v85: Event-Driven Autoplay — wait for durationchange before play()
+                    // v32.2 called play() immediately, but duration=0 after page reload
+                    // → state=3 (buffering) deadlock. v85 waits for durationchange.
                     video.muted = false;
-                    video.play().then(function() {
-                        console.log("[Plink v32.2] Unmuted autoplay succeeded!");
-                    }).catch(function(e) {
-                        console.log("[Plink v32.2] Unmuted autoplay blocked, trying muted: " + e);
-                        video.muted = true;
-                        video.play().catch(function(e2) {
-                            console.log("[Plink v32.2] Muted autoplay also blocked: " + e2);
-                        });
+
+                    function tryAutoplay() {
+                        if (video.duration > 0 && !isNaN(video.duration)) {
+                            console.log('[Plink v85] Duration acquired (' + video.duration + 's). Playing.');
+                            video.play().then(function() {
+                                console.log("[Plink v32.2] Unmuted autoplay succeeded!");
+                            }).catch(function(e) {
+                                console.log("[Plink v32.2] Unmuted autoplay blocked, trying muted: " + e);
+                                video.muted = true;
+                                video.play().catch(function(e2) {
+                                    console.log("[Plink v32.2] Muted autoplay also blocked: " + e2);
+                                });
+                            });
+                        } else {
+                            console.log('[Plink v85] Duration=0, waiting for durationchange...');
+                        }
+                    }
+
+                    // Try immediately
+                    tryAutoplay();
+                    // Also wait for durationchange event
+                    video.addEventListener('durationchange', function onDurChange() {
+                        if (video.duration > 0 && !isNaN(video.duration)) {
+                            console.log('[Plink v85] durationchange fired — duration=' + video.duration);
+                            video.removeEventListener('durationchange', onDurChange);
+                            if (video.paused) {
+                                video.play().then(function() {
+                                    console.log("[Plink v85] Play succeeded after durationchange");
+                                }).catch(function(e) {
+                                    console.log("[Plink v85] Play after durationchange failed: " + e);
+                                });
+                            }
+                        }
                     });
+                    // 2s fail-safe: if durationchange doesn't fire, force play
+                    setTimeout(function() {
+                        if (video.paused && video.readyState >= 2) {
+                            console.log('[Plink v85] 2s fail-safe — forcing play');
+                            video.play().catch(function(e) {
+                                console.log("[Plink v85] Fail-safe play failed: " + e);
+                            });
+                        }
+                    }, 2000);
 
                     // 🔧 v39: Let YouTube handle tap = play/pause natively.
                     // v32.8 blocked YouTube's tap (preventDefault + stopPropagation)

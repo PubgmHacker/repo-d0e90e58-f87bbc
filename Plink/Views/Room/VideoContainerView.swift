@@ -953,28 +953,69 @@ struct WebVideoView: UIViewRepresentable {
             // to reload, but we need to bypass its "already loaded" guard.
             // See loadVideoOnceForceReload below.
         } else if let existing = WebViewControl.shared.webView {
-            // 🔧 v53 (Gemini): Safe Reparenting — detach from old superview
-            // BEFORE returning. This prevents WebKit GPU render crash when
-            // SwiftUI calls makeUIView again after WS reconnect.
-            existing.removeFromSuperview()
-            print("📺 v53: reusing existing WKWebView (detached from old parent)")
-            if isYouTube || isBackendPlayer {
-                existing.navigationDelegate = context.coordinator
-            }
-            if context.coordinator.webView == nil {
-                context.coordinator.webView = existing
-            }
-            if isYouTube || isBackendPlayer {
-                let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
-                context.coordinator.loadVideoOnce(id: videoId, webView: existing)
-            }
-            // 🔧 v64 (Gemini): After detaching + re-attaching WKWebView, the GPU
-            // composite layer is lost → black screen. Schedule reactivate() on
-            // next run loop (after the view is in the new hierarchy) to force
-            // WebKit to re-attach to the GPU pipeline.
-            let existingRef = existing
-            DispatchQueue.main.async {
-                WebViewControl.shared.reactivate(webView: existingRef)
+            // 🔧 v66 (Gemini): Safe Container — DON'T detach WKWebView if app
+            // is in background/transition. iOS refuses GPU context
+            // ("CARenderServer failed bootstrap look up, Null Context server
+            // port!") when app is not .active. The old v53 code called
+            // removeFromSuperview() unconditionally, which triggered the
+            // detach/attach cycle during shade open/close → permanent black
+            // screen (audio continues, GPU dead).
+            //
+            // v66 SOLUTION: Only detach + re-attach when app is .active.
+            // If app is in background/transition, return the WKWebView as-is
+            // WITHOUT calling removeFromSuperview(). SwiftUI will handle the
+            // reparenting itself — but since we don't force-detach, the GPU
+            // context stays alive.
+            let appState = UIApplication.shared.applicationState
+            print("📺 v66: reusing existing WKWebView (appState=\(appState.rawValue))")
+
+            if appState == .active {
+                // App is active — safe to detach/reattach + reactivate GPU
+                existing.removeFromSuperview()
+                print("📺 v66: app active — detached from old parent, will reactivate GPU")
+                if isYouTube || isBackendPlayer {
+                    existing.navigationDelegate = context.coordinator
+                }
+                if context.coordinator.webView == nil {
+                    context.coordinator.webView = existing
+                }
+                if isYouTube || isBackendPlayer {
+                    let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
+                    context.coordinator.loadVideoOnce(id: videoId, webView: existing)
+                }
+                // Schedule reactivate on next run loop (after view is in hierarchy)
+                let existingRef = existing
+                DispatchQueue.main.async {
+                    WebViewControl.shared.reactivate(webView: existingRef)
+                }
+            } else {
+                // App is in background/transition — DON'T detach!
+                // Just set up coordinator references, skip removeFromSuperview.
+                // SwiftUI will reparent the view itself without killing GPU.
+                print("📺 v66: app NOT active — skipping detach (GPU context preserved)")
+                if isYouTube || isBackendPlayer {
+                    existing.navigationDelegate = context.coordinator
+                }
+                if context.coordinator.webView == nil {
+                    context.coordinator.webView = existing
+                }
+                if isYouTube || isBackendPlayer {
+                    let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
+                    context.coordinator.loadVideoOnce(id: videoId, webView: existing)
+                }
+                // 🔧 v66: Schedule reactivate for when app becomes active
+                // (didBecomeActiveNotification). This fires after the shade
+                // animation completes, so GPU context is available.
+                let existingRef = existing
+                context.coordinator.activationObserver = NotificationCenter.default.addObserver(
+                    forName: UIApplication.didBecomeActiveNotification,
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    DispatchQueue.main.async {
+                        WebViewControl.shared.reactivate(webView: existingRef)
+                    }
+                }
             }
             return existing
         }
@@ -1412,6 +1453,10 @@ struct WebVideoView: UIViewRepresentable {
         /// in didCommit (page start) so the JS bridge (attachToVideo) can read
         /// it when the <video> element appears.
         var pendingRestorePosition: TimeInterval = 0
+        /// 🔧 v66 (Gemini): Observer for didBecomeActiveNotification — used when
+        /// makeUIView is called while app is in background. We defer reactivate()
+        /// until the app becomes active so iOS doesn't refuse GPU context.
+        var activationObserver: NSObjectProtocol?
 
         // MARK: - Lifecycle (v35) + Window Observer (v35.2)
 
@@ -1459,6 +1504,11 @@ struct WebVideoView: UIViewRepresentable {
         }
 
         deinit {
+            // 🔧 v66: Remove activationObserver if it was set
+            if let observer = activationObserver {
+                NotificationCenter.default.removeObserver(observer)
+                activationObserver = nil
+            }
             NotificationCenter.default.removeObserver(self)
         }
 

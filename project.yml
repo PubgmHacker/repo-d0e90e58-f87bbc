@@ -26,8 +26,6 @@ targets:
       - path: Plink
         excludes:
           - "**/.DS_Store"
-      - path: Plink/Vendors/XCDYouTubeKit
-        type: folder
       - path: Plink/Resources/Info.plist
         buildPhase: none
     resources:
@@ -43,7 +41,6 @@ targets:
         DEVELOPMENT_TEAM: "2QAMUC4Z4P"
         CODE_SIGN_IDENTITY: "Apple Development"
         SUPPORTS_MACCATALYST: NO
-        SWIFT_OBJC_BRIDGING_HEADER: Plink/Plink-Bridging-Header.h
     info:
       path: Plink/Resources/Info.plist
       properties:

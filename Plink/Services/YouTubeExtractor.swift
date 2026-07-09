@@ -81,12 +81,12 @@ final class YouTubeExtractor {
 private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
 
     private weak var webView: WKWebView?
-    private var continuation: (Result<String, Error>)?
+    private var completion: ((Result<String, Error>) -> Void)?
     private var finished = false
 
     static func extract(videoId: String, completion: @escaping (Result<String, Error>) -> Void) {
         let extractor = HybridHookExtractor()
-        extractor.continuation = completion
+        extractor.completion = completion
         extractor.start(videoId: videoId)
     }
 
@@ -205,7 +205,7 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
             self?.webView = nil
         }
 
-        continuation?(result)
+        completion?(result)
     }
 
     deinit {

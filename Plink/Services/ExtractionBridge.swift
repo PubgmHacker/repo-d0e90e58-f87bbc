@@ -95,6 +95,10 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
             config.userContentController.addUserScript(scraperScript)
             config.userContentController.add(self, name: "extractor")
 
+            // 🔧 v94.10: Create WKWebView on main thread + add to view hierarchy.
+            // "Could not create a sandbox extension" error happens when WKWebView
+            // is created off-main-thread or not attached to any UIView hierarchy.
+            // iOS kills WKWebView that aren't in the view tree.
             let wv = WKWebView(
                 frame: CGRect(x: 0, y: 0, width: 1, height: 1),
                 configuration: config
@@ -104,7 +108,28 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                                  "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 " +
                                  "Mobile/15E148 Safari/604.1"
             wv.navigationDelegate = self
+            wv.isHidden = false  // must be visible (even if 1x1 pixel)
+            wv.alpha = 0.01      // nearly invisible but still in hierarchy
             self.webView = wv
+
+            // 🔧 v94.10: Add to a hidden window's view hierarchy.
+            // iOS requires WKWebView to be in a UIView tree to avoid sandbox errors.
+            // We add it to the key window's root VC view, 1x1 pixel, alpha 0.01.
+            if let keyWindow = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })?
+                .windows.first(where: { $0.isKeyWindow }) {
+                keyWindow.addSubview(wv)
+                print("🔍 v94.10: ExtractionBridge — WKWebView added to key window hierarchy")
+            } else {
+                // Fallback: create a temporary window
+                let tempWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+                tempWindow.windowLevel = .init(rawValue: -1)  // below everything
+                tempWindow.isHidden = false
+                tempWindow.rootViewController = UIViewController()
+                tempWindow.rootViewController?.view.addSubview(wv)
+                print("🔍 v94.10: ExtractionBridge — WKWebView added to temp window")
+            }
 
             print("🔍 v90: ExtractionBridge — loading m.youtube.com/watch?v=\(videoId)")
             let url = URL(string: "https://m.youtube.com/watch?v=\(videoId)")!
@@ -217,6 +242,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         webView?.navigationDelegate = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "extractor")
         webView?.configuration.userContentController.removeAllUserScripts()
+        webView?.removeFromSuperview()  // 🔧 v94.10: remove from view hierarchy
         webView = nil
 
         continuation?.resume(with: result)

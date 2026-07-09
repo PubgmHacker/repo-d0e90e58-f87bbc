@@ -1097,99 +1097,115 @@ final class VideoHostController: UIViewController {
         print("📺 v80: AudioInterruptionObserver registered")
     }
 
-    /// 🔧 v81 (Gemini): Force resume playback with Hard Buffering Reset.
-    /// YouTube player gets stuck in state=3 (buffering) after Control Center.
-    /// Simple play() doesn't work — YouTube's internal state machine is stuck.
-    /// We reset video.src to force the decoder to reload from scratch.
+    /// 🔧 v87 (Gemini): Bulletproof forceResumePlayback with Swift-side logging.
+    /// v86 problem: no [Plink v86] logs appeared — console.log from WKWebView
+    /// may not show in Xcode, and completionHandler was nil (errors hidden).
+    /// v87: Add print() at start + completion handler with error logging.
     func forceResumePlayback() {
-        guard let webView = WebViewControl.shared.webView else { return }
+        print("⚡ v87: forceResumePlayback CALLED")
+
+        guard let webView = WebViewControl.shared.webView else {
+            print("⚠️ v87: forceResumePlayback — webView is nil!")
+            return
+        }
 
         // Reactivate audio session
         do {
             try AVAudioSession.sharedInstance().setActive(true)
+            print("⚡ v87: AVAudioSession reactivated")
         } catch {
-            print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
+            print("⚠️ v87: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v86 (Gemini): Raw DOM Force Play + Keep-Alive
-        // v84/v85 used window.location.replace() which caused markAllLayersVolatile.
-        // v86: Don't reload page. Instead, force-play via raw DOM manipulation:
-        //   1. video.pause() — reset internal lock
-        //   2. video.playbackRate = 1.0 — reset rate
-        //   3. video.muted = false — ensure audio
-        //   4. video.play() — native unpause
-        //   5. If play() fails: playbackRate = 0.99 → triggers decoder refresh
+        // 🔧 v87: Simplified JS with PLINK_DEBUG logs + setTimeout for decoder reset
         let js = """
         (function() {
             try {
                 var video = document.querySelector('video');
                 if (!video) {
-                    console.log('[Plink v86] No video element found');
+                    console.log('PLINK_DEBUG: Video element NOT found');
                     return;
                 }
+                console.log('PLINK_DEBUG: Video state=' + video.readyState + ', paused=' + video.paused + ', duration=' + video.duration + ', currentTime=' + video.currentTime);
 
-                console.log('[Plink v86] Raw DOM Force Play — paused=' + video.paused + ', readyState=' + video.readyState + ', networkState=' + video.networkState + ', currentTime=' + video.currentTime + ', duration=' + video.duration);
+                // If stuck (paused or buffering)
+                if (video.paused || video.readyState < 3) {
+                    console.log('PLINK_DEBUG: Stuck — pause + rate reset + delayed play');
+                    video.pause();
+                    video.playbackRate = 1.0;
+                    video.muted = false;
 
-                // 1. Reset lock — pause first
-                video.pause();
+                    // Delay 100ms before play — gives decoder time to reset
+                    setTimeout(function() {
+                        video.play().then(function() {
+                            console.log('PLINK_DEBUG: Play SUCCESS');
+                        }).catch(function(e) {
+                            console.log('PLINK_DEBUG: Play failed, forcing rate trick: ' + e);
+                            video.playbackRate = 0.99;
+                            video.play().then(function() {
+                                console.log('PLINK_DEBUG: Rate trick SUCCESS');
+                                setTimeout(function() {
+                                    video.playbackRate = 1.0;
+                                    console.log('PLINK_DEBUG: Rate restored to 1.0');
+                                }, 500);
+                            }).catch(function(e2) {
+                                console.log('PLINK_DEBUG: Rate trick also failed: ' + e2);
+                            });
+                        });
+                    }, 100);
+                } else {
+                    console.log('PLINK_DEBUG: Video not stuck — just nudging GPU');
+                }
 
-                // 2. Reset rate + unmute
-                video.playbackRate = 1.0;
-                video.muted = false;
-
-                // 3. Native unpause
-                video.play().then(function() {
-                    console.log('[Plink v86] DOM-Force Play SUCCESS');
-                }).catch(function(err) {
-                    console.log('[Plink v86] DOM-Force Play error, forcing rate change: ' + err);
-                    // Trick: playbackRate = 0.99 triggers decoder refresh
-                    video.playbackRate = 0.99;
-                    video.play().then(function() {
-                        console.log('[Plink v86] Play succeeded after rate trick');
-                        // Restore normal rate after 500ms
-                        setTimeout(function() {
-                            video.playbackRate = 1.0;
-                            console.log('[Plink v86] Rate restored to 1.0');
-                        }, 500);
-                    }).catch(function(e2) {
-                        console.log('[Plink v86] Rate trick also failed: ' + e2);
-                    });
-                });
-
-                // Nudge GPU with translateZ + will-change
+                // GPU nudge
                 video.style.transform = 'translateZ(0)';
                 video.style.willChange = 'transform';
                 video.style.backfaceVisibility = 'hidden';
                 setTimeout(function() { video.style.transform = 'none'; }, 50);
-
-                // Dispatch resize
                 window.dispatchEvent(new Event('resize'));
             } catch(e) {
-                console.log('[Plink v86] Raw DOM Force Play error: ' + e);
+                console.log('PLINK_DEBUG: JS Error: ' + e);
             }
         })();
         """
-        webView.evaluateJavaScript(js, completionHandler: nil)
 
-        // 🔧 v86: No page reload — no need to reset lastLoadedVideoId.
-        // v84/v85 reset it because window.location.replace() reloaded the page.
-        // v86 uses Raw DOM Force Play — no page reload, no reset needed.
+        print("⚡ v87: evaluateJavaScript — executing forceResume JS")
+        webView.evaluateJavaScript(js) { result, error in
+            if let error = error {
+                print("⚠️ v87: evaluateJavaScript ERROR: \(error.localizedDescription)")
+            } else {
+                print("⚡ v87: evaluateJavaScript SUCCESS — result: \(result ?? "nil")")
+            }
+        }
 
-        // Retry after 2s — if force play didn't work, try again
+        // Retry after 2s
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard self != nil, let webView = WebViewControl.shared.webView else { return }
+            print("⚡ v87: Retry after 2s — checking if video still paused")
             webView.evaluateJavaScript("""
             (function() {
                 try {
                     var video = document.querySelector('video');
-                    if (video && video.paused) {
-                        console.log('[Plink v81] Retry after 1s: video still paused, calling play');
-                        if (typeof window.playVideo === 'function') window.playVideo();
-                        else video.play().catch(function(){});
+                    if (video) {
+                        console.log('PLINK_DEBUG: Retry — paused=' + video.paused + ', readyState=' + video.readyState);
+                        if (video.paused) {
+                            console.log('PLINK_DEBUG: Retry — still paused, calling play again');
+                            video.play().catch(function(e) {
+                                console.log('PLINK_DEBUG: Retry play failed: ' + e);
+                            });
+                        }
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.log('PLINK_DEBUG: Retry error: ' + e);
+                }
             })();
-            """, completionHandler: nil)
+            """) { result, error in
+                if let error = error {
+                    print("⚠️ v87: Retry evaluateJavaScript ERROR: \(error.localizedDescription)")
+                } else {
+                    print("⚡ v87: Retry evaluateJavaScript SUCCESS")
+                }
+            }
         }
     }
 

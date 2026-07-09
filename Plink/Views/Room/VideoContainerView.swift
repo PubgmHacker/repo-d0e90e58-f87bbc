@@ -1251,13 +1251,28 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerError: ((Int) -> Void)?
 
         @objc private func appWillResignActive() {
-            // 🔧 v46.1: NO-OP. Don't save position or reload on shade open.
-            print("📱 v46.1: appWillResignActive — no-op")
+            // 🔧 v47.3: NO-OP. Don't pause on shade open.
+            print("📱 v47.3: appWillResignActive — no-op")
         }
 
         @objc private func appDidBecomeActive() {
-            // 🔧 v46.1: NO-OP. Don't reload on shade close.
-            print("📱 v46.1: appDidBecomeActive — no-op")
+            // 🔧 v47.3: Micro-seek to restore rendering after shade close.
+            // When shade opens, iOS suspends CARenderServer for WKWebView.
+            // When shade closes, the rendering context is dead.
+            // Micro-seek (±0.1s) kicks the compositor back to life.
+            guard webView != nil else { return }
+            print("📱 v47.3: appDidBecomeActive — micro-seek to restore render")
+            webView?.evaluateJavaScript("""
+            (function() {
+                var v = document.querySelector('video');
+                if (v && v.currentTime > 0) {
+                    var t = v.currentTime;
+                    v.currentTime = t + 0.1;
+                    setTimeout(function() { v.currentTime = t; }, 100);
+                    if (v.paused) v.play().catch(function(){});
+                }
+            })();
+            """, completionHandler: nil)
         }
 
         /// 🔧 v42: Background handling.
@@ -1460,10 +1475,9 @@ struct WebVideoView: UIViewRepresentable {
                     'ytm-channel-name, ytm-subscribe-button-renderer,',
                     'ytm-comment-section-renderer, #comments-button, ytd-comments, #comments,',
                     'ytm-compact-video-renderer, ytm-item-section-renderer, #related, #secondary,',
-                    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-                    '.ytp-progress-bar-container, .ytp-settings-button,',
+                    '.ytp-chrome-top, .ytp-settings-button,',
                     '.ytp-mute-button, .ytp-unmute-button,',
-                    '.ytp-play-button, .ytp-time-display, .ytp-watermark,',
+                    '.ytp-time-display, .ytp-watermark,',
                     '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
                     '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
                     'button[aria-label*=\"mute\"], button[aria-label*=\"Mute\"],',
@@ -1933,11 +1947,11 @@ struct WebVideoView: UIViewRepresentable {
             '#related, #secondary, ytd-watch-next-secondary-results-renderer {',
             '  display:none!important; visibility:hidden!important; opacity:0!important;',
             '  pointer-events:none!important; }',
-            // YouTube player chrome (controls, buttons, overlays)
-            '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,',
-            '.ytp-progress-bar-container, .ytp-progress-bar, .ytp-settings-button,',
+            // YouTube player chrome (hide topbar + settings, KEEP bottom controls + fullscreen)
+            '.ytp-chrome-top, .ytp-chrome-controls,',
+            '.ytp-settings-button,',
             '.ytp-mute-button, .ytp-unmute-button,',
-            '.ytp-play-button, .ytp-next-button, .ytp-prev-button,',
+            '.ytp-next-button, .ytp-prev-button,',
             '.ytp-time-display, .ytp-watermark, .ytp-tooltip,',
             '.ytp-pause-overlay, .ytp-endscreen-content, .html5-endscreen,',
             '.ytp-cued-thumbnail-overlay, .ytp-cover-overlay,',
@@ -1951,6 +1965,11 @@ struct WebVideoView: UIViewRepresentable {
             'ytd-promo-sparkles-web-renderer, .ytd-banner-promo-renderer {',
             '  display:none!important; visibility:hidden!important; opacity:0!important;',
             '  pointer-events:none!important; }',
+            // KEEP bottom controls + fullscreen button VISIBLE
+            '.ytp-chrome-bottom, .ytp-progress-bar-container, .ytp-progress-bar,',
+            '.ytp-play-button, .ytp-fullscreen-button {',
+            '  display:block!important; visibility:visible!important; opacity:1!important;',
+            '  pointer-events:auto!important; }',
             // Make video player fullscreen (only visible element)
             '#movie_player, #movie_player video, .html5-main-video, video {',
             '  position:fixed!important; top:0!important; left:0!important;',

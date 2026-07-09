@@ -1251,28 +1251,15 @@ struct WebVideoView: UIViewRepresentable {
         var onPlayerError: ((Int) -> Void)?
 
         @objc private func appWillResignActive() {
-            // 🔧 v47.3: NO-OP. Don't pause on shade open.
-            print("📱 v47.3: appWillResignActive — no-op")
+            // 🔧 v47.4: NO-OP. Video keeps playing when notification shade is pulled down.
+            // YouTube doesn't pause on shade open, we don't either.
+            print("📱 v47.4: appWillResignActive — no-op (video keeps playing)")
         }
 
         @objc private func appDidBecomeActive() {
-            // 🔧 v47.3: Micro-seek to restore rendering after shade close.
-            // When shade opens, iOS suspends CARenderServer for WKWebView.
-            // When shade closes, the rendering context is dead.
-            // Micro-seek (±0.1s) kicks the compositor back to life.
-            guard webView != nil else { return }
-            print("📱 v47.3: appDidBecomeActive — micro-seek to restore render")
-            webView?.evaluateJavaScript("""
-            (function() {
-                var v = document.querySelector('video');
-                if (v && v.currentTime > 0) {
-                    var t = v.currentTime;
-                    v.currentTime = t + 0.1;
-                    setTimeout(function() { v.currentTime = t; }, 100);
-                    if (v.paused) v.play().catch(function(){});
-                }
-            })();
-            """, completionHandler: nil)
+            // 🔧 v47.4: NO-OP. No micro-seeks, no pauses, no reloads.
+            // The video should just keep playing naturally.
+            print("📱 v47.4: appDidBecomeActive — no-op")
         }
 
         /// 🔧 v42: Background handling.
@@ -1689,33 +1676,10 @@ struct WebVideoView: UIViewRepresentable {
                             return;
                         }
 
-                        // 🔧 v42: REMOVED RENDER FREEZE DETECTOR.
-                        // v34.35 had a detector that checked webkitDecodedFrameCount
-                        // every 1s and fired 'renderFrozen' if no change for 3s.
-                        // PROBLEM: opening the notification shade CAUSES the frame
-                        // count to stop (iOS suspends rendering when app is inactive).
-                        // The detector then fired → Swift did a micro-seek → which
-                        // does NOT help (rendering is still suspended) but DOES cause
-                        // a visible glitch when user closes the shade.
-                        // v42: trust the OS — rendering resumes automatically when
-                        // app becomes active again. If WebContent process is killed
-                        // (real background), v42 does a full reload in
-                        // appWillEnterForeground (see below).
+                        // 🔧 v47.4: NO auto-resume, NO reset detection, NO micro-seeks.
+                        // YouTube doesn't do this — we don't either.
+                        // Only unmute if somehow muted, and hide ad overlays.
 
-                        // v32.13: detect reset to 0
-                        var nearEnd = video.duration && video.currentTime >= video.duration - 2;
-                        if (video.currentTime === 0 && lastGoodPosition > 5 &&
-                            !nearEnd &&
-                            (Date.now() - lastPositionUpdate) < 10000) {
-                            console.log("[Plink v32.13] Video reset detected, restoring to " + lastGoodPosition + "s");
-                            video.currentTime = lastGoodPosition;
-                            video.play().catch(function() {});
-                            return;
-                        }
-
-                        if (video.paused && video.currentTime > 0 && video.currentTime < (video.duration || Infinity) - 1) {
-                            video.play().catch(function() {});
-                        }
                         if (video.muted) video.muted = false;
 
                         // hide ad/overlay elements

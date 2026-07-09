@@ -74,7 +74,7 @@ final class YouTubeExtractor {
         )
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
 
-        let (_, response) = try await session.data(for: request)
+        let _ = try await session.data(for: request)
 
         // Extract cookies from response
         let cookies = HTTPCookieStorage.shared.cookies(for: watchURL) ?? []

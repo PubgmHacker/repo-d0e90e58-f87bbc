@@ -146,16 +146,22 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
         }
         else
         {
-                // 🔧 v49.3: Use WEB client — ANDROID returns FAILED_PRECONDITION.
-                // WEB client is the most compatible with youtubei/v1/player API.
+                // 🔧 v49.4 (Gemini Plan B): Use TVHTML5 client (Smart TV).
+                // WEB client returns UNPLAYABLE (requires BotGuard po_token).
+                // ANDROID/IOS clients return FAILED_PRECONDITION.
+                // TVHTML5 (Smart TV) is the golden path:
+                //   - No signatureCipher (TVs can't execute JS decryption)
+                //   - No BotGuard (TVs can't run heavy JS)
+                //   - Returns direct URLs in streamingData.formats
+                //   - Returns hlsManifestUrl for live streams
                 NSString *apiURLString = @"https://www.youtube.com/youtubei/v1/player";
                 NSURL *videoInfoURL = [NSURL URLWithString:apiURLString];
                 
                 NSDictionary *body = @{
                         @"context": @{
                                 @"client": @{
-                                        @"clientName": @"WEB",
-                                        @"clientVersion": @"2.20240726.00.00",
+                                        @"clientName": @"TVHTML5",
+                                        @"clientVersion": @"7.20230407.00.00",
                                         @"hl": self.languageIdentifier,
                                         @"gl": @"US"
                                 }
@@ -173,7 +179,7 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                 NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:videoInfoURL cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:10];
                 [request setHTTPMethod:@"POST"];
                 [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-                [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+                [request setValue:@"Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/531.2+ (KHTML, like Gecko) WebBrowser/1.0 SmartTV Safari/531.2+" forHTTPHeaderField:@"User-Agent"];
                 [request setValue:self.languageIdentifier forHTTPHeaderField:@"Accept-Language"];
                 [request setValue:[NSString stringWithFormat:@"https://youtube.com/watch?v=%@", self.videoIdentifier] forHTTPHeaderField:@"Referer"];
                 [request setHTTPBody:bodyData];

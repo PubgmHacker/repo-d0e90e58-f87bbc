@@ -752,23 +752,15 @@ private struct VideoSectionContent: View {
     let videoPlaceholder: () -> AnyView
 
     var body: some View {
-        // 🔧 v65 (Gemini): CRITICAL — VideoContainerView must NEVER be removed
-        // from the view hierarchy while in the room. Use ZStack + opacity instead
-        // of if/else.
+        // 🔧 v73 (Gemini): ROOT-LEVEL IMMORTAL ZStack. VideoContainerView is
+        // ALWAYS in the hierarchy — NEVER conditionally removed. The old
+        // if/else code would remove VideoContainerView when currentMediaItem
+        // became nil (socket drop) → makeUIView called again → GPU crash.
         //
-        // ROOT CAUSE of black screen bug:
-        // When the user opens Control Center, the app goes inactive. WS
-        // disconnects → reconnects → SyncEngine state changes → SwiftUI
-        // re-evaluates VideoSectionContent. The OLD if/else code:
-        //   if currentMediaItem != nil { VideoContainerView } else { placeholder }
-        // would briefly remove VideoContainerView and re-add it → makeUIView
-        // called → WKWebView detached from parent → iOS refuses GPU context
-        // ("app in background, CARenderServer failed bootstrap, Null Context
-        // server port!") → PERMANENT black screen, audio continues.
-        //
-        // FIX: VideoContainerView is ALWAYS in the hierarchy. When there's no
-        // media, we set opacity to 0.01 (NOT 0 — opacity 0 lets iOS kill the
-        // GPU context too). The placeholder is shown ON TOP via ZStack.
+        // v73 adds .id("eternal_video_container") to lock VideoContainerView
+        // identity — SwiftUI NEVER recreates it, even when mediaURL/playbackMode
+        // change. Combined with .id("eternal_web_player") on WebVideoView,
+        // the entire video view tree is now immortal.
         ZStack {
             // Player is ALWAYS rendered — never conditionally removed
             VideoContainerView(
@@ -780,18 +772,19 @@ private struct VideoSectionContent: View {
                 onTogglePlay: { syncEngine.togglePlayPause() },
                 onSeek: { pos in syncEngine.seek(to: pos) }
             )
-            // 🔧 v65: opacity 0.01 when no media (NOT 0 — 0 lets iOS kill GPU).
-            // opacity 1.0 when media is loaded and ready.
+            .id("eternal_video_container")  // 🔧 v73: LOCK identity — never recreate
             .opacity(hasMedia ? 1.0 : 0.01)
+            .allowsHitTesting(hasMedia)
             .onAppear {
                 if let mediaItem = syncEngine.currentMediaItem {
-                    print("🎬 v65: VideoSectionContent — VideoContainerView in hierarchy (always present), streamURL=\(mediaItem.streamURL.prefix(80))")
+                    print("🎬 v73: VideoSectionContent — VideoContainerView in hierarchy (always present), streamURL=\(mediaItem.streamURL.prefix(80))")
                 }
             }
 
             // Placeholder shown ON TOP when no media loaded yet
             if !hasMedia {
                 videoPlaceholder()
+                    .zIndex(10)
             }
         }
     }

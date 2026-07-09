@@ -227,7 +227,7 @@ final class WebViewControl {
         webView.frame = nudgedFrame
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self else { return }
+            guard self != nil else { return }
             webView.frame = originalFrame
 
             // ─── 3. JS: translateZ(0) GPU trigger + micro-seek ───
@@ -737,17 +737,13 @@ struct VideoContainerView: View {
 
     @ViewBuilder
     private func webVideoView() -> some View {
-        // 🔧 v69 (Gemini): ALWAYS render WebVideoView — never use if/else on
-        // mediaURL. The old code:
-        //   if let url = URL(string: mediaURL) { WebVideoView(url: url) } else { VideoPlaceholder() }
-        // would remove WebVideoView when mediaURL was empty → makeUIView called
-        // again when mediaURL came back → WKWebView recreated → GPU crash.
-        //
-        // v69: Always create WebVideoView. If mediaURL is empty, pass a dummy
-        // URL (about:blank). WebVideoView's makeUIView will create the WKWebView
-        // once, and updateUIView will handle URL changes without recreating.
-        let url = URL(string: mediaURL) ?? URL(string: "about:blank")!
-        return WebVideoView(url: url) { time in
+        // 🔧 v70 (Gemini): DON'T pass about:blank when mediaURL is empty.
+        // v69 passed about:blank → updateUIView loaded it → destroyed prewarm.
+        // Instead, pass the real URL only if it's valid. WebVideoView now
+        // accepts URL? — if nil, it doesn't load anything (preserves prewarm).
+        // 🔧 v70: No explicit return — use let + direct view expression for ViewBuilder.
+        let url = URL(string: mediaURL)
+        WebVideoView(url: url) { time in
             WebViewControl.shared.handleTimeUpdate(time)
         }
     }
@@ -970,7 +966,7 @@ final class PlayerUIView: UIView {
 // rotation because SwiftUI keeps the same UIView instance.
 
 struct WebVideoView: UIViewRepresentable {
-    let url: URL
+    let url: URL?  // 🔧 v70: URL? — if nil, don't load anything (preserves prewarm)
     var onTimeUpdate: (TimeInterval) -> Void
 
     func makeUIView(context: Context) -> WKWebView {
@@ -983,6 +979,36 @@ struct WebVideoView: UIViewRepresentable {
             print("⚠️ v35: AVAudioSession config failed: \(error)")
         }
         print("🔧🔧🔧 makeUIView CALLED — WebViewControl.shared.webView exists: \(WebViewControl.shared.webView != nil)")
+
+        // 🔧 v70: Handle nil URL (preserves prewarm — don't destroy cached page)
+        // If url is nil, we still create/reuse the WKWebView, but we DON'T load
+        // anything. This preserves the prewarmed page (loaded in
+        // WebViewControl.prewarm) so it's ready when the real URL arrives.
+        guard let url = url else {
+            print("📺 v70: makeUIView — url is nil, preserving prewarm (no load)")
+            // If we have an existing WKWebView from prewarm, return it as-is
+            if let existing = WebViewControl.shared.webView {
+                print("📺 v70: returning existing prewarmed WKWebView (no load)")
+                if context.coordinator.webView == nil {
+                    context.coordinator.webView = existing
+                }
+                return existing
+            }
+            // No prewarmed WKWebView — create a fresh empty one
+            let config = WKWebViewConfiguration()
+            config.allowsInlineMediaPlayback = true
+            config.mediaTypesRequiringUserActionForPlayback = []
+            let emptyWebView = WKWebView(frame: .zero, configuration: config)
+            emptyWebView.scrollView.isScrollEnabled = false
+            emptyWebView.isOpaque = false
+            emptyWebView.backgroundColor = .clear
+            WebViewControl.shared.register(emptyWebView)
+            if context.coordinator.webView == nil {
+                context.coordinator.webView = emptyWebView
+            }
+            return emptyWebView
+        }
+
         let urlString = url.absoluteString
         // 🔧 v14.1: must also match youtube-nocookie.com (v14 changed embed URL domain)
         let isYouTube = urlString.contains("youtube.com/embed/") ||
@@ -1440,13 +1466,16 @@ struct WebVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        // 🔧 v35.1: MINIMAL updateUIView — just re-register coordinator if needed.
-        // loadVideoOnce is only called from makeUIView (first time) — NOT here.
-        // Previously this called loadVideoOnce on EVERY update (including fullscreen
-        // toggle) → even though guard blocked reload, the evaluation itself caused
-        // SwiftUI to re-evaluate the view → potential identity change → makeUIView.
-        // Now: do nothing in updateUIView for YouTube. The WebView is controlled
-        // via WebViewControl.shared (play/pause/seek) from Swift.
+        // 🔧 v70: Handle nil URL — don't load anything, preserve prewarm
+        guard let url = url else {
+            // URL is nil (mediaURL was empty). Don't load anything — the
+            // prewarmed page is preserved. When real URL arrives, SwiftUI
+            // will call makeUIView again (not updateUIView) because the
+            // url property changed from nil to non-nil.
+            print("📺 v70: updateUIView — url is nil, preserving prewarm (no load)")
+            return
+        }
+
         let urlString = url.absoluteString
         let isYouTube = urlString.contains("youtube.com/embed/") ||
                          urlString.contains("youtube-nocookie.com/embed/") ||

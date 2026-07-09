@@ -94,10 +94,11 @@ final class NativePlayerEngine: ObservableObject {
             let loaderDelegate = YouTubeResourceLoaderDelegate(originalURL: url)
             resourceLoaderDelegate = loaderDelegate
 
-            asset = AVURLAsset(url: proxyURL, options: [
+            let urlAsset = AVURLAsset(url: proxyURL, options: [
                 AVURLAssetPreferPreciseDurationAndTimingKey: true
             ])
-            asset.resourceLoader.setDelegate(loaderDelegate, queue: loaderDelegate.queue)
+            urlAsset.resourceLoader.setDelegate(loaderDelegate, queue: loaderDelegate.queue)
+            asset = urlAsset
             print("🎬 v91: googlevideo.com URL — AVAssetResourceLoaderDelegate attached (custom scheme: youtube-proxy://)")
         } else {
             asset = AVURLAsset(url: url, options: [

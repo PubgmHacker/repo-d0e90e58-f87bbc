@@ -23,6 +23,8 @@ import WebKit
 @MainActor
 final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
 
+    static let shared = ExtractionBridge()
+
     struct StreamInfo {
         let streamURL: String
         let title: String

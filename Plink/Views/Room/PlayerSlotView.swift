@@ -55,10 +55,9 @@ final class PlayerSlotUIView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         // Convert self.bounds to global (window) coordinates
-        if let window = self.window {
-            let globalFrame = self.convert(self.bounds, to: nil)
-            onFrameChange?(globalFrame)
-        }
+        guard window != nil else { return }
+        let globalFrame = self.convert(self.bounds, to: nil)
+        onFrameChange?(globalFrame)
     }
 
     // Also update on first appearance (didMoveToWindow)

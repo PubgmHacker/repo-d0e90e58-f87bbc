@@ -64,6 +64,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
     func extract(videoId: String) async throws -> StreamInfo {
         // Reset state
         isFinished = false
+        didReloadAfterTerminate = false  // v94.8: reset reload flag
         webView?.stopLoading()
         webView = nil
         continuation = nil
@@ -180,6 +181,26 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         guard !isFinished else { return }
         print("❌ v90: ExtractionBridge — provisional nav failed: \(error.localizedDescription)")
         finish(with: .failure(error))
+    }
+
+    // 🔧 v94.8: Handle WebContent process termination (iOS kills background WKWebView).
+    // Instead of giving up, reload the page ONCE and let the scraper continue.
+    private var didReloadAfterTerminate = false
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard !isFinished else { return }
+
+        if !didReloadAfterTerminate {
+            didReloadAfterTerminate = true
+            print("🔄 v94.8: ExtractionBridge — WebContent process terminated, reloading ONCE...")
+            // Reload the page — scraper script will re-inject at documentEnd
+            if let url = webView.url {
+                webView.load(URLRequest(url: url))
+            }
+        } else {
+            print("❌ v94.8: ExtractionBridge — WebContent terminated again, giving up")
+            finish(with: .failure(ExtractionError.invalidResponse))
+        }
     }
 
     // MARK: - Cleanup

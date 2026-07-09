@@ -1,0 +1,933 @@
+     1→import AVFoundation
+     2→import Foundation
+     3→import Combine
+     4→
+     5→// MARK: - Sync Engine (Production — Latency Compensated)
+     6→/// Synchronizes AVPlayer playback across all room participants with
+     7→/// **network latency compensation**.
+     8→///
+     9→/// ┌─────────────────────────────────────────────────────────────────┐
+    10→/// │                   THE LATENCY PROBLEM                            │
+    11→/// │                                                                  │
+    12→/// │  Host presses Play at media-time = 10.0s, wall-clock T0.        │
+    13→/// │  Command travels to server (T0 + uplink)                         │
+    14→/// │  Server broadcasts to all clients (T0 + uplink + downlink)       │
+    15→/// │  Client receives command at T0 + RTT                              │
+    16→/// │                                                                  │
+    17→/// │  If client seeks to 10.0s and plays, it is already RTT seconds   │
+    18→/// │  behind the host. Everyone sees different frames.                │
+    19→///                                                                  │
+    20→/// │  SOLUTION: compensate using synchronized server clock + RTT.     │
+    21→/// └─────────────────────────────────────────────────────────────────┘
+    22→///
+    23→/// Compensation formula:
+    24→///   elapsedSinceEvent = currentServerTime - eventServerTimestamp
+    25→///   targetMediaTime = eventMediaTime + (isPlayingEvent ? elapsedSinceEvent : 0)
+    26→///
+    27→/// The client's view of "currentServerTime" is kept accurate by the
+    28→/// WebSocketClient's ping/pong clock-sync (see synchronizedServerTime).
+    29→
+    30→@MainActor
+    31→final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
+    32→
+    33→    // MARK: - Published State
+    34→
+    35→    @Published private(set) var isPlaying = false
+    36→    @Published private(set) var currentTime: TimeInterval = 0
+    37→    @Published private(set) var duration: TimeInterval = 0
+    38→    @Published private(set) var currentMediaItem: MediaItem?
+    39→    @Published private(set) var syncQuality: SyncQuality = .perfect
+    40→    @Published private(set) var isLoadingMedia = false
+    41→
+    42→    /// 🔧 v34.18: public setter for currentMediaItem
+    43→    func setCurrentMediaItem(_ item: MediaItem) {
+    44→        currentMediaItem = item
+    45→    }
+    46→
+    47→    /// 🔧 v35.6: public setter for isPlaying — updated from YouTube IFrame API
+    48→    /// state changes so ControlsOverlay shows correct play/pause icon.
+    49→    func setIsPlaying(_ playing: Bool) {
+    50→        isPlaying = playing
+    51→    }
+    52→    @Published private(set) var errorMessage: String?
+    53→    @Published var volume: Float = 1.0 {
+    54→        didSet { player?.volume = volume }
+    55→    }
+    56→
+    57→    // Latency telemetry — surfaced for the SyncIndicatorView
+    58→    @Published private(set) var estimatedRTTms: Int = 0
+    59→    @Published private(set) var lastCompensationMs: Int = 0
+    60→
+    61→    // MARK: - Private State
+    62→
+    63→    // 🔧 FIX H3: Expose player as internal so VideoContainerView can use the SAME
+    64→    // AVPlayer instance (was: private — forced VideoContainerView to create its own
+    65→    // second AVPlayer, causing visual desync).
+    66→    private(set) var player: AVPlayer?
+    67→    private var playerItem: AVPlayerItem?
+    68→    private var timeObserver: Any?
+    69→    private var lastSyncEventTime: TimeInterval = 0      // server time of last event
+    70→    private var lastSyncMediaTime: TimeInterval = 0      // media time at last event
+    71→    private var lastSyncWasPlaying: Bool = false
+    72→    private var driftCorrectionTimer: Timer?
+    73→    private var stateBroadcastTimer: Timer?
+    74→    private var seekCompletionHandler: ((Bool) -> Void)?
+    75→    /// 🔧 FIX 1.2: Buffer underrun observer
+    76→    private var bufferObserver: NSObjectProtocol?
+    77→    private var bufferUnderrunCount = 0
+    78→
+    79→    private let wsClient: WebSocketClient
+    80→    private let roomID: String
+    81→    private let userID: String
+    82→    private let isHost: Bool
+    83→    /// 🔧 FIX 2.2: Throttle for play/pause to prevent rapid-fire WS spam
+    84→    private var lastCommandTime: TimeInterval = 0
+    85→    private let commandThrottle: TimeInterval = 0.3  // 300ms min between commands
+    86→
+    87→    // MARK: - Constants
+    88→
+    89→    private enum Constants {
+    90→        static let driftThreshold: TimeInterval = 0.5        // 500ms — visible desync
+    91→        static let hardResyncThreshold: TimeInterval = 1.5   // 1.5s — force reseek
+    92→        static let seekTolerance: TimeInterval = 0.05         // 50ms — don't reseek for tiny diffs
+    93→        static let stateBroadcastInterval: TimeInterval = 2.0
+    94→        static let driftCheckInterval: TimeInterval = 1.0
+    95→        static let maxPredictiveJump: TimeInterval = 5.0     // cap extrapolation
+    96→    }
+    97→
+    98→    // MARK: - Init
+    99→
+   100→    init(wsClient: WebSocketClient, roomID: String, userID: String, isHost: Bool) {
+   101→        self.wsClient = wsClient
+   102→        self.roomID = roomID
+   103→        self.userID = userID
+   104→        self.isHost = isHost
+   105→        super.init()
+   106→    }
+   107→
+   108→    deinit {
+   109→        // Cannot touch @MainActor state in deinit; just tear down player.
+   110→        player?.pause()
+   111→        if let observer = timeObserver { player?.removeTimeObserver(observer) }
+   112→    }
+   113→
+   114→    // MARK: - Server Time Accessor
+   115→
+   116→    /// The client's best estimate of the current server wall-clock time.
+   117→    /// Maintained by WebSocketClient via ping/pong clock synchronization.
+   118→    private var currentServerTime: TimeInterval {
+   119→        wsClient.synchronizedServerTime > 0
+   120→            ? wsClient.synchronizedServerTime
+   121→            : Date().timeIntervalSince1970
+   122→    }
+   123→
+   124→    private var estimatedRTT: TimeInterval {
+   125→        wsClient.estimatedRTT
+   126→    }
+   127→
+   128→    // MARK: - Load Media
+   129→
+   130→    func loadMedia(_ item: MediaItem) {
+   131→        // 🔧 v34.15: GUARD — don't reload the same media item!
+   132→        // WS reconnects on fullscreen toggle → calls loadMedia with the SAME item
+   133→        // → teardownPlayer sets currentMediaItem = nil → VideoContainerView re-renders
+   134→        // → WKWebView re-attached → rendering context destroyed → black screen.
+   135→        // If the same item is already loaded AND WebView already has it, skip entirely.
+   136→        if let existing = currentMediaItem,
+   137→           existing.id == item.id,
+   138→           existing.streamURL == item.streamURL,
+   139→           WebViewControl.shared.loadedVideoId != nil {
+   140→            Logger.sync.info("🔍 loadMedia: SAME item already loaded — skipping (prevents rendering destroy)")
+   141→            return
+   142→        }
+   143→
+   144→        teardownPlayer()
+   145→        isLoadingMedia = true
+   146→        errorMessage = nil
+   147→
+   148→        // 🔧 FIX: For WebView playback mode (YouTube embed, cinema sites, HTML pages),
+   149→        // AVPlayer can't play the URL — it would just spin forever. Skip AVPlayer setup
+   150→        // entirely. RoomView's VideoContainerView will use WebVideoView instead.
+   151→        // We still set currentMediaItem so RoomView knows to render the video section.
+   152→        if item.effectivePlaybackMode == .webview {
+   153→            currentMediaItem = item
+   154→            isLoadingMedia = false
+   155→            errorMessage = nil  // 🔧 FIX: explicitly clear any stale error from previous AVPlayer
+   156→            Logger.sync.info("🔍 loadMedia: webview mode, skipping AVPlayer. errorMessage cleared.")
+   157→            // Host still broadcasts the new media to participants
+   158→            if isHost {
+   159→                let msg = SyncMessage(
+   160→                    command: .changeMedia,
+   161→                    roomID: roomID,
+   162→                    senderID: userID,
+   163→                    mediaItem: item
+   164→                )
+   165→                broadcast(msg)
+   166→            }
+   167→            return
+   168→        }
+   169→
+   170→        guard let url = URL(string: item.streamURL) else {
+   171→            errorMessage = "Invalid media URL"
+   172→            isLoadingMedia = false
+   173→            return
+   174→        }
+   175→
+   176→        // 🔧 FIX v8.1 (July 2026): use AVURLAsset with custom HTTP headers
+   177→        // for googlevideo.com URLs (backend yt-dlp extraction results).
+   178→        //
+   179→        // 🔧 v9 (July 2026): for backend proxy URLs (youtube-stream endpoint),
+   180→        // add Authorization header with JWT token — backend requires auth.
+   181→        // The proxy URL looks like:
+   182→        //   https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
+   183→        // Without the Authorization header, backend returns 401 → AVPlayer fails.
+   184→        //
+   185→        // AVAsset(url:) doesn't let you set headers, but AVURLAsset does via
+   186→        // the AVURLAssetHTTPHeaderFieldsKey option.
+   187→        //
+   188→        // 🔧 FIX v8.2: AVURLAssetHTTPHeaderFieldsKey is an Obj-C NSString
+   189→        // constant that's not directly importable in Swift. Use the raw
+   190→        // string literal "AVURLAssetHTTPHeaderFieldsKey" instead — this is
+   191→        // the underlying value Apple's AVFoundation uses internally.
+   192→        let asset: AVAsset
+   193→        let lowerURL = item.streamURL.lowercased()
+   194→        if lowerURL.contains("googlevideo.com") {
+   195→            // Direct googlevideo URL (v8 approach — IP-bound, may fail)
+   196→            let headers: [String: String] = [
+   197→                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+   198→                "Referer": "https://www.youtube.com/",
+   199→                "Origin": "https://www.youtube.com",
+   200→            ]
+   201→            let options: [String: Any] = [
+   202→                "AVURLAssetHTTPHeaderFieldsKey": headers,
+   203→                AVURLAssetPreferPreciseDurationAndTimingKey: true,
+   204→            ]
+   205→            asset = AVURLAsset(url: url, options: options)
+   206→            Logger.sync.info("🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers")
+   207→        } else if lowerURL.contains("plink-backend") && lowerURL.contains("youtube-stream") {
+   208→            // 🔧 v9.3: auth via query param — AVPlayer drops Authorization headers
+   209→            // on Range requests, causing 401 → -1008. Instead, append token as
+   210→            // ?token=JWT to the URL itself. AVPlayer always sends the full URL,
+   211→            // so the token is guaranteed to reach the backend.
+   212→            //
+   213→            // The URL already has ?id=VIDEO_ID — we append &token=JWT.
+   214→            // Backend reads token from query param (v9.3) instead of header.
+   215→            var finalURL = url
+   216→            if let token = KeychainHelper.read(for: "rave_auth_token") {
+   217→                // Append token as query param
+   218→                var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+   219→                let tokenItem = URLQueryItem(name: "token", value: token)
+   220→                if var existing = components?.queryItems {
+   221→                    existing.append(tokenItem)
+   222→                    components?.queryItems = existing
+   223→                } else {
+   224→                    components?.queryItems = [tokenItem]
+   225→                }
+   226→                if let modifiedURL = components?.url {
+   227→                    finalURL = modifiedURL
+   228→                }
+   229→            }
+   230→            asset = AVAsset(url: finalURL)
+   231→            Logger.sync.info("🔍 loadMedia: backend proxy URL — token in query param: \(finalURL.absoluteString.prefix(80))...")
+   232→        } else {
+   233→            asset = AVAsset(url: url)
+   234→        }
+   235→
+   236→        let playerItem = AVPlayerItem(asset: asset)
+   237→        self.playerItem = playerItem
+   238→
+   239→        let player = AVPlayer(playerItem: playerItem)
+   240→        player.volume = volume
+   241→        player.allowsExternalPlayback = true
+   242→        player.automaticallyWaitsToMinimizeStalling = true
+   243→        self.player = player
+   244→
+   245→        currentMediaItem = item
+   246→
+   247→        observeDuration(playerItem)
+   248→        observeStatus(playerItem)
+   249→        addTimeObserver()
+   250→        observeBufferUnderrun(playerItem)  // 🔧 FIX 1.2: Wire up buffer observer
+   251→
+   252→        // Host broadcasts the new media so participants load the same item
+   253→        if isHost {
+   254→            let msg = SyncMessage(
+   255→                command: .changeMedia,
+   256→                roomID: roomID,
+   257→                senderID: userID,
+   258→                mediaItem: item
+   259→            )
+   260→            broadcast(msg)
+   261→        }
+   262→    }
+   263→
+   264→    // MARK: - Playback Controls (HOST ONLY)
+   265→
+   266→    func play() {
+   267→        guard isHost else { return }
+   268→        let now = Date().timeIntervalSince1970
+   269→        guard now - lastCommandTime >= commandThrottle else { return }
+   270→        lastCommandTime = now
+   271→        player?.play()
+   272→        isPlaying = true
+   273→
+   274→        // 🔧 WEBVIEW: for YouTube/cinema, send JS command to the WebView player.
+   275→        // AVPlayer is nil in webview mode, so player?.play() is a no-op.
+   276→        // WebViewControl.shared sends playVideo()/pauseVideo() to the WKWebView.
+   277→        if player == nil {
+   278→            WebViewControl.shared.play()
+   279→        }
+   280→
+   281→        let msg = SyncMessage(
+   282→            command: .play,
+   283→            roomID: roomID,
+   284→            senderID: userID,
+   285→            mediaTime: currentTime,
+   286→            timestamp: currentServerTime
+   287→        )
+   288→        broadcast(msg)
+   289→    }
+   290→
+   291→    func pause() {
+   292→        guard isHost else { return }
+   293→        let now = Date().timeIntervalSince1970
+   294→        guard now - lastCommandTime >= commandThrottle else { return }
+   295→        lastCommandTime = now
+   296→        player?.pause()
+   297→        isPlaying = false
+   298→
+   299→        // 🔧 WEBVIEW: pause the YouTube/cinema player via JS
+   300→        if player == nil {
+   301→            WebViewControl.shared.pause()
+   302→        }
+   303→
+   304→        let msg = SyncMessage(
+   305→            command: .pause,
+   306→            roomID: roomID,
+   307→            senderID: userID,
+   308→            mediaTime: currentTime,
+   309→            timestamp: currentServerTime
+   310→        )
+   311→        broadcast(msg)
+   312→    }
+   313→
+   314→    func togglePlayPause() {
+   315→        isPlaying ? pause() : play()
+   316→    }
+   317→
+   318→    func seek(to time: TimeInterval) {
+   319→        guard isHost else { return }
+   320→        // 🔧 v32.11: in webview mode, duration is often 0 (never set from AVPlayer).
+   321→        // min(time, 0) = 0 → seek always goes to start. Fix: only clamp to duration
+   322→        // if duration > 0. In webview mode, video.duration is handled by JS.
+   323→        let clamped: TimeInterval
+   324→        if duration > 0 {
+   325→            clamped = max(0, min(time, duration))
+   326→        } else {
+   327→            clamped = max(0, time)  // don't clamp upper bound if duration unknown
+   328→        }
+   329→
+   330→        // 🔧 v32.19: set seek lock — block WebView timeupdate for 1.5s so
+   331→        // seek bar shows the new position immediately (YouTube seek is async,
+   332→        // timeupdate sends old position for ~0.5s before seek takes effect)
+   333→        seekLockUntil = Date().addingTimeInterval(1.5)
+   334→
+   335→        // 🔧 FIX: for webview mode, there's no AVPlayer to seek. Just update
+   336→        // currentTime, send JS seek to YouTube player, and broadcast.
+   337→        if player == nil {
+   338→            currentTime = clamped
+   339→            WebViewControl.shared.seek(to: clamped)
+   340→            broadcastSyncCommand(.seek, mediaTime: clamped)
+   341→            return
+   342→        }
+   343→
+   344→        let handler: @Sendable (Bool) -> Void = { [weak self] _ in
+   345→            guard let self else { return }
+   346→            Task { @MainActor in
+   347→                self.currentTime = clamped
+   348→                self.broadcastSyncCommand(.seek, mediaTime: clamped)
+   349→                self.seekCompletionHandler = nil
+   350→            }
+   351→        }
+   352→        seekCompletionHandler = handler
+   353→        player?.seek(to: CMTime(seconds: clamped, preferredTimescale: 600),
+   354→                     completionHandler: handler)
+   355→
+   356→        // 🔧 FIX 2.3: Fallback timeout — if seek doesn't complete in 2s, broadcast anyway
+   357→        Task { @MainActor [weak self] in
+   358→            try? await Task.sleep(nanoseconds: 2_000_000_000)
+   359→            guard let self, self.seekCompletionHandler != nil else { return }
+   360→            Logger.sync.warn("Seek timeout — broadcasting anyway")
+   361→            self.currentTime = clamped
+   362→            self.broadcastSyncCommand(.seek, mediaTime: clamped)
+   363→            self.seekCompletionHandler = nil
+   364→        }
+   365→    }
+   366→
+   367→    func seekRelative(_ delta: TimeInterval) {
+   368→        seek(to: currentTime + delta)
+   369→    }
+   370→
+   371→    /// 🔧 v32.10 (July 2026): Update currentTime from WebView timeupdate events.
+   372→    /// This does NOT seek — it only updates the published currentTime property
+   373→    /// so the UI (seek bar, time display) reflects actual playback position.
+   374→    /// Without this, seekRelative(+10) would seek to (0 + 10) = 10s instead of
+   375→    /// (currentTime + 10), because currentTime was never updated from WebView.
+   376→    /// 🔧 v32.17: removed the < 5.0 difference check — it was blocking legitimate
+   377→    /// updates after seeks (seek to 100s, timeupdate sends 100.5, diff > 5 →
+   378→    /// blocked). Now always updates, but only triggers objectWillChange if the
+   379→    /// value actually changed (SwiftUI @Published deduplicates automatically).
+   380→    /// 🔧 v32.19: added seekLock — after user seek, block WebView timeupdate
+   381→    /// for 1.5s so the seek bar shows the new position immediately instead of
+   382→    /// lagging back to old position (YouTube seek is async).
+   383→    private var seekLockUntil: Date = .distantPast
+   384→
+   385→    func updateCurrentTimeFromWebView(_ time: TimeInterval) {
+   386→        // v32.19: if we're within 1.5s of a user seek, ignore WebView updates
+   387→        // (they send old position before seek takes effect)
+   388→        if Date() < seekLockUntil {
+   389→            return
+   390→        }
+   391→        currentTime = time
+   392→    }
+   393→
+   394→    /// 🔧 v32.11 (July 2026): Update duration from WebView.
+   395→    /// In webview mode, AVPlayer is nil → duration never set from AVPlayer
+   396→    /// observers. Without this, seek() clamps to min(time, 0) = 0 → always
+   397→    /// seeks to start. This method sets duration from HTML5 video.duration.
+   398→    func updateDurationFromWebView(_ duration: TimeInterval) {
+   399→        guard duration > 0 else { return }
+   400→        self.duration = duration
+   401→        print("📏 SyncEngine v32.19: duration = \(duration)s")
+   402→    }
+   403→
+   404→    // MARK: - Late Joiner Support
+   405→
+   406→    /// 🔧 FIX 1.1: Late joiner must request current state from host immediately.
+   407→    /// Without this, new viewers see black screen until host does play/pause/seek.
+   408→    func requestInitialState() {
+   409→        guard !isHost else { return }
+   410→        Logger.sync.info("Requesting initial state from host (late joiner)")
+   411→        requestStateFromHost()
+   412→    }
+   413→
+   414→    // MARK: - Incoming Sync Command Handling (LATENCY COMPENSATED)
+   415→
+   416→    func handleSyncMessage(_ message: SyncMessage) {
+   417→        // Ignore echoes of our own commands (server broadcasts to all incl. sender)
+   418→        guard message.senderID != userID else { return }
+   419→
+   420→        // 🔧 v49 (Gemini audit fix #1): Validate mediaItemID to prevent race conditions.
+   421→        // If a play/pause/seek command arrives for a DIFFERENT video than what's
+   422→        // currently loaded, ignore it — it's a stale command from before video change.
+   423→        if message.command == .play || message.command == .pause || message.command == .seek {
+   424→            if let currentId = currentMediaItem?.id,
+   425→               let messageId = message.mediaItem?.id,
+   426→               currentId != messageId {
+   427→                Logger.sync.warn("🔍 Ignoring stale command for old media (current=\(currentId), got=\(messageId))")
+   428→                return
+   429→            }
+   430→        }
+   431→
+   432→        switch message.command {
+   433→        case .play:
+   434→            handlePlay(message)
+   435→        case .pause:
+   436→            handlePause(message)
+   437→        case .seek:
+   438→            handleSeek(message)
+   439→        case .changeMedia:
+   440→            if let item = message.mediaItem {
+   441→                handleMediaChange(item, from: message)
+   442→            }
+   443→        case .stateRequest:
+   444→            // A participant is asking the host for the current state
+   445→            if isHost {
+   446→                respondWithCurrentState()
+   447→            }
+   448→        case .stateResponse:
+   449→            handleStateResponse(message)
+   450→        case .correction:
+   451→            handleForcedCorrection(message)
+   452→        case .ping, .pong:
+   453→            break
+   454→        }
+   455→    }
+   456→
+   457→    // MARK: - Host: Periodic State Broadcast
+   458→
+   459→    func startStateBroadcast() {
+   460→        stopStateBroadcast()
+   461→        guard isHost else { return }
+   462→        // 🔧 v34: ENABLE state broadcast for webview mode too — needed for sync.
+   463→        // Previously disabled because there's no AVPlayer, but now WebViewControl
+   464→        // provides currentTime via updateCurrentTimeFromWebView().
+   465→        // Without state broadcast, non-host participants drift indefinitely.
+   466→
+   467→        stateBroadcastTimer = Timer.scheduledTimer(
+   468→            withTimeInterval: Constants.stateBroadcastInterval,
+   469→            repeats: true
+   470→        ) { [weak self] _ in
+   471→            Task { @MainActor [weak self] in
+   472→                self?.broadcastPeriodicState()
+   473→            }
+   474→        }
+   475→    }
+   476→
+   477→    func stopStateBroadcast() {
+   478→        stateBroadcastTimer?.invalidate()
+   479→        stateBroadcastTimer = nil
+   480→    }
+   481→
+   482→    // MARK: - Host: Periodic State Broadcast
+   483→    /// Every 2s the host sends its current playback position stamped with
+   484→    /// server time. Participants use this to detect and correct drift.
+   485→    private func broadcastPeriodicState() {
+   486→        guard isHost else { return }
+   487→
+   488→        // Use a lightweight "seek" envelope as a heartbeat state sync.
+   489→        // Participants ignore seek commands within tolerance, but reseek
+   490→        // if drift exceeds the threshold.
+   491→        let msg = SyncMessage(
+   492→            command: .seek,        // reuse seek as a state pulse
+   493→            roomID: roomID,
+   494→            senderID: userID,
+   495→            mediaTime: currentTime,
+   496→            timestamp: currentServerTime
+   497→        )
+   498→        broadcast(msg)
+   499→    }
+   500→
+   501→    // MARK: - Drift Monitoring
+   502→
+   503→    func startDriftMonitor() {
+   504→        stopDriftMonitor()
+   505→        driftCorrectionTimer = Timer.scheduledTimer(
+   506→            withTimeInterval: Constants.driftCheckInterval,
+   507→            repeats: true
+   508→        ) { [weak self] _ in
+   509→            Task { @MainActor [weak self] in
+   510→                self?.checkDrift()
+   511→            }
+   512→        }
+   513→    }
+   514→
+   515→    func stopDriftMonitor() {
+   516→        driftCorrectionTimer?.invalidate()
+   517→        driftCorrectionTimer = nil
+   518→    }
+   519→
+   520→    /// Compare local playback position against the extrapolated host position.
+   521→    /// If drift exceeds threshold, self-correct (participant) or request state (host).
+   522→    private func checkDrift() {
+   523→        guard lastSyncEventTime > 0 else { return }
+   524→
+   525→        // Extrapolate where the host SHOULD be right now
+   526→        let elapsed = currentServerTime - lastSyncEventTime
+   527→        let extrapolatedHostTime: TimeInterval
+   528→        if lastSyncWasPlaying {
+   529→            extrapolatedHostTime = min(lastSyncMediaTime + elapsed, duration)
+   530→        } else {
+   531→            extrapolatedHostTime = lastSyncMediaTime
+   532→        }
+   533→
+   534→        let drift = abs(currentTime - extrapolatedHostTime)
+   535→        let driftMs = drift * 1000
+   536→        syncQuality = .fromDrift(driftMs)
+   537→
+   538→        // Surface telemetry
+   539→        estimatedRTTms = Int(estimatedRTT * 1000)
+   540→
+   541→        // Hard resync: participant drifted way off — request fresh state from host
+   542→        if !isHost && drift > Constants.hardResyncThreshold {
+   543→            Logger.sync.warn("Hard drift: \(String(format: "%.0f", driftMs))ms — requesting state from host")
+   544→            requestStateFromHost()
+   545→            return
+   546→        }
+   547→
+   548→        // Soft correction: small drift, nudge locally without a visible jump
+   549→        if !isHost && drift > Constants.driftThreshold && drift <= Constants.hardResyncThreshold {
+   550→            Logger.sync.info("Soft drift: \(String(format: "%.0f", driftMs))ms — self-correcting to \(String(format: "%.2f", extrapolatedHostTime))s")
+   551→            seekSilently(to: extrapolatedHostTime, preserveRate: isPlaying)
+   552→            lastCompensationMs = Int(driftMs)
+   553→        }
+   554→    }
+   555→
+   556→    // MARK: - Latency-Compensated Command Handlers
+   557→
+   558→    /// PLAY command received.
+   559→    /// The host stamped this with (mediaTime, serverTimestamp).
+   560→    /// By the time we receive it, real playback on the host has advanced by
+   561→    /// (currentServerTime - serverTimestamp). We must seek AHEAD by that delta
+   562→    /// so we're aligned with where the host actually is right now.
+   563→    private func handlePlay(_ message: SyncMessage) {
+   564→        let eventMediaTime = message.mediaTime ?? 0
+   565→        let eventServerTime = message.timestamp
+   566→
+   567→        // ─── Core latency compensation ───
+   568→        let elapsedSinceEvent = max(0, currentServerTime - eventServerTime)
+   569→        let compensatedTarget = min(
+   570→            eventMediaTime + min(elapsedSinceEvent, Constants.maxPredictiveJump),
+   571→            duration > 0 ? duration : .infinity
+   572→        )
+   573→
+   574→        let compensationMs = Int(elapsedSinceEvent * 1000)
+   575→        lastCompensationMs = compensationMs
+   576→        recordSyncPoint(mediaTime: compensatedTarget, isPlaying: true, serverTime: currentServerTime)
+   577→
+   578→        Logger.sync.info("▶️ PLAY  host@\(fmt(eventMediaTime))s → seek to \(fmt(compensatedTarget))s (+\(compensationMs)ms latency, RTT \(Int(estimatedRTT*1000))ms)")
+   579→
+   580→        // 🔧 v34: WEBVIEW mode — control YouTube player via JS bridge
+   581→        if player == nil {
+   582→            isPlaying = true
+   583→            // Seek to compensated position first, then play
+   584→            if abs(currentTime - compensatedTarget) > 1.0 {
+   585→                WebViewControl.shared.seek(to: compensatedTarget)
+   586→                currentTime = compensatedTarget
+   587→            }
+   588→            WebViewControl.shared.play()
+   589→            return
+   590→        }
+   591→
+   592→        // 🔧 FAST PATH: If we're already playing and within tolerance, do nothing
+   593→        // (avoids stutter on rapid play/pause toggles)
+   594→        if isPlaying && abs(currentTime - compensatedTarget) < Constants.seekTolerance {
+   595→            return
+   596→        }
+   597→
+   598→        // 🔧 FAST PATH: If drift is small (< 2s), just play without seeking —
+   599→        // the drift monitor will self-correct within a few seconds.
+   600→        // This avoids the "seek then play" stutter that was causing delay.
+   601→        if abs(currentTime - compensatedTarget) < 2.0 {
+   602→            player?.play()
+   603→            isPlaying = true
+   604→            return
+   605→        }
+   606→
+   607→        // Large drift — seek to compensated position, then play
+   608→        player?.seek(to: CMTime(seconds: compensatedTarget, preferredTimescale: 600)) { [weak self] _ in
+   609→            guard let self else { return }
+   610→            Task { @MainActor in
+   611→                self.player?.play()
+   612→                self.isPlaying = true
+   613→                self.currentTime = compensatedTarget
+   614→            }
+   615→        }
+   616→    }
+   617→
+   618→    /// PAUSE command received.
+   619→    /// 🔧 IMMEDIATE: Pause instantly for zero-latency visual sync.
+   620→    /// Seek to exact frame happens after pause (non-blocking).
+   621→    private func handlePause(_ message: SyncMessage) {
+   622→        let eventMediaTime = message.mediaTime ?? currentTime
+   623→        recordSyncPoint(mediaTime: eventMediaTime, isPlaying: false, serverTime: message.timestamp)
+   624→
+   625→        Logger.sync.info("⏸️ PAUSE at \(fmt(eventMediaTime))s")
+   626→
+   627→        // 🔧 v34: WEBVIEW mode — pause YouTube player via JS bridge
+   628→        if player == nil {
+   629→            isPlaying = false
+   630→            currentTime = eventMediaTime
+   631→            WebViewControl.shared.pause()
+   632→            return
+   633→        }
+   634→
+   635→        // 🔧 IMMEDIATE pause — no waiting for seek completion
+   636→        player?.pause()
+   637→        isPlaying = false
+   638→        currentTime = eventMediaTime
+   639→
+   640→        // Seek to exact paused frame (async, non-blocking)
+   641→        player?.seek(to: CMTime(seconds: eventMediaTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+   642→            Task { @MainActor in self?.currentTime = eventMediaTime }
+   643→        }
+   644→    }
+   645→
+   646→    /// SEEK command received (also used as periodic state pulse from host).
+   647→    /// Compensate for latency so we land where the host actually is now.
+   648→    ///
+   649→    /// 🔧 FIX M1: Was using `elapsedSinceEvent < stateBroadcastInterval + 1` as a
+   650→    /// heuristic to detect state pulses vs real seeks. But the host's periodic
+   651→    /// state broadcast (every 2s) and a user-initiated seek can both arrive within
+   652→    /// that 3s window, causing real seeks to be silently reverted (extrapolated
+   653→    /// back to the original position).
+   654→    ///
+   655→    /// New heuristic: a state pulse is a seek where |eventMediaTime - lastSyncMediaTime|
+   656→    /// is small (≤ 2s, normal playback progress). A real seek has a large jump.
+   657→    /// This distinguishes "host is just broadcasting position" from "host actually
+   658→    /// jumped to a new position".
+   659→    private func handleSeek(_ message: SyncMessage) {
+   660→        guard let eventMediaTime = message.mediaTime else { return }
+   661→        let eventServerTime = message.timestamp
+   662→        let elapsedSinceEvent = max(0, currentServerTime - eventServerTime)
+   663→
+   664→        // 🔧 v56 (Gemini): Soft Sync — don't seek if delta < 2.5 seconds.
+   665→        // Small deltas are from normal drift, not real seeks. Seeking
+   666→        // causes YouTube to flush its buffer → 5-second freeze.
+   667→        let compensatedTarget: TimeInterval
+   668→        if isPlaying {
+   669→            compensatedTarget = min(eventMediaTime + elapsedSinceEvent, duration > 0 ? duration : .infinity)
+   670→        } else {
+   671→            compensatedTarget = eventMediaTime
+   672→        }
+   673→
+   674→        let timeDelta = abs(currentTime - compensatedTarget)
+   675→        if timeDelta < 2.5 {
+   676→            // 🔧 v56: Within 2.5s — soft sync, NO seek. Just update recorded time.
+   677→            recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
+   678→            Logger.sync.info("⏩ SKIP seek (delta=\(fmt(timeDelta))s < 2.5s) — soft sync")
+   679→            return
+   680→        }
+   681→
+   682→        // Real seek needed (delta > 2.5s)
+   683→        recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
+   684→        Logger.sync.info("⏩ SEEK host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s [delta=\(fmt(timeDelta))s]")
+   685→
+   686→        // 🔧 v34: WEBVIEW mode — seek YouTube player via JS bridge
+   687→        if player == nil {
+   688→            currentTime = compensatedTarget
+   689→            seekLockUntil = Date().addingTimeInterval(1.5)
+   690→            WebViewControl.shared.seek(to: compensatedTarget)
+   691→            return
+   692→        }
+   693→
+   694→        let wasPlaying = isPlaying
+   695→        seekSilently(to: compensatedTarget, preserveRate: wasPlaying)
+   696→    }
+   697→
+   698→    private func handleMediaChange(_ item: MediaItem, from message: SyncMessage) {
+   699→        Logger.sync.info("🎬 Media change: \(item.displayTitle)")
+   700→        loadMedia(item)
+   701→
+   702→        // If host is already partway in, jump to their position
+   703→        if let startTime = message.mediaTime, startTime > 0.1 {
+   704→            player?.seek(to: CMTime(seconds: startTime, preferredTimescale: 600))
+   705→            currentTime = startTime
+   706→            recordSyncPoint(mediaTime: startTime, isPlaying: false, serverTime: message.timestamp)
+   707→        }
+   708→    }
+   709→
+   710→    private func handleStateResponse(_ message: SyncMessage) {
+   711→        guard !isHost, let hostMediaTime = message.mediaTime else { return }
+   712→
+   713→        // Host responded to our stateRequest with its current position + server time.
+   714→        // Apply full latency compensation.
+   715→        let elapsedSinceEvent = max(0, currentServerTime - message.timestamp)
+   716→        let hostPlaying = message.command == .play  // host marks play vs seek
+   717→        let target = hostPlaying
+   718→            ? min(hostMediaTime + elapsedSinceEvent, duration > 0 ? duration : .infinity)
+   719→            : hostMediaTime
+   720→
+   721→        let drift = abs(currentTime - target)
+   722→        if drift > Constants.driftThreshold {
+   723→            Logger.sync.warn("State response: correcting \(String(format: "%.0f", drift*1000))ms → \(fmt(target))s")
+   724→            seekSilently(to: target, preserveRate: hostPlaying)
+   725→            recordSyncPoint(mediaTime: target, isPlaying: hostPlaying, serverTime: currentServerTime)
+   726→        }
+   727→    }
+   728→
+   729→    private func handleForcedCorrection(_ message: SyncMessage) {
+   730→        guard let target = message.mediaTime else { return }
+   731→        Logger.sync.info("🔄 Forced correction → \(fmt(target))s")
+   732→        seekSilently(to: target, preserveRate: isPlaying)
+   733→        recordSyncPoint(mediaTime: target, isPlaying: isPlaying, serverTime: currentServerTime)
+   734→        syncQuality = .perfect
+   735→    }
+   736→
+   737→    // MARK: - Seek Helpers
+   738→
+   739→    /// Seek without a visible stutter — used for drift correction.
+   740→    /// Uses tolerant seeking to avoid rebuffering on tiny adjustments.
+   741→    private func seekSilently(to time: TimeInterval, preserveRate: Bool) {
+   742→        let clamped = max(0, min(time, duration))
+   743→        let tolerance = CMTime(seconds: Constants.seekTolerance, preferredTimescale: 600)
+   744→        player?.seek(
+   745→            to: CMTime(seconds: clamped, preferredTimescale: 600),
+   746→            toleranceBefore: tolerance,
+   747→            toleranceAfter: tolerance,
+   748→            completionHandler: { [weak self] _ in
+   749→                guard let self else { return }
+   750→                Task { @MainActor in self.currentTime = clamped }
+   751→            }
+   752→        )
+   753→        if preserveRate { player?.play() }
+   754→    }
+   755→
+   756→    // MARK: - Host State Response
+   757→
+   758→    private func respondWithCurrentState() {
+   759→        let msg = SyncMessage(
+   760→            command: isPlaying ? .play : .pause,  // signal play vs pause state
+   761→            roomID: roomID,
+   762→            senderID: userID,
+   763→            mediaTime: currentTime,
+   764→            timestamp: currentServerTime
+   765→        )
+   766→        broadcast(msg)
+   767→    }
+   768→
+   769→    func requestStateFromHost() {
+   770→        let msg = SyncMessage(
+   771→            command: .stateRequest,
+   772→            roomID: roomID,
+   773→            senderID: userID,
+   774→            timestamp: currentServerTime
+   775→        )
+   776→        broadcast(msg)
+   777→    }
+   778→
+   779→    // MARK: - Sync Point Bookkeeping
+   780→
+   781→    private func recordSyncPoint(mediaTime: TimeInterval, isPlaying: Bool, serverTime: TimeInterval) {
+   782→        lastSyncEventTime = serverTime
+   783→        lastSyncMediaTime = mediaTime
+   784→        lastSyncWasPlaying = isPlaying
+   785→        syncQuality = .perfect
+   786→    }
+   787→
+   788→    // MARK: - Broadcast Helpers
+   789→
+   790→    private func broadcastSyncCommand(_ command: SyncCommand, mediaTime: TimeInterval) {
+   791→        let msg = SyncMessage(
+   792→            command: command,
+   793→            roomID: roomID,
+   794→            senderID: userID,
+   795→            mediaTime: mediaTime,
+   796→            timestamp: currentServerTime
+   797→        )
+   798→        broadcast(msg)
+   799→    }
+   800→
+   801→    private func broadcast(_ message: SyncMessage) {
+   802→        // Inject synchronized server time into every outgoing command
+   803→        var msg = message
+   804→        if msg.timestamp == 0 { msg.timestamp = currentServerTime }
+   805→
+   806→        if let data = try? JSONEncoder().encode(msg),
+   807→           let string = String(data: data, encoding: .utf8) {
+   808→            wsClient.send(string)
+   809→        }
+   810→    }
+   811→
+   812→    // MARK: - AVPlayer Observation
+   813→
+   814→    private func addTimeObserver() {
+   815→        guard let player else { return }
+   816→        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+   817→        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+   818→            guard let self, time.seconds.isFinite else { return }
+   819→            Task { @MainActor in self.currentTime = time.seconds }
+   820→        }
+   821→    }
+   822→
+   823→    private func teardownPlayer() {
+   824→        if let observer = timeObserver {
+   825→            player?.removeTimeObserver(observer)
+   826→            timeObserver = nil
+   827→        }
+   828→        // 🔧 FIX 1.2: Remove buffer observer on teardown
+   829→        if let observer = bufferObserver {
+   830→            NotificationCenter.default.removeObserver(observer)
+   831→            bufferObserver = nil
+   832→        }
+   833→        player?.pause()
+   834→        player?.replaceCurrentItem(with: nil)
+   835→        player = nil
+   836→        playerItem = nil
+   837→        currentMediaItem = nil
+   838→        isPlaying = false
+   839→        currentTime = 0
+   840→        duration = 0
+   841→        errorMessage = nil  // 🔧 FIX: clear error message on teardown
+   842→        stopDriftMonitor()
+   843→        stopStateBroadcast()
+   844→        // 🔧 FIX: clear ALL Combine subscriptions (observeStatus, observeDuration, etc.)
+   845→        // Without this, stale AVPlayerItem observers can fire .failed status and
+   846→        // set errorMessage = "Ошибка настройки видеопроигрывателя" (error 153)
+   847→        // even after we've moved to webview playback mode.
+   848→        cancellables.removeAll()
+   849→    }
+   850→
+   851→    func cleanup() {
+   852→        teardownPlayer()
+   853→    }
+   854→
+   855→    private func observeDuration(_ item: AVPlayerItem) {
+   856→        item.publisher(for: \.duration, options: .new)
+   857→            .compactMap { $0.seconds.isFinite ? $0.seconds : nil }
+   858→            .assign(to: &$duration)
+   859→    }
+   860→
+   861→    private func observeStatus(_ item: AVPlayerItem) {
+   862→        item.publisher(for: \.status, options: .new)
+   863→            .sink { [weak self] status in
+   864→                switch status {
+   865→                case .readyToPlay:
+   866→                    self?.isLoadingMedia = false
+   867→                    self?.errorMessage = nil
+   868→                case .failed:
+   869→                    let errDesc = item.error?.localizedDescription ?? "Failed to load media"
+   870→                    let errCode = (item.error as NSError?)?.code ?? -1
+   871→                    Logger.sync.error("🔍 observeStatus .failed: code=\(errCode), desc=\(errDesc)")
+   872→                    Logger.sync.error("🔍 observeStatus: currentMediaItem.streamURL=\(self?.currentMediaItem?.streamURL ?? "nil")")
+   873→                    Logger.sync.error("🔍 observeStatus: effectivePlaybackMode=\(self?.currentMediaItem?.effectivePlaybackMode.rawValue ?? "nil")")
+   874→                    // 🔧 FIX: don't set errorMessage if we're in webview mode —
+   875→                    // AVPlayer failure is expected (YouTube URL can't play in AVPlayer).
+   876→                    // The WebView handles playback, not AVPlayer.
+   877→                    if self?.currentMediaItem?.effectivePlaybackMode == .webview {
+   878→                        Logger.sync.info("🔍 observeStatus: ignoring AVPlayer failure (webview mode)")
+   879→                        self?.isLoadingMedia = false
+   880→                        return
+   881→                    }
+   882→                    self?.errorMessage = errDesc
+   883→                    self?.isLoadingMedia = false
+   884→                default:
+   885→                    break
+   886→                }
+   887→            }
+   888→            .store(in: &cancellables)
+   889→    }
+   890→
+   891→    // 🔧 FIX 1.2: Buffer underrun observer — detects when AVPlayer stalls
+   892→    // due to slow network. Pauses local playback (without broadcasting pause
+   893→    // to other participants), then resumes + requests fresh state from host
+   894→    // when buffer recovers. Prevents visible desync during buffering.
+   895→    private func observeBufferUnderrun(_ item: AVPlayerItem) {
+   896→        // Listen for playback stall notification
+   897→        bufferObserver = NotificationCenter.default.addObserver(
+   898→            forName: .AVPlayerItemPlaybackStalled,
+   899→            object: item,
+   900→            queue: .main
+   901→        ) { [weak self] _ in
+   902→            guard let self, !self.isHost else { return }
+   903→            Task { @MainActor in
+   904→                self.bufferUnderrunCount += 1
+   905→                Logger.sync.warn("Buffer underrun #\(self.bufferUnderrunCount) — local pause (no broadcast)")
+   906→                self.player?.pause()
+   907→            }
+   908→        }
+   909→
+   910→        // Also observe isPlaybackLikelyToKeepUp for recovery
+   911→        item.publisher(for: \.isPlaybackLikelyToKeepUp, options: .new)
+   912→            .receive(on: DispatchQueue.main)
+   913→            .sink { [weak self] canKeepUp in
+   914→                guard let self, !self.isHost else { return }
+   915→                if canKeepUp && self.isPlaying {
+   916→                    // Buffer recovered — resume local playback + request fresh state
+   917→                    Logger.sync.info("Buffer recovered — resuming + requesting fresh state from host")
+   918→                    self.player?.play()
+   919→                    self.requestStateFromHost()
+   920→                }
+   921→            }
+   922→            .store(in: &cancellables)
+   923→    }
+   924→
+   925→    private var cancellables = Set<AnyCancellable>()
+   926→
+   927→    // MARK: - Formatting
+   928→
+   929→    private func fmt(_ t: TimeInterval) -> String {
+   930→        String(format: "%.2f", t)
+   931→    }
+   932→}
+   933→

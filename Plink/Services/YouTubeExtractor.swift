@@ -137,6 +137,9 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                     if (src && checkURL(src)) {
                         window.webkit.messageHandlers.hook.postMessage({type: 'video', url: src});
                     }
+                    // Mute to prevent double audio
+                    videos[i].muted = true;
+                    videos[i].volume = 0;
                 }
             }, 500);
         })();
@@ -148,8 +151,7 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
         webView.navigationDelegate = self
-        // 🔧 v51.3: Native mute — allows autoplay but silences audio
-        webView.isMuted = true
+        // 🔧 v51.3: Mute via JS (webView.isMuted is not available in all iOS versions)
         self.webView = webView
 
         print("📺 HybridHookExtractor: loading watch page for \(videoId)")
@@ -221,9 +223,8 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         selfRetain = nil
     }
 
-    deinit {
-        webView?.stopLoading()
-        webView?.navigationDelegate = nil
+    nonisolated deinit {
+        // Cannot touch @MainActor state in deinit
     }
 }
 

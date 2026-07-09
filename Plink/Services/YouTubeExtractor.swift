@@ -93,44 +93,56 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
 
         var scraperInterval = setInterval(function() {
             try {
-                // Auto-click "Accept cookies" consent banner
-                var consentBtn = document.querySelector('button[aria-label="Accept all"]');
+                // Auto-click consent banner or play button
+                var consentBtn = document.querySelector('button[aria-label="Accept all"]') || document.querySelector('.ytp-large-play-button');
                 if (consentBtn) consentBtn.click();
 
-                // Find player response object
-                var response = window.ytInitialPlayerResponse;
-                if (!response && window.ytplayer && window.ytplayer.config) {
-                    var raw = window.ytplayer.config.args.raw_player_response;
-                    if (raw) response = JSON.parse(raw);
+                var sd = null;
+
+                // Method 1: Direct access (desktop sometimes works)
+                if (window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.streamingData) {
+                    sd = window.ytInitialPlayerResponse.streamingData;
                 }
 
-                if (response && response.streamingData) {
-                    var sd = response.streamingData;
-
-                    // Priority A: HLS Manifest (.m3u8)
-                    if (sd.hlsManifestUrl) {
-                        clearInterval(scraperInterval);
-                        window.webkit.messageHandlers.hook.postMessage(sd.hlsManifestUrl);
-                        return;
-                    }
-
-                    // Priority B: Direct MP4 (muxed video+audio, itag 22=720p, 18=360p)
-                    if (sd.formats && sd.formats.length > 0) {
-                        var bestFormat = sd.formats.find(function(f) { return f.itag === 22 || f.itag === 18; }) || sd.formats[0];
-                        if (bestFormat && bestFormat.url) {
-                            clearInterval(scraperInterval);
-                            window.webkit.messageHandlers.hook.postMessage(bestFormat.url);
-                            return;
+                // Method 2: Hardcoded regex parse of HTML (always works on desktop)
+                if (!sd) {
+                    var scripts = document.getElementsByTagName('script');
+                    for (var i = 0; i < scripts.length; i++) {
+                        if (scripts[i].innerHTML.indexOf('ytInitialPlayerResponse = ') !== -1) {
+                            var match = scripts[i].innerHTML.match(/ytInitialPlayerResponse = ({.*?});/);
+                            if (match && match[1]) {
+                                var data = JSON.parse(match[1]);
+                                if (data.streamingData) sd = data.streamingData;
+                            }
                         }
                     }
                 }
 
-                // Method 2: video element with .m3u8 src
-                var video = document.querySelector('video');
-                if (video && video.src && video.src.indexOf('.m3u8') !== -1) {
-                    clearInterval(scraperInterval);
-                    window.webkit.messageHandlers.hook.postMessage(video.src);
-                    return;
+                // Method 3: ytplayer.config fallback
+                if (!sd && window.ytplayer && window.ytplayer.config) {
+                    var raw = window.ytplayer.config.args.raw_player_response;
+                    if (raw) {
+                        var parsed = JSON.parse(raw);
+                        if (parsed.streamingData) sd = parsed.streamingData;
+                    }
+                }
+
+                if (sd) {
+                    var targetUrl = null;
+
+                    // Priority A: HLS Manifest
+                    if (sd.hlsManifestUrl) {
+                        targetUrl = sd.hlsManifestUrl;
+                    } else if (sd.formats && sd.formats.length > 0) {
+                        // Priority B: Direct MP4 (itag 22=720p, 18=360p)
+                        var bestFormat = sd.formats.find(function(f) { return f.itag === 22 || f.itag === 18; }) || sd.formats[0];
+                        if (bestFormat) targetUrl = bestFormat.url;
+                    }
+
+                    if (targetUrl) {
+                        clearInterval(scraperInterval);
+                        window.webkit.messageHandlers.hook.postMessage(targetUrl);
+                    }
                 }
             } catch(e) {}
         }, 500);
@@ -140,8 +152,8 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         config.userContentController.add(self, name: "hook")
 
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
-        // 🔧 v51.6 (Gemini): iPhone UA — YouTube generates HLS for iOS devices
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+        // 🔧 v51.8 (Gemini): Desktop Mac Safari UA — always embeds ytInitialPlayerResponse
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15"
         webView.navigationDelegate = self
         self.webView = webView
 

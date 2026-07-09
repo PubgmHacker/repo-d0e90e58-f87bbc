@@ -1098,9 +1098,10 @@ final class VideoHostController: UIViewController, WKScriptMessageHandler {
 
             if type == .ended {
                 print("⚡ v80: AVAudioSession interruption ENDED — forcing resume")
-                // 🔧 v88: Increase delay to 1.0s — audio session needs time to
-                // fully switch back from interrupted state before we can resume.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                // 🔧 v89: Increase delay to 1.5s — WebProcess + NetworkStack need
+                // time to fully wake up after background (nw_connection logs show
+                // network wakes with delay).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                     self.forceResumePlayback()
                 }
             }
@@ -1128,10 +1129,11 @@ final class VideoHostController: UIViewController, WKScriptMessageHandler {
             print("⚠️ v87: AVAudioSession reactivation failed: \(error)")
         }
 
-        // 🔧 v88 (Gemini): Aggressive retry loop with JS→Swift log bridge.
-        // Uses window.webkit.messageHandlers.plinkLogger.postMessage() to send
-        // logs to Xcode console (console.log doesn't show in Xcode by default).
-        // Retries every 500ms up to 5 attempts.
+        // 🔧 v89 (Gemini): Iframe Source Re-attachment
+        // v88 logs showed: readyState=0, networkState=0 → video element is EMPTY.
+        // iOS sterilized the video — play() can't work on empty player.
+        // v89: If readyState=0, re-attach iframe.src to force YouTube to
+        // re-initialize. If readyState>0, use standard retry loop.
         let js = """
         (function() {
             function log(msg) {
@@ -1139,8 +1141,31 @@ final class VideoHostController: UIViewController, WKScriptMessageHandler {
             }
             try {
                 var video = document.querySelector('video');
-                if (!video) { log('No video element'); return; }
 
+                // Check if player is EMPTY (readyState=0 = HAVE_NOTHING)
+                if (!video || video.readyState === 0) {
+                    log('CRITICAL: Player empty (state=0). Triggering Iframe Reload.');
+
+                    // Find iframe (YouTube embed lives inside iframe)
+                    var iframe = document.querySelector('iframe');
+                    if (iframe && iframe.src) {
+                        var currentSrc = iframe.src;
+                        log('Iframe found, src=' + currentSrc.substring(0, 80));
+                        // Clear + restore src — forces YouTube to re-initialize
+                        iframe.src = '';
+                        setTimeout(function() {
+                            iframe.src = currentSrc;
+                            log('Iframe source re-attached.');
+                        }, 200);
+                    } else {
+                        // No iframe — try reloading the whole page (m.youtube.com/watch?v=ID)
+                        log('No iframe found. Trying window.location.reload().');
+                        window.location.reload();
+                    }
+                    return;
+                }
+
+                // Standard recovery: readyState > 0, try play
                 log('forceResume START — state=' + video.readyState + ', paused=' + video.paused + ', duration=' + video.duration + ', currentTime=' + video.currentTime);
 
                 var attempts = 0;
@@ -1155,7 +1180,6 @@ final class VideoHostController: UIViewController, WKScriptMessageHandler {
                         log('GIVING UP: State stuck at readyState=' + video.readyState + ', paused=' + video.paused);
                         clearInterval(interval);
                     } else {
-                        // Try to wake up decoder
                         video.play().catch(function() {
                             log('Attempt ' + attempts + ': play() failed, trying rate trick');
                             video.playbackRate = 0.99;

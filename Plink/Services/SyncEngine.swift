@@ -661,29 +661,27 @@ final class SyncEngine: NSObject, ObservableObject, @unchecked Sendable {
         let eventServerTime = message.timestamp
         let elapsedSinceEvent = max(0, currentServerTime - eventServerTime)
 
-        // 🔧 FIX M1: Detect state pulse by comparing media time delta, NOT time elapsed.
-        // A state pulse has media time ≈ lastSyncMediaTime + (elapsed * playbackRate).
-        // A real seek has a large jump in media time relative to lastSyncMediaTime.
-        let expectedProgress = isPlaying ? elapsedSinceEvent : 0
-        let mediaTimeDelta = abs(eventMediaTime - (lastSyncMediaTime + expectedProgress))
-        let isStatePulse = mediaTimeDelta < Constants.stateBroadcastInterval  // ≤ 2s drift = pulse
-
+        // 🔧 v56 (Gemini): Soft Sync — don't seek if delta < 2.5 seconds.
+        // Small deltas are from normal drift, not real seeks. Seeking
+        // causes YouTube to flush its buffer → 5-second freeze.
         let compensatedTarget: TimeInterval
-        if isStatePulse && isPlaying {
+        if isPlaying {
             compensatedTarget = min(eventMediaTime + elapsedSinceEvent, duration > 0 ? duration : .infinity)
         } else {
-            // Real seek — don't extrapolate, just go to the exact position.
             compensatedTarget = eventMediaTime
         }
 
-        // Within tolerance → ignore (prevents jitter from periodic pulses)
-        if abs(currentTime - compensatedTarget) < Constants.seekTolerance {
+        let timeDelta = abs(currentTime - compensatedTarget)
+        if timeDelta < 2.5 {
+            // 🔧 v56: Within 2.5s — soft sync, NO seek. Just update recorded time.
             recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
+            Logger.sync.info("⏩ SKIP seek (delta=\(fmt(timeDelta))s < 2.5s) — soft sync")
             return
         }
 
+        // Real seek needed (delta > 2.5s)
         recordSyncPoint(mediaTime: compensatedTarget, isPlaying: isPlaying, serverTime: currentServerTime)
-        Logger.sync.info("⏩ SEEK  host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s [\(isStatePulse ? "pulse" : "real-seek")]")
+        Logger.sync.info("⏩ SEEK host@\(fmt(eventMediaTime))s → \(fmt(compensatedTarget))s [delta=\(fmt(timeDelta))s]")
 
         // 🔧 v34: WEBVIEW mode — seek YouTube player via JS bridge
         if player == nil {

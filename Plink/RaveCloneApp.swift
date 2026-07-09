@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 // MARK: - AppDelegate (orientation lock)
 //
@@ -83,8 +84,15 @@ struct PlinkApp: App {
     // MARK: - Init
 
     init() {
-        // 🔧 v24: PlinkLocalServer removed — replaced by WKURLSchemeHandler
-        // (PlinkSchemeHandler). No network server needed.
+        // 🔧 v56 (Gemini): Configure AVAudioSession at app launch.
+        // Tells iOS: "we are a media player, don't kill WebKit/AVPlayer
+        // when app goes inactive (Control Center, notification shade)".
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ v56: AVAudioSession config failed: \(error)")
+        }
 
         let api = APIClient()
         apiClient = api

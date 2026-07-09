@@ -94,15 +94,15 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
         Object.defineProperty(document, 'hidden', { get: () => false });
 
-        (function() {
-            function checkURL(url) {
-                if (typeof url !== 'string') return false;
-                return url.indexOf('googlevideo.com/videoplayback') !== -1 ||
-                       url.indexOf('.m3u8') !== -1 ||
-                       url.indexOf('googlevideo.com') !== -1;
-            }
+        // 🔧 v51.5 (Gemini): STRICT HLS filter — only .m3u8, not videoplayback
+        function checkURL(url) {
+            if (typeof url !== 'string') return false;
+            return url.indexOf('.m3u8') !== -1 ||
+                   url.indexOf('manifest/hls_variant') !== -1 ||
+                   url.indexOf('hls_playlist') !== -1;
+        }
 
-            var origFetch = window.fetch;
+        var origFetch = window.fetch;
             window.fetch = function() {
                 var url = arguments[0];
                 if (url && url.url) url = url.url;
@@ -170,7 +170,8 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
 
         // 🔧 v51.4 (Gemini): Real frame size — WebKit throttles zero-size views
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
-        webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        // 🔧 v51.5 (Gemini): Mac Safari UA — better HLS support than iPad
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15"
         webView.navigationDelegate = self
         // 🔧 v51.3: Mute via JS (webView.isMuted is not available in all iOS versions)
         self.webView = webView
@@ -195,7 +196,7 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
 
         if let dict = message.body as? [String: Any],
            let url = dict["url"] as? String,
-           url.contains("googlevideo.com") || url.contains(".m3u8") {
+           url.contains(".m3u8") || url.contains("manifest/hls") {
             print("🎯 HybridHookExtractor: HOOK intercepted URL: \(url.prefix(80))")
             finish(with: .success(url))
         }

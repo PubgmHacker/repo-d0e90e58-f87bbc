@@ -146,19 +146,18 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
         }
         else
         {
-                // 🔧 v48.2: Use youtubei/v1/player API with IOS client.
-                // Gemini recommended IOS client (clientVersion: "19.29.1") —
-                // mobile clients don't require SAPISIDHASH, signatures are static.
+                // 🔧 v48.2: Use youtubei/v1/player API with ANDROID client.
+                // IOS client returns HTTP 400 (deviceMake/deviceModel not recognized).
+                // ANDROID client is recommended by Gemini — mobile clients don't
+                // require SAPISIDHASH, signatures are static.
                 NSString *apiURLString = [NSString stringWithFormat:@"https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"];
                 NSURL *videoInfoURL = [NSURL URLWithString:apiURLString];
                 
                 NSDictionary *body = @{
                         @"context": @{
                                 @"client": @{
-                                        @"clientName": @"IOS",
-                                        @"clientVersion": @"19.29.1",
-                                        @"deviceMake": @"Apple",
-                                        @"deviceModel": @"iPhone15,3",
+                                        @"clientName": @"ANDROID",
+                                        @"clientVersion": @"19.09.37",
                                         @"hl": self.languageIdentifier,
                                         @"gl": @"US"
                                 }
@@ -176,7 +175,7 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                 NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:videoInfoURL cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:10];
                 [request setHTTPMethod:@"POST"];
                 [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-                [request setValue:@"com.google.ios.youtube/19.29.1 (iPhone15,3; U; CPU iOS 17_0 like Mac OS X)" forHTTPHeaderField:@"User-Agent"];
+                [request setValue:@"com.google.android.youtube/19.09.37 (Linux; U; Android 14; SM-S918B) gzip" forHTTPHeaderField:@"User-Agent"];
                 [request setValue:self.languageIdentifier forHTTPHeaderField:@"Accept-Language"];
                 [request setValue:[NSString stringWithFormat:@"https://youtube.com/watch?v=%@", self.videoIdentifier] forHTTPHeaderField:@"Referer"];
                 [request setHTTPBody:bodyData];
@@ -218,12 +217,19 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                                 // Check playability status
                                 NSDictionary *playability = responseDict[@"playabilityStatus"];
                                 NSString *status = playability[@"status"];
+                                if (!status) {
+                                        status = @"UNKNOWN";
+                                }
                                 NSLog(@"[XCDYouTubeKit] youtubei playability status: %@", status);
                                 
                                 if (![status isEqualToString:@"OK"] && ![status isEqualToString:@"LIVE_STREAM_OFFLINE"])
                                 {
-                                        NSLog(@"[XCDYouTubeKit] youtubei video not playable: %@", status);
-                                        NSString *reason = playability[@"reason"] ?: status;
+                                        NSString *reason = playability[@"reason"];
+                                        if (!reason) {
+                                                reason = [NSString stringWithFormat:@"Video not playable (status: %@)", status];
+                                        }
+                                        NSLog(@"[XCDYouTubeKit] youtubei video not playable: %@", reason);
+                                        // 🔧 v49.1: Fix crash — don't pass nil to NSDictionary
                                         self.lastError = [NSError errorWithDomain:XCDYouTubeVideoErrorDomain code:XCDYouTubeErrorUnknown userInfo:@{NSLocalizedDescriptionKey: reason}];
                                         [self finishWithError];
                                         return;

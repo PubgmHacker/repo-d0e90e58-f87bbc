@@ -179,77 +179,115 @@ final class WebViewControl {
     // has been added to the SwiftUI hierarchy (so setNeedsDisplay has somewhere
     // to send its invalidation to).
     func reactivate(webView: WKWebView) {
-        print("⚡ v62: reactivate — forcing GPU repaint + video play")
+        print("⚡ v67: reactivate — Frame Nudge (1px resize + micro-seek to wake video decoder)")
 
-        // 1. Ping UIKit layer hierarchy
-        webView.setNeedsDisplay()
-        webView.setNeedsLayout()
-        webView.layoutIfNeeded()
-        webView.layer.setNeedsDisplay()
-        webView.layer.setNeedsLayout()
+        // ─── 1. CoreAnimation Frame Nudge ───
+        // Change the webView frame by 1 pixel to force CoreAnimation to
+        // recreate the graphics buffer. This is the ONLY reliable way to
+        // wake up a frozen video decoder after returning from background.
+        let originalFrame = webView.frame
+        let nudgedFrame = CGRect(
+            x: originalFrame.origin.x,
+            y: originalFrame.origin.y,
+            width: originalFrame.width,
+            height: originalFrame.height + 1  // +1px forces buffer recreation
+        )
+        webView.frame = nudgedFrame
 
-        // 2. JS: dispatch resize event + force video reflow + resume if paused
-        let js = """
-        (function() {
-            try {
-                // Force WebKit to recompute viewport + repaint all layers
-                window.dispatchEvent(new Event('resize'));
+        // Give iOS 50ms to process the frame change, then restore + nudge JS
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            // Restore original frame
+            webView.frame = originalFrame
 
-                var video = document.querySelector('video');
-                if (video) {
-                    // Force reflow: toggle display:none → read offsetHeight → restore
-                    var oldDisplay = video.style.display;
-                    video.style.display = 'none';
-                    void video.offsetHeight;  // forces synchronous reflow
-                    video.style.display = oldDisplay || 'block';
+            // Also ping UIKit layer (belt + suspenders)
+            webView.setNeedsDisplay()
+            webView.setNeedsLayout()
+            webView.layoutIfNeeded()
+            webView.layer.setNeedsDisplay()
+            webView.layer.setNeedsLayout()
 
-                    // iOS may have paused the video during hierarchy change — resume
-                    if (video.paused) {
-                        console.log('[Plink v62] Video was paused by hierarchy change — resuming');
-                        if (typeof window.playVideo === 'function') {
-                            window.playVideo();
-                        } else if (window.player && typeof window.player.playVideo === 'function') {
-                            window.player.playVideo();
-                        } else {
-                            video.play().catch(function(e) {
-                                console.log('[Plink v62] Play resume failed: ' + e);
-                            });
-                        }
-                    }
-
-                    // Also nudge #movie_player to re-attach to GPU pipeline
-                    var moviePlayer = document.querySelector('#movie_player');
-                    if (moviePlayer) {
-                        var oldPos = moviePlayer.style.position;
-                        moviePlayer.style.position = 'absolute';
-                        void moviePlayer.offsetHeight;
-                        moviePlayer.style.position = oldPos || 'fixed';
-                    }
-                }
-            } catch(e) {
-                console.log('[Plink v62] reactivate error: ' + e);
-            }
-        })();
-        """
-        webView.evaluateJavaScript(js, completionHandler: nil)
-
-        // 3. Schedule a second reactivate after 300ms — sometimes the first
-        // nudge isn't enough (GPU context is still being re-acquired).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self, let webView = self.webView, webView === self.webView else { return }
-            webView.evaluateJavaScript("""
+            // ─── 2. Video Decoder Nudge (micro-seek) ───
+            // A micro-seek of 0.01s forces the video decoder to flush the
+            // frozen frame and render a new one. This is the JS-level nudge
+            // that complements the CoreAnimation frame nudge above.
+            let js = """
             (function() {
                 try {
-                    window.dispatchEvent(new Event('resize'));
                     var video = document.querySelector('video');
-                    if (video && video.paused) {
-                        if (typeof window.playVideo === 'function') window.playVideo();
-                        else if (window.player && typeof window.player.playVideo === 'function') window.player.playVideo();
-                        else video.play().catch(function(){});
+                    if (video) {
+                        // Force reflow first (DOM-level nudge)
+                        var oldDisplay = video.style.display;
+                        video.style.display = 'none';
+                        void video.offsetHeight;
+                        video.style.display = oldDisplay || 'block';
+
+                        // Dispatch resize event (forces viewport recompute)
+                        window.dispatchEvent(new Event('resize'));
+
+                        // MICRO-SEEK: 0.01s forward forces decoder to render new frame
+                        if (!video.paused) {
+                            var newTime = video.currentTime + 0.01;
+                            if (newTime < video.duration) {
+                                video.currentTime = newTime;
+                                console.log('[Plink v67] Micro-seek to ' + newTime + ' (decoder nudge)');
+                            }
+                        } else {
+                            // Video was paused by iOS — resume playback
+                            console.log('[Plink v67] Video was paused — resuming');
+                            if (typeof window.playVideo === 'function') {
+                                window.playVideo();
+                            } else if (window.player && typeof window.player.playVideo === 'function') {
+                                window.player.playVideo();
+                            } else {
+                                video.play().catch(function(e) {
+                                    console.log('[Plink v67] Play resume failed: ' + e);
+                                });
+                            }
+                        }
+
+                        // Nudge #movie_player to re-attach to GPU pipeline
+                        var moviePlayer = document.querySelector('#movie_player');
+                        if (moviePlayer) {
+                            var oldPos = moviePlayer.style.position;
+                            moviePlayer.style.position = 'absolute';
+                            void moviePlayer.offsetHeight;
+                            moviePlayer.style.position = oldPos || 'fixed';
+                        }
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.log('[Plink v67] reactivate error: ' + e);
+                }
             })();
-            """, completionHandler: nil)
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        // ─── 3. Second Frame Nudge after 300ms ───
+        // Sometimes the first nudge isn't enough — the decoder needs a second
+        // kick after the frame has settled. Repeat the 1px nudge + micro-seek.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, let activeWebView = self.webView, activeWebView === webView else { return }
+            let frame = activeWebView.frame
+            activeWebView.frame = CGRect(x: frame.origin.x, y: frame.origin.y,
+                                         width: frame.width, height: frame.height + 1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                activeWebView.frame = frame
+                activeWebView.evaluateJavaScript("""
+                (function() {
+                    try {
+                        var video = document.querySelector('video');
+                        if (video && !video.paused && video.currentTime < video.duration - 0.1) {
+                            video.currentTime += 0.01;
+                        } else if (video && video.paused) {
+                            if (typeof window.playVideo === 'function') window.playVideo();
+                            else video.play().catch(function(){});
+                        }
+                        window.dispatchEvent(new Event('resize'));
+                    } catch(e) {}
+                })();
+                """, completionHandler: nil)
+            }
         }
     }
 
@@ -1006,13 +1044,17 @@ struct WebVideoView: UIViewRepresentable {
                 // 🔧 v66: Schedule reactivate for when app becomes active
                 // (didBecomeActiveNotification). This fires after the shade
                 // animation completes, so GPU context is available.
+                // 🔧 v67: Add 0.1s delay after didBecomeActive to ensure iOS
+                // has FULLY deployed the app (animation complete, GPU ready).
+                // Without the delay, reactivate() may fire too early and the
+                // Frame Nudge won't wake the video decoder.
                 let existingRef = existing
                 context.coordinator.activationObserver = NotificationCenter.default.addObserver(
                     forName: UIApplication.didBecomeActiveNotification,
                     object: nil,
                     queue: .main
                 ) { _ in
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         WebViewControl.shared.reactivate(webView: existingRef)
                     }
                 }

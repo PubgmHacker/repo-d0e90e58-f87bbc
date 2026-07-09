@@ -437,12 +437,12 @@ struct RoomSetupView: View {
                 }
 
                 do {
-                    print("🔧 RoomSetupView v59: calling YouTubeExtractor (Ultra API Interceptor) for videoId='\(videoId)'")
+                    print("🔧 RoomSetupView v60: calling YouTubeExtractor (Regex DOM Scraper — MP4) for videoId='\(videoId)'")
                     let streamInfo = try await YouTubeExtractor.shared.extract(videoId: videoId)
                     finalStreamURL = streamInfo.streamURL
                     finalSource = .url  // direct stream, not youtube embed
                     finalDuration = streamInfo.duration
-                    print("✅ RoomSetupView v59: extraction succeeded, extractor=\(streamInfo.extractor), URL prefix=\(finalStreamURL.prefix(60))")
+                    print("✅ RoomSetupView v60: extraction succeeded, extractor=\(streamInfo.extractor), URL prefix=\(finalStreamURL.prefix(60))")
                 } catch {
                     // 🔧 v52 (Gemini): GRACEFUL FALLBACK — don't show error.
                     // If extraction fails (DRM, age-restricted, timeout), fall

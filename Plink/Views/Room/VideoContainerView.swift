@@ -1265,74 +1265,54 @@ struct WebVideoView: UIViewRepresentable {
             print("📱 v47.4: appWillResignActive — no-op (video keeps playing)")
         }
 
-        /// 🔧 v58 (Gemini): REVERTED v57 zoom hack. Back to no-op.
+        /// 🔧 v60 (Gemini): REVERTED v57 zoom hack + v46.1 manual pause/resume.
         ///
-        /// PROBLEM with v57: The micro-zoom trick + video.play() "nudge" was
-        /// forcing YouTube's player to re-buffer. Logs confirmed:
-        ///   📱 v57: appDidBecomeActive — forcing GPU repaint + video resume
-        ///   🔄 YouTube v32: state=3, currentTime=3.902169334s  ← BUFFERING!
-        /// YouTube was happily playing from its buffer (state 1), but our hack
-        /// kicked it into state 3 (Buffering), causing the 5-second freeze we
-        /// were trying to fix.
+        /// PROBLEM history:
+        /// - v46.1: appDidEnterBackground called pauseVideo() → broke buffer on resume
+        /// - v57: appDidBecomeActive called zoom + playVideo() → also broke buffer
+        /// - v58: reverted v57, but v46.1 still active → still broke buffer
         ///
-        /// v58 SOLUTION: Now that the extractor returns real MP4 URLs (v58 API
-        /// interceptor), AVPlayer is used instead of WKWebView. AVAudioSession
-        /// (.playback + .moviePlayback) keeps AVPlayer alive in background
-        /// naturally — no JS hacks needed. For the rare case where AVPlayer
-        /// fails and we fall back to WebView mode, just leave the video alone;
-        /// YouTube's player handles its own buffer management.
+        /// v60 SOLUTION: ALL app lifecycle handlers are now no-ops. AVAudioSession
+        /// (.playback + .moviePlayback) configured in v56 keeps AVPlayer/WebKit
+        /// alive in background natively. YouTube's player manages its own buffer
+        /// perfectly when we don't interfere.
         @objc private func appDidBecomeActive() {
-            // 🔧 v58: NO-OP. AVAudioSession + AVPlayer handle background natively.
+            // 🔧 v60: NO-OP. AVAudioSession + AVPlayer handle background natively.
             // For WebView fallback mode, YouTube's player manages its own buffer
             // — any "nudge" from us just causes re-buffering (v57 lesson learned).
-            print("📱 v58: appDidBecomeActive — no-op (AVAudioSession handles background)")
+            print("📱 v60: appDidBecomeActive — no-op (AVAudioSession handles background)")
         }
 
-        /// 🔧 v42: Background handling.
+        /// 🔧 v60 (Gemini): NO-OP. Removed v46.1 pause-on-background.
         ///
-        /// REALITY CHECK on PiP with WKWebView + m.youtube.com:
-        /// The previous v40 code tried `video.webkitSetPresentationMode('picture-in-picture')`
-        /// via evaluateJavaScript. This DOES NOT WORK because:
-        /// 1. The <video> element is on m.youtube.com (cross-origin from our app).
-        /// 2. YouTube's player code controls the video element — our JS is a guest.
-        /// 3. webkitSetPresentationMode on a cross-origin video is blocked by iOS.
-        /// 4. Logs confirmed: NO "background result" log appeared — the handler
-        ///    either didn't fire or the JS silently failed.
-        /// 5. After backgrounding, logs showed "ProcessAssertion acquireSync Failed...
-        ///    process does not exist" — the WebContent process was KILLED.
+        /// PROBLEM with v46.1: When app entered background, we called pauseVideo()
+        /// and on foreground called playVideo(). Logs confirmed this BROKE YouTube's
+        /// buffer:
+        ///   📱 v46.1: appDidEnterBackground — pausing video
+        ///   📱 v46.1: appWillEnterForeground — resuming playback
+        ///   🔄 YouTube v32: state=3, currentTime=5.591886060994289s  ← BUFFERING!
         ///
-        /// TRUE PiP for WKWebView requires either:
-        ///   a) AVPictureInPictureController with a custom AVPlayerLayer (we don't
-        ///      have one for YouTube — video is inside WKWebView).
-        ///   b) The website itself to call requestPictureInPicture() (YouTube
-        ///      mobile doesn't do this).
+        /// The manual play() call forced YouTube to re-buffer (state 3), causing
+        /// the 5-second freeze. This is exactly the bug we tried to fix with v57
+        /// (which made it worse). The root cause all along was v46.1's manual
+        /// intervention.
         ///
-        /// v42 pragmatic solution: SAVE position to SWIFT (not JS, because JS
-        /// process will die) on background, PAUSE video. On foreground, trigger
-        /// full WKWebView reload (the WebContent process is dead, so JS won't
-        /// work anyway). The reload restores the saved position.
+        /// v60 SOLUTION: With AVAudioSession (.playback + .moviePlayback) configured
+        /// in v56, iOS keeps the audio process alive in background natively. We
+        /// don't need to pause OR resume — just let the system handle it. YouTube's
+        /// player manages its own buffer perfectly when we don't interfere.
         @objc private func appDidEnterBackground() {
-            // 🔧 v46.1: Just pause the video, no position saving or reload.
-            guard webView != nil else { return }
-            print("📱 v46.1: appDidEnterBackground — pausing video")
-            webView?.evaluateJavaScript("""
-            (function() {
-                if (typeof pauseVideo === 'function') pauseVideo();
-                else { var v = document.querySelector('video'); if (v) v.pause(); }
-            })();
-            """, completionHandler: nil)
+            // 🔧 v60: NO-OP. AVAudioSession handles background audio natively.
+            // Pausing the video here breaks YouTube's buffer (state=3) on resume.
+            print("📱 v60: appDidEnterBackground — no-op (AVAudioSession handles background)")
         }
 
-        /// 🔧 v46.1: Resume playback on foreground return (no reload).
+        /// 🔧 v60 (Gemini): NO-OP. Removed v46.1 resume-on-foreground.
         @objc private func appWillEnterForeground() {
-            guard webView != nil else { return }
-            print("📱 v46.1: appWillEnterForeground — resuming playback")
-            webView?.evaluateJavaScript("""
-            (function() {
-                if (typeof playVideo === 'function') playVideo();
-                else { var v = document.querySelector('video'); if (v) v.play().catch(function(){}); }
-            })();
-            """, completionHandler: nil)
+            // 🔧 v60: NO-OP. AVAudioSession + AVPlayer (or YouTube's own player)
+            // handle foreground resume natively. Calling playVideo() here was
+            // forcing YouTube to re-buffer (state=3) → 5-second freeze.
+            print("📱 v60: appWillEnterForeground — no-op (no manual resume)")
         }
 
         // MARK: - JS Bridge Handler

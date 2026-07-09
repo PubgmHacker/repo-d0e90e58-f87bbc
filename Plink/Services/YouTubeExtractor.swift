@@ -1,20 +1,22 @@
 import Foundation
 import WebKit
 
-// MARK: - YouTubeExtractor (Ultra API Interceptor — direct MP4 for AVPlayer)
+// MARK: - YouTubeExtractor (Regex DOM Scraper — MP4 for AVPlayer)
 //
-// 🔧 v59 (Gemini): Ultra API Interceptor — Fetch + XHR (addEventListener) +
-// Active player request + ytcfg hook + inspect ALL responses.
+// 🔧 v60 (Gemini): Reverted to v51.8-style Regex DOM Scraper, but tuned to
+// search for direct MP4 (itag 22 = 720p, itag 18 = 360p) instead of HLS.
+// The v59 API Interceptor was too clever — its hooks fired too early
+// (.atDocumentStart before page rendered), and YouTube's player code never
+// made the /youtubei/v1/player call for many videos, so we timed out.
 //
-// Why v59 replaces v58:
-// v58 used `xhr.onload = ...` which gets clobbered if YouTube sets onload
-// AFTER our hook, or uses addEventListener itself. v59 uses addEventListener
-// which never conflicts. v59 ALSO makes an active POST request to
-// /youtubei/v1/player ourselves — for videos where YouTube never calls that
-// endpoint, our active request forces the response.
+// The Regex DOM Scraper is simpler and more reliable: it waits for the
+// page to load, then polls every 500ms for ytInitialPlayerResponse. When
+// found, it extracts the muxed MP4 URL. For videos where YouTube doesn't
+// embed the data (DRM, age-restricted, premium), it fails — but we have
+// the graceful WebView fallback (v52) so the user still watches the video.
 //
-// Returns a clean .mp4 URL (itag 22 = 720p or itag 18 = 360p) that AVPlayer
-// plays natively (no -11850 DASH errors).
+// Returns a clean .mp4 URL (itag 22 or 18) that AVPlayer plays natively
+// (no -11850 DASH errors).
 
 @MainActor
 final class YouTubeExtractor {
@@ -32,11 +34,11 @@ final class YouTubeExtractor {
             return cached.info
         }
 
-        print("📺 YouTubeExtractor v59: extracting \(videoId) (Ultra API Interceptor — Fetch + XHR + Active)")
+        print("📺 YouTubeExtractor v60: extracting \(videoId) (Regex DOM Scraper — MP4)")
 
         let streamURL = try await HybridHookExtractor.extract(videoId: videoId)
 
-        print("✅ YouTubeExtractor v59: got stream URL, prefix=\(streamURL.prefix(80))")
+        print("✅ YouTubeExtractor v60: got stream URL, prefix=\(streamURL.prefix(80))")
 
         let info = StreamInfo(
             id: videoId,
@@ -46,7 +48,7 @@ final class YouTubeExtractor {
             streamURL: streamURL,
             duration: 0,
             isLive: false,
-            extractor: "ultra-api-interceptor"
+            extractor: "regex-dom-scraper-mp4"
         )
 
         cache[videoId] = (info, Date().addingTimeInterval(cacheTTL))
@@ -68,13 +70,14 @@ final class YouTubeExtractor {
     }
 }
 
-// MARK: - Hybrid Hook Extractor (v59: Ultra API Interceptor)
+// MARK: - Hybrid Hook Extractor (v60: Regex DOM Scraper — MP4)
 //
-// Hooks window.fetch + XMLHttpRequest (addEventListener) at documentStart.
-// Captures ytcfg.set to grab INNERTUBE_CONTEXT + INNERTUBE_API_KEY. Then
-// ACTIVELY calls /youtubei/v1/player ourselves at 1s/3s/6s/9s intervals —
-// this is the killer feature that catches videos where YouTube never makes
-// the player API call itself.
+// Loads youtube.com/watch?v=ID in invisible WKWebView with Desktop Mac Safari
+// UA. Polls every 500ms for ytInitialPlayerResponse. When found, extracts
+// muxed MP4 URL (itag 22 or 18) and posts to Swift.
+//
+// injectionTime: .atDocumentEnd — script starts AFTER page has loaded once,
+// so ytInitialPlayerResponse is more likely to be present.
 
 @MainActor
 private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -99,227 +102,95 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // 🔧 v59 (Gemini): Ultra API Interceptor — Fetch + XHR (addEventListener)
-        // + Active player request + ytcfg hook + inspect ALL responses.
+        // 🔧 v60 (Gemini): Regex DOM Scraper — polls for ytInitialPlayerResponse,
+        // extracts muxed MP4 (itag 22/18) for AVPlayer.
         //
-        // Why v59 replaces v58:
-        // v58 used `xhr.onload = ...` which gets clobbered if YouTube sets
-        // onload AFTER our hook, or if YouTube uses addEventListener instead.
-        // v59 uses addEventListener('load', ...) which never conflicts.
-        //
-        // v59 also adds ACTIVE request to /youtubei/v1/player ourselves.
-        // For some videos, YouTube's watch page NEVER calls /youtubei/v1/player
-        // (uses Service Worker or embeds data differently). We capture
-        // INNERTUBE_CONTEXT + INNERTUBE_API_KEY from ytcfg, then make the
-        // request ourselves. This is the most reliable approach.
-        let interceptorScript = WKUserScript(source: """
-        // ═══════════════════════════════════════════════════════════════
-        // v59 Ultra API Interceptor (Gemini spec — Fetch + XHR + Active)
-        // ═══════════════════════════════════════════════════════════════
-
-        // Spoof Page Visibility API (helps YouTube serve full player response)
+        // injectionTime: .atDocumentEnd — script runs after the page has loaded
+        // once, so ytInitialPlayerResponse is more likely to be present.
+        let scraperScript = WKUserScript(source: """
+        // 🔧 v60: Spoof Page Visibility API (helps page render faster)
         Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
         Object.defineProperty(document, 'hidden', { get: () => false });
 
-        var plinkDone = false;
-        var plinkInnertubeContext = null;
-        var plinkInnertubeApiKey = null;
-        var plinkVideoId = null;
-
-        // Extract videoId from URL (?v=ID)
-        try {
-            var urlMatch = window.location.href.match(/[?&]v=([\\w-]{11})/);
-            if (urlMatch) plinkVideoId = urlMatch[1];
-        } catch(e) {}
-
-        // Helper: post URL to Swift (only if it's a real googlevideo URL or HLS)
-        function plinkPostURL(url) {
-            if (plinkDone || !url) return false;
-            if (url.indexOf('googlevideo.com') !== -1 || url.indexOf('.m3u8') !== -1) {
-                plinkDone = true;
-                try { window.webkit.messageHandlers.hook.postMessage(url); } catch(e) {}
-                return true;
-            }
-            return false;
-        }
-
-        // Helper: extract best muxed MP4 URL from any data object containing streamingData
-        function plinkTryExtract(data) {
-            if (plinkDone || !data) return;
+        var scraperInterval = setInterval(function() {
             try {
-                var sd = data.streamingData;
-                if (!sd) return;
-                var formats = sd.formats || [];
-                // Priority: itag 22 (720p MP4 with audio) > itag 18 (360p MP4 with audio) > first
-                var best = formats.find(function(f) { return f.itag === 22; })
-                           || formats.find(function(f) { return f.itag === 18; })
-                           || formats[0];
-                if (best && best.url) {
-                    plinkPostURL(best.url);
-                } else if (sd.hlsManifestUrl) {
-                    plinkPostURL(sd.hlsManifestUrl);
-                }
-            } catch(e) {}
-        }
+                // Auto-click consent banner or play button
+                var consentBtn = document.querySelector('button[aria-label="Accept all"]')
+                              || document.querySelector('button[aria-label="Accept the use of cookies"]')
+                              || document.querySelector('button[aria-label="I agree"]')
+                              || document.querySelector('.ytp-large-play-button');
+                if (consentBtn) consentBtn.click();
 
-        // ─── Hook ytcfg.set to capture INNERTUBE_CONTEXT + INNERTUBE_API_KEY ───
-        // YouTube's player config is stored in ytcfg. We hook the setter to
-        // capture the context + API key needed for our active request.
-        if (window.ytcfg) {
-            var origYtcfgSet = window.ytcfg.set;
-            window.ytcfg.set = function() {
-                try {
-                    if (arguments.length === 2) {
-                        if (arguments[0] === 'INNERTUBE_CONTEXT') plinkInnertubeContext = arguments[1];
-                        if (arguments[0] === 'INNERTUBE_API_KEY') plinkInnertubeApiKey = arguments[1];
+                var sd = null;
+
+                // Method 1: Direct access to global variable (desktop sometimes works)
+                if (window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.streamingData) {
+                    sd = window.ytInitialPlayerResponse.streamingData;
+                }
+
+                // Method 2: Hardcoded regex parse of HTML (most reliable on desktop)
+                // Searches all <script> tags for 'ytInitialPlayerResponse = {...};'
+                if (!sd) {
+                    var scripts = document.getElementsByTagName('script');
+                    for (var i = 0; i < scripts.length; i++) {
+                        if (scripts[i].innerHTML.indexOf('ytInitialPlayerResponse = ') !== -1) {
+                            var match = scripts[i].innerHTML.match(/ytInitialPlayerResponse = ({.*?});/);
+                            if (match && match[1]) {
+                                var data = JSON.parse(match[1]);
+                                if (data.streamingData) sd = data.streamingData;
+                            }
+                        }
                     }
-                } catch(e) {}
-                return origYtcfgSet.apply(this, arguments);
-            };
-        }
-        // Also try direct get (in case ytcfg was populated before our hook)
-        try {
-            if (window.ytcfg && window.ytcfg.get) {
-                plinkInnertubeContext = plinkInnertubeContext || window.ytcfg.get('INNERTUBE_CONTEXT');
-                plinkInnertubeApiKey = plinkInnertubeApiKey || window.ytcfg.get('INNERTUBE_API_KEY');
-            }
-        } catch(e) {}
-
-        // ─── Fast Path: ytInitialPlayerResponse (instant if data is in HTML) ───
-        function plinkTryFastPath() {
-            if (plinkDone) return;
-            try {
-                if (window.ytInitialPlayerResponse) {
-                    plinkTryExtract(window.ytInitialPlayerResponse);
                 }
-            } catch(e) {}
-        }
 
-        // ─── Intercept window.fetch (modern) ───
-        var origFetch = window.fetch;
-        window.fetch = async function() {
-            var response = await origFetch.apply(this, arguments);
-            if (plinkDone) return response;
-            try {
-                var url = '';
-                if (typeof arguments[0] === 'string') url = arguments[0];
-                else if (arguments[0] && arguments[0].url) url = arguments[0].url;
-
-                // Broad match: any youtubei endpoint OR any URL containing 'player'
-                if (url.indexOf('youtubei') !== -1 || url.indexOf('/player') !== -1) {
-                    var clone = response.clone();
-                    clone.json().then(function(data) {
-                        plinkTryExtract(data);
-                    }).catch(function() {});
-                }
-            } catch(e) {}
-            return response;
-        };
-
-        // ─── Intercept XMLHttpRequest (classic) — uses addEventListener! ───
-        // v59 fix: addEventListener is non-destructive. YouTube can set onload
-        // freely without clobbering our hook.
-        var origXhrOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(method, url) {
-            this._plinkUrl = url;
-            return origXhrOpen.apply(this, arguments);
-        };
-        var origXhrSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.send = function() {
-            var xhr = this;
-            xhr.addEventListener('load', function() {
-                if (plinkDone) return;
-                try {
-                    var reqUrl = xhr._plinkUrl || '';
-                    // Broad match: any youtubei endpoint OR any URL containing 'player'
-                    if (reqUrl.indexOf('youtubei') !== -1 || reqUrl.indexOf('/player') !== -1) {
-                        var data = JSON.parse(xhr.responseText);
-                        plinkTryExtract(data);
+                // Method 3: ytplayer.config fallback (older player)
+                if (!sd && window.ytplayer && window.ytplayer.config) {
+                    var raw = window.ytplayer.config.args.raw_player_response;
+                    if (raw) {
+                        var parsed = JSON.parse(raw);
+                        if (parsed.streamingData) sd = parsed.streamingData;
                     }
-                } catch(e) {}
-            });
-            return origXhrSend.apply(this, arguments);
-        };
+                }
 
-        // ─── ACTIVE request: call /youtubei/v1/player ourselves ───
-        // For some videos, YouTube's watch page NEVER calls /youtubei/v1/player.
-        // We capture INNERTUBE_CONTEXT + INNERTUBE_API_KEY from ytcfg, then
-        // make the POST request ourselves. This is the most reliable approach.
-        function plinkActivePlayerRequest() {
-            if (plinkDone) return;
-            if (!plinkInnertubeContext || !plinkInnertubeApiKey || !plinkVideoId) {
-                // Retry ytcfg.get in case it wasn't ready at script init
-                try {
-                    if (window.ytcfg && window.ytcfg.get) {
-                        plinkInnertubeContext = plinkInnertubeContext || window.ytcfg.get('INNERTUBE_CONTEXT');
-                        plinkInnertubeApiKey = plinkInnertubeApiKey || window.ytcfg.get('INNERTUBE_API_KEY');
+                if (sd) {
+                    var targetUrl = null;
+
+                    // 🔧 v60: Priority A — muxed MP4 formats (itag 22=720p, 18=360p)
+                    // These have audio + video in one file → AVPlayer plays natively.
+                    if (sd.formats && sd.formats.length > 0) {
+                        var bestFormat = sd.formats.find(function(f) { return f.itag === 22; })
+                                       || sd.formats.find(function(f) { return f.itag === 18; })
+                                       || sd.formats[0];
+                        if (bestFormat) targetUrl = bestFormat.url;
                     }
-                } catch(e) {}
-            }
-            if (plinkDone || !plinkInnertubeContext || !plinkInnertubeApiKey || !plinkVideoId) return;
 
-            try {
-                var body = JSON.stringify({
-                    context: plinkInnertubeContext,
-                    videoId: plinkVideoId
-                });
-                var apiUrl = 'https://www.youtube.com/youtubei/v1/player?key=' + plinkInnertubeApiKey;
-                // Use original fetch (not our hooked one) to avoid infinite loop
-                origFetch.call(window, apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: body
-                }).then(function(r) { return r.json(); })
-                  .then(function(data) { plinkTryExtract(data); })
-                  .catch(function(e) {
-                    console.log('[Plink v59] Active player request failed: ' + e);
-                  });
-            } catch(e) {}
-        }
+                    // 🔧 v60: Priority B — HLS Manifest (fallback if no muxed MP4)
+                    // AVPlayer handles .m3u8 too, though buffer management is different.
+                    if (!targetUrl && sd.hlsManifestUrl) {
+                        targetUrl = sd.hlsManifestUrl;
+                    }
 
-        // ─── Schedule active requests at multiple intervals ───
-        // ytcfg may not be ready immediately, so we retry at 1s, 3s, 6s, 9s
-        setTimeout(plinkActivePlayerRequest, 1000);
-        setTimeout(plinkActivePlayerRequest, 3000);
-        setTimeout(plinkActivePlayerRequest, 6000);
-        setTimeout(plinkActivePlayerRequest, 9000);
-
-        // ─── Periodic fast-path check + consent banner auto-click ───
-        var plinkScraperInterval = setInterval(function() {
-            if (plinkDone) {
-                clearInterval(plinkScraperInterval);
-                return;
-            }
-            // Auto-click consent banner (EU/CA users get cookie dialog)
-            var consentBtn = document.querySelector('button[aria-label="Accept all"]')
-                          || document.querySelector('button[aria-label="Accept the use of cookies"]')
-                          || document.querySelector('button[aria-label="I agree"]')
-                          || document.querySelector('.ytp-large-play-button');
-            if (consentBtn) consentBtn.click();
-
-            // Refresh ytcfg data (may have been set after script init)
-            try {
-                if (window.ytcfg && window.ytcfg.get) {
-                    plinkInnertubeContext = plinkInnertubeContext || window.ytcfg.get('INNERTUBE_CONTEXT');
-                    plinkInnertubeApiKey = plinkInnertubeApiKey || window.ytcfg.get('INNERTUBE_API_KEY');
+                    if (targetUrl) {
+                        clearInterval(scraperInterval);
+                        window.webkit.messageHandlers.hook.postMessage(targetUrl);
+                    }
                 }
             } catch(e) {}
-
-            plinkTryFastPath();
         }, 500);
-        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        """, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
 
-        config.userContentController.addUserScript(interceptorScript)
+        config.userContentController.addUserScript(scraperScript)
         config.userContentController.add(self, name: "hook")
 
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
-        // 🔧 v59: Desktop Mac Safari UA — YouTube returns formats[] (muxed MP4)
-        // for desktop clients, not adaptiveFormats (DASH audio/video split).
+        // 🔧 v60: Desktop Mac Safari UA — YouTube returns formats[] (muxed MP4
+        // with audio+video) for desktop clients, not adaptiveFormats (DASH
+        // audio/video split which AVPlayer can't play → -11850 error).
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15"
         webView.navigationDelegate = self
         self.webView = webView
 
-        print("📺 HybridHookExtractor v59: loading watch page for \(videoId)")
+        print("📺 HybridHookExtractor v60: loading watch page for \(videoId)")
         let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
         webView.load(URLRequest(url: url))
 
@@ -327,7 +198,7 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
         timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 15_000_000_000)
             guard !Task.isCancelled else { return }
-            print("⏰ HybridHookExtractor v59: 15s timeout — finishing with error")
+            print("⏰ HybridHookExtractor v60: 15s timeout — finishing with error")
             self?.finish(with: .failure(YouTubeExtractorError.timedOut))
         }
     }
@@ -337,10 +208,10 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard !isFinished else { return }
 
-        // 🔧 v59: Accept googlevideo.com (muxed MP4) OR .m3u8 (HLS manifest)
+        // 🔧 v60: Accept googlevideo.com (muxed MP4) OR .m3u8 (HLS manifest)
         if let url = message.body as? String,
            url.contains("googlevideo.com") || url.contains(".m3u8") {
-            print("🎯 HybridHookExtractor v59: INTERCEPTOR found URL: \(url.prefix(80))")
+            print("🎯 HybridHookExtractor v60: SCRAPER found URL: \(url.prefix(80))")
             finish(with: .success(url))
         }
     }
@@ -348,18 +219,18 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("📺 HybridHookExtractor v59: watch page loaded, waiting for /youtubei/v1/player API call...")
+        print("📺 HybridHookExtractor v60: watch page loaded, polling for ytInitialPlayerResponse...")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         guard !isFinished else { return }
-        print("❌ HybridHookExtractor v59: navigation failed: \(error.localizedDescription)")
+        print("❌ HybridHookExtractor v60: navigation failed: \(error.localizedDescription)")
         finish(with: .failure(error))
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard !isFinished else { return }
-        print("❌ HybridHookExtractor v59: provisional navigation failed: \(error.localizedDescription)")
+        print("❌ HybridHookExtractor v60: provisional navigation failed: \(error.localizedDescription)")
         finish(with: .failure(error))
     }
 

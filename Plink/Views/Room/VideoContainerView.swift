@@ -968,6 +968,14 @@ struct WebVideoView: UIViewRepresentable {
                 let videoId = VideoTimeBridge.extractYouTubeVideoID(from: url) ?? url.lastPathComponent
                 context.coordinator.loadVideoOnce(id: videoId, webView: existing)
             }
+            // 🔧 v64 (Gemini): After detaching + re-attaching WKWebView, the GPU
+            // composite layer is lost → black screen. Schedule reactivate() on
+            // next run loop (after the view is in the new hierarchy) to force
+            // WebKit to re-attach to the GPU pipeline.
+            let existingRef = existing
+            DispatchQueue.main.async {
+                WebViewControl.shared.reactivate(webView: existingRef)
+            }
             return existing
         }
 
@@ -1193,6 +1201,13 @@ struct WebVideoView: UIViewRepresentable {
             webView.load(URLRequest(url: url))
         } else {
             webView.load(URLRequest(url: url))
+        }
+
+        // 🔧 v64: Also reactivate fresh WKWebView after first creation —
+        // ensures GPU pipeline is initialized when the view enters hierarchy.
+        let freshWebViewRef = webView
+        DispatchQueue.main.async {
+            WebViewControl.shared.reactivate(webView: freshWebViewRef)
         }
 
         return webView

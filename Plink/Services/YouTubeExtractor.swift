@@ -93,7 +93,8 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
     private func start(videoId: String) {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
+        // 🔧 v51.1 (Gemini fix): Prevent double audio — mute invisible WebView
+        config.mediaTypesRequiringUserActionForPlayback = .all
 
         // JS hook: intercept fetch/XHR for googlevideo.com or .m3u8 URLs
         let hookScript = WKUserScript(source: """
@@ -150,6 +151,11 @@ private final class HybridHookExtractor: NSObject, WKNavigationDelegate, WKScrip
                     }
                 }
             }, 500);
+
+            // 🔧 v51.1 (Gemini fix): Mute all video elements to prevent double audio
+            setInterval(function() {
+                document.querySelectorAll('video').forEach(function(v) { v.muted = true; v.volume = 0; });
+            }, 200);
         })();
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
 

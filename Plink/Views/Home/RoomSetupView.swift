@@ -437,23 +437,28 @@ struct RoomSetupView: View {
                 }
 
                 do {
-                    print("🔧 RoomSetupView v48: calling iOS YouTubeExtractor for videoId='\(videoId)'")
-                    // 🔧 v48.2: 15-second timeout — if XCDYouTubeKit hangs,
-                    // show error instead of infinite loading.
-                    let streamInfo = try await withTimeout(15, operation: {
-                        try await YouTubeExtractor.shared.extract(videoId: videoId)
-                    })
+                    print("🔧 RoomSetupView v52: calling YouTubeExtractor for videoId='\(videoId)'")
+                    let streamInfo = try await YouTubeExtractor.shared.extract(videoId: videoId)
                     finalStreamURL = streamInfo.streamURL
                     finalSource = .url  // direct stream, not youtube embed
                     finalDuration = streamInfo.duration
-                    print("✅ RoomSetupView v48: iOS extraction succeeded, extractor=\(streamInfo.extractor)")
+                    print("✅ RoomSetupView v52: extraction succeeded, extractor=\(streamInfo.extractor)")
                 } catch {
-                    print("❌ RoomSetupView v48: iOS extraction failed (\(error.localizedDescription)) — NO fallback, showing error")
-                    await MainActor.run {
-                        errorMessage = "Не удалось извлечь видео: \(error.localizedDescription)"
-                        isCreating = false
-                    }
-                    return
+                    // 🔧 v52 (Gemini): GRACEFUL FALLBACK — don't show error.
+                    // If extraction fails (DRM, age-restricted, timeout), fall
+                    // back to WebView mode. User still watches the video,
+                    // just through WKWebView instead of AVPlayer.
+                    print("⚠️ RoomSetupView v52: extraction failed (\(error.localizedDescription)) — falling back to WebView mode")
+                    let videoId = Self.extractYouTubeVideoID(from: contentURL) ?? videoId
+                    var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+                    embedComponents.queryItems = [
+                        URLQueryItem(name: "playsinline", value: "1"),
+                        URLQueryItem(name: "rel", value: "0"),
+                    ]
+                    finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
+                    finalSource = .youtube  // WebView mode
+                    finalDuration = nil
+                    print("🔧 RoomSetupView v52: fallback to embed URL='\(finalStreamURL.prefix(80))'")
                 }
             } else {
                 finalStreamURL = contentURL
@@ -617,23 +622,5 @@ struct RoomSetupView: View {
         }
 
         return nil
-    }
-}
-
-// MARK: - Timeout helper
-func withTimeout<T>(_ seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
-        }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            throw URLError(.timedOut)
-        }
-        guard let result = try await group.next() else {
-            throw URLError(.timedOut)
-        }
-        group.cancelAll()
-        return result
     }
 }

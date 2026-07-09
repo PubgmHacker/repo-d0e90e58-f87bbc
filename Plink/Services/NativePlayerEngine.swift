@@ -61,8 +61,14 @@ final class NativePlayerEngine: ObservableObject {
 
     // MARK: - Load & Play
 
+    /// Custom scheme resource loader for injecting headers into AVPlayer requests.
+    /// YouTube requires User-Agent + Referer to match the extraction request.
+    private var resourceLoaderDelegate: YouTubeResourceLoaderDelegate?
+
     /// Load a stream URL and start playing.
-    /// For googlevideo.com URLs, adds User-Agent + Referer headers.
+    /// For googlevideo.com URLs, uses AVAssetResourceLoaderDelegate to inject
+    /// User-Agent + Referer headers into EVERY request (including Range requests).
+    /// AVURLAssetHTTPHeaderFieldsKey doesn't work reliably for Range requests.
     func loadAndPlay(streamURL: String) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
@@ -70,25 +76,29 @@ final class NativePlayerEngine: ObservableObject {
         }
 
         isLoading = true
-        print("🎬 v90: Loading stream: \(streamURL.prefix(80))")
+        print("🎬 v91: Loading stream: \(streamURL.prefix(80))")
 
-        // Create asset with headers for googlevideo.com
         let lowerURL = streamURL.lowercased()
         let asset: AVAsset
+
         if lowerURL.contains("googlevideo.com") {
-            let headers: [String: String] = [
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) " +
-                              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 " +
-                              "Mobile/15E148 Safari/604.1",
-                "Referer": "https://www.youtube.com/",
-                "Origin": "https://www.youtube.com"
-            ]
-            let options: [String: Any] = [
-                "AVURLAssetHTTPHeaderFieldsKey": headers,
+            // 🔧 v91: Use AVAssetResourceLoaderDelegate with custom scheme.
+            // Replace "https://" with "youtube-proxy://" — this forces AVPlayer
+            // to route ALL requests through our delegate, where we inject headers.
+            let proxyURLString = streamURL.replacingOccurrences(of: "https://", with: "youtube-proxy://")
+            guard let proxyURL = URL(string: proxyURLString) else {
+                print("⚠️ v91: Failed to create proxy URL")
+                return
+            }
+
+            let loaderDelegate = YouTubeResourceLoaderDelegate(originalURL: url)
+            resourceLoaderDelegate = loaderDelegate
+
+            asset = AVURLAsset(url: proxyURL, options: [
                 AVURLAssetPreferPreciseDurationAndTimingKey: true
-            ]
-            asset = AVURLAsset(url: url, options: options)
-            print("🎬 v90: googlevideo.com URL — added User-Agent + Referer headers")
+            ])
+            asset.resourceLoader.setDelegate(loaderDelegate, queue: loaderDelegate.queue)
+            print("🎬 v91: googlevideo.com URL — AVAssetResourceLoaderDelegate attached (custom scheme: youtube-proxy://)")
         } else {
             asset = AVURLAsset(url: url, options: [
                 AVURLAssetPreferPreciseDurationAndTimingKey: true
@@ -241,5 +251,145 @@ final class NativePlayerEngine: ObservableObject {
                 }
             }
         }
+    }
+}
+
+// MARK: - YouTubeResourceLoaderDelegate (v91)
+//
+/// 🔧 v91 (Gemini): AVAssetResourceLoaderDelegate that injects User-Agent + Referer
+/// headers into EVERY AVPlayer request (including Range requests).
+///
+/// How it works:
+/// 1. NativePlayerEngine replaces "https://" with "youtube-proxy://" in the URL
+/// 2. AVURLAsset with custom scheme → AVPlayer routes ALL requests through delegate
+/// 3. Delegate receives each request, rewrites URL back to "https://"
+/// 4. Delegate creates URLSession with custom headers (User-Agent + Referer)
+/// 5. Delegate forwards request → receives data → feeds to AVPlayer
+///
+/// This is the ONLY reliable way to inject headers into AVPlayer requests.
+/// AVURLAssetHTTPHeaderFieldsKey doesn't work for Range requests (AVPlayer
+/// drops headers on subsequent Range requests → YouTube returns 403).
+
+final class YouTubeResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
+
+    /// The original HTTPS URL (before custom scheme replacement)
+    private let originalURL: URL
+
+    /// Dedicated queue for resource loading (don't block main thread)
+    let queue = DispatchQueue(label: "com.plink.youtube-resourceloader", qos: .userInitiated)
+
+    /// Active URLSession for forwarding requests
+    private let session: URLSession
+
+    /// YouTube headers that must match the extraction request
+    private let headers: [String: String]
+
+    init(originalURL: URL) {
+        self.originalURL = originalURL
+        self.headers = [
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) " +
+                          "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 " +
+                          "Mobile/15E148 Safari/604.1",
+            "Referer": "https://www.youtube.com/",
+            "Origin": "https://www.youtube.com"
+        ]
+        let config = URLSessionConfiguration.default
+        config.httpAdditionalHeaders = headers
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 30
+        self.session = URLSession(configuration: config)
+        super.init()
+        print("🔧 v91: YouTubeResourceLoaderDelegate created for \(originalURL.host ?? "?")")
+    }
+
+    func resourceLoader(
+        _ resourceLoader: AVAssetResourceLoader,
+        shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest
+    ) -> Bool {
+        // Get the URL from the loading request
+        guard let url = loadingRequest.request.url else {
+            print("⚠️ v91: No URL in loading request")
+            loadingRequest.finishLoading(with: NSError(domain: "Plink", code: -1, userInfo: nil))
+            return false
+        }
+
+        // Convert custom scheme back to HTTPS
+        let httpsURLString = url.absoluteString
+            .replacingOccurrences(of: "youtube-proxy://", with: "https://")
+        guard let httpsURL = URL(string: httpsURLString) else {
+            print("⚠️ v91: Failed to convert URL to HTTPS: \(httpsURLString.prefix(60))")
+            loadingRequest.finishLoading(with: NSError(domain: "Plink", code: -1, userInfo: nil))
+            return false
+        }
+
+        // Create a new request with the HTTPS URL + headers
+        var request = URLRequest(url: httpsURL)
+        request.httpMethod = "GET"
+
+        // Copy Range header if present (AVPlayer uses Range for seeking)
+        if let range = loadingRequest.request.value(forHTTPHeaderField: "Range") {
+            request.setValue(range, forHTTPHeaderField: "Range")
+        }
+
+        // Add YouTube headers
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        // Perform the request
+        let task = session.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("⚠️ v91: ResourceLoader request failed: \(error.localizedDescription)")
+                loadingRequest.finishLoading(with: error)
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("⚠️ v91: Non-HTTP response")
+                loadingRequest.finishLoading(with: NSError(domain: "Plink", code: -1, userInfo: nil))
+                return
+            }
+
+            if httpResponse.statusCode != 200 && httpResponse.statusCode != 206 {
+                print("⚠️ v91: HTTP \(httpResponse.statusCode) from YouTube")
+                loadingRequest.finishLoading(with: NSError(
+                    domain: "Plink", code: httpResponse.statusCode, userInfo: nil))
+                return
+            }
+
+            // Fill in content information
+            if let contentInfoRequest = loadingRequest.contentInformationRequest {
+                contentInfoRequest.contentType = "video/mp4"
+                contentInfoRequest.isByteRangeAccessSupported = true
+
+                if let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
+                   let length = Int64(contentLength) {
+                    contentInfoRequest.contentLength = length
+                } else if let contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range") {
+                    // Parse "bytes 0-999/2000"
+                    let parts = contentRange.split(separator: "/")
+                    if parts.count >= 2, let total = Int64(parts[1]) {
+                        contentInfoRequest.contentLength = total
+                    }
+                }
+            }
+
+            // Feed data to AVPlayer
+            if let data = data {
+                loadingRequest.dataRequest?.respond(with: data)
+            }
+
+            loadingRequest.finishLoading()
+        }
+
+        task.resume()
+        return true
+    }
+
+    func resourceLoader(
+        _ resourceLoader: AVAssetResourceLoader,
+        didCancel loadingRequest: AVAssetResourceLoadingRequest
+    ) {
+        // Request cancelled by AVPlayer (seeking, etc.)
     }
 }

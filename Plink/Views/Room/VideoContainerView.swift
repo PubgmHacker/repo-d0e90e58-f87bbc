@@ -1052,6 +1052,106 @@ final class VideoHostController: UIViewController {
         super.viewDidLoad()
         // Set up coordinator + navigation delegate + plinkBridge
         setupCoordinator()
+        // 🔧 v80: Listen for AVAudioSession interruption end
+        setupAudioInterruptionObserver()
+    }
+
+    /// 🔧 v80 (Gemini): AVAudioSession interruption observer.
+    /// When user opens Control Center, iOS sends AVAudioSessionInterruption
+    /// (type = .began). YouTube player automatically pauses + clears buffer.
+    /// When user closes Control Center, iOS sends InterruptionEnded — but
+    /// YouTube doesn't always resume. We force resume here.
+    private var audioInterruptionObserver: NSObjectProtocol?
+
+    private func setupAudioInterruptionObserver() {
+        // Don't add duplicate observers
+        if audioInterruptionObserver != nil { return }
+
+        audioInterruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let userInfo = notification.userInfo,
+                  let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+            if type == .ended {
+                print("⚡ v80: AVAudioSession interruption ENDED — forcing resume")
+                // Give iOS 200ms to settle before forcing resume
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.forceResumePlayback()
+                }
+            }
+        }
+        print("📺 v80: AudioInterruptionObserver registered")
+    }
+
+    /// 🔧 v80 (Gemini): Force resume playback after audio interruption ends.
+    /// YouTube player gets stuck in state=3 (buffering) after Control Center.
+    /// We force video.play() to kick it out of buffering.
+    func forceResumePlayback() {
+        guard let webView = WebViewControl.shared.webView else { return }
+
+        // Reactivate audio session
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ v80: AVAudioSession reactivation failed: \(error)")
+        }
+
+        // Force resume via JS — call play() multiple times with delays
+        let js = """
+        (function() {
+            try {
+                var video = document.querySelector('video');
+                if (video) {
+                    console.log('[Plink v80] forceResumePlayback — video.paused=' + video.paused + ', readyState=' + video.readyState + ', currentTime=' + video.currentTime);
+
+                    // Force play
+                    if (video.paused) {
+                        if (typeof window.playVideo === 'function') {
+                            window.playVideo();
+                        } else if (window.player && typeof window.player.playVideo === 'function') {
+                            window.player.playVideo();
+                        } else {
+                            video.play().catch(function(e) {
+                                console.log('[Plink v80] Play failed: ' + e);
+                            });
+                        }
+                    }
+
+                    // Also nudge GPU with translateZ
+                    video.style.transform = 'translateZ(0)';
+                    setTimeout(function() { video.style.transform = 'none'; }, 50);
+
+                    // Dispatch resize
+                    window.dispatchEvent(new Event('resize'));
+                }
+            } catch(e) {
+                console.log('[Plink v80] forceResumePlayback error: ' + e);
+            }
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
+
+        // Retry after 500ms — sometimes first attempt doesn't work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self, let webView = WebViewControl.shared.webView else { return }
+            webView.evaluateJavaScript("""
+            (function() {
+                try {
+                    var video = document.querySelector('video');
+                    if (video && video.paused) {
+                        console.log('[Plink v80] Retry: video still paused, calling play again');
+                        if (typeof window.playVideo === 'function') window.playVideo();
+                        else video.play().catch(function(){});
+                    }
+                } catch(e) {}
+            })();
+            """, completionHandler: nil)
+        }
     }
 
     override func viewWillLayoutSubviews() {

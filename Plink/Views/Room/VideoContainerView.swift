@@ -752,7 +752,11 @@ struct WebVideoView: UIViewRepresentable {
             // to reload, but we need to bypass its "already loaded" guard.
             // See loadVideoOnceForceReload below.
         } else if let existing = WebViewControl.shared.webView {
-            print("📺 v41: reusing existing WKWebView (no rotation)")
+            // 🔧 v53 (Gemini): Safe Reparenting — detach from old superview
+            // BEFORE returning. This prevents WebKit GPU render crash when
+            // SwiftUI calls makeUIView again after WS reconnect.
+            existing.removeFromSuperview()
+            print("📺 v53: reusing existing WKWebView (detached from old parent)")
             if isYouTube || isBackendPlayer {
                 existing.navigationDelegate = context.coordinator
             }

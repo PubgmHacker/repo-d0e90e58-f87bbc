@@ -56,15 +56,6 @@ struct RoomView: View {
     // WS connect without auth → 401 → reconnect loop.
     @EnvironmentObject private var sharedWsClient: WebSocketClient
 
-    /// 🔧 v42: Trigger counter — incremented when .plinkWebviewNeedsReload
-    /// notification fires (from Coordinator.appWillEnterForeground). Changing
-    /// this @State forces SwiftUI to re-evaluate the view tree, which calls
-    /// makeUIView again. makeUIView sees needsFullReload=true (set by
-    /// prepareForFullReload in appWillEnterForeground) and recreates the
-    /// WKWebView — because the old one's WebContent process was killed during
-    /// background and JS evaluateJavaScript no longer works on it.
-    @State private var webviewReloadTrigger = 0
-
     private let controlsHideDelay: UInt64 = 3_000_000_000
 
     var body: some View {

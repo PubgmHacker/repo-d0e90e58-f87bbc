@@ -146,18 +146,16 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
         }
         else
         {
-                // 🔧 v48.2: Use youtubei/v1/player API with ANDROID client.
-                // IOS client returns HTTP 400 (deviceMake/deviceModel not recognized).
-                // ANDROID client is recommended by Gemini — mobile clients don't
-                // require SAPISIDHASH, signatures are static.
-                NSString *apiURLString = [NSString stringWithFormat:@"https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"];
+                // 🔧 v49.3: Use WEB client — ANDROID returns FAILED_PRECONDITION.
+                // WEB client is the most compatible with youtubei/v1/player API.
+                NSString *apiURLString = @"https://www.youtube.com/youtubei/v1/player";
                 NSURL *videoInfoURL = [NSURL URLWithString:apiURLString];
                 
                 NSDictionary *body = @{
                         @"context": @{
                                 @"client": @{
-                                        @"clientName": @"ANDROID",
-                                        @"clientVersion": @"19.09.37",
+                                        @"clientName": @"WEB",
+                                        @"clientVersion": @"2.20240726.00.00",
                                         @"hl": self.languageIdentifier,
                                         @"gl": @"US"
                                 }
@@ -175,7 +173,7 @@ static NSError *YouTubeError(NSError *error, NSSet *regionsAllowed, NSString *la
                 NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:videoInfoURL cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:10];
                 [request setHTTPMethod:@"POST"];
                 [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-                [request setValue:@"com.google.android.youtube/19.09.37 (Linux; U; Android 14; SM-S918B) gzip" forHTTPHeaderField:@"User-Agent"];
+                [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
                 [request setValue:self.languageIdentifier forHTTPHeaderField:@"Accept-Language"];
                 [request setValue:[NSString stringWithFormat:@"https://youtube.com/watch?v=%@", self.videoIdentifier] forHTTPHeaderField:@"Referer"];
                 [request setHTTPBody:bodyData];

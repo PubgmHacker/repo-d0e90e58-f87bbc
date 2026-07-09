@@ -179,110 +179,135 @@ final class WebViewControl {
     // has been added to the SwiftUI hierarchy (so setNeedsDisplay has somewhere
     // to send its invalidation to).
     func reactivate(webView: WKWebView) {
-        print("⚡ v67: reactivate — Frame Nudge (1px resize + micro-seek to wake video decoder)")
+        print("⚡ v68: reactivate — AutoLayout + translateZ(0) GPU trigger + Frame Nudge")
+        print("⚡ v68: webView frame is \(webView.frame), layer frame is \(webView.layer.frame), superview: \(String(describing: webView.superview))")
 
-        // ─── 1. CoreAnimation Frame Nudge ───
+        // ─── 1. Force WKWebView to fill its superview via AutoLayout ───
+        // v68 fix: when makeUIView is called during WS reconnect (background),
+        // the container may have 0x0 frame. autoresizingMask doesn't reliably
+        // scale the WKWebView back up after background return. AutoLayout
+        // constraints "nail" the webView to its superview edges so it always
+        // fills the container regardless of when the container gets its size.
+        if let superview = webView.superview {
+            webView.translatesAutoresizingMaskIntoConstraints = false
+            // Deactivate any old constraints that might conflict
+            NSLayoutConstraint.deactivate(
+                superview.constraints.filter { constraint in
+                    (constraint.firstItem === webView || constraint.secondItem === webView)
+                }
+            )
+            NSLayoutConstraint.activate([
+                webView.topAnchor.constraint(equalTo: superview.topAnchor),
+                webView.bottomAnchor.constraint(equalTo: superview.bottomAnchor),
+                webView.leadingAnchor.constraint(equalTo: superview.leadingAnchor),
+                webView.trailingAnchor.constraint(equalTo: superview.trailingAnchor)
+            ])
+            superview.setNeedsLayout()
+            superview.layoutIfNeeded()
+            print("⚡ v68: AutoLayout constraints activated — webView now fills superview \(superview.frame)")
+        }
+
+        // Ping UIKit layer
+        webView.setNeedsDisplay()
+        webView.setNeedsLayout()
+        webView.layoutIfNeeded()
+        webView.layer.setNeedsDisplay()
+        webView.layer.setNeedsLayout()
+
+        // ─── 2. CoreAnimation Frame Nudge (1px resize) ───
         // Change the webView frame by 1 pixel to force CoreAnimation to
-        // recreate the graphics buffer. This is the ONLY reliable way to
-        // wake up a frozen video decoder after returning from background.
+        // recreate the graphics buffer.
         let originalFrame = webView.frame
         let nudgedFrame = CGRect(
             x: originalFrame.origin.x,
             y: originalFrame.origin.y,
-            width: originalFrame.width,
+            width: max(originalFrame.width, 1),
             height: originalFrame.height + 1  // +1px forces buffer recreation
         )
         webView.frame = nudgedFrame
 
-        // Give iOS 50ms to process the frame change, then restore + nudge JS
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self else { return }
-            // Restore original frame
             webView.frame = originalFrame
 
-            // Also ping UIKit layer (belt + suspenders)
-            webView.setNeedsDisplay()
-            webView.setNeedsLayout()
-            webView.layoutIfNeeded()
-            webView.layer.setNeedsDisplay()
-            webView.layer.setNeedsLayout()
-
-            // ─── 2. Video Decoder Nudge (micro-seek) ───
-            // A micro-seek of 0.01s forces the video decoder to flush the
-            // frozen frame and render a new one. This is the JS-level nudge
-            // that complements the CoreAnimation frame nudge above.
+            // ─── 3. JS: translateZ(0) GPU trigger + micro-seek ───
+            // translateZ(0) is THE system trigger that forces WebKit to
+            // re-render the layer on the GPU. It rebuilds the
+            // AVSampleBufferDisplayLayer that detached during background.
             let js = """
             (function() {
                 try {
                     var video = document.querySelector('video');
                     if (video) {
-                        // Force reflow first (DOM-level nudge)
+                        // 1. Force Reflow
                         var oldDisplay = video.style.display;
                         video.style.display = 'none';
                         void video.offsetHeight;
                         video.style.display = oldDisplay || 'block';
 
-                        // Dispatch resize event (forces viewport recompute)
-                        window.dispatchEvent(new Event('resize'));
+                        // 2. Hardware Acceleration Trigger (CoreAnimation layer rebuild)
+                        // translateZ(0) forces WebKit to create a new GPU layer
+                        video.style.transform = 'translateZ(0)';
 
-                        // MICRO-SEEK: 0.01s forward forces decoder to render new frame
+                        // 3. Micro-seek to flush frozen decoder frames
                         if (!video.paused) {
-                            var newTime = video.currentTime + 0.01;
-                            if (newTime < video.duration) {
-                                video.currentTime = newTime;
-                                console.log('[Plink v67] Micro-seek to ' + newTime + ' (decoder nudge)');
+                            var curr = video.currentTime;
+                            if (curr + 0.001 < video.duration) {
+                                video.currentTime = curr + 0.001;
+                                console.log('[Plink v68] Micro-seek to ' + (curr + 0.001) + ' (decoder flush)');
                             }
                         } else {
-                            // Video was paused by iOS — resume playback
-                            console.log('[Plink v67] Video was paused — resuming');
+                            // Video was paused by iOS — resume
+                            console.log('[Plink v68] Video was paused — resuming');
                             if (typeof window.playVideo === 'function') {
                                 window.playVideo();
                             } else if (window.player && typeof window.player.playVideo === 'function') {
                                 window.player.playVideo();
                             } else {
                                 video.play().catch(function(e) {
-                                    console.log('[Plink v67] Play resume failed: ' + e);
+                                    console.log('[Plink v68] Play resume failed: ' + e);
                                 });
                             }
                         }
-
-                        // Nudge #movie_player to re-attach to GPU pipeline
-                        var moviePlayer = document.querySelector('#movie_player');
-                        if (moviePlayer) {
-                            var oldPos = moviePlayer.style.position;
-                            moviePlayer.style.position = 'absolute';
-                            void moviePlayer.offsetHeight;
-                            moviePlayer.style.position = oldPos || 'fixed';
-                        }
                     }
+
+                    // Ping the document body too — forces overall GPU layer rebuild
+                    document.body.style.transform = 'translateZ(0)';
+                    setTimeout(function() {
+                        document.body.style.transform = 'none';
+                    }, 50);
+
+                    // Dispatch resize event
+                    window.dispatchEvent(new Event('resize'));
                 } catch(e) {
-                    console.log('[Plink v67] reactivate error: ' + e);
+                    console.log('[Plink v68] reactivate error: ' + e);
                 }
             })();
             """
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
-        // ─── 3. Second Frame Nudge after 300ms ───
-        // Sometimes the first nudge isn't enough — the decoder needs a second
-        // kick after the frame has settled. Repeat the 1px nudge + micro-seek.
+        // ─── 4. Second Frame Nudge after 300ms ───
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self, let activeWebView = self.webView, activeWebView === webView else { return }
             let frame = activeWebView.frame
             activeWebView.frame = CGRect(x: frame.origin.x, y: frame.origin.y,
-                                         width: frame.width, height: frame.height + 1)
+                                         width: max(frame.width, 1), height: frame.height + 1)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 activeWebView.frame = frame
                 activeWebView.evaluateJavaScript("""
                 (function() {
                     try {
                         var video = document.querySelector('video');
-                        if (video && !video.paused && video.currentTime < video.duration - 0.1) {
-                            video.currentTime += 0.01;
-                        } else if (video && video.paused) {
-                            if (typeof window.playVideo === 'function') window.playVideo();
-                            else video.play().catch(function(){});
+                        if (video) {
+                            video.style.transform = 'translateZ(0)';
+                            if (video.paused) {
+                                if (typeof window.playVideo === 'function') window.playVideo();
+                                else video.play().catch(function(){});
+                            }
                         }
+                        document.body.style.transform = 'translateZ(0)';
+                        setTimeout(function() { document.body.style.transform = 'none'; }, 30);
                         window.dispatchEvent(new Event('resize'));
                     } catch(e) {}
                 })();

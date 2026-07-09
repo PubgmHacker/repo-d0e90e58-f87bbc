@@ -146,14 +146,11 @@ final class RoomViewModel: WebSocketClientDelegate {
         Logger.ws.info("Сессия восстановлена — ресинхронизация")
         connectionStatus = .connected
 
-        // 🔧 v54 (Gemini): DON'T touch currentMediaItem on session restore!
-        // Only load if genuinely nil (first connect, not reconnect).
+        // 🔧 v63: ALWAYS call loadMedia if currentMediaItem is nil.
+        // Same fix as webSocketDidConnect — don't skip based on loadedVideoId.
         if syncEngine.currentMediaItem == nil, let mediaItem = room.mediaItem {
-            if WebViewControl.shared.loadedVideoId == nil {
-                syncEngine.loadMedia(mediaItem)
-            } else {
-                Logger.ws.info("🔍 SKIP loadMedia — WebView already has video loaded")
-            }
+            Logger.ws.info("🔍 Calling syncEngine.loadMedia (v63: session restore)")
+            syncEngine.loadMedia(mediaItem)
         } else {
             Logger.ws.info("🔍 SKIP — currentMediaItem already set (v54)")
         }
@@ -217,20 +214,18 @@ final class RoomViewModel: WebSocketClientDelegate {
         self.errorMessage = nil
         Logger.ws.info("Connected → room \(self.room.id)")
 
-        // 🔧 v54 (Gemini): DON'T touch currentMediaItem if it's already set!
-        // WS reconnects on shade open/close. If we call loadMedia or
-        // setCurrentMediaItem, SwiftUI re-evaluates VideoSectionContent →
-        // makeUIView called → WKWebView re-attached → GPU render crash.
+        // 🔧 v63: ALWAYS call loadMedia on first connect (currentMediaItem == nil).
+        // The v54 check `WebViewControl.shared.loadedVideoId != nil` was WRONG
+        // when combined with prewarm — prewarm doesn't set loadedVideoId anymore
+        // (v63 fix), but even if it did, we MUST call loadMedia to set
+        // currentMediaItem. Without currentMediaItem, VideoContainerView never
+        // renders the video section → "eternal loading" bug.
         //
-        // Only load media if it's genuinely a NEW video (currentMediaItem is nil).
-        // If video is already playing, just request sync state from host.
+        // On WS reconnect (currentMediaItem already set), the guard at the top
+        // of loadMedia itself prevents unnecessary reloading.
         if self.syncEngine.currentMediaItem == nil, let mediaItem = self.room.mediaItem {
-            if WebViewControl.shared.loadedVideoId != nil {
-                Logger.ws.info("🔍 SKIP loadMedia — WebView already has video loaded (v54)")
-            } else {
-                Logger.ws.info("🔍 Calling syncEngine.loadMedia...")
-                self.syncEngine.loadMedia(mediaItem)
-            }
+            Logger.ws.info("🔍 Calling syncEngine.loadMedia (v63: always on first connect)")
+            self.syncEngine.loadMedia(mediaItem)
         } else {
             Logger.ws.info("🔍 SKIP — currentMediaItem already set, video is playing (v54)")
         }

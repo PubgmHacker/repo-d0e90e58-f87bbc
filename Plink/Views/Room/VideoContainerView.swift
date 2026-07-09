@@ -74,41 +74,43 @@ final class WebViewControl {
 
     /// Pre-warmed WKWebView instance, waiting to be adopted by RoomView.
     private var prewarmedWebView: WKWebView?
+    /// 🔧 v63: Separate flag for prewarmed video ID. Do NOT set loadedVideoId
+    /// in prewarm — that would cause webSocketDidConnect to skip loadMedia,
+    /// leaving currentMediaItem nil and the video section never rendering.
+    private var prewarmedVideoId: String?
 
     /// Pre-warm the player for a YouTube video.
     /// Call this when the user selects a video in RoomCreationView.
     /// The WKWebView starts loading m.youtube.com/watch?v=ID immediately.
-    /// When RoomView's makeUIView runs, it will reuse this instance.
+    ///
+    /// 🔧 v63: prewarm now ONLY warms the network (DNS, TLS, connection pool).
+    /// The prewarmed WKWebView is NOT consumed by makeUIView because it lacks
+    /// the JS bridge scripts (plinkBridge handler + Coordinator scripts) that
+    /// are only added in makeUIView's config. Instead, makeUIView always
+    /// creates a fresh WKWebView with full config — but the network is already
+    /// warm from prewarm, so page load is faster.
     func prewarm(videoId: String) {
         // Don't prewarm the same video twice
-        if let existing = prewarmedWebView,
-           loadedVideoId == videoId {
-            print("🔥 v61: prewarm(videoId=\(videoId)) — already prewarmed, skipping")
+        if prewarmedVideoId == videoId && prewarmedWebView != nil {
+            print("🔥 v63: prewarm(videoId=\(videoId)) — already prewarmed, skipping")
             return
         }
 
-        // Don't prewarm if there's already an active player using this video
-        if webView != nil && loadedVideoId == videoId {
-            print("🔥 v61: prewarm(videoId=\(videoId)) — active player already has this video, skipping")
-            return
-        }
-
-        // 🔧 v62: If prewarming a DIFFERENT video, discard the old prewarmed
-        // WKWebView first (it's stale — user changed their mind).
-        if prewarmedWebView != nil && loadedVideoId != videoId {
-            print("🔥 v62: prewarm — discarding stale prewarmed WKWebView (was videoId=\(loadedVideoId ?? "?"))")
+        // If prewarming a DIFFERENT video, discard the old prewarmed WKWebView
+        if prewarmedWebView != nil && prewarmedVideoId != videoId {
+            print("🔥 v63: prewarm — discarding stale prewarmed WKWebView (was videoId=\(prewarmedVideoId ?? "?"))")
             prewarmedWebView?.stopLoading()
             prewarmedWebView = nil
         }
 
-        print("🔥 v61: prewarm(videoId=\(videoId)) — creating hidden WKWebView + loading m.youtube.com")
+        print("🔥 v63: prewarm(videoId=\(videoId)) — creating hidden WKWebView for network warming")
 
-        // Create config matching what WebVideoView.makeUIView uses
+        // Create config — just CSS for now (network warming only, not for display)
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // Inject the same CSS hide script as the active player uses
+        // Inject CSS hide script (same as active player)
         let youtubeCssScript = WKUserScript(
             source: WebVideoView.youtubeHideCSS,
             injectionTime: .atDocumentStart,
@@ -116,32 +118,26 @@ final class WebViewControl {
         )
         config.userContentController.addUserScript(youtubeCssScript)
 
-        // 🔧 v61: Native Experience — hide everything except <video>.
-        // Must be injected in prewarm too, so the prewarmed WKWebView already
-        // has it applied when makeUIView adopts it (makeUIView won't re-inject
-        // scripts on the consumed instance).
-        let nativeExperienceScript = WKUserScript(
-            source: WebVideoView.nativeExperienceScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
-        )
-        config.userContentController.addUserScript(nativeExperienceScript)
-
         // Create the prewarmed WKWebView
         let prewarmed = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
         prewarmed.scrollView.isScrollEnabled = false
         prewarmed.isOpaque = false
-        prewarmed.backgroundColor = .clear  // 🔧 v61: .clear instead of .black
+        prewarmed.backgroundColor = .clear
 
-        // Start loading m.youtube.com/watch?v=ID
+        // Start loading m.youtube.com/watch?v=ID — this warms DNS, TLS,
+        // connection pool, and YouTube's CDN. When makeUIView creates a fresh
+        // WKWebView and loads the same URL, it'll be faster.
         let url = URL(string: "https://m.youtube.com/watch?v=\(videoId)")!
         prewarmed.load(URLRequest(url: url))
 
-        // Store it — makeUIView will pick it up via consumePrewarmed()
+        // Store it — released when a different video is prewarmed or on dealloc
         prewarmedWebView = prewarmed
-        loadedVideoId = videoId  // mark as loaded so makeUIView doesn't reload
+        prewarmedVideoId = videoId
+        // 🔧 v63: DO NOT set loadedVideoId here! That would cause
+        // webSocketDidConnect to skip loadMedia → currentMediaItem stays nil
+        // → video section never renders → "eternal loading" bug.
 
-        print("🔥 v61: prewarm complete — WKWebView loading in background, will be adopted by RoomView.makeUIView")
+        print("🔥 v63: prewarm complete — network warming started (DNS/TLS/CDN)")
     }
 
     /// Called by WebVideoView.makeUIView to consume the prewarmed WKWebView.
@@ -1127,41 +1123,17 @@ struct WebVideoView: UIViewRepresentable {
         }
 
         let webView: WKWebView
-        // 🔧 v61 (Gemini): Try to consume a prewarmed WKWebView first.
-        // If RoomCreationView prewarmed the player, we adopt that instance
-        // — zero-latency init, player already loaded.
-        let didConsumePrewarm: Bool
-        if let prewarmed = WebViewControl.shared.consumePrewarmed() {
-            webView = prewarmed
-            // Re-attach navigation delegate so Coordinator callbacks fire
-            webView.navigationDelegate = context.coordinator
-            // Re-register the JS bridge handler (prewarmed instance doesn't have it)
-            webView.configuration.userContentController.add(context.coordinator, name: "plinkBridge")
-            // Adopt in Coordinator
-            if context.coordinator.webView == nil {
-                context.coordinator.webView = webView
-            }
-            WebViewControl.shared.register(webView)
-            print("📺 v61: makeUIView consumed prewarmed WKWebView — videoId=\(WebViewControl.shared.loadedVideoId ?? "?")")
-            didConsumePrewarm = true
-        } else {
-            webView = WKWebView(frame: .zero, configuration: config)
-            webView.scrollView.isScrollEnabled = false
-            webView.isOpaque = false
-            webView.backgroundColor = .clear  // 🔧 v61: .clear instead of .black (Native Experience)
-            didConsumePrewarm = false
-        }
-
-        // 🔧 v62 (Gemini): After makeUIView returns, the webView is added to
-        // the SwiftUI hierarchy. We schedule reactivate() on the next run loop
-        // so it runs AFTER the view is in the hierarchy. This forces WebKit to
-        // re-attach to the GPU pipeline (especially important for prewarmed
-        // instances that were off-screen during loading).
-        let webViewRef = webView
-        DispatchQueue.main.async {
-            WebViewControl.shared.reactivate(webView: webViewRef)
-        }
-        _ = didConsumePrewarm  // suppress unused warning
+        // 🔧 v63: ALWAYS create a fresh WKWebView with full config.
+        // The prewarmed WKWebView (from RoomCreationView) is NOT consumed
+        // because it lacks the JS bridge scripts (plinkBridge handler +
+        // Coordinator scripts) that are only added here in makeUIView's config.
+        // prewarm still helps by warming the network (DNS/TLS/CDN), so the
+        // fresh WKWebView loads faster.
+        _ = WebViewControl.shared.consumePrewarmed()  // discard, just for cleanup
+        webView = WKWebView(frame: .zero, configuration: config)
+        webView.scrollView.isScrollEnabled = false
+        webView.isOpaque = false
+        webView.backgroundColor = .clear  // 🔧 v61: .clear instead of .black (Native Experience)
 
         // 🔧 v34.34: NO customUserAgent — real WKWebView UA (what m.youtube.com expects).
         // Embed required fake Safari UA, but m.youtube.com works with real WKWebView UA.

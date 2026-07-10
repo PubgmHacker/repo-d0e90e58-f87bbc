@@ -61,8 +61,7 @@ final class NativePlayerEngine: ObservableObject {
 
     // MARK: - Load & Play
 
-    /// v96: Authenticated Proxy. Client sends b64url + cookies to backend.
-    /// Backend uses cookies when fetching googlevideo → YouTube sees "same session".
+    /// v97: Server-side extraction via videoId. Backend extracts + streams (same IP).
     func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = [], videoId: String? = nil) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
@@ -74,8 +73,21 @@ final class NativePlayerEngine: ObservableObject {
         let lowerURL = streamURL.lowercased()
         let finalURL: URL
 
-        // v96: Send b64url + cookies to backend (Authenticated Proxy)
-        if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
+        // v97: Priority 1 — videoId (server-side extraction, solves IP mismatch)
+        if let vid = videoId, !vid.isEmpty {
+            let backendBase = "https://plink-backend-production-ef31.up.railway.app"
+            let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
+            var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
+            relayComponents.queryItems = [
+                URLQueryItem(name: "videoId", value: vid),
+                URLQueryItem(name: "token", value: token)
+            ]
+            guard let relayURL = relayComponents.url else { return }
+            finalURL = relayURL
+            print("🎬 v97: StreamRelay — server-side extraction for videoId=\(vid)")
+        }
+        // v96: Priority 2 — b64url + cookies (backward compat, still IP-bound)
+        else if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
             let backendBase = "https://plink-backend-production-ef31.up.railway.app"
             let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
 

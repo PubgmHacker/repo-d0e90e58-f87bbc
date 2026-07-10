@@ -494,6 +494,14 @@ struct RoomSetupView: View {
             }
             print("🖼️ RoomSetupView v33: thumbnailURL = \(finalThumbnailURL ?? "nil")")
 
+            // 🔧 v97: Save videoId for server-side extraction
+            let savedVideoId: String?
+            if service == .youtube {
+                savedVideoId = Self.extractYouTubeVideoID(from: contentURL)
+            } else {
+                savedVideoId = nil
+            }
+
             let mediaItem = MediaItem(
                 id: UUID().uuidString,
                 title: finalTitle,
@@ -502,7 +510,8 @@ struct RoomSetupView: View {
                 streamURL: finalStreamURL,
                 duration: finalDuration,
                 mediaType: .video,
-                source: finalSource
+                source: finalSource,
+                videoId: savedVideoId
             )
             print("🔍 RoomSetupView.createRoom: mediaItem.streamURL='\(mediaItem.streamURL.prefix(80))', source=\(mediaItem.source.rawValue)")
 

@@ -10,6 +10,10 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
     let duration: TimeInterval?
     let mediaType: MediaType
     let source: MediaSource
+    /// 🔧 v97: YouTube video ID for server-side extraction.
+    /// When present, NativePlayerEngine sends ?videoId=ID to backend
+    /// instead of ?b64url=... — backend extracts URL with its own IP.
+    var videoId: String?
 
     enum MediaType: String, Codable, Sendable {
         case movie = "movie"

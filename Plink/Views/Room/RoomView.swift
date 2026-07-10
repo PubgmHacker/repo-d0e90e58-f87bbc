@@ -773,10 +773,11 @@ private struct VideoSectionContent: View {
                         .onAppear {
                             print("🎬 v90: PlayerSlotView appeared — AVPlayer mode")
                             NativePlayerEngine.shared.attach()
-                            // v96: Pass cookies from ExtractionBridge for Authenticated Proxy
+                            // v97: Pass videoId for server-side extraction
                             NativePlayerEngine.shared.loadAndPlay(
                                 streamURL: mediaItem.streamURL,
-                                cookies: ExtractionBridge.shared.lastCookies
+                                cookies: ExtractionBridge.shared.lastCookies,
+                                videoId: mediaItem.videoId
                             )
                         }
                         .onDisappear {

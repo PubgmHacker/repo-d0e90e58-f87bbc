@@ -61,7 +61,8 @@ final class NativePlayerEngine: ObservableObject {
 
     // MARK: - Load & Play
 
-    /// v95: Server-side extraction. Client sends videoId, backend extracts + streams.
+    /// v96: Authenticated Proxy. Client sends b64url + cookies to backend.
+    /// Backend uses cookies when fetching googlevideo → YouTube sees "same session".
     func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = [], videoId: String? = nil) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
@@ -73,44 +74,32 @@ final class NativePlayerEngine: ObservableObject {
         let lowerURL = streamURL.lowercased()
         let finalURL: URL
 
-        // v95: If we have a videoId, use server-side extraction mode
-        if let vid = videoId, !vid.isEmpty {
-            let backendBase = "https://plink-backend-production-ef31.up.railway.app"
-            let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
-            var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
-            relayComponents.queryItems = [
-                URLQueryItem(name: "videoId", value: vid),
-                URLQueryItem(name: "token", value: token)
-            ]
-            guard let relayURL = relayComponents.url else { return }
-            finalURL = relayURL
-            print("🎬 v95: StreamRelay — server-side extraction for videoId=\(vid)")
-        } else if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
-            // 🔧 v94.11: Base64-encode the stream URL to avoid AVPlayer URL parsing issues.
-            // AVPlayer is very picky about long URLs with & and % — double-encoding
-            // can break AVFoundation. Base64 produces a clean alphanumeric string
-            // that AVPlayer handles without issues.
+        // v96: Send b64url + cookies to backend (Authenticated Proxy)
+        if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
             let backendBase = "https://plink-backend-production-ef31.up.railway.app"
             let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
 
             // Base64-encode the googlevideo URL
             let b64url = (streamURL.data(using: .utf8) ?? Data()).base64EncodedString()
 
-            // Build clean URL: /api/media/stream?b64url=...&token=...
-            // Base64 string is pure alphanumeric + / + = — URL-safe enough for AVPlayer
+            // v96: Base64-encode cookies as cookie header string
+            let cookieString = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+            let b64cookies = cookieString.data(using: .utf8)?.base64EncodedString() ?? ""
+
             var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
             relayComponents.queryItems = [
                 URLQueryItem(name: "b64url", value: b64url),
-                URLQueryItem(name: "token", value: token)
+                URLQueryItem(name: "token", value: token),
+                URLQueryItem(name: "b64cookies", value: b64cookies)
             ]
 
             guard let relayURL = relayComponents.url else {
-                print("⚠️ v94.11: Failed to create StreamRelay URL")
+                print("⚠️ v96: Failed to create StreamRelay URL")
                 return
             }
 
             finalURL = relayURL
-            print("🎬 v94.11: StreamRelay — routing through backend (base64 encoded, length=\(b64url.count))")
+            print("🎬 v96: StreamRelay — b64url(\(b64url.count)) + cookies(\(cookies.count)) → backend")
         } else {
             // Non-YouTube URL — play directly (no relay needed)
             finalURL = url

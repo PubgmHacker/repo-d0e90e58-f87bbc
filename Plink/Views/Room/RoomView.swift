@@ -773,10 +773,13 @@ private struct VideoSectionContent: View {
                         .onAppear {
                             print("🎬 v90: PlayerSlotView appeared — AVPlayer mode")
                             NativePlayerEngine.shared.attach()
-                            // 🔧 v92: Pass cookies from ExtractionBridge to avoid 403
+                            // v95: Pass videoId for server-side extraction
+                            let videoId = YouTubeExtractor.extractVideoId(from: mediaItem.streamURL)
+                                ?? mediaItem.streamURL.components(separatedBy: "/").last?.components(separatedBy: "?").first
                             NativePlayerEngine.shared.loadAndPlay(
                                 streamURL: mediaItem.streamURL,
-                                cookies: ExtractionBridge.shared.lastCookies
+                                cookies: [],
+                                videoId: videoId
                             )
                         }
                         .onDisappear {

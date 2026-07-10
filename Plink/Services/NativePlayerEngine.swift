@@ -61,12 +61,8 @@ final class NativePlayerEngine: ObservableObject {
 
     // MARK: - Load & Play
 
-    /// Load a stream URL and start playing.
-    /// 🔧 v94 (Gemini): StreamRelay — ALL googlevideo.com URLs are proxied
-    /// through our backend (plink-backend/api/media/stream?url=...).
-    /// The backend adds User-Agent + Referer headers and relays bytes.
-    /// AVPlayer sees our backend URL — NO 403, NO ResourceLoaderDelegate needed!
-    func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = []) {
+    /// v95: Server-side extraction. Client sends videoId, backend extracts + streams.
+    func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = [], videoId: String? = nil) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
             return
@@ -77,7 +73,19 @@ final class NativePlayerEngine: ObservableObject {
         let lowerURL = streamURL.lowercased()
         let finalURL: URL
 
-        if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
+        // v95: If we have a videoId, use server-side extraction mode
+        if let vid = videoId, !vid.isEmpty {
+            let backendBase = "https://plink-backend-production-ef31.up.railway.app"
+            let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
+            var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
+            relayComponents.queryItems = [
+                URLQueryItem(name: "videoId", value: vid),
+                URLQueryItem(name: "token", value: token)
+            ]
+            guard let relayURL = relayComponents.url else { return }
+            finalURL = relayURL
+            print("🎬 v95: StreamRelay — server-side extraction for videoId=\(vid)")
+        } else if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
             // 🔧 v94.11: Base64-encode the stream URL to avoid AVPlayer URL parsing issues.
             // AVPlayer is very picky about long URLs with & and % — double-encoding
             // can break AVFoundation. Base64 produces a clean alphanumeric string

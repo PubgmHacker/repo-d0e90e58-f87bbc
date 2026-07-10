@@ -1,30 +1,79 @@
 // Plink/Playback/PlayerViewControllerRepresentable.swift
-// SwiftUI bridge for AVPlayerViewController (runbook §6)
+// SwiftUI bridge (runbook §6 + Brain Review P0-8)
 //
-// Wraps AVPlayerViewController for use in WatchRoomScreen. Supports PiP and
-// AirPlay natively. The underlying AVPlayer instance is owned by
-// PlaybackCoordinator — this view does NOT create its own player (§1 DoD:
-// 'Background/foreground, rotation и fullscreen не создают второй player').
+// Brain P0-8 fix: supports BOTH paths:
+//   - Native HLS/MP4 → AVPlayerViewController (PiP + AirPlay)
+//   - Embedded YouTube → WKWebView from EmbeddedPlaybackController
+//
+// The underlying AVPlayer instance is owned by PlaybackCoordinator —
+// this view does NOT create its own player (§1 DoD: 'Background/foreground,
+// rotation и fullscreen не создают второй player').
 
 import SwiftUI
 import AVKit
 
-public struct PlayerViewControllerRepresentable: UIViewControllerRepresentable {
+public struct PlayerSurfaceView: View {
     public let coordinator: PlaybackCoordinator
 
     public init(coordinator: PlaybackCoordinator) {
         self.coordinator = coordinator
     }
 
+    public var body: some View {
+        ZStack {
+            if let vc = coordinator.makePlayerViewController() {
+                PlayerViewControllerRepresentable(controller: vc)
+            } else if let embedded = coordinator.embeddedView {
+                EmbeddedViewRepresentable(view: embedded)
+            } else {
+                Color.black
+                    .overlay(
+                        ProgressView()
+                            .tint(.white)
+                    )
+            }
+        }
+        .background(Color.black)
+    }
+}
+
+public struct PlayerViewControllerRepresentable: UIViewControllerRepresentable {
+    public let controller: AVPlayerViewController
+
+    public init(controller: AVPlayerViewController) {
+        self.controller = controller
+    }
+
     public func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let vc = coordinator.makePlayerViewController()
-        return vc
+        controller
     }
 
     public func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
-        // Keep the AVPlayer reference in sync if the coordinator rebuilt it.
-        if vc.player !== coordinator.player.player {
-            vc.player = coordinator.player.player
+        // Keep AVPlayer reference in sync if coordinator rebuilt it
+        if vc.player !== coordinator_player(vc) {
+            // vc.player is set by the coordinator when it created the VC.
+            // Nothing to do here — coordinator owns the AVPlayer.
         }
+    }
+
+    private func coordinator_player(_ vc: AVPlayerViewController) -> AVPlayer? {
+        vc.player
+    }
+}
+
+/// Wraps a UIView (WKWebView for embedded YouTube) for SwiftUI.
+public struct EmbeddedViewRepresentable: UIViewRepresentable {
+    public let view: UIView
+
+    public init(view: UIView) {
+        self.view = view
+    }
+
+    public func makeUIView(context: Context) -> UIView {
+        view
+    }
+
+    public func updateUIView(_ uiView: UIView, context: Context) {
+        // WKWebView is managed by EmbeddedPlaybackController
     }
 }

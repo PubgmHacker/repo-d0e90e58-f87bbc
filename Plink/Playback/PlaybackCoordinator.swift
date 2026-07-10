@@ -1,15 +1,13 @@
 // Plink/Playback/PlaybackCoordinator.swift
-// Single owner of player lifecycle (runbook §6, §21)
+// Single owner of player lifecycle (runbook §6, §21 + Brain Review P0-8)
 //
-// WatchRoomModel delegates all player operations to this coordinator. It:
-//   - Owns ONE NativePlayerController per room session (§1 DoD)
-//   - Routes OrderedSyncController corrections to the player
-//   - Forwards player state (position, buffering, errors) to UI consumers
-//   - Holds the AVPlayerViewController for PiP presentation
+// Brain P0-8 fix: coordinator now chooses between NativePlayerController
+// (for .hls/.mp4/.external) and EmbeddedPlaybackController (for .youtube).
+// The two controllers implement the same PlaybackControlling protocol, so
+// OrderedSyncController is agnostic to which one is active.
 //
 // Per §21: 'PlaybackController не отправляет WebSocket сообщения' —
-// the coordinator never talks to RealtimeClient. It only receives state
-// from OrderedSyncController (which itself only receives from RealtimeClient).
+// the coordinator never talks to RealtimeClient.
 //
 // Per §16: 'Не добавлять еще один singleton WebView' — the coordinator is
 // owned by WatchRoomModel, never a global. Each room session gets a fresh
@@ -23,21 +21,57 @@ import Observation
 @MainActor
 @Observable
 public final class PlaybackCoordinator {
-    public let player: NativePlayerController
+    /// Current active controller — either NativePlayerController or
+    /// EmbeddedPlaybackController depending on source type.
+    public private(set) var currentController: PlaybackControlling?
+
+    public var position: TimeInterval { currentController?.position ?? 0 }
+    public var duration: TimeInterval { currentController?.duration ?? 0 }
+    public var isPlaying: Bool { currentController?.isPlaying ?? false }
+    public var isBuffering: Bool { currentController?.isBuffering ?? false }
+    public var capabilities: PlaybackCapabilities {
+        currentController?.capabilities ?? .unknown
+    }
 
     public private(set) var currentSource: PlaybackSource?
     public private(set) var isPreparing: Bool = false
     public private(set) var lastError: String?
 
-    public init(player: NativePlayerController = NativePlayerController()) {
-        self.player = player
+    /// Native AVPlayer (nil for embedded YouTube source).
+    public var nativePlayer: AVPlayer? {
+        (currentController as? NativePlayerController)?.player
     }
+
+    /// Embedded view (nil for native HLS/MP4 source).
+    public var embeddedView: UIView? {
+        (currentController as? EmbeddedPlaybackController)?.embeddedView
+    }
+
+    public init() {}
 
     public func prepare(_ source: PlaybackSource) async {
         isPreparing = true
         lastError = nil
+        // Teardown any previous controller
+        if let prev = currentController {
+            if let native = prev as? NativePlayerController { native.teardown() }
+            if let embedded = prev as? EmbeddedPlaybackController { embedded.teardown() }
+        }
+        currentController = nil
+
         do {
-            try await player.prepare(source)
+            let controller: PlaybackControlling
+            switch source {
+            case .hls, .mp4, .external:
+                let native = NativePlayerController()
+                try await native.prepare(source)
+                controller = native
+            case .youtube:
+                let embedded = EmbeddedPlaybackController()
+                try await embedded.prepare(source)
+                controller = embedded
+            }
+            currentController = controller
             currentSource = source
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -46,16 +80,19 @@ public final class PlaybackCoordinator {
     }
 
     public func teardown() {
-        player.teardown()
+        if let native = currentController as? NativePlayerController { native.teardown() }
+        if let embedded = currentController as? EmbeddedPlaybackController { embedded.teardown() }
+        currentController = nil
         currentSource = nil
         lastError = nil
     }
 
     /// Returns the AVPlayerViewController for PiP / fullscreen presentation.
-    /// Created lazily — one per coordinator lifetime.
-    public func makePlayerViewController() -> AVPlayerViewController {
+    /// Returns nil for embedded YouTube source (no AVPlayer).
+    public func makePlayerViewController() -> AVPlayerViewController? {
+        guard let native = currentController as? NativePlayerController else { return nil }
         let vc = AVPlayerViewController()
-        vc.player = player.player
+        vc.player = native.player
         vc.allowsPictureInPicturePlayback = true
         vc.allowsVideoFrameAnalysis = false
         return vc

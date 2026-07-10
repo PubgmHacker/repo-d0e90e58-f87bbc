@@ -1,20 +1,22 @@
 // Plink/Playback/NativePlayerController.swift
-// AVPlayer-backed PlaybackControlling (runbook §6)
+// AVPlayer-backed PlaybackControlling (runbook §6 + Brain Review P0-6, P0-7)
 //
-// ONE AVPlayer per room session (§1 DoD). Manages:
-//   - AVPlayer instance + AVPlayerViewController for PiP
-//   - allowsExternalPlayback = true for AirPlay
-//   - preferredForwardBufferDuration: 8s for VOD, 2-3s for live
-//   - preroll(atRate:) before reveal (avoids visible stutter on rate change)
-//   - KVO on timeControlStatus, reasonForWaitingToPlay — surfaced as
-//     isBuffering and access/error logs
-//   - Periodic time observer for position reporting
-//   - All observers are removed in teardown (§19: 'Player observers,
-//     NotificationCenter observers, KVO и periodic time observer должны
-//     гарантированно сниматься')
+// Brain P0-6 fix: seek() awaits completion via withCheckedContinuation.
+//   AVPlayer.seek(to:toleranceBefore:toleranceAfter:completionHandler:) is
+//   the only reliable signal that the seek finished. Task.yield() does NOT
+//   wait for seek completion. OrderedSyncController may not call play() or
+//   declare correction complete until the seek has actually repositioned.
+//   Also: clamp non-finite/negative values, serialize overlapping seeks.
 //
-// NEVER promises zero buffering — startup/rebuffer ratio is measured and
-// surfaced as telemetry (Stage 13).
+// Brain P0-7 fix: buffering state derived correctly.
+//   timeControlStatus == .waitingToPlayAtSpecifiedRate is the PRIMARY
+//   signal of buffering. reasonForWaitingToPlay == .toMinimizeStalling is
+//   a TYPICAL buffering reason, NOT a 'not buffering' signal. Derive
+//   isBuffering from timeControlStatus + item.isPlaybackLikelyToKeepUp +
+//   item.status == .readyToPlay.
+//
+// ONE AVPlayer per room session (§1 DoD). All observers removed in
+// teardown() (§19).
 
 import Foundation
 import AVFoundation
@@ -39,13 +41,17 @@ public final class NativePlayerController: PlaybackControlling {
     private var reasonObservation: NSKeyValueObservation?
     private var timeObserverToken: Any?
     private var statusObservation: NSKeyValueObservation?
+    private var likelyKeepUpObservation: NSKeyValueObservation?
+    private var isPlaybackBufferEmptyObservation: NSKeyValueObservation?
+
+    // P0-6: serialize overlapping seeks
+    private var pendingSeekTask: Task<Void, Never>?
 
     public init() {}
 
     public func prepare(_ source: PlaybackSource) async throws {
         teardown()
 
-        // Pick provider by source type.
         let provider: ProviderAdapter
         switch source {
         case .hls, .mp4, .external:
@@ -60,25 +66,21 @@ public final class NativePlayerController: PlaybackControlling {
 
         if let item = provider.playerItem {
             let p = AVPlayer(playerItem: item)
-            // allowsExternalPlayback = true → AirPlay route button works
             p.usesExternalPlaybackWhileExternalScreenIsActive = true
             p.allowsExternalPlayback = true
-            // VOD: 8s forward buffer. Live: 2-3s. Default keeps it simple here.
             item.preferredForwardBufferDuration = 8
             self.player = p
-
             observe(p, item)
         } else if provider.embeddedView != nil {
-            // Embedded (YouTube) — no AVPlayer. Sync via JS bridge.
-            // OrderedSyncController will see capabilities.supportsRateCorrection
-            // = false and use less frequent precise seeks.
+            // Embedded (YouTube) — sync via JS bridge. NativePlayerController
+            // is NOT the right controller for embedded; PlaybackCoordinator
+            // should use EmbeddedPlaybackController instead (P0-8).
         }
     }
 
     public func play() async {
         guard let p = player else { return }
         if capabilities.supportsRateCorrection {
-            // Preroll at rate 1.0 to avoid visible stutter on first frame.
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 p.preroll(atRate: 1.0) { _ in cont.resume() }
             }
@@ -92,23 +94,46 @@ public final class NativePlayerController: PlaybackControlling {
         isPlaying = false
     }
 
+    // P0-6: await AVPlayer.seek completion via withCheckedContinuation.
+    // Clamp non-finite/negative. Serialize overlapping seeks.
     public func seek(to seconds: TimeInterval, precise: Bool) async {
         guard let p = player else { return }
-        let target = CMTime(seconds: seconds, preferredTimescale: 600)
-        if precise {
-            p.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+        // Clamp
+        let clamped: Double
+        if seconds.isNaN || seconds.isInfinite || seconds < 0 {
+            clamped = 0
+        } else if duration > 0 && seconds > duration {
+            clamped = duration
         } else {
-            p.seek(to: target, toleranceBefore: CMTime(seconds: 0.5, preferredTimescale: 600),
-                   toleranceAfter: CMTime(seconds: 0.5, preferredTimescale: 600))
+            clamped = seconds
         }
-        // AVPlayer.seek is sync but the actual seek completion needs KVO on
-        // currentItem.status. For simplicity we yield once.
-        await Task.yield()
+        let target = CMTime(seconds: clamped, preferredTimescale: 600)
+        let tolerance: CMTime
+        if precise {
+            tolerance = .zero
+        } else {
+            tolerance = CMTime(seconds: 0.15, preferredTimescale: 600)
+        }
+
+        // Cancel any pending seek — last-write-wins
+        pendingSeekTask?.cancel()
+        pendingSeekTask = Task { [weak p] in
+            guard let p else { return }
+            if Task.isCancelled { return }
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                p.seek(
+                    to: target,
+                    toleranceBefore: tolerance,
+                    toleranceAfter: tolerance
+                ) { _ in cont.resume() }
+            }
+        }
+        // Await the task so callers know seek is done before next op
+        await pendingSeekTask?.value
+        pendingSeekTask = nil
     }
 
     public func setRate(_ rate: Float) {
-        // Only apply rate changes if the provider supports rate correction.
-        // YouTube IFrame API does NOT support setRate for non-PRO content.
         guard capabilities.supportsRateCorrection else { return }
         player?.rate = rate
     }
@@ -118,12 +143,14 @@ public final class NativePlayerController: PlaybackControlling {
             player?.removeTimeObserver(token)
             timeObserverToken = nil
         }
-        timeControlObservation?.invalidate()
+        for obs in [timeControlObservation, reasonObservation, statusObservation, likelyKeepUpObservation, isPlaybackBufferEmptyObservation] {
+            obs?.invalidate()
+        }
         timeControlObservation = nil
-        reasonObservation?.invalidate()
         reasonObservation = nil
-        statusObservation?.invalidate()
         statusObservation = nil
+        likelyKeepUpObservation = nil
+        isPlaybackBufferEmptyObservation = nil
         player?.pause()
         player = nil
         pipController = nil
@@ -135,38 +162,31 @@ public final class NativePlayerController: PlaybackControlling {
         isBuffering = false
     }
 
-    deinit {
-        // KVO observations are tied to NativePlayerController lifetime —
-        // they use [weak self] so they're auto-niled. timeObserverToken
-        // must be removed explicitly (we did in teardown()).
-    }
-
     // ── KVO / periodic time observer wiring ────────────────────────────────
     private func observe(_ player: AVPlayer, _ item: AVPlayerItem) {
         timeControlObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
             Task { @MainActor in
                 guard let self else { return }
+                self.recomputeBuffering(player: p, item: item)
                 switch p.timeControlStatus {
                 case .playing:
                     self.isPlaying = true
-                    self.isBuffering = false
                 case .paused:
                     self.isPlaying = false
-                    self.isBuffering = false
                 case .waitingToPlay:
                     self.isPlaying = false
-                    self.isBuffering = true
                 @unknown default:
                     break
                 }
             }
         }
 
+        // P0-7: reasonForWaitingToPlay is informational; do NOT use it to
+        // override isBuffering=false. Just log it for diagnostics.
         reasonObservation = player.observe(\.reasonForWaitingToPlay, options: [.new]) { [weak self] p, _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.isBuffering = (p.reasonForWaitingToPlay != .toMinimizeStalling
-                                    && p.reasonForWaitingToPlay != .noReason)
+                self.recomputeBuffering(player: p, item: item)
             }
         }
 
@@ -176,6 +196,21 @@ public final class NativePlayerController: PlaybackControlling {
                 if it.status == .readyToPlay {
                     self.duration = it.duration.seconds.isFinite ? it.duration.seconds : 0
                 }
+                self.recomputeBuffering(player: player, item: it)
+            }
+        }
+
+        // P0-7: also observe playback buffer indicators for accurate state
+        likelyKeepUpObservation = item.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { [weak self] it, _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.recomputeBuffering(player: player, item: it)
+            }
+        }
+        isPlaybackBufferEmptyObservation = item.observe(\.isPlaybackBufferEmpty, options: [.new]) { [weak self] it, _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.recomputeBuffering(player: player, item: it)
             }
         }
 
@@ -185,5 +220,37 @@ public final class NativePlayerController: PlaybackControlling {
                 self?.position = time.seconds
             }
         }
+    }
+
+    // P0-7: derive isBuffering from timeControlStatus + isPlaybackLikelyToKeepUp
+    // + isPlaybackBufferEmpty + item.status.
+    private func recomputeBuffering(player: AVPlayer, item: AVPlayerItem) {
+        let controlStatus = player.timeControlStatus
+        let bufferEmpty = item.isPlaybackBufferEmpty
+        let likelyKeepUp = item.isPlaybackLikelyToKeepUp
+        let ready = item.status == .readyToPlay
+
+        // Buffering iff:
+        //   - waitingToPlay (AVPlayer is waiting for media data), OR
+        //   - playback buffer empty, OR
+        //   - not likely to keep up
+        // BUT only if item is .readyToPlay — otherwise we're still loading
+        // the asset, which is a separate 'preparing' state we surface as
+        // isBuffering=true.
+        let buffering: Bool
+        if controlStatus == .waitingToPlay {
+            buffering = true
+        } else if !ready {
+            buffering = true
+        } else if bufferEmpty {
+            buffering = true
+        } else if !likelyKeepUp && controlStatus == .playing {
+            // Playing but barely keeping up — keep buffering flag on so UI
+            // shows a spinner.
+            buffering = true
+        } else {
+            buffering = false
+        }
+        isBuffering = buffering
     }
 }

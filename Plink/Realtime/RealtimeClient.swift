@@ -1,75 +1,97 @@
 // Plink/Realtime/RealtimeClient.swift
-// Production WebSocket client (runbook §8)
+// Production WebSocket client (runbook §8 + Brain Review P0-4, P0-5 fixes)
 //
-// Replaces Plink/Networking/WebSocketClient.swift. Key differences:
+// Brain Review P0-4 fix: complete handshake protocol.
+//   WS open → .joining → session.ready → .synchronizing →
+//   ingest ≥3 clock replies → send sync.state.request(roomId, afterSeq) →
+//   receive snapshot → hand to OrderedSyncController → .connected
+//   Timeout 5s for clock sync — degraded mode, not infinite wait.
 //
-//   1. NO fake 'connected' via timer. Uses URLSessionWebSocketDelegate callback
-//      urlSession(_:webSocketTask:didOpenWithProtocol:) — the ONLY reliable
-//      signal that the WS handshake completed.
-//   2. NO JWT in URL query string. Auth via Sec-WebSocket-Protocol subprotocol
-//      with a short-lived (60s) single-use ticket from POST /api/realtime/ticket.
-//   3. Explicit connection state machine (RealtimeConnectionState).
-//      Clients must NOT treat the socket as 'connected' until session.ready
-//      arrives (runbook §19).
-//   4. ONE receive loop — never two. Cancellation is structured (Task.cancel).
-//   5. Reconnect protocol (§5, §19):
-//        auth → join → 7 clock probes → snapshot request → UI connected
-//        NO replay of local transport commands (play/pause/seek) from offline.
-//   6. State changes flow as an AsyncStream — replaces the legacy
-//      onSessionRestored callback.
-//   7. All reconnect Tasks are cancelled on manual disconnect and deinit.
-//   8. NO @unchecked Sendable. Transport is isolated to a custom actor or
-//      MainActor; thread safety is proven, not assumed.
-//
-// Legacy WebSocketClient.swift is NOT deleted — it stays behind the
-// realtime_protocol_v2 feature flag (§15). It will be removed after one
-// release cycle.
+// Brain Review P0-5 fix: compile correctness.
+//   - Use @MainActor @Observable (type macro on the class), NOT @Observable
+//     on stored properties inside ObservableObject.
+//   - AsyncStream.Continuation is a value type — comparison by === is
+//     illegal. Use UUID tokens to identify subscriptions for removal.
+//   - URLSessionWebSocketDelegate methods are nonisolated and hop to
+//     MainActor for state mutation.
+//   - deinit performs only synchronous, non-isolated cleanup (socket.cancel,
+//     session.invalidateAndCancel) — does NOT touch @MainActor state.
 
 import Foundation
+import Observation
+
+// MARK: - Subscription tokens (P0-5: AsyncStream.Continuation is a value type,
+// cannot be compared by ===. Use UUID for identity.)
+private struct MessageSink {
+    let id: UUID
+    let continuation: AsyncStream<RealtimeServerMessage>.Continuation
+}
+private struct StateSink {
+    let id: UUID
+    let continuation: AsyncStream<RealtimeConnectionState>.Continuation
+}
+
+/// Orchestration interface — RealtimeClient needs to know roomId, last
+/// (epoch, seq) watermark, and where to hand clock replies + snapshots.
+/// The concrete owner is WatchRoomModel (Stage 10). For now we expose a
+/// protocol so the client is testable in isolation.
+@MainActor
+public protocol RealtimeClientDelegate: AnyObject {
+    /// The room this session is bound to.
+    var roomId: String? { get }
+
+    /// Last applied (epoch, seq) watermark — used as afterSeq in snapshot
+    /// request after reconnect.
+    var lastEpoch: Int64 { get }
+    var lastSeq: Int64 { get }
+
+    /// Called for each clock.probe.reply. Must call clockSynchronizer.ingest.
+    func ingestClockProbe(clientSentMs: Double, serverMs: Double, clientReceivedMs: Double)
+
+    /// Called when sync.state.snapshot arrives — typically hands to
+    /// OrderedSyncController.apply().
+    func applySnapshot(_ state: RealtimeRoomState?)
+
+    /// Called when session is fully established (clock synced + snapshot
+    /// received). Delegate may flip its UI to 'connected'.
+    func sessionDidConnect()
+
+    /// Called when any other server message arrives (chat, reaction,
+    /// participant events, errors). Delegate routes to appropriate consumer.
+    func handleOtherMessage(_ message: RealtimeServerMessage)
+}
 
 @MainActor
-public final class RealtimeClient: NSObject, ObservableObject {
-    @Observable public private(set) var state: RealtimeConnectionState = .idle
-    @Observable public private(set) var lastError: String?
+@Observable
+public final class RealtimeClient: NSObject {
+    // MARK: - Public state (P0-5: @Observable on the class, no per-property annotation)
+    public private(set) var state: RealtimeConnectionState = .idle
+    public private(set) var lastError: String?
+    public private(set) var clockSynced: Bool = false
 
-    /// Server messages — consumers (WatchRoomModel, OrderedSyncController,
-    /// ChatTimeline) subscribe to this stream.
-    public var messages: AsyncStream<RealtimeServerMessage> {
-        AsyncStream { continuation in
-            self.messageContinuations.append(continuation)
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                self.messageContinuations.removeAll { $0 === continuation }
-            }
-        }
-    }
+    // MARK: - Subscriptions
+    private var messageSinks: [MessageSink] = []
+    private var stateSinks: [StateSink] = []
 
-    /// State change events — UI (ConnectionBanner) subscribes to this.
-    public var stateChanges: AsyncStream<RealtimeConnectionState> {
-        AsyncStream { continuation in
-            self.stateContinuations.append(continuation)
-            continuation.yield(self.state)
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                self.stateContinuations.removeAll { $0 === continuation }
-            }
-        }
-    }
-
+    // MARK: - Networking
     private var task: URLSessionWebSocketTask?
     private var session: URLSession?
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var clockProbeTask: Task<Void, Never>?
+    private var handshakeTimeoutTask: Task<Void, Never>?
+    private var clockReplyCount = 0
 
-    private var messageContinuations: [AsyncStream<RealtimeServerMessage>.Continuation] = []
-    private var stateContinuations: [AsyncStream<RealtimeConnectionState>.Continuation] = []
-
+    // MARK: - Config
     private let endpoint: URL
+    public weak var delegate: RealtimeClientDelegate?
     private let ticketProvider: () async -> String?
     private var currentTicket: String?
+    private var currentRoomId: String?
     private var reconnectAttempt = 0
     private static let maxReconnectBackoffSec: Double = 30
+    private static let clockSyncTimeoutNs: UInt64 = 5_000_000_000
+    private static let minClockRepliesForSync = 3
 
     public init(endpoint: URL, ticketProvider: @escaping () async -> String?) {
         self.endpoint = endpoint
@@ -77,31 +99,81 @@ public final class RealtimeClient: NSObject, ObservableObject {
         super.init()
     }
 
-    // MARK: - Connect
+    // MARK: - Public API
 
-    public func connect() {
-        guard state == .idle || state.isTransient == false else { return }
-        if case .failed = state { /* allow retry from failed */ }
+    public var messages: AsyncStream<RealtimeServerMessage> {
+        AsyncStream { continuation in
+            let sink = MessageSink(id: UUID(), continuation: continuation)
+            self.messageSinks.append(sink)
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.messageSinks.removeAll { $0.id == sink.id }
+                }
+            }
+        }
+    }
+
+    public var stateChanges: AsyncStream<RealtimeConnectionState> {
+        AsyncStream { continuation in
+            let sink = StateSink(id: UUID(), continuation: continuation)
+            self.stateSinks.append(sink)
+            continuation.yield(self.state)
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.stateSinks.removeAll { $0.id == sink.id }
+                }
+            }
+        }
+    }
+
+    public func connect(roomId: String) {
+        currentRoomId = roomId
+        guard state == .idle || !state.isTransient || state.isOnline == false else { return }
+        if case .failed = state { /* allow retry */ }
         setState(.connecting)
-        Task { await self.openConnection() }
+        Task { await openConnection() }
     }
 
     public func disconnect() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        receiveTask?.cancel()
-        receiveTask = nil
-        clockProbeTask?.cancel()
-        clockProbeTask = nil
+        reconnectTask?.cancel(); reconnectTask = nil
+        receiveTask?.cancel(); receiveTask = nil
+        clockProbeTask?.cancel(); clockProbeTask = nil
+        handshakeTimeoutTask?.cancel(); handshakeTimeoutTask = nil
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         session?.invalidateAndCancel()
         session = nil
         currentTicket = nil
+        clockReplyCount = 0
+        clockSynced = false
         setState(.idle)
     }
 
+    public func send(_ msg: RealtimeClientMessage) {
+        guard let task, state.isOnline || state.isTransient else { return }
+        do {
+            let data = try JSONEncoder().encode(msg)
+            task.send(.data(data)) { [weak self] err in
+                if let err {
+                    Task { @MainActor [weak self] in
+                        self?.lastError = "send failed: \(err.localizedDescription)"
+                    }
+                }
+            }
+        } catch {
+            lastError = "encode failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Connection
+
     private func openConnection() async {
+        guard let roomId = currentRoomId else {
+            setState(.failed(reason: "No roomId"))
+            return
+        }
         guard let ticket = await ticketProvider() else {
             setState(.failed(reason: "No realtime ticket"))
             return
@@ -109,23 +181,18 @@ public final class RealtimeClient: NSObject, ObservableObject {
         currentTicket = ticket
 
         var request = URLRequest(url: endpoint)
-        // Sec-WebSocket-Protocol carries the ticket (runbook §2)
         request.setValue("plink.v2, plink.ticket.\(ticket)", forHTTPHeaderField: "Sec-WebSocket-Protocol")
-
         let cfg = URLSessionConfiguration.default
         cfg.waitsForConnectivity = true
         cfg.timeoutIntervalForRequest = 15
-        cfg.timeoutIntervalForResource = 0  // no overall timeout — long-lived socket
+        cfg.timeoutIntervalForResource = 0
 
-        let session = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
-        self.session = session
-
-        let task = session.webSocketTask(with: request)
-        self.task = task
+        let s = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
+        self.session = s
+        let t = s.webSocketTask(with: request)
+        self.task = t
         setState(.authenticating)
-        task.resume()
-
-        // Start single receive loop (§19: 'Не запускать два receive loop')
+        t.resume()
         startReceiveLoop()
     }
 
@@ -137,10 +204,10 @@ public final class RealtimeClient: NSObject, ObservableObject {
                 do {
                     let msg = try await self.task?.receive()
                     guard let msg else { break }
-                    await self.handleIncoming(msg)
+                    self.handleIncoming(msg)
                 } catch {
                     if !Task.isCancelled {
-                        await self.handleReceiveError(error)
+                        self.handleReceiveError(error)
                     }
                     break
                 }
@@ -150,39 +217,93 @@ public final class RealtimeClient: NSObject, ObservableObject {
 
     // MARK: - Incoming
 
-    private func handleIncoming(_ msg: URLSessionWebSocketTask.Message) async {
+    private func handleIncoming(_ msg: URLSessionWebSocketTask.Message) {
         let data: Data
         switch msg {
         case .data(let d): data = d
         case .string(let s): data = Data(s.utf8)
         @unknown default: return
         }
+        let clientReceivedMs = Date().timeIntervalSince1970 * 1000
         do {
             let decoded = try JSONDecoder().decode(RealtimeServerMessage.self, from: data)
-            // Forward to all subscribers
-            for c in messageContinuations { c.yield(decoded) }
-
-            // Handle session.ready internally — it's the signal that we're
-            // truly connected (runbook §19).
-            if case .sessionReady(let ready) = decoded {
+            for sink in messageSinks { sink.continuation.yield(decoded) }
+            switch decoded {
+            case .sessionReady(let ready):
                 handleSessionReady(ready)
+            case .clockProbeReply(let reply):
+                handleClockReply(reply, clientReceivedMs: clientReceivedMs)
+            case .syncStateSnapshot(let snapshot):
+                handleSnapshot(snapshot)
+            case .syncState(let stateMsg):
+                // Live authoritative update — delegate applies it.
+                delegate?.applySnapshot(stateMsg.state)
+                for sink in messageSinks { sink.continuation.yield(decoded) }
+            default:
+                delegate?.handleOtherMessage(decoded)
             }
         } catch {
-            // Schema mismatch — log metric, don't crash
             lastError = "decode failed: \(error.localizedDescription)"
         }
     }
 
+    // P0-4: complete handshake on session.ready
     private func handleSessionReady(_ ready: RealtimeServerMessage.SessionReady) {
-        setState(.connected)
-        reconnectAttempt = 0
-        // Kick off clock probes — 7 probes at 120ms, then 1 every 10s
+        setState(.synchronizing)
+        // Start clock probes immediately — we need ≥3 replies before .connected
         startClockProbes()
+        // Start handshake timeout — if clock sync doesn't converge in 5s,
+        // proceed in degraded mode (clockSynced=false) so UI doesn't hang.
+        startHandshakeTimeout()
+    }
+
+    private func handleClockReply(_ reply: RealtimeServerMessage.ClockProbeReply, clientReceivedMs: Double) {
+        delegate?.ingestClockProbe(
+            clientSentMs: reply.clientSentMs,
+            serverMs: reply.serverMs,
+            clientReceivedMs: clientReceivedMs
+        )
+        clockReplyCount += 1
+        if clockReplyCount >= Self.minClockRepliesForSync && !clockSynced {
+            clockSynced = true
+            // Send snapshot request — afterSeq = last applied watermark
+            guard let roomId = currentRoomId else { return }
+            let afterSeq = delegate?.lastSeq ?? 0
+            send(.stateRequest(.init(roomId: roomId, afterSeq: afterSeq)))
+        }
+    }
+
+    private func handleSnapshot(_ snapshot: RealtimeServerMessage.SyncStateSnapshotMessage) {
+        // Hand snapshot to OrderedSyncController (via delegate)
+        delegate?.applySnapshot(snapshot.state)
+        // P1-8: if snapshot (epoch, seq) is not newer than watermark, treat
+        // as reconciliation ack — still proceed to .connected.
+        handshakeTimeoutTask?.cancel()
+        handshakeTimeoutTask = nil
+        if state != .connected {
+            setState(.connected)
+            delegate?.sessionDidConnect()
+            reconnectAttempt = 0
+        }
+    }
+
+    private func startHandshakeTimeout() {
+        handshakeTimeoutTask?.cancel()
+        handshakeTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.clockSyncTimeoutNs)
+            guard !Task.isCancelled, let self else { return }
+            // Timeout — proceed in degraded mode
+            if self.state != .connected {
+                self.clockSynced = false
+                self.lastError = "Clock sync timeout — proceeding in degraded mode"
+                self.setState(.connected)
+                self.delegate?.sessionDidConnect()
+            }
+        }
     }
 
     private func handleReceiveError(_ error: Error) {
         let nsError = error as NSError
-        // 57 = Socket not connected, 60 = Timed out, 54 = Connection reset
         let transient = [57, 60, 54, -1005, -1009, -1001].contains(nsError.code)
         if transient {
             scheduleReconnect()
@@ -205,7 +326,7 @@ public final class RealtimeClient: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Clock probes (runbook §5)
+    // MARK: - Clock probes
 
     private func startClockProbes() {
         clockProbeTask?.cancel()
@@ -217,7 +338,7 @@ public final class RealtimeClient: NSObject, ObservableObject {
                 self.sendClockProbe()
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
-            // Steady state: 1 probe every 10s
+            // Steady: 1 every 10s
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
                 if Task.isCancelled { return }
@@ -227,46 +348,23 @@ public final class RealtimeClient: NSObject, ObservableObject {
     }
 
     private func sendClockProbe() {
-        let probe = RealtimeClientMessage.clockProbe(
-            .init(clientSentMs: Date().timeIntervalSince1970 * 1000)
-        )
-        send(probe)
+        send(.clockProbe(.init(clientSentMs: Date().timeIntervalSince1970 * 1000)))
     }
-
-    // MARK: - Send
-
-    public func send(_ msg: RealtimeClientMessage) {
-        guard let task, state.isOnline || state.isTransient else { return }
-        do {
-            let data = try JSONEncoder().encode(msg)
-            task.send(.data(data)) { [weak self] err in
-                if let err {
-                    Task { @MainActor in
-                        self?.lastError = "send failed: \(err.localizedDescription)"
-                    }
-                }
-            }
-        } catch {
-            lastError = "encode failed: \(error.localizedDescription)"
-        }
-    }
-
-    // MARK: - State
 
     private func setState(_ newState: RealtimeConnectionState) {
         state = newState
-        for c in stateContinuations { c.yield(newState) }
+        for sink in stateSinks { sink.continuation.yield(newState) }
     }
 
-    deinit {
-        // Synchronous cancel — cannot touch MainActor state from deinit.
-        // task?.cancel is safe to call from any thread.
+    // P0-5: deinit must NOT touch @MainActor state. Only synchronous
+    // non-isolated socket/session cancellation.
+    nonisolated deinit {
         task?.cancel(with: .goingAway, reason: nil)
         session?.invalidateAndCancel()
     }
 }
 
-// MARK: - URLSessionWebSocketDelegate
+// MARK: - URLSessionWebSocketDelegate (nonisolated, hop to MainActor)
 
 extension RealtimeClient: URLSessionWebSocketDelegate {
     nonisolated public func urlSession(
@@ -274,10 +372,10 @@ extension RealtimeClient: URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?
     ) {
-        // Handshake completed. We are NOT 'connected' yet — wait for
-        // session.ready from the server (runbook §19).
-        Task { @MainActor in
-            self.setState(.joining)
+        Task { @MainActor [weak self] in
+            // Handshake completed at transport level. NOT .connected yet —
+            // wait for session.ready + clock sync + snapshot.
+            self?.setState(.joining)
         }
     }
 
@@ -287,12 +385,14 @@ extension RealtimeClient: URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
-        Task { @MainActor in
-            // 1000 = normal close, 1001 = going away, 4001 = auth fail
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             if closeCode == .normal || closeCode == .goingAway {
                 self.setState(.idle)
             } else if closeCode.rawValue == 4001 {
                 self.setState(.failed(reason: "Auth rejected (4001)"))
+            } else if closeCode.rawValue == 4003 {
+                self.setState(.failed(reason: "Forbidden (4003) — not member/host"))
             } else {
                 self.scheduleReconnect()
             }

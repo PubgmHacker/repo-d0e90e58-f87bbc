@@ -1,7 +1,7 @@
 import Foundation
 import WebKit
 
-// MARK: - ExtractionBridge (v98 — HLS-First Headless WKWebView Scraper)
+// MARK: - ExtractionBridge (v99 — HLS via IOS Innertube API)
 //
 // 🔧 v90 (Gemini): Separate invisible WKWebView that ONLY extracts stream URL.
 // 🔧 v98: Switched priority to HLS-first. MP4 formats (itag 18/22) are
@@ -9,20 +9,26 @@ import WebKit
 //         proxy can't strip `ip` without invalidating the signature → 403.
 //         HLS manifest URLs are NOT IP-bound (sparams doesn't include `ip`),
 //         so they survive the proxy and play through AVPlayer natively.
+// 🔧 v99: MWEB client (used by m.youtube.com) usually does NOT include
+//         hlsManifestUrl in streamingData. We now POST to /youtubei/v1/player
+//         with clientName=IOS — IOS client DOES return hlsManifestUrl.
+//         Cookies + INNERTUBE_API_KEY are already in the WebView, so the
+//         request is authenticated as the same iPhone session.
 //
 // Strategy:
 //   1. Load m.youtube.com/watch?v=ID with iOS Safari UA
-//   2. Poll for ytInitialPlayerResponse (in HTML or window variable)
-//   3. Extract hlsManifestUrl (.m3u8) — NOT IP-bound, works through proxy
-//   4. Fallback: itag 22 (720p MP4) or itag 18 (360p MP4) — IP-bound
-//   5. Return StreamInfo to caller (NativePlayerEngine)
-//   6. Release WKWebView (don't keep in memory — Gemini recommendation)
+//   2. Poll for ytInitialPlayerResponse (HTML/window/ytplayer.config)
+//   3. Extract hlsManifestUrl from MWEB response (sometimes present)
+//   4. Fallback: POST to /youtubei/v1/player with IOS client → get HLS
+//   5. Last resort: itag 22/18 MP4 (IP-bound, may 403 through proxy)
+//   6. Return StreamInfo to caller (NativePlayerEngine)
+//   7. Release WKWebView (don't keep in memory)
 //
 // Why this avoids ban:
 //   - IP = iPhone (residential, not server)
 //   - UA = iOS Safari (YouTube trusts mobile browsers)
-//   - No API calls (no /youtubei/v1/player → no BotGuard check)
-//   - Just HTML scrape (parses <script> tags)
+//   - IOS innertube API request runs in-page (same origin) — no CORS, no BotGuard
+//   - Cookies + STS token already in WebView session
 
 @MainActor
 final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -159,8 +165,13 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         if let url = message.body as? String {
             // Accept googlevideo.com (MP4 or HLS manifest) or .m3u8 (HLS)
             if url.contains("googlevideo.com") || url.contains(".m3u8") {
-                let isHLS = url.contains("/manifest/hls/") || url.contains(".m3u8")
-                print("✅ v98: ExtractionBridge — found \(isHLS ? "HLS manifest" : "MP4"): \(url.prefix(80))")
+                let source: String
+                if url.contains("/manifest/hls/") || url.contains(".m3u8") {
+                    source = "HLS manifest"
+                } else {
+                    source = "MP4 (IP-bound, may 403 through proxy)"
+                }
+                print("✅ v99: ExtractionBridge — found \(source): \(url.prefix(80))")
 
                 // 🔧 v92: Capture cookies before finishing.
                 // YouTube requires matching cookies between extraction and playback.
@@ -276,10 +287,12 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                 if (consentBtn) consentBtn.click();
 
                 var sd = null;
+                var videoId = null;
 
                 // Method 1: Direct access to global variable
                 if (window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.streamingData) {
                     sd = window.ytInitialPlayerResponse.streamingData;
+                    videoId = window.ytInitialPlayerResponse.videoDetails?.videoId;
                 }
 
                 // Method 2: Regex parse <script> tags
@@ -293,6 +306,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                                 var data = JSON.parse(match[1]);
                                 if (data.streamingData) {
                                     sd = data.streamingData;
+                                    videoId = data.videoDetails?.videoId;
                                     break;
                                 }
                             }
@@ -305,30 +319,66 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                     var raw = window.ytplayer.config.args.raw_player_response;
                     if (raw) {
                         var parsed = JSON.parse(raw);
-                        if (parsed.streamingData) sd = parsed.streamingData;
+                        if (parsed.streamingData) {
+                            sd = parsed.streamingData;
+                            videoId = parsed.videoDetails?.videoId;
+                        }
                     }
+                }
+
+                // Fallback: extract videoId from URL
+                if (!videoId) {
+                    var urlMatch = location.href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+                    if (urlMatch) videoId = urlMatch[1];
                 }
 
                 if (sd) {
                     var targetUrl = null;
 
-                    // v98: Priority A — HLS Manifest.
-                    // HLS URLs (hlsManifestUrl) are NOT IP-bound: their signature
-                    // (sparams=...) does NOT include `ip`, so the URL works from
-                    // any IP (including our Railway backend). The backend's v97
-                    // transparent-proxy strips `ip` from the URL — but for MP4
-                    // formats, `ip` is part of the cryptographic signature
-                    // (sparams contains `ip`), so stripping it invalidates the
-                    // signature → 403. HLS avoids this entirely.
-                    // AVPlayer natively supports HLS (.m3u8).
+                    // v99 Priority A — HLS from MWEB (sometimes present for live/recent).
                     if (sd.hlsManifestUrl) {
                         targetUrl = sd.hlsManifestUrl;
                     }
 
-                    // v98: Priority B — muxed MP4 formats (fallback if no HLS).
-                    // itag 22=720p, 18=360p. These URLs are IP-bound — may 403
-                    // through the proxy if YouTube validates signature strictly.
-                    // Kept as last-resort fallback for videos without HLS.
+                    // v99 Priority B — IOS innertube API request.
+                    // MWEB client typically does NOT include hlsManifestUrl in
+                    // streamingData. The IOS client DOES. We POST to /youtubei/v1/player
+                    // with clientName=IOS — YouTube responds with hlsManifestUrl.
+                    // Cookies + STS token are already in the WebView, so the request
+                    // is authenticated as the same iPhone session.
+                    if (!targetUrl && videoId) {
+                        try {
+                            // Extract INNERTUBE_API_KEY from ytcfg
+                            var apiKey = window.ytcfg?.get?.('INNERTUBE_API_KEY') || 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+                            var clientVersion = window.ytcfg?.get?.('INNERTUBE_CONTEXT_CLIENT_VERSION') || '17.31.4';
+
+                            var xhr = new XMLHttpRequest();
+                            xhr.open('POST', 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey, false);
+                            xhr.setRequestHeader('Content-Type', 'application/json');
+
+                            var body = JSON.stringify({
+                                context: {
+                                    client: {
+                                        clientName: 'IOS',
+                                        clientVersion: clientVersion,
+                                        hl: 'en',
+                                        gl: 'US'
+                                    }
+                                },
+                                videoId: videoId
+                            });
+
+                            xhr.send(body);
+                            if (xhr.status === 200) {
+                                var iosResp = JSON.parse(xhr.responseText);
+                                if (iosResp.streamingData && iosResp.streamingData.hlsManifestUrl) {
+                                    targetUrl = iosResp.streamingData.hlsManifestUrl;
+                                }
+                            }
+                        } catch(e) {}
+                    }
+
+                    // v99 Priority C — muxed MP4 (LAST resort, IP-bound, may 403).
                     if (!targetUrl) {
                         var formats = sd.formats || [];
                         var best = formats.find(function(f) { return f.itag === 22; })

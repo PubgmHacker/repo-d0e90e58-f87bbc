@@ -35,6 +35,16 @@ final class NativePlayerEngine: ObservableObject {
     private var statusObservation: NSKeyValueObservation?
     private var durationObservation: NSKeyValueObservation?
 
+    /// v97: The User-Agent that ExtractionBridge's WKWebView uses to load
+    /// m.youtube.com. We forward the SAME UA to the backend so YouTube's CDN
+    /// sees a consistent client between extraction (iPhone WebView) and
+    /// media-fetch (Railway proxy impersonating that same iPhone WebView).
+    /// MUST stay in sync with ExtractionBridge.swift `wv.customUserAgent`.
+    private static let webViewUserAgent =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) " +
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 " +
+        "Mobile/15E148 Safari/604.1"
+
     private init() {
         configureAudioSession()
     }
@@ -61,7 +71,15 @@ final class NativePlayerEngine: ObservableObject {
 
     // MARK: - Load & Play
 
-    /// v97: Server-side extraction via videoId. Backend extracts + streams (same IP).
+    /// v97: Transparent Proxy. iOS extracts googlevideo URL via ExtractionBridge,
+    /// then asks the backend to fetch it on iOS's behalf. Backend strips the
+    /// `ip` query param (which would otherwise 403 due to IP mismatch) and
+    /// forwards iPhone UA + cookies + Referer. Backend IP is irrelevant.
+    ///
+    /// Priority:
+    ///   1. b64url + cookies + UA   (v97 transparent proxy — PRIMARY, works)
+    ///   2. videoId                 (v95 server-side extract — fallback, may 429)
+    ///   3. direct URL              (non-YouTube, no relay needed)
     func loadAndPlay(streamURL: String, cookies: [HTTPCookie] = [], videoId: String? = nil) {
         guard let url = URL(string: streamURL) else {
             print("⚠️ v90: Invalid stream URL: \(streamURL.prefix(60))")
@@ -72,11 +90,45 @@ final class NativePlayerEngine: ObservableObject {
 
         let lowerURL = streamURL.lowercased()
         let finalURL: URL
+        let backendBase = "https://plink-backend-production-ef31.up.railway.app"
+        let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
 
-        // v97: Priority 1 — videoId (server-side extraction, solves IP mismatch)
-        if let vid = videoId, !vid.isEmpty {
-            let backendBase = "https://plink-backend-production-ef31.up.railway.app"
-            let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
+        // v97: Priority 1 — Transparent Proxy via b64url + cookies + UA.
+        // iOS already extracted the googlevideo URL; backend just strips `ip`
+        // and forwards with iPhone identity. This is the WORKING path.
+        if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
+            // Base64-encode the googlevideo URL (backend will strip the `ip` param)
+            let b64url = (streamURL.data(using: .utf8) ?? Data()).base64EncodedString()
+
+            // Base64-encode cookies as a cookie header string
+            let cookieString = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+            let b64cookies = (cookieString.data(using: .utf8) ?? Data()).base64EncodedString()
+
+            // v97: Base64-encode the WebView User-Agent so the backend can
+            // impersonate the same iPhone that performed the extraction.
+            let uaData = Self.webViewUserAgent.data(using: .utf8) ?? Data()
+            let b64ua = uaData.base64EncodedString()
+
+            var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
+            relayComponents.queryItems = [
+                URLQueryItem(name: "b64url", value: b64url),
+                URLQueryItem(name: "token", value: token),
+                URLQueryItem(name: "b64cookies", value: b64cookies),
+                URLQueryItem(name: "b64ua", value: b64ua) // v97: WebView UA
+            ]
+
+            guard let relayURL = relayComponents.url else {
+                print("⚠️ v97: Failed to create StreamRelay URL")
+                return
+            }
+
+            finalURL = relayURL
+            print("🎬 v97: StreamRelay transparent-proxy — b64url(\(b64url.count)) + cookies(\(cookies.count)) + UA(\(b64ua.count)) → backend")
+        }
+        // v97: Priority 2 — Fallback to videoId (server-side extraction).
+        // Only used when streamURL is empty/not a googlevideo URL but we still
+        // have a videoId. Backend tries Piped + yt-dlp (may 429/400 on Railway).
+        else if let vid = videoId, !vid.isEmpty {
             var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
             relayComponents.queryItems = [
                 URLQueryItem(name: "videoId", value: vid),
@@ -84,34 +136,7 @@ final class NativePlayerEngine: ObservableObject {
             ]
             guard let relayURL = relayComponents.url else { return }
             finalURL = relayURL
-            print("🎬 v97: StreamRelay — server-side extraction for videoId=\(vid)")
-        }
-        // v96: Priority 2 — b64url + cookies (backward compat, still IP-bound)
-        else if lowerURL.contains("googlevideo.com") || lowerURL.contains("youtube.com") {
-            let backendBase = "https://plink-backend-production-ef31.up.railway.app"
-            let token = KeychainHelper.read(for: "rave_auth_token") ?? ""
-
-            // Base64-encode the googlevideo URL
-            let b64url = (streamURL.data(using: .utf8) ?? Data()).base64EncodedString()
-
-            // v96: Base64-encode cookies as cookie header string
-            let cookieString = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
-            let b64cookies = cookieString.data(using: .utf8)?.base64EncodedString() ?? ""
-
-            var relayComponents = URLComponents(string: "\(backendBase)/api/media/stream")!
-            relayComponents.queryItems = [
-                URLQueryItem(name: "b64url", value: b64url),
-                URLQueryItem(name: "token", value: token),
-                URLQueryItem(name: "b64cookies", value: b64cookies)
-            ]
-
-            guard let relayURL = relayComponents.url else {
-                print("⚠️ v96: Failed to create StreamRelay URL")
-                return
-            }
-
-            finalURL = relayURL
-            print("🎬 v96: StreamRelay — b64url(\(b64url.count)) + cookies(\(cookies.count)) → backend")
+            print("🎬 v97: StreamRelay fallback — server-side extraction for videoId=\(vid)")
         } else {
             // Non-YouTube URL — play directly (no relay needed)
             finalURL = url

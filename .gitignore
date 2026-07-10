@@ -1,2 +1,55 @@
-skills/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+build/
+*.moved-aside
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Node (backend, если есть рядом)
 node_modules/
+.next/
+*.tsbuildinfo
+
+# Unity / Godot / чужие проекты — НИКОГДА не коммитить
+MegabonkUnity/
+Builds/
+*.app/
+*.dylib
+*.dll
+*.so
+
+# Сессии и временные файлы
+*.session-history.md
+*.zcode-session
+sess_*/
+
+# Встроенные git-репозитории (submodules случайно добавленные)
+dating/
+mobile/
+
+# 🔧 NEW: Never commit real API keys
+Secrets.xcconfig
+*.xcconfig.local
+

@@ -30,28 +30,8 @@
 
 import Foundation
 import Observation
-
-/// Abstraction over AVPlayer / WKWebView / external route.
-/// Real implementation lives in Plink/Playback/NativePlayerController.swift.
-@MainActor
-public protocol PlaybackControlling: AnyObject {
-    var position: TimeInterval { get }
-    var duration: TimeInterval { get }
-    var isPlaying: Bool { get }
-    var isBuffering: Bool { get }
-    func prepare(_ source: PlaybackSource) async throws
-    func play() async
-    func pause()
-    func seek(to seconds: TimeInterval, precise: Bool) async
-    func setRate(_ rate: Float)
-}
-
-public enum PlaybackSource: Sendable {
-    case hls(URL, headers: [String: String])
-    case mp4(URL, headers: [String: String])
-    case youtube(String)
-    case external(URL)
-}
+// PlaybackControlling + PlaybackSource are defined in Plink/Playback/.
+// We import them transitively via the module — same target, no import needed.
 
 @MainActor
 @Observable

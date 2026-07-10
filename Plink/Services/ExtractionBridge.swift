@@ -1,7 +1,7 @@
 import Foundation
 import WebKit
 
-// MARK: - ExtractionBridge (v101 — Async IOS Innertube Fetch in WebView)
+// MARK: - ExtractionBridge (v102 — Async IOS Innertube + Diagnostic Logging)
 //
 // 🔧 v90 (Gemini): Separate invisible WKWebView that ONLY extracts stream URL.
 // 🔧 v98: Switched priority to HLS-first. MP4 formats (itag 18/22) are
@@ -13,15 +13,18 @@ import WebKit
 //         blocked by YouTube ("Precondition check failed" +
 //         "Sign in to confirm you're not a bot"). Cookies don't help.
 // 🔧 v101: Async fetch in WebView to call /youtubei/v1/player with IOS client.
-//         Runs on iPhone IP (not blocked). YouTube returns hlsManifestUrl.
-//         Backend pipes manifest bytes only; AVPlayer fetches segments
-//         DIRECTLY from iPhone IP → IP matches → 200 OK.
+//         Ran but timed out at 30s before fetch completed.
+// 🔧 v102: Diagnostic logging via separate "logger" message handler.
+//         JS side reports every step (fetch start, response, errors, retries).
+//         Timeout increased 30s → 60s. Retry fetch up to 3 times.
+//         MP4 fallback waits 7.5s + 3 fetch attempts before giving up.
 //
 // Strategy:
 //   1. Load m.youtube.com/watch?v=ID with iOS Safari UA
 //   2. Poll for ytInitialPlayerResponse (HTML/window/ytplayer.config)
 //   3. Priority A: hlsManifestUrl from MWEB (sometimes present)
 //   4. Priority B: async fetch /youtubei/v1/player {clientName:'IOS'} → HLS
+//                  (retry up to 3 times, with diagnostic logging)
 //   5. Priority C: MP4 itag 22/18 (LAST resort, IP-bound, will 403)
 //   6. Return StreamInfo to caller (NativePlayerEngine)
 //   7. Release WKWebView
@@ -107,6 +110,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
             )
             config.userContentController.addUserScript(scraperScript)
             config.userContentController.add(self, name: "extractor")
+            config.userContentController.add(self, name: "logger") // v102: diagnostic logger
 
             // 🔧 v94.10: Create WKWebView on main thread + add to view hierarchy.
             // "Could not create a sandbox extension" error happens when WKWebView
@@ -148,9 +152,11 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
             let url = URL(string: "https://m.youtube.com/watch?v=\(videoId)")!
             wv.load(URLRequest(url: url))
 
-            // 30s timeout (v94.7: was 15s — not enough for VEVO/licensed content)
+            // v102: timeout increased to 60s — async fetch to /youtubei/v1/player
+            // can take 5-15s on slow connections, and ytInitialPlayerResponse
+            // parsing itself needs a few seconds. 30s was too tight.
             timeoutTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard !Task.isCancelled else { return }
                 self?.finish(with: .failure(ExtractionError.timeout))
             }
@@ -163,7 +169,18 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard !isFinished, message.name == "extractor" else { return }
+        guard !isFinished else { return }
+
+        // v102: diagnostic logger — JS side calls window.webkit.messageHandlers.logger.postMessage("...")
+        // to report fetch progress/errors. Helps debug async fetch failures.
+        if message.name == "logger" {
+            if let msg = message.body as? String {
+                print("🔍 v102 [JS]: \(msg)")
+            }
+            return
+        }
+
+        guard message.name == "extractor" else { return }
 
         if let url = message.body as? String {
             // Accept googlevideo.com (MP4 or HLS manifest) or .m3u8 (HLS)
@@ -174,7 +191,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                 } else {
                     source = "MP4 (IP-bound, may 403 through proxy)"
                 }
-                print("✅ v101: ExtractionBridge — found \(source): \(url.prefix(80))")
+                print("✅ v102: ExtractionBridge — found \(source): \(url.prefix(80))")
 
                 // 🔧 v92: Capture cookies before finishing.
                 // YouTube requires matching cookies between extraction and playback.
@@ -260,6 +277,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "extractor")
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "logger")
         webView?.configuration.userContentController.removeAllUserScripts()
         webView?.removeFromSuperview()  // 🔧 v94.10: remove from view hierarchy
         webView = nil
@@ -341,6 +359,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                     // v101 Priority A — HLS from MWEB (sometimes present for live/recent).
                     if (sd.hlsManifestUrl) {
                         targetUrl = sd.hlsManifestUrl;
+                        window.webkit.messageHandlers.logger.postMessage('Priority A: found hlsManifestUrl in MWEB');
                     }
 
                     // v101 Priority B — IOS innertube API via ASYNC fetch.
@@ -362,8 +381,11 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
 
                         var apiKey = window.ytcfg?.get?.('INNERTUBE_API_KEY') || 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
                         var clientVersion = window.ytcfg?.get?.('INNERTUBE_CONTEXT_CLIENT_VERSION') || '17.31.4';
+                        var fetchUrl = 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey + '&prettyPrint=false';
 
-                        fetch('https://www.youtube.com/youtubei/v1/player?key=' + apiKey + '&prettyPrint=false', {
+                        window.webkit.messageHandlers.logger.postMessage('Priority B: starting async fetch to innertube (videoId=' + videoId + ', clientVersion=' + clientVersion + ')');
+
+                        fetch(fetchUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -378,17 +400,39 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                                 videoId: videoId
                             })
                         })
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            if (data && data.streamingData && data.streamingData.hlsManifestUrl) {
-                                clearInterval(interval);
-                                window.webkit.messageHandlers.extractor.postMessage(data.streamingData.hlsManifestUrl);
+                        .then(function(r) {
+                            window.webkit.messageHandlers.logger.postMessage('fetch response: status=' + r.status + ' ok=' + r.ok);
+                            if (!r.ok) {
+                                // Read error body for diagnostic
+                                return r.text().then(function(t) {
+                                    window.webkit.messageHandlers.logger.postMessage('fetch error body: ' + t.substring(0, 300));
+                                    window.__plinkIosFetchStarted = false;
+                                    return null;
+                                });
                             }
-                            // If no hlsManifestUrl, fall through to MP4 on next interval tick.
-                            // Reset guard so we don't retry innertube forever.
-                            window.__plinkIosFetchStarted = false;
+                            return r.json();
+                        })
+                        .then(function(data) {
+                            if (!data) return;
+                            var hls = data.streamingData && data.streamingData.hlsManifestUrl;
+                            var hasFormats = data.streamingData && data.streamingData.formats && data.streamingData.formats.length;
+                            var playStatus = data.playabilityStatus && data.playabilityStatus.status;
+                            window.webkit.messageHandlers.logger.postMessage('innertube response: playStatus=' + playStatus + ' hls=' + (hls ? 'YES' : 'NO') + ' formats=' + (hasFormats || 0));
+
+                            if (hls) {
+                                clearInterval(interval);
+                                window.webkit.messageHandlers.extractor.postMessage(hls);
+                            } else {
+                                // Reset guard so we can retry on next poll cycle (up to 3 times).
+                                window.__plinkIosFetchAttempts = (window.__plinkIosFetchAttempts || 0) + 1;
+                                window.__plinkIosFetchStarted = false;
+                                if (window.__plinkIosFetchAttempts >= 3) {
+                                    window.webkit.messageHandlers.logger.postMessage('innertube: no HLS after 3 attempts, giving up');
+                                }
+                            }
                         })
                         .catch(function(e) {
+                            window.webkit.messageHandlers.logger.postMessage('fetch CATCH error: ' + (e && e.message ? e.message : String(e)).substring(0, 200));
                             // Reset guard on failure so we can retry on next poll cycle.
                             window.__plinkIosFetchStarted = false;
                         });
@@ -396,8 +440,10 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
 
                     // v101 Priority C — muxed MP4 (LAST resort, IP-bound, will 403 through proxy).
                     // Only used as fallback if IOS innertube fetch fails AND no HLS available.
-                    // We give innertube fetch 3 attempts (1.5s) to complete before falling back.
-                    if (!targetUrl && attempts > 6 && !window.__plinkIosFetchStarted) {
+                    // v102: wait 15 attempts (7.5s) instead of 6 — gives async fetch time to complete.
+                    if (!targetUrl && attempts > 15
+                        && (window.__plinkIosFetchAttempts || 0) >= 3) {
+                        window.webkit.messageHandlers.logger.postMessage('Priority C: falling back to MP4 (innertube failed 3x)');
                         var formats = sd.formats || [];
                         var best = formats.find(function(f) { return f.itag === 22; })
                                    || formats.find(function(f) { return f.itag === 18; })
@@ -412,8 +458,11 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                         window.webkit.messageHandlers.extractor.postMessage(targetUrl);
                     }
                 }
-            } catch(e) {}
-            if (attempts > 60) clearInterval(interval); // v94.7: 60 attempts × 500ms = 30s
+            } catch(e) {
+                // v102: log exceptions from scraper
+                try { window.webkit.messageHandlers.logger.postMessage('scraper exception: ' + (e && e.message ? e.message : String(e)).substring(0, 200)); } catch(_) {}
+            }
+            if (attempts > 110) clearInterval(interval); // v102: 110 attempts × 500ms = 55s (under 60s timeout)
         }, 500);
     })();
     """

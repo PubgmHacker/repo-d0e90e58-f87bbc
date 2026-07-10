@@ -1,34 +1,37 @@
 import Foundation
 import WebKit
 
-// MARK: - ExtractionBridge (v99 — HLS via IOS Innertube API)
+// MARK: - ExtractionBridge (v101 — Async IOS Innertube Fetch in WebView)
 //
 // 🔧 v90 (Gemini): Separate invisible WKWebView that ONLY extracts stream URL.
 // 🔧 v98: Switched priority to HLS-first. MP4 formats (itag 18/22) are
 //         IP-bound — their sparams include `ip`, so backend's v97 transparent
 //         proxy can't strip `ip` without invalidating the signature → 403.
-//         HLS manifest URLs are NOT IP-bound (sparams doesn't include `ip`),
-//         so they survive the proxy and play through AVPlayer natively.
-// 🔧 v99: MWEB client (used by m.youtube.com) usually does NOT include
-//         hlsManifestUrl in streamingData. We now POST to /youtubei/v1/player
-//         with clientName=IOS — IOS client DOES return hlsManifestUrl.
-//         Cookies + INNERTUBE_API_KEY are already in the WebView, so the
-//         request is authenticated as the same iPhone session.
+// 🔧 v99: Tried IOS innertube API via sync XHR — BLOCKED in WKWebView,
+//         silently fell through to MP4 fallback → same 403.
+// 🔧 v100: Tried backend-side IOS innertube extraction — Railway IP fully
+//         blocked by YouTube ("Precondition check failed" +
+//         "Sign in to confirm you're not a bot"). Cookies don't help.
+// 🔧 v101: Async fetch in WebView to call /youtubei/v1/player with IOS client.
+//         Runs on iPhone IP (not blocked). YouTube returns hlsManifestUrl.
+//         Backend pipes manifest bytes only; AVPlayer fetches segments
+//         DIRECTLY from iPhone IP → IP matches → 200 OK.
 //
 // Strategy:
 //   1. Load m.youtube.com/watch?v=ID with iOS Safari UA
 //   2. Poll for ytInitialPlayerResponse (HTML/window/ytplayer.config)
-//   3. Extract hlsManifestUrl from MWEB response (sometimes present)
-//   4. Fallback: POST to /youtubei/v1/player with IOS client → get HLS
-//   5. Last resort: itag 22/18 MP4 (IP-bound, may 403 through proxy)
+//   3. Priority A: hlsManifestUrl from MWEB (sometimes present)
+//   4. Priority B: async fetch /youtubei/v1/player {clientName:'IOS'} → HLS
+//   5. Priority C: MP4 itag 22/18 (LAST resort, IP-bound, will 403)
 //   6. Return StreamInfo to caller (NativePlayerEngine)
-//   7. Release WKWebView (don't keep in memory)
+//   7. Release WKWebView
 //
 // Why this avoids ban:
-//   - IP = iPhone (residential, not server)
+//   - IP = iPhone (residential, not blocked)
 //   - UA = iOS Safari (YouTube trusts mobile browsers)
 //   - IOS innertube API request runs in-page (same origin) — no CORS, no BotGuard
-//   - Cookies + STS token already in WebView session
+//   - Cookies + INNERTUBE_API_KEY already in WebView session
+//   - Async fetch works reliably in WKWebView (sync XHR does NOT)
 
 @MainActor
 final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -171,7 +174,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                 } else {
                     source = "MP4 (IP-bound, may 403 through proxy)"
                 }
-                print("✅ v99: ExtractionBridge — found \(source): \(url.prefix(80))")
+                print("✅ v101: ExtractionBridge — found \(source): \(url.prefix(80))")
 
                 // 🔧 v92: Capture cookies before finishing.
                 // YouTube requires matching cookies between extraction and playback.
@@ -335,28 +338,35 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                 if (sd) {
                     var targetUrl = null;
 
-                    // v99 Priority A — HLS from MWEB (sometimes present for live/recent).
+                    // v101 Priority A — HLS from MWEB (sometimes present for live/recent).
                     if (sd.hlsManifestUrl) {
                         targetUrl = sd.hlsManifestUrl;
                     }
 
-                    // v99 Priority B — IOS innertube API request.
+                    // v101 Priority B — IOS innertube API via ASYNC fetch.
+                    // v99 used sync XHR which gets blocked/silently fails in WKWebView.
+                    // v101 uses async fetch — works reliably in WKWebView.
+                    //
                     // MWEB client typically does NOT include hlsManifestUrl in
                     // streamingData. The IOS client DOES. We POST to /youtubei/v1/player
                     // with clientName=IOS — YouTube responds with hlsManifestUrl.
-                    // Cookies + STS token are already in the WebView, so the request
-                    // is authenticated as the same iPhone session.
-                    if (!targetUrl && videoId) {
-                        try {
-                            // Extract INNERTUBE_API_KEY from ytcfg
-                            var apiKey = window.ytcfg?.get?.('INNERTUBE_API_KEY') || 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-                            var clientVersion = window.ytcfg?.get?.('INNERTUBE_CONTEXT_CLIENT_VERSION') || '17.31.4';
+                    // Cookies + API key are already in the WebView session (same-origin).
+                    //
+                    // IMPORTANT: this runs on iPhone IP, so hlsManifestUrl is bound to
+                    // iPhone IP. Backend pipes the manifest bytes only; AVPlayer then
+                    // fetches segments DIRECTLY from iPhone IP → IP matches → 200 OK.
+                    // (Railway IP is fully blocked by YouTube — v100 proved this with
+                    //  "Precondition check failed" + "Sign in to confirm you're not a bot")
+                    if (!targetUrl && videoId && !window.__plinkIosFetchStarted) {
+                        window.__plinkIosFetchStarted = true; // one-shot guard
 
-                            var xhr = new XMLHttpRequest();
-                            xhr.open('POST', 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey, false);
-                            xhr.setRequestHeader('Content-Type', 'application/json');
+                        var apiKey = window.ytcfg?.get?.('INNERTUBE_API_KEY') || 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+                        var clientVersion = window.ytcfg?.get?.('INNERTUBE_CONTEXT_CLIENT_VERSION') || '17.31.4';
 
-                            var body = JSON.stringify({
+                        fetch('https://www.youtube.com/youtubei/v1/player?key=' + apiKey + '&prettyPrint=false', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
                                 context: {
                                     client: {
                                         clientName: 'IOS',
@@ -366,20 +376,28 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                                     }
                                 },
                                 videoId: videoId
-                            });
-
-                            xhr.send(body);
-                            if (xhr.status === 200) {
-                                var iosResp = JSON.parse(xhr.responseText);
-                                if (iosResp.streamingData && iosResp.streamingData.hlsManifestUrl) {
-                                    targetUrl = iosResp.streamingData.hlsManifestUrl;
-                                }
+                            })
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data && data.streamingData && data.streamingData.hlsManifestUrl) {
+                                clearInterval(interval);
+                                window.webkit.messageHandlers.extractor.postMessage(data.streamingData.hlsManifestUrl);
                             }
-                        } catch(e) {}
+                            // If no hlsManifestUrl, fall through to MP4 on next interval tick.
+                            // Reset guard so we don't retry innertube forever.
+                            window.__plinkIosFetchStarted = false;
+                        })
+                        .catch(function(e) {
+                            // Reset guard on failure so we can retry on next poll cycle.
+                            window.__plinkIosFetchStarted = false;
+                        });
                     }
 
-                    // v99 Priority C — muxed MP4 (LAST resort, IP-bound, may 403).
-                    if (!targetUrl) {
+                    // v101 Priority C — muxed MP4 (LAST resort, IP-bound, will 403 through proxy).
+                    // Only used as fallback if IOS innertube fetch fails AND no HLS available.
+                    // We give innertube fetch 3 attempts (1.5s) to complete before falling back.
+                    if (!targetUrl && attempts > 6 && !window.__plinkIosFetchStarted) {
                         var formats = sd.formats || [];
                         var best = formats.find(function(f) { return f.itag === 22; })
                                    || formats.find(function(f) { return f.itag === 18; })

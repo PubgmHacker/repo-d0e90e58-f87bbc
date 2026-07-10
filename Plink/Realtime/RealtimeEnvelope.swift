@@ -168,10 +168,12 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
     case syncStateSnapshot(SyncStateSnapshotMessage)
     case clockProbeReply(ClockProbeReply)
     case chatBroadcast(ChatBroadcast)
+    case reactionBroadcast(ReactionBroadcast)
     case participantJoined(ParticipantEvent)
     case participantLeft(ParticipantEvent)
     case error(ErrorMessage)
     case sessionReady(SessionReady)
+    case serverDraining(ServerDraining)
 
     public struct SyncStateMessage: Decodable, Sendable, Equatable {
         public let type: String  // "sync.state"
@@ -233,6 +235,25 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
         public let serverTimeMs: Int64
     }
 
+    // P0-17: reaction.broadcast — was missing, decode would fail
+    public struct ReactionBroadcast: Decodable, Sendable, Equatable {
+        public let type: String  // "reaction.broadcast"
+        public let protocolVersion: Int
+        public let roomId: String
+        public let userId: String
+        public let username: String
+        public let emoji: String
+        public let serverTimeMs: Int64
+    }
+
+    // P0-17: server.draining — sent on graceful shutdown
+    public struct ServerDraining: Decodable, Sendable, Equatable {
+        public let type: String  // "server.draining"
+        public let protocolVersion: Int
+        public let message: String
+        public let retryInMs: Int64
+    }
+
     private enum DiscriminatorKey: String, CodingKey { case type }
 
     public init(from decoder: Decoder) throws {
@@ -256,6 +277,10 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
             self = .error(try single.decode(ErrorMessage.self))
         case "session.ready":
             self = .sessionReady(try single.decode(SessionReady.self))
+        case "reaction.broadcast":
+            self = .reactionBroadcast(try single.decode(ReactionBroadcast.self))
+        case "server.draining":
+            self = .serverDraining(try single.decode(ServerDraining.self))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,

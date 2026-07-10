@@ -1,22 +1,15 @@
 // Plink/Playback/NativePlayerController.swift
-// AVPlayer-backed PlaybackControlling (runbook §6 + Brain Review P0-6, P0-7)
+// AVPlayer-backed PlaybackControlling (runbook §6 + Brain Review 2 P1-14, P1-16, P1-17)
 //
-// Brain P0-6 fix: seek() awaits completion via withCheckedContinuation.
-//   AVPlayer.seek(to:toleranceBefore:toleranceAfter:completionHandler:) is
-//   the only reliable signal that the seek finished. Task.yield() does NOT
-//   wait for seek completion. OrderedSyncController may not call play() or
-//   declare correction complete until the seek has actually repositioned.
-//   Also: clamp non-finite/negative values, serialize overlapping seeks.
+// Brain P1-14 fix: seek generation token. Each seek bumps generation; only
+// the latest seek's completion is honored. teardown() cancels pending seek.
+// cancelPendingPrerolls() called before new seek.
 //
-// Brain P0-7 fix: buffering state derived correctly.
-//   timeControlStatus == .waitingToPlayAtSpecifiedRate is the PRIMARY
-//   signal of buffering. reasonForWaitingToPlay == .toMinimizeStalling is
-//   a TYPICAL buffering reason, NOT a 'not buffering' signal. Derive
-//   isBuffering from timeControlStatus + item.isPlaybackLikelyToKeepUp +
-//   item.status == .readyToPlay.
+// Brain P1-16 fix: NativePlayerController throws immediately for .youtube
+// source — impossible state. Use EmbeddedPlaybackController for YouTube.
 //
-// ONE AVPlayer per room session (§1 DoD). All observers removed in
-// teardown() (§19).
+// Brain P1-17 fix: preroll only after prepare() or route change, NOT on
+// every play(). Added isPrerolled state.
 
 import Foundation
 import AVFoundation
@@ -44,12 +37,21 @@ public final class NativePlayerController: PlaybackControlling {
     private var likelyKeepUpObservation: NSKeyValueObservation?
     private var isPlaybackBufferEmptyObservation: NSKeyValueObservation?
 
-    // P0-6: serialize overlapping seeks
+    // P1-14: seek generation token
+    private var seekGeneration = 0
     private var pendingSeekTask: Task<Void, Never>?
+
+    // P1-17: preroll state — only preroll after prepare, not every play()
+    private var isPrerolled: Bool = false
 
     public init() {}
 
     public func prepare(_ source: PlaybackSource) async throws {
+        // P1-16: reject .youtube — use EmbeddedPlaybackController instead
+        if case .youtube = source {
+            throw ProviderError.unsupportedSource
+        }
+
         teardown()
 
         let provider: ProviderAdapter
@@ -57,10 +59,11 @@ public final class NativePlayerController: PlaybackControlling {
         case .hls, .mp4, .external:
             provider = NativeHLSProvider()
         case .youtube:
-            provider = YouTubeEmbeddedProvider()
+            throw ProviderError.unsupportedSource  // unreachable
         }
         self.provider = provider
         self.capabilities = provider.capabilities
+        self.isPrerolled = false  // P1-17
 
         try await provider.prepare(source: source)
 
@@ -71,19 +74,17 @@ public final class NativePlayerController: PlaybackControlling {
             item.preferredForwardBufferDuration = 8
             self.player = p
             observe(p, item)
-        } else if provider.embeddedView != nil {
-            // Embedded (YouTube) — sync via JS bridge. NativePlayerController
-            // is NOT the right controller for embedded; PlaybackCoordinator
-            // should use EmbeddedPlaybackController instead (P0-8).
         }
     }
 
     public func play() async {
         guard let p = player else { return }
-        if capabilities.supportsRateCorrection {
+        // P1-17: preroll only if not yet prerolled (after prepare or route change)
+        if capabilities.supportsRateCorrection && !isPrerolled {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 p.preroll(atRate: 1.0) { _ in cont.resume() }
             }
+            isPrerolled = true
         }
         p.play()
         isPlaying = true
@@ -94,11 +95,9 @@ public final class NativePlayerController: PlaybackControlling {
         isPlaying = false
     }
 
-    // P0-6: await AVPlayer.seek completion via withCheckedContinuation.
-    // Clamp non-finite/negative. Serialize overlapping seeks.
+    // P1-14: seek generation token. Only latest seek's completion honored.
     public func seek(to seconds: TimeInterval, precise: Bool) async {
         guard let p = player else { return }
-        // Clamp
         let clamped: Double
         if seconds.isNaN || seconds.isInfinite || seconds < 0 {
             clamped = 0
@@ -115,9 +114,13 @@ public final class NativePlayerController: PlaybackControlling {
             tolerance = CMTime(seconds: 0.15, preferredTimescale: 600)
         }
 
-        // Cancel any pending seek — last-write-wins
+        // P1-14: bump generation, cancel pending prerolls
+        seekGeneration += 1
+        let generation = seekGeneration
+        p.cancelPendingPrerolls()
         pendingSeekTask?.cancel()
-        pendingSeekTask = Task { [weak p] in
+
+        pendingSeekTask = Task { [weak p, weak self] in
             guard let p else { return }
             if Task.isCancelled { return }
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -127,10 +130,17 @@ public final class NativePlayerController: PlaybackControlling {
                     toleranceAfter: tolerance
                 ) { _ in cont.resume() }
             }
+            // P1-14: only the latest seek's completion is honored
+            guard !Task.isCancelled,
+                  let self else { return }
+            guard generation == self.seekGeneration else { return }
+            // Mark prerolled as invalidated — next play() will re-preroll
+            self.isPrerolled = false
         }
-        // Await the task so callers know seek is done before next op
         await pendingSeekTask?.value
-        pendingSeekTask = nil
+        if generation == seekGeneration {
+            pendingSeekTask = nil
+        }
     }
 
     public func setRate(_ rate: Float) {
@@ -139,6 +149,12 @@ public final class NativePlayerController: PlaybackControlling {
     }
 
     public func teardown() {
+        // P1-14: cancel pending seek on teardown
+        seekGeneration += 1
+        pendingSeekTask?.cancel()
+        pendingSeekTask = nil
+        player?.cancelPendingPrerolls()
+
         if let token = timeObserverToken {
             player?.removeTimeObserver(token)
             timeObserverToken = nil
@@ -160,6 +176,7 @@ public final class NativePlayerController: PlaybackControlling {
         duration = 0
         isPlaying = false
         isBuffering = false
+        isPrerolled = false
     }
 
     // ── KVO / periodic time observer wiring ────────────────────────────────
@@ -181,8 +198,6 @@ public final class NativePlayerController: PlaybackControlling {
             }
         }
 
-        // P0-7: reasonForWaitingToPlay is informational; do NOT use it to
-        // override isBuffering=false. Just log it for diagnostics.
         reasonObservation = player.observe(\.reasonForWaitingToPlay, options: [.new]) { [weak self] p, _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -200,7 +215,6 @@ public final class NativePlayerController: PlaybackControlling {
             }
         }
 
-        // P0-7: also observe playback buffer indicators for accurate state
         likelyKeepUpObservation = item.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { [weak self] it, _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -222,21 +236,12 @@ public final class NativePlayerController: PlaybackControlling {
         }
     }
 
-    // P0-7: derive isBuffering from timeControlStatus + isPlaybackLikelyToKeepUp
-    // + isPlaybackBufferEmpty + item.status.
     private func recomputeBuffering(player: AVPlayer, item: AVPlayerItem) {
         let controlStatus = player.timeControlStatus
         let bufferEmpty = item.isPlaybackBufferEmpty
         let likelyKeepUp = item.isPlaybackLikelyToKeepUp
         let ready = item.status == .readyToPlay
 
-        // Buffering iff:
-        //   - waitingToPlay (AVPlayer is waiting for media data), OR
-        //   - playback buffer empty, OR
-        //   - not likely to keep up
-        // BUT only if item is .readyToPlay — otherwise we're still loading
-        // the asset, which is a separate 'preparing' state we surface as
-        // isBuffering=true.
         let buffering: Bool
         if controlStatus == .waitingToPlay {
             buffering = true
@@ -245,8 +250,6 @@ public final class NativePlayerController: PlaybackControlling {
         } else if bufferEmpty {
             buffering = true
         } else if !likelyKeepUp && controlStatus == .playing {
-            // Playing but barely keeping up — keep buffering flag on so UI
-            // shows a spinner.
             buffering = true
         } else {
             buffering = false

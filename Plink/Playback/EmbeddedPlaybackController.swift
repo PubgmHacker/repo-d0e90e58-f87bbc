@@ -53,9 +53,11 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     private var webView: WKWebView?
     private var videoId: String?
     private var ready: Bool = false
-    private var pendingPositionMs: Double = 0
+    // P1-15: pending seek as Double? so seek-to-zero is preserved
+    private var pendingSeekSeconds: Double?
     private var pendingPlaying: Bool = false
     private var positionTimer: Timer?
+    private var lastError: String?
 
     // Message handler class — must be NSObject for WKScriptMessageHandler.
     private let messageHandler = EmbeddedMessageHandler()
@@ -66,15 +68,19 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         guard case .youtube(let id) = source else {
             throw ProviderError.unsupportedSource
         }
+        // P1-15: validate/sanitize video ID before interpolation into HTML
+        guard Self.isValidVideoId(id) else {
+            throw ProviderError.loadingFailed("Invalid YouTube video ID")
+        }
         teardown()
         self.videoId = id
         ready = false
+        lastError = nil
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.userContentController = WKUserContentController()
-        // P0-8: register the message handler under the name 'player'
         config.userContentController.add(messageHandler, name: "player")
 
         let web = WKWebView(frame: .zero, configuration: config)
@@ -83,55 +89,24 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         self.webView = web
         self.embeddedView = web
 
-        // Weak self capture for message handler closure
         let onReady: () -> Void = { [weak self] in
             Task { @MainActor in self?.handleReady() }
         }
         let onStateChange: (Int) -> Void = { [weak self] state in
             Task { @MainActor in self?.handleStateChange(state) }
         }
+        let onError: (Int) -> Void = { [weak self] code in
+            Task { @MainActor in self?.handleError(code: code) }
+        }
         messageHandler.onReady = onReady
         messageHandler.onStateChange = onStateChange
+        messageHandler.onError = onError
 
-        let html = """
-        <!DOCTYPE html>
-        <html>
-          <body style="margin:0;background:#000;overflow:hidden;">
-            <div id="player"></div>
-            <script>
-              var ytPlayer;
-              function onYouTubeIframeAPIReady() {
-                ytPlayer = new YT.Player('player', {
-                  videoId: '\(id)',
-                  width: '100%',
-                  height: '100%',
-                  playerVars: {
-                    'controls': 1,
-                    'modestbranding': 1,
-                    'playsinline': 1,
-                    'rel': 0,
-                    'iv_load_policy': 3
-                  },
-                  events: {
-                    'onReady': function() {
-                      window.webkit.messageHandlers.player.postMessage({event:'ready'});
-                    },
-                    'onStateChange': function(e) {
-                      window.webkit.messageHandlers.player.postMessage({event:'stateChange', state:e.data});
-                    },
-                    'onError': function(e) {
-                      window.webkit.messageHandlers.player.postMessage({event:'error', code:e.data});
-                    }
-                  }
-                });
-              }
-              var tag = document.createElement('script');
-              tag.src = "https://www.youtube.com/iframe_api";
-              document.head.appendChild(tag);
-            </script>
-          </body>
-        </html>
-        """
+        // P1-15: use JSON-encoded video ID instead of string interpolation
+        // to prevent XSS / injection
+        let videoIdJSON = try JSONSerialization.data(withJSONObject: [id], options: [])
+        let videoIdArrayString = String(data: videoIdJSON, encoding: .utf8) ?? "[]"
+        let html = Self.buildHTML(videoIdArray: videoIdArrayString)
         web.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
 
         // Await ready (5s timeout — degraded mode if not)
@@ -159,10 +134,21 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     public func seek(to seconds: TimeInterval, precise: Bool) async {
-        guard ready else { pendingPositionMs = seconds * 1000; return }
+        guard ready else { pendingSeekSeconds = seconds; return }
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
-        evaluate("ytPlayer && ytPlayer.seekTo(\(clamped), true);")
-        position = clamped
+        // P1-15: use callAsyncJavaScript for safe argument passing
+        guard let web = webView else { return }
+        do {
+            _ = try await web.callAsyncJavaScript(
+                "ytPlayer && ytPlayer.seekTo(seconds, true);",
+                arguments: ["seconds": clamped],
+                in: nil,
+                in: .page
+            )
+            position = clamped
+        } catch {
+            lastError = "seek failed: \(error.localizedDescription)"
+        }
     }
 
     public func setRate(_ rate: Float) {
@@ -172,7 +158,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     public func teardown() {
-        positionTimer?.invalidate()
+        positionTimer?.invalidate()  // P1-15: stop timer on teardown
         positionTimer = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "player")
         webView?.stopLoading()
@@ -185,8 +171,26 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         duration = 0
         isPlaying = false
         isBuffering = false
+        pendingSeekSeconds = nil
+        pendingPlaying = false
         messageHandler.onReady = nil
         messageHandler.onStateChange = nil
+        messageHandler.onError = nil
+    }
+
+    // P1-15: surface YouTube error callback
+    private func handleError(code: Int) {
+        let message: String
+        switch code {
+        case 2: message = "Invalid video parameter"
+        case 5: message = "HTML5 player error"
+        case 100: message = "Video not found or private"
+        case 101, 150: message = "Video not allowed to be embedded"
+        default: message = "YouTube error code \(code)"
+        }
+        lastError = message
+        isBuffering = false
+        isPlaying = false
     }
 
     // ── JS bridge handlers ────────────────────────────────────────────────
@@ -198,9 +202,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             Task { await play() }
             pendingPlaying = false
         }
-        if pendingPositionMs > 0 {
-            Task { await seek(to: pendingPositionMs / 1000, precise: true) }
-            pendingPositionMs = 0
+        // P1-15: pending seek as Double? — seek-to-zero now preserved
+        if let pending = pendingSeekSeconds {
+            Task { await seek(to: pending, precise: true) }
+            pendingSeekSeconds = nil
         }
         // Fetch duration
         evaluate("ytPlayer ? ytPlayer.getDuration() : 0") { result in
@@ -259,6 +264,58 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             completion?(result)
         }
     }
+
+    // P1-15: validate YouTube video ID — only [A-Za-z0-9_-]{11}
+    private static func isValidVideoId(_ id: String) -> Bool {
+        guard id.count == 11 else { return false }
+        return id.allSatisfy { c in
+            c.isLetter || c.isNumber || c == "_" || c == "-"
+        }
+    }
+
+    // P1-15: build HTML with JSON-encoded video ID array (no string interpolation)
+    private static func buildHTML(videoIdArray: String) -> String {
+        return """
+        <!DOCTYPE html>
+        <html>
+          <body style="margin:0;background:#000;overflow:hidden;">
+            <div id="player"></div>
+            <script>
+              var videoIds = \(videoIdArray);
+              var ytPlayer;
+              function onYouTubeIframeAPIReady() {
+                ytPlayer = new YT.Player('player', {
+                  videoId: videoIds[0],
+                  width: '100%',
+                  height: '100%',
+                  playerVars: {
+                    'controls': 1,
+                    'modestbranding': 1,
+                    'playsinline': 1,
+                    'rel': 0,
+                    'iv_load_policy': 3
+                  },
+                  events: {
+                    'onReady': function() {
+                      window.webkit.messageHandlers.player.postMessage({event:'ready'});
+                    },
+                    'onStateChange': function(e) {
+                      window.webkit.messageHandlers.player.postMessage({event:'stateChange', state:e.data});
+                    },
+                    'onError': function(e) {
+                      window.webkit.messageHandlers.player.postMessage({event:'error', code:e.data});
+                    }
+                  }
+                });
+              }
+              var tag = document.createElement('script');
+              tag.src = "https://www.youtube.com/iframe_api";
+              document.head.appendChild(tag);
+            </script>
+          </body>
+        </html>
+        """
+    }
 }
 
 // MARK: - Message handler bridge
@@ -266,6 +323,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 private final class EmbeddedMessageHandler: NSObject, WKScriptMessageHandler {
     var onReady: (() -> Void)?
     var onStateChange: ((Int) -> Void)?
+    var onError: ((Int) -> Void)?  // P1-15: surface YouTube error callback
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
@@ -278,8 +336,9 @@ private final class EmbeddedMessageHandler: NSObject, WKScriptMessageHandler {
                 onStateChange?(state)
             }
         case "error":
-            // Surface as a no-op state for now — telemetry in Stage 13
-            break
+            if let code = body["code"] as? Int {
+                onError?(code)
+            }
         default:
             break
         }

@@ -25,6 +25,10 @@
 import Foundation
 import Observation
 
+// P1-18: ContinuousClock for monotonic waits (immune to system clock changes).
+// ClockSynchronizer still uses wall clock for server epoch mapping, but local
+// duration waits use ContinuousClock.
+
 @MainActor
 @Observable
 public final class OrderedSyncController {
@@ -65,12 +69,15 @@ public final class OrderedSyncController {
         // The server sets effectiveAtServerMs = now + 80ms so all clients
         // apply the transition at the same wall-clock moment. We must NOT
         // apply play/pause/seek before that moment.
+        // P1-18: use ContinuousClock for monotonic wait (immune to system clock changes).
         let serverNow = clock.serverNowMs
         let waitMs = Double(state.effectiveAtServerMs) - serverNow
         if waitMs > 0 {
             effectiveAtWaitTask?.cancel()
             effectiveAtWaitTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(waitMs * 1_000_000))
+                let clock = ContinuousClock()
+                let duration = Duration.milliseconds(Int64(waitMs))
+                try? await clock.sleep(for: duration)
                 if !Task.isCancelled {
                     await self?.applyTransition(state)
                 }

@@ -53,3 +53,24 @@ mobile/
 Secrets.xcconfig
 *.xcconfig.local
 
+# Agent / tooling scratch (per Plink runbook §2)
+tool-results/
+upload/
+download/
+save/
+*.save
+
+# Archives & generated artifacts
+*.zip
+*.pdf
+*.tar
+*.gz
+
+# Backend duplicates that accidentally landed in iOS repo
+plink-backend/
+
+# Env files
+.env
+.env.*
+!.env.example
+

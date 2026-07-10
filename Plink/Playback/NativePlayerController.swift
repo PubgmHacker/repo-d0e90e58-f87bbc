@@ -37,11 +37,13 @@ public final class NativePlayerController: PlaybackControlling {
     private var likelyKeepUpObservation: NSKeyValueObservation?
     private var isPlaybackBufferEmptyObservation: NSKeyValueObservation?
 
-    // P1-14: seek generation token
+    // P1-23: serial latest-target seek coordinator
     private var seekGeneration = 0
     private var pendingSeekTask: Task<Void, Never>?
+    private var latestTargetSeek: (seconds: TimeInterval, precise: Bool)?
 
-    // P1-17: preroll state — only preroll after prepare, not every play()
+    // P1-17/P1-24: preroll state — only preroll after prepare, not every play()
+    // P1-24: seek invalidates isPrerolled only for precise transition seeks
     private var isPrerolled: Bool = false
 
     public init() {}
@@ -95,7 +97,9 @@ public final class NativePlayerController: PlaybackControlling {
         isPlaying = false
     }
 
-    // P1-14: seek generation token. Only latest seek's completion honored.
+    // P1-23: serial latest-target seek. Queue stores only the latest target;
+    // next seek executes after current completion. Generation guard ensures
+    // cancelled seek's completion does not mutate state.
     public func seek(to seconds: TimeInterval, precise: Bool) async {
         guard let p = player else { return }
         let clamped: Double
@@ -106,41 +110,56 @@ public final class NativePlayerController: PlaybackControlling {
         } else {
             clamped = seconds
         }
-        let target = CMTime(seconds: clamped, preferredTimescale: 600)
-        let tolerance: CMTime
-        if precise {
-            tolerance = .zero
-        } else {
-            tolerance = CMTime(seconds: 0.15, preferredTimescale: 600)
-        }
 
-        // P1-14: bump generation, cancel pending prerolls
-        seekGeneration += 1
-        let generation = seekGeneration
-        p.cancelPendingPrerolls()
-        pendingSeekTask?.cancel()
+        // P1-23: store latest target — if a seek is in progress, the new
+        // target will be executed after current completion.
+        latestTargetSeek = (clamped, precise)
 
-        pendingSeekTask = Task { [weak p, weak self] in
-            guard let p else { return }
-            if Task.isCancelled { return }
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                p.seek(
-                    to: target,
-                    toleranceBefore: tolerance,
-                    toleranceAfter: tolerance
-                ) { _ in cont.resume() }
+        // If a seek is already in progress, just store the target — the
+        // pending task will pick it up after current completion.
+        if pendingSeekTask != nil { return }
+
+        await executeNextSeek(p)
+    }
+
+    private func executeNextSeek(_ p: AVPlayer) async {
+        repeat {
+            guard let target = latestTargetSeek else { return }
+            latestTargetSeek = nil
+
+            seekGeneration += 1
+            let generation = seekGeneration
+            p.cancelPendingPrerolls()
+
+            let cmTarget = CMTime(seconds: target.seconds, preferredTimescale: 600)
+            let tolerance: CMTime = target.precise
+                ? .zero
+                : CMTime(seconds: 0.15, preferredTimescale: 600)
+
+            pendingSeekTask = Task { [weak p, weak self] in
+                guard let p else { return }
+                if Task.isCancelled { return }
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    p.seek(
+                        to: cmTarget,
+                        toleranceBefore: tolerance,
+                        toleranceAfter: tolerance
+                    ) { _ in cont.resume() }
+                }
+                guard !Task.isCancelled,
+                      let self else { return }
+                guard generation == self.seekGeneration else { return }
+                // P1-24: only invalidate isPrerolled for precise transition
+                // seeks, not for drift corrections (which don't need preroll).
+                if target.precise {
+                    self.isPrerolled = false
+                }
             }
-            // P1-14: only the latest seek's completion is honored
-            guard !Task.isCancelled,
-                  let self else { return }
-            guard generation == self.seekGeneration else { return }
-            // Mark prerolled as invalidated — next play() will re-preroll
-            self.isPrerolled = false
-        }
-        await pendingSeekTask?.value
-        if generation == seekGeneration {
-            pendingSeekTask = nil
-        }
+            await pendingSeekTask?.value
+            if generation == seekGeneration {
+                pendingSeekTask = nil
+            }
+        } while latestTargetSeek != nil  // P1-23: process queued latest target
     }
 
     public func setRate(_ rate: Float) {
@@ -149,10 +168,11 @@ public final class NativePlayerController: PlaybackControlling {
     }
 
     public func teardown() {
-        // P1-14: cancel pending seek on teardown
+        // P1-23: cancel pending seek on teardown
         seekGeneration += 1
         pendingSeekTask?.cancel()
         pendingSeekTask = nil
+        latestTargetSeek = nil
         player?.cancelPendingPrerolls()
 
         if let token = timeObserverToken {

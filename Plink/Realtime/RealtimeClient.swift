@@ -1,39 +1,26 @@
 // Plink/Realtime/RealtimeClient.swift
-// Production WebSocket client (runbook §8 + Brain Review 2 P0-9..P0-14 fixes)
+// Production WebSocket client (runbook §8 + Brain Review 3 P0-19..P0-21 fixes)
 //
-// Brain Review 2 fixes:
+// Brain Review 3 fixes:
 //
-// P0-9: AsyncStream generics already correct (MessageSink uses
-//   AsyncStream<RealtimeServerMessage>.Continuation). BUT deinit isolation
-//   is real — nonisolated deinit was reading actor-isolated `task`/`session`.
-//   Fixed via Sendable Transport holder with internal lock. No @unchecked
-//   Sendable on the client class itself.
+// P0-19: receive loop bound to EXACT task, not shared transport.task.
+//   Old loop's `try await self.transport.task?.receive()` reads the shared
+//   current task — after reconnect, old loop can steal the new task's first
+//   message. Fixed: startReceiveLoop takes task parameter; loop awaits
+//   task.receive() directly, never reads transport.task.
 //
-// P0-10: WS URL built via roomEndpoint(roomId) → /ws/room/<roomId>. Ticket
-//   provider now takes roomId parameter so it can't issue a ticket for the
-//   wrong room.
+// P0-20: URLSession delegate callbacks check task identity via
+//   transport.isCurrent(task). Old socket close no longer triggers
+//   scheduleReconnect() over healthy new connection.
 //
-// P0-11: connect() uses explicit switch — only .idle and .failed allow
-//   new connection. All transient/connected states return. Before opening
-//   new transport, cancel previous.
-//
-// P0-12: transport generation UUID. Each new openConnection() bumps
-//   generation. All callbacks check generation before mutating state.
-//   clockSynced/clockReplyCount reset on new generation.
-//
-// P0-13: split timeouts. Clock timeout → degraded clock mode BUT still
-//   send snapshot request. Snapshot timeout → .reconnecting, NOT .connected.
-//   .connected only after snapshot received.
-//
-// P0-14: single yield per message. Removed duplicate yield in .syncState case.
+// P0-21: beginReconnect(cause:) unifies reconnect paths. Cancels old
+//   transport IMMEDIATELY before backoff (not after). Single reconnectTask
+//   prevents competing reconnect attempts.
 
 import Foundation
 import Observation
 
-// MARK: - Sendable transport holder (P0-9: deinit isolation fix)
-//
-// Holds URLSessionWebSocketTask + URLSession behind a lock so nonisolated
-// deinit can cancel without touching @MainActor state.
+// MARK: - Sendable transport holder with task identity check (P0-20)
 private final class Transport: @unchecked Sendable {
     private let lock = NSLock()
     private var _task: URLSessionWebSocketTask?
@@ -41,7 +28,6 @@ private final class Transport: @unchecked Sendable {
 
     func set(task: URLSessionWebSocketTask?, session: URLSession?) {
         lock.lock(); defer { lock.unlock() }
-        // Cancel previous before storing new
         _task?.cancel(with: .goingAway, reason: nil)
         _session?.invalidateAndCancel()
         _task = task
@@ -61,6 +47,12 @@ private final class Transport: @unchecked Sendable {
         return _task
     }
 
+    // P0-20: identity check for delegate callbacks
+    func isCurrent(_ candidate: URLSessionWebSocketTask) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return _task === candidate
+    }
+
     func send(_ data: Data, completionHandler: @escaping (Error?) -> Void) {
         lock.lock()
         let t = _task
@@ -73,7 +65,7 @@ private final class Transport: @unchecked Sendable {
     }
 }
 
-// MARK: - Subscription tokens (AsyncStream.Continuation is a value type)
+// MARK: - Subscription tokens
 private struct MessageSink {
     let id: UUID
     let continuation: AsyncStream<RealtimeServerMessage>.Continuation
@@ -83,7 +75,7 @@ private struct StateSink {
     let continuation: AsyncStream<RealtimeConnectionState>.Continuation
 }
 
-// MARK: - Realtime ticket (P0-10: typed ticket, room-bound)
+// MARK: - Realtime ticket
 public struct RealtimeTicket: Sendable, Equatable {
     public let jwt: String
     public let roomId: String
@@ -111,32 +103,27 @@ public protocol RealtimeClientDelegate: AnyObject {
 @MainActor
 @Observable
 public final class RealtimeClient: NSObject {
-    // Public state
     public private(set) var state: RealtimeConnectionState = .idle
     public private(set) var lastError: String?
     public private(set) var clockSynced: Bool = false
     public private(set) var snapshotReceived: Bool = false
 
-    // Subscriptions
     private var messageSinks: [MessageSink] = []
     private var stateSinks: [StateSink] = []
 
-    // Transport (P0-9: Sendable holder, safe from nonisolated deinit)
     private let transport = Transport()
 
-    // Tasks
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var clockProbeTask: Task<Void, Never>?
     private var clockTimeoutTask: Task<Void, Never>?
     private var snapshotTimeoutTask: Task<Void, Never>?
 
-    // Generation (P0-12: bump on each new transport)
+    // Generation — bumped on each new transport
     private var generation: UUID = UUID()
     private var clockReplyCount = 0
 
-    // Config
-    private let baseEndpoint: URL  // e.g. wss://host/ws
+    private let baseEndpoint: URL
     public weak var delegate: RealtimeClientDelegate?
     private let ticketProvider: (String) async throws -> RealtimeTicket
     private var currentTicket: RealtimeTicket?
@@ -182,7 +169,6 @@ public final class RealtimeClient: NSObject {
         }
     }
 
-    // P0-11: explicit switch — only .idle and .failed allow new connection.
     public func connect(roomId: String) {
         switch state {
         case .idle, .failed:
@@ -192,7 +178,6 @@ public final class RealtimeClient: NSObject {
             return
         }
         currentRoomId = roomId
-        // P0-11: cancel any previous transport before new
         cancelAllTasks()
         transport.cancel()
         setState(.connecting)
@@ -225,22 +210,19 @@ public final class RealtimeClient: NSObject {
         }
     }
 
-    // MARK: - Connection (P0-12: generation-bumped)
+    // MARK: - Connection (P0-21: cancel old transport BEFORE backoff)
 
     private func openConnection() async {
         guard let roomId = currentRoomId else {
             setState(.failed(reason: "No roomId"))
             return
         }
-        // P0-12: new generation — old callbacks will be ignored
         generation = UUID()
         let gen = generation
-        // P0-12: reset clock/snapshot state for new generation
         clockSynced = false
         clockReplyCount = 0
         snapshotReceived = false
 
-        // P0-10: ticket bound to roomId
         let ticket: RealtimeTicket
         do {
             ticket = try await ticketProvider(roomId)
@@ -248,16 +230,14 @@ public final class RealtimeClient: NSObject {
             if gen == generation { setState(.failed(reason: "Ticket error: \(error.localizedDescription)")) }
             return
         }
-        guard gen == generation else { return }  // superseded
+        guard gen == generation else { return }
         currentTicket = ticket
 
-        // P0-10: verify ticket roomId matches requested roomId
         guard ticket.roomId == roomId else {
             setState(.failed(reason: "Ticket roomId mismatch"))
             return
         }
 
-        // P0-10: build WS URL via path, not query
         let url: URL
         do {
             url = try roomEndpoint(roomId: roomId)
@@ -278,12 +258,12 @@ public final class RealtimeClient: NSObject {
         transport.set(task: t, session: s)
         if gen == generation { setState(.authenticating) }
         t.resume()
-        if gen == generation { startReceiveLoop(generation: gen) }
+        // P0-19: pass the EXACT task to the receive loop — do not read
+        // transport.task inside the loop.
+        if gen == generation { startReceiveLoop(task: t, generation: gen) }
     }
 
-    // P0-10: /ws/room/<roomId> — no query string
     private func roomEndpoint(roomId: String) throws -> URL {
-        // baseEndpoint is e.g. wss://host/ws — append /room/<roomId>
         var components = URLComponents(url: baseEndpoint, resolvingAgainstBaseURL: false)
         guard let scheme = components?.scheme,
               scheme == "ws" || scheme == "wss",
@@ -303,18 +283,22 @@ public final class RealtimeClient: NSObject {
         return url
     }
 
-    private func startReceiveLoop(generation: UUID) {
+    // P0-19: receive loop bound to EXACT task — never reads transport.task
+    private func startReceiveLoop(task: URLSessionWebSocketTask, generation: UUID) {
         receiveTask?.cancel()
-        receiveTask = Task { [weak self] in
+        receiveTask = Task { [weak self, weak task] in
             guard let self else { return }
+            guard let task else { return }
             while !Task.isCancelled {
                 do {
-                    let msg = try await self.transport.task?.receive()
-                    guard self.generation == generation else { return }
-                    guard let msg else { break }
+                    // P0-19: await on the EXACT task, not transport.task
+                    let msg = try await task.receive()
+                    // Generation check still needed for handleIncoming, but
+                    // the message came from the correct task — no stealing.
+                    guard generation == self.generation else { return }
                     self.handleIncoming(msg, generation: generation)
                 } catch {
-                    if self.generation != generation { return }
+                    if generation != self.generation { return }
                     if !Task.isCancelled {
                         self.handleReceiveError(error)
                     }
@@ -324,7 +308,7 @@ public final class RealtimeClient: NSObject {
         }
     }
 
-    // MARK: - Incoming (P0-14: single yield per message)
+    // MARK: - Incoming (single yield per message)
 
     private func handleIncoming(_ msg: URLSessionWebSocketTask.Message, generation: UUID) {
         let data: Data
@@ -336,7 +320,6 @@ public final class RealtimeClient: NSObject {
         let clientReceivedMs = Date().timeIntervalSince1970 * 1000
         do {
             let decoded = try JSONDecoder().decode(RealtimeServerMessage.self, from: data)
-            // P0-14: single yield — happens ONCE here, not in each case.
             for sink in messageSinks { sink.continuation.yield(decoded) }
             switch decoded {
             case .sessionReady(let ready):
@@ -355,15 +338,12 @@ public final class RealtimeClient: NSObject {
         }
     }
 
-    // P0-13: on session.ready, send snapshot request immediately (don't wait
-    // for clock sync). Clock probes run in parallel.
     private func handleSessionReady(_ ready: RealtimeServerMessage.SessionReady, generation: UUID) {
         guard generation == self.generation else { return }
         setState(.synchronizing)
         startClockProbes(generation: generation)
         startClockTimeout(generation: generation)
         startSnapshotTimeout(generation: generation)
-        // P0-13: send snapshot request immediately — don't wait for clock sync
         if let roomId = currentRoomId {
             let afterSeq = delegate?.lastSeq ?? 0
             send(.stateRequest(.init(roomId: roomId, afterSeq: afterSeq)))
@@ -385,7 +365,6 @@ public final class RealtimeClient: NSObject {
         }
     }
 
-    // P0-13: .connected only after snapshot received
     private func handleSnapshot(_ snapshot: RealtimeServerMessage.SyncStateSnapshotMessage, generation: UUID) {
         guard generation == self.generation else { return }
         delegate?.applySnapshot(snapshot.state)
@@ -399,7 +378,6 @@ public final class RealtimeClient: NSObject {
         }
     }
 
-    // P0-13: clock timeout — degraded mode, but does NOT declare .connected
     private func startClockTimeout(generation: UUID) {
         clockTimeoutTask?.cancel()
         clockTimeoutTask = Task { [weak self] in
@@ -409,12 +387,10 @@ public final class RealtimeClient: NSObject {
             if !self.clockSynced {
                 self.clockSynced = false
                 self.lastError = "Clock sync timeout — degraded mode"
-                // P0-13: do NOT setState(.connected) here. Snapshot still required.
             }
         }
     }
 
-    // P0-13: snapshot timeout — fail/reconnect, do NOT declare .connected
     private func startSnapshotTimeout(generation: UUID) {
         snapshotTimeoutTask?.cancel()
         snapshotTimeoutTask = Task { [weak self] in
@@ -423,7 +399,7 @@ public final class RealtimeClient: NSObject {
             guard generation == self.generation else { return }
             if !self.snapshotReceived && self.state != .connected {
                 self.lastError = "Snapshot timeout — reconnecting"
-                self.scheduleReconnect()
+                self.beginReconnect(cause: "snapshot timeout")
             }
         }
     }
@@ -432,24 +408,36 @@ public final class RealtimeClient: NSObject {
         let nsError = error as NSError
         let transient = [57, 60, 54, -1005, -1009, -1001].contains(nsError.code)
         if transient {
-            scheduleReconnect()
+            beginReconnect(cause: "receive error: \(nsError.localizedDescription)")
         } else {
             setState(.failed(reason: nsError.localizedDescription))
         }
     }
 
-    // MARK: - Reconnect
+    // MARK: - Reconnect (P0-21: unified beginReconnect, cancel old BEFORE backoff)
 
-    private func scheduleReconnect() {
+    private func beginReconnect(cause: String) {
+        // P0-21: prevent competing reconnect tasks
+        if reconnectTask != nil { return }
+        // P0-21: invalidate generation + cancel old transport IMMEDIATELY
+        generation = UUID()  // old callbacks now ignored
+        cancelAllTasksExceptReconnect()
+        transport.cancel()  // old task cancelled BEFORE backoff
         reconnectAttempt += 1
         setState(.reconnecting(attempt: reconnectAttempt))
+        lastError = cause
         let delaySec = min(Self.maxReconnectBackoffSec, pow(2.0, Double(reconnectAttempt))) + Double.random(in: 0...0.5)
-        reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delaySec * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
+            self.reconnectTask = nil
             await self.openConnection()
         }
+    }
+
+    // Legacy alias — kept for delegate close path
+    private func scheduleReconnect() {
+        beginReconnect(cause: "socket closed")
     }
 
     // MARK: - Clock probes
@@ -458,14 +446,12 @@ public final class RealtimeClient: NSObject {
         clockProbeTask?.cancel()
         clockProbeTask = Task { [weak self] in
             guard let self else { return }
-            // Burst: 7 probes at 120ms
             for _ in 0..<7 {
                 if Task.isCancelled { return }
                 if generation != self.generation { return }
                 self.sendClockProbe()
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
-            // Steady: 1 every 10s
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
                 if Task.isCancelled { return }
@@ -492,13 +478,20 @@ public final class RealtimeClient: NSObject {
         snapshotTimeoutTask?.cancel(); snapshotTimeoutTask = nil
     }
 
-    // P0-9: deinit touches only Sendable Transport — safe from nonisolated context
+    // P0-21: cancel all except reconnect (called FROM beginReconnect)
+    private func cancelAllTasksExceptReconnect() {
+        receiveTask?.cancel(); receiveTask = nil
+        clockProbeTask?.cancel(); clockProbeTask = nil
+        clockTimeoutTask?.cancel(); clockTimeoutTask = nil
+        snapshotTimeoutTask?.cancel(); snapshotTimeoutTask = nil
+    }
+
     nonisolated deinit {
         transport.cancel()
     }
 }
 
-// MARK: - URLSessionWebSocketDelegate (nonisolated, hop to MainActor)
+// MARK: - URLSessionWebSocketDelegate (P0-20: task identity check)
 
 extension RealtimeClient: URLSessionWebSocketDelegate {
     nonisolated public func urlSession(
@@ -507,8 +500,10 @@ extension RealtimeClient: URLSessionWebSocketDelegate {
         didOpenWithProtocol protocol: String?
     ) {
         Task { @MainActor [weak self] in
-            // Handshake completed at transport level. NOT .connected yet.
-            self?.setState(.joining)
+            guard let self else { return }
+            // P0-20: only handle if this is the current task
+            guard self.transport.isCurrent(webSocketTask) else { return }
+            self.setState(.joining)
         }
     }
 
@@ -520,6 +515,8 @@ extension RealtimeClient: URLSessionWebSocketDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // P0-20: only handle if this is the current task
+            guard self.transport.isCurrent(webSocketTask) else { return }
             if closeCode == .normal || closeCode == .goingAway {
                 self.setState(.idle)
             } else if closeCode.rawValue == 4001 {
@@ -527,7 +524,7 @@ extension RealtimeClient: URLSessionWebSocketDelegate {
             } else if closeCode.rawValue == 4003 {
                 self.setState(.failed(reason: "Forbidden (4003) — not member/host"))
             } else {
-                self.scheduleReconnect()
+                self.beginReconnect(cause: "socket closed: \(closeCode.rawValue)")
             }
         }
     }

@@ -254,11 +254,20 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
         public let retryInMs: Int64
     }
 
-    private enum DiscriminatorKey: String, CodingKey { case type }
+    private enum DiscriminatorKey: String, CodingKey { case type, protocolVersion }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DiscriminatorKey.self)
         let type = try container.decode(String.self, forKey: .type)
+        // P1-21: validate protocolVersion == 2 — reject v1/unknown envelopes
+        // instead of silently decoding with mismatched assumptions.
+        if let pv = try? container.decode(Int.self, forKey: .protocolVersion), pv != 2 {
+            throw DecodingError.dataCorruptedError(
+                forKey: .protocolVersion,
+                in: container,
+                debugDescription: "Unsupported protocolVersion: \(pv). Expected 2."
+            )
+        }
         let single = try decoder.singleValueContainer()
         switch type {
         case "sync.state":

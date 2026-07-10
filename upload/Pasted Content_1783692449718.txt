@@ -1,0 +1,1049 @@
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+<0x10223e080> Gesture: System gesture gate timed out.
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+nw_path_necp_check_for_updates Failed to copy updated result (22)
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C4] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C4] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C4] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C4] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C4] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C5] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C5] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+🔍 RoomCreationView.onContentSelected: creating config with contentURL='https://www.youtube.com/watch?v=yv5-FG08fqg', thumbnailURL='https://i.ytimg.com/vi/yv5-FG08fqg/mqdefault.jpg'
+
+🔥 v61: prewarming WKWebView for videoId='yv5-FG08fqg'
+
+🔥 v71: prewarm(videoId=yv5-FG08fqg) — initializing singleton + loading embed URL
+
+🔥 v71: ensureWebViewCreated — creating singleton WKWebView with full config
+
+🔥 v71: prewarm complete — singleton WKWebView loading https://m.youtube.com/watch?v=yv5-FG08fqg
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+Updated list with error: DownloadFailed
+
+Updated list with error: DownloadFailed
+
+Updated list with error: DownloadFailed
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+🔍 RoomSetupView.createRoom: contentURL='https://www.youtube.com/watch?v=yv5-FG08fqg', contentTitle='Дюна: Часть третья — Русский трейлер #2 (Дубляж, 2026)', service=youtube
+
+🔧 RoomSetupView v93: calling PipedClient for videoId='yv5-FG08fqg'
+
+🌐 v93: PipedClient — extracting videoId='yv5-FG08fqg'
+
+🌐 v93: Trying instance #0: https://pipedapi.kavin.rocks/streams/yv5-FG08fqg
+
+WebContent[2545] Unable to hide query parameters from script (missing data)
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C7] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C7] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C7] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C7] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C7] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C8] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C8] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C8] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C8] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C8] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+⚠️ v93: Piped instance #0 (https://pipedapi.kavin.rocks) failed: Неверный ответ от Piped API
+
+🌐 v93: Trying instance #1: https://api.piped.yt/streams/yv5-FG08fqg
+
+Updated list with error: DownloadFailed
+
+Updated list with error: DownloadFailed
+
+Connection 9: received failure notification
+
+Connection 9: failed to connect 12:8, reason -1
+
+Connection 9: encountered error(12:8)
+
+Task <698E2236-A82B-4BED-A877-843507BC613E>.<13> HTTP load failed, 0/0 bytes (error code: -1003 [12:8])
+
+Task <698E2236-A82B-4BED-A877-843507BC613E>.<13> finished with error [-1003] Error Domain=NSURLErrorDomain Code=-1003 "A server with the specified hostname could not be found." UserInfo={_kCFStreamErrorCodeKey=8, NSUnderlyingError=0x11855d980 {Error Domain=kCFErrorDomainCFNetwork Code=-1003 "(null)" UserInfo={_kCFStreamErrorDomainKey=12, _kCFStreamErrorCodeKey=8, _NSURLErrorNWResolutionReportKey=Resolved 0 endpoints in 179ms using unknown from cache, provider Network Agent [domain: SystemConfig, type: DNSAgent, uuid: 51FA630F-CFF5-40F8-A56B-7C92B86E41C5, flags: 0x3], _NSURLErrorNWPathKey=satisfied (Path is satisfied), interface: utun4[lte], ipv4, dns, expensive, uses cell, LQM: unknown}}, _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <698E2236-A82B-4BED-A877-843507BC613E>.<13>, _NSURLErrorRelatedURLSessionTaskErrorKey=(
+
+    "LocalDataTask <698E2236-A82B-4BED-A877-843507BC613E>.<13>"
+
+), NSLocalizedDescription=A server with the specified hostname could not be found., NSErrorFailingURLStringKey=https://api.piped.yt/streams/yv5-FG08fqg, NSErrorFailingURLKey=https://api.piped.yt/streams/yv5-FG08fqg, _kCFStreamErrorDomainKey=12}
+
+⚠️ v93: Piped instance #1 (https://api.piped.yt) failed: A server with the specified hostname could not be found.
+
+🌐 v93: Trying instance #2: https://pipedapi.moomoo.me/streams/yv5-FG08fqg
+
+Updated list with error: DownloadFailed
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C11] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C11] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C11] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C11] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C11] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C12] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C12] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C12] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C12] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C12] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+⚠️ v93: Piped instance #2 (https://pipedapi.moomoo.me) failed: Неверный ответ от Piped API
+
+🌐 v93: Trying instance #3: https://pipedapi.leptons.xyz/streams/yv5-FG08fqg
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C14] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C14] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C14] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C14] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C14] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C15] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C15] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C15] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C15] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C15] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+⚠️ v93: Piped instance #3 (https://pipedapi.leptons.xyz) failed: Неверный ответ от Piped API
+
+🌐 v93: Trying instance #4: https://pipedapi.tokhmi.xyz/streams/yv5-FG08fqg
+
+ATS failed system trust
+
+Connection 16: system TLS Trust evaluation failed(-9802)
+
+Connection 16: TLS Trust encountered error 3:-9802
+
+Connection 16: encountered error(3:-9802)
+
+Task <EF5559BF-8D78-4D17-8D21-7667E65729D3>.<16> HTTP load failed, 0/0 bytes (error code: -1200 [3:-9802])
+
+Task <EF5559BF-8D78-4D17-8D21-7667E65729D3>.<16> finished with error [-1200] Error Domain=NSURLErrorDomain Code=-1200 "A TLS error caused the secure connection to fail." UserInfo={NSURLErrorFailingURLPeerTrustErrorKey=<SecTrustRef: 0x11b92c6c0>, NSErrorFailingURLKey=https://pipedapi.tokhmi.xyz/streams/yv5-FG08fqg, NSErrorFailingURLStringKey=https://pipedapi.tokhmi.xyz/streams/yv5-FG08fqg, NSErrorClientCertificateStateKey=0, NSErrorPeerCertificateChainKey=(
+
+    "<cert(0x11b913800) s: valet.1push.io i: YE2>",
+
+    "<cert(0x11b928c00) s: YE2 i: Root YE>",
+
+    "<cert(0x11b929200) s: Root YE i: ISRG Root X2>",
+
+    "<cert(0x11b930000) s: ISRG Root X2 i: ISRG Root X1>"
+
+), _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <EF5559BF-8D78-4D17-8D21-7667E65729D3>.<16>, _NSURLErrorRelatedURLSessionTaskErrorKey=(
+
+    "LocalDataTask <EF5559BF-8D78-4D17-8D21-7667E65729D3>.<16>"
+
+), NSLocalizedDescription=A TLS error caused the secure connection to fail., _kCFStreamErrorDomainKey=3, NSUnderlyingError=0x11853af10 {Error Domain=kCFErrorDomainCFNetwork Code=-1200 "(null)" UserInfo={_kCFStreamPropertySSLClientCertificateState=0, kCFStreamPropertySSLPeerTrust=<SecTrustRef: 0x11b92c6c0>, _kCFNetworkCFStreamSSLErrorOriginalValue=-9802, _kCFStreamErrorDomainKey=3, _kCFStreamErrorCodeKey=-9802, kCFStreamPropertySSLPeerCertificates=(
+
+    "<cert(0x11b913800) s: valet.1push.io i: YE2>",
+
+    "<cert(0x11b928c00) s: YE2 i: Root YE>",
+
+    "<cert(0x11b929200) s: Root YE i: ISRG Root X2>",
+
+    "<cert(0x11b930000) s: ISRG Root X2 i: ISRG Root X1>"
+
+)}}, _kCFStreamErrorCodeKey=-9802}
+
+⚠️ v93: Piped instance #4 (https://pipedapi.tokhmi.xyz) failed: A TLS error caused the secure connection to fail.
+
+🌐 v93: Trying instance #5: https://pipedapi.silkky.cloud/streams/yv5-FG08fqg
+
+boringssl_context_handle_fatal_alert(2388) [C17.1.1.1:2][0x11ee71be0] read alert, level: fatal, description: unrecognized name
+
+boringssl_session_handshake_incomplete(244) [C17.1.1.1:2][0x11ee71be0] SSL library error
+
+boringssl_session_handshake_error_print(47) [C17.1.1.1:2][0x11ee71be0] Error: 4811139136:error:10000458:SSL routines:OPENSSL_internal:TLSV1_ALERT_UNRECOGNIZED_NAME:/Library/Caches/com.apple.xbs/Sources/boringssl/ssl/tls_record.cc:579:SSL alert number 112
+
+nw_protocol_boringssl_handshake_negotiate_proceed(928) [C17.1.1.1:2][0x11ee71be0] handshake failed at state 12288: not completed
+
+nw_endpoint_flow_failed_with_error [C17.1.1.1 13.248.169.48:443 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: utun4[lte], ipv4, dns, expensive, uses cell, LQM: unknown)] already failing, returning
+
+nw_endpoint_flow_failed_with_error [C17.1.1.1 13.248.169.48:443 cancelled channel-flow ((null))] already failing, returning
+
+Connection 17: received failure notification
+
+Connection 17: failed to connect 3:-9800, reason -1
+
+Connection 17: encountered error(3:-9800)
+
+Task <9EC0785D-BCAE-46B0-8C61-64C441BA7225>.<17> HTTP load failed, 0/0 bytes (error code: -1200 [3:-9800])
+
+Task <9EC0785D-BCAE-46B0-8C61-64C441BA7225>.<17> finished with error [-1200] Error Domain=NSURLErrorDomain Code=-1200 "A TLS error caused the secure connection to fail." UserInfo={_kCFStreamErrorCodeKey=-9800, NSUnderlyingError=0x11855f720 {Error Domain=kCFErrorDomainCFNetwork Code=-1200 "(null)" UserInfo={_kCFStreamPropertySSLClientCertificateState=0, _kCFNetworkCFStreamSSLErrorOriginalValue=-9800, _kCFStreamErrorDomainKey=3, _kCFStreamErrorCodeKey=-9800, _NSURLErrorNWPathKey=satisfied (Path is satisfied), viable, interface: utun4[lte], ipv4, dns, expensive, uses cell, LQM: unknown}}, _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <9EC0785D-BCAE-46B0-8C61-64C441BA7225>.<17>, _NSURLErrorRelatedURLSessionTaskErrorKey=(
+
+    "LocalDataTask <9EC0785D-BCAE-46B0-8C61-64C441BA7225>.<17>"
+
+), NSLocalizedDescription=A TLS error caused the secure connection to fail., NSErrorFailingURLStringKey=https://pipedapi.silkky.cloud/streams/yv5-FG08fqg, NSErrorFailingURLKey=https://pipedapi.silkky.cloud/streams/yv5-FG08fqg, _kCFStreamErrorDomainKey=3}
+
+⚠️ v93: Piped instance #5 (https://pipedapi.silkky.cloud) failed: A TLS error caused the secure connection to fail.
+
+🌐 v93: Trying instance #6: https://pipedapi.r4fo.com/streams/yv5-FG08fqg
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C19] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C19] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C19] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C19] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C19] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C20] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C20] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_protocol_metadata_internal_block_invoke [C20] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+
+nw_connection_copy_connected_local_endpoint_block_invoke [C20] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+
+nw_connection_copy_connected_remote_endpoint_block_invoke [C20] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+
+⚠️ v93: Piped instance #6 (https://pipedapi.r4fo.com) failed: The data couldn’t be read because it isn’t in the correct format.
+
+❌ v93: All 7 Piped instances failed
+
+⚠️ RoomSetupView v93: Piped failed (The data couldn’t be read because it isn’t in the correct format.) — trying ExtractionBridge
+
+🔍 v94.10: ExtractionBridge — WKWebView added to key window hierarchy
+
+🔍 v90: ExtractionBridge — loading m.youtube.com/watch?v=yv5-FG08fqg
+
+Could not create a sandbox extension for '/var/containers/Bundle/Application/97551B67-5127-4B2F-BBBF-EE4CC854A635/Plink.app'
+
+✅ v99: ExtractionBridge — found MP4 (IP-bound, may 403 through proxy): https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783674336&ei=gGF
+
+🍪 v92: Captured 7 cookies from YouTube
+
+✅ RoomSetupView v93: ExtractionBridge succeeded — AVPlayer mode
+
+🖼️ RoomSetupView v33: thumbnailURL = https://i.ytimg.com/vi/yv5-FG08fqg/mqdefault.jpg
+
+🔍 RoomSetupView.createRoom: mediaItem.streamURL='https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783674336&ei=gGF', source=url
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+Plink.ReactionSKView implements focusItemsInRect: - caching for linear focus movement is limited as long as this view is on screen.
+
+[WS] ℹ️ Connecting to /ws/room/7365b14d-827e-4e47-9dfb-975e00507066…
+
+[WS] ℹ️ Connecting to /ws/room/7365b14d-827e-4e47-9dfb-975e00507066…
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+[WS] ❌ Receive error: cancelled
+
+[WS] ❌ Disconnected: cancelled
+
+[WS] ℹ️ Reconnecting in 1.2s (attempt #1)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+[WS] ℹ️ ✅ Connected (RTT estimate: 100ms)
+
+[WS] ℹ️ Connected → room 7365b14d-827e-4e47-9dfb-975e00507066
+
+[WS] ℹ️ 🔍 Calling syncEngine.loadMedia (v63: always on first connect)
+
+<<<< FigApplicationStateMonitor >>>> signalled err=-19431 at <>:474
+
+<<<< FigApplicationStateMonitor >>>> signalled err=-19431 at <>:474
+
+[SYNC] ℹ️ 🔍 loadMedia: googlevideo.com URL — added User-Agent + Referer headers
+
+[WS] ℹ️ Restoring room session: 7365b14d-827e-4e47-9dfb-975e00507066
+
+🎬 v90: PlayerSlotView appeared — AVPlayer mode
+
+🔊 v90: AVAudioSession configured (.playback + .moviePlayback)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+🪟 v90: PlayerWindowContainer initialized (UIWindow created)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+📱 AppDelegate supportedInterfaceOrientationsFor → UIInterfaceOrientationMask(rawValue: 30)
+
+🪟 v90: PlayerWindowContainer SHOW — window visible
+
+🎬 v90: NativePlayerEngine attached to room
+
+🎬 v100: StreamRelay authenticated-extraction — videoId=yv5-FG08fqg + cookies(7) + UA(180) → backend
+
+🪟 v90: AVPlayer set on playerLayer
+
+📱 v90: AVPictureInPictureController created — PiP ready
+
+🎬 v90: AVPlayer created (first time)
+
+[WS] ℹ️ Сессия восстановлена — ресинхронизация
+
+[WS] ℹ️ 🔍 SKIP — currentMediaItem already set (v54)
+
+[WS] ℹ️ Connecting to /ws/room/7365b14d-827e-4e47-9dfb-975e00507066…
+
+<<<< FigPlayerInterstitial >>>> signalled err=-15671 at <>:10251
+
+<<<< FigPlayerInterstitial >>>> signalled err=-15671 at <>:10251
+
+<<<< FigPlayerInterstitial >>>> signalled err=-15671 at <>:10251
+
+[SYNC] ❌ 🔍 observeStatus .failed: code=-11828, desc=Cannot Open
+
+[SYNC] ❌ 🔍 observeStatus: currentMediaItem.streamURL=https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783674336&ei=gGFQaqOENomdp-oPt4md2QQ&ip=89.34.219.189&id=o-AA7zl8IOIKO5KiBSXRNNgRQWvyN4w5mJwaPz-oxeInG3&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=683&met=1783652736%2C&mh=Wa&mm=31%2C26&mn=sn-4g5ednde%2Csn-1gi7znes&ms=au%2Conr&mv=m&mvi=5&pl=24&rms=au%2Cau&initcwndbps=2437500&bui=AZFlqhPKN2IWfhFZt-uOhs1ZZ-j0R4dANy5iFjneV6oRgGOh9WsMYZ3U_csAEyPFCpSxFjTt8wBk-Vvo&spc=SQ-umhYlO88_KjsK7BtR9asIpyVbqWPugSfPLrF6sD7ixsXyQjhkDMK54rV7KfeOUezs4Mhj&vprv=1&svpuc=1&mime=video%2Fmp4&ns=Yrbfq7G9Wa41ePezhgNmzngW&rqh=1&gir=yes&clen=9329090&ratebypass=yes&dur=178.004&lmt=1783586785103481&mt=1783652238&fvip=2&fexp=51565115%2C52017147&c=MWEB&sefc=1&txp=4438534&n=2go_g_BLD_FWUBo&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AHEqNM4wRQIhAN3HZOqwRvlbQawM38rgoCwaj71K11whxws6yKctRzOLAiBenglbw2Ubv_7MD7StKUHjwRRU1rVmfFC5TNtYRpwqyg%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAKqSz0OPjj8kOunz_WeDZprK_Oj0Nz4pWwHY0_qxBcfzAiAbuYHs3YtyXudV3YWFvMLSlZuJVimyaGMRTVf5db-EUg%3D%3D
+
+[SYNC] ❌ 🔍 observeStatus: effectivePlaybackMode=directStream
+
+⚠️ v90: AVPlayer failed: resource unavailable
+
+[WS] ℹ️ RTT: 156ms | drift: -11ms
+
+Failed to terminate process: Error Domain=com.apple.extensionKit.errorDomain Code=18 "(null)" UserInfo={NSUnderlyingError=0x11876c3c0 {Error Domain=RBSRequestErrorDomain Code=3 "No such process found" UserInfo={NSLocalizedFailureReason=No such process found}}}  2026-07-10T03:04:09.349220872Z [inf] Starting Container
+
+2026-07-10T03:04:09.998417176Z [inf] 2023.03.04
+
+2026-07-10T03:04:09.998426915Z [inf] ==== Step 0/4 done (exit 0) ====
+
+2026-07-10T03:04:09.998430885Z [inf] ==== Step 1/4: prisma generate ====
+
+2026-07-10T03:04:09.998434047Z [inf] Environment variables loaded from .env
+
+2026-07-10T03:04:09.998437159Z [inf] Prisma schema loaded from prisma/schema.prisma
+
+2026-07-10T03:04:09.998492489Z [inf] ==== Step 0/4: upgrade yt-dlp ====
+
+2026-07-10T03:04:10.265010929Z [inf]
+
+2026-07-10T03:04:10.265014526Z [inf] ✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 190ms
+
+2026-07-10T03:04:10.265017730Z [inf]
+
+2026-07-10T03:04:10.265020671Z [inf] Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+2026-07-10T03:04:10.265024040Z [inf]
+
+2026-07-10T03:04:10.265027300Z [inf] Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+
+2026-07-10T03:04:10.265030571Z [inf]
+
+2026-07-10T03:04:10.322432593Z [err] ┌─────────────────────────────────────────────────────────┐
+
+2026-07-10T03:04:10.322436009Z [err] │ Update available 5.22.0 -> 7.8.0 │
+
+2026-07-10T03:04:10.322439712Z [err] │ │
+
+2026-07-10T03:04:10.322442877Z [err] │ This is a major update - please follow the guide at │
+
+2026-07-10T03:04:10.322445956Z [err] │ https://pris.ly/d/major-version-upgrade │
+
+2026-07-10T03:04:10.322448893Z [err] │ │
+
+2026-07-10T03:04:10.322452033Z [err] │ Run the following to update │
+
+2026-07-10T03:04:10.322455001Z [err] │ npm i --save-dev prisma@latest │
+
+2026-07-10T03:04:10.322457862Z [err] │ npm i @prisma/client@latest │
+
+2026-07-10T03:04:10.322461260Z [err] └─────────────────────────────────────────────────────────┘
+
+2026-07-10T03:04:10.478763266Z [inf] ==== Step 1/4 done (exit 0) ====
+
+2026-07-10T03:04:10.478766734Z [inf] ==== Step 2/4: prisma db push ====
+
+2026-07-10T03:04:11.008446892Z [inf] Environment variables loaded from .env
+
+2026-07-10T03:04:11.008450647Z [inf] Prisma schema loaded from prisma/schema.prisma
+
+2026-07-10T03:04:11.008454272Z [inf] Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+
+2026-07-10T03:04:11.202736843Z [inf]
+
+2026-07-10T03:04:11.202739830Z [inf] The database is already in sync with the Prisma schema.
+
+2026-07-10T03:04:11.202742904Z [inf]
+
+2026-07-10T03:04:11.249230496Z [inf] ==== Step 2/4 done (exit 0) ====
+
+2026-07-10T03:04:11.249235773Z [inf] ==== Step 3/4: starting Plink backend (tsx src/index.ts) ====
+
+2026-07-10T03:04:12.390279313Z [inf] [Telemetry] No OTEL endpoint — skipping init
+
+2026-07-10T03:04:12.499042541Z [inf] │ │ │ │ │ ├── tream (GET, HEAD)
+
+2026-07-10T03:04:12.499051497Z [inf] │ │ │ │ │ └── earch (GET, HEAD)
+
+2026-07-10T03:04:12.499055485Z [inf] │ │ │ │ ├── trending (GET, HEAD)
+
+2026-07-10T03:04:12.499058680Z [inf] │ │ │ │ ├── categories (GET, HEAD)
+
+2026-07-10T03:04:12.499063098Z [inf] │ │ │ │ ├── extract (GET, HEAD)
+
+2026-07-10T03:04:12.499066588Z [inf] │ │ │ │ │ └── -url (POST)
+
+2026-07-10T03:04:12.499070185Z [inf] │ │ │ │ ├── metadata (GET, HEAD)
+
+2026-07-10T03:04:12.499073546Z [inf] │ │ │ │ └── youtube-
+
+2026-07-10T03:04:12.499076779Z [inf] │ │ │ │ ├── stream (GET, HEAD)
+
+2026-07-10T03:04:12.499080235Z [inf] │ │ │ │ ├── player (GET, HEAD)
+
+2026-07-10T03:04:12.499084209Z [inf] │ │ │ │ └── embed (GET, HEAD)
+
+2026-07-10T03:04:12.499088474Z [inf] │ │ │ └── ssages/dm (POST)
+
+2026-07-10T03:04:12.499092218Z [inf] │ │ │ └── /
+
+2026-07-10T03:04:12.499095943Z [inf] │ │ │ └── :friendId (GET, HEAD)
+
+2026-07-10T03:04:12.499109091Z [inf] 🚀 Plink backend v1.6.0 on port 8080 [development]
+
+2026-07-10T03:04:12.499112249Z [inf] 🤖 AI: /api/ai/chat | /api/ai/recommend
+
+2026-07-10T03:04:12.499115613Z [inf] 📋 REGISTERED ROUTES:
+
+2026-07-10T03:04:12.499119039Z [inf] └── (empty root node)
+
+2026-07-10T03:04:12.499122523Z [inf] ├── /
+
+2026-07-10T03:04:12.499126574Z [inf] │ ├── api/
+
+2026-07-10T03:04:12.499130528Z [inf] │ │ ├── me
+
+2026-07-10T03:04:12.499134577Z [inf] │ │ │ ├── dia/
+
+2026-07-10T03:04:12.499137980Z [inf] │ │ │ │ ├── s
+
+2026-07-10T03:04:12.500178049Z [inf] │ │ ├── a
+
+2026-07-10T03:04:12.500184936Z [inf] │ │ │ ├── uth/
+
+2026-07-10T03:04:12.500189461Z [inf] │ │ │ │ ├── sign
+
+2026-07-10T03:04:12.500193145Z [inf] │ │ │ │ │ ├── up (POST)
+
+2026-07-10T03:04:12.500197134Z [inf] │ │ │ │ │ └── in (POST)
+
+2026-07-10T03:04:12.500201789Z [inf] │ │ │ │ ├── admin-verify (POST)
+
+2026-07-10T03:04:12.500206081Z [inf] │ │ │ │ ├── refresh (POST)
+
+2026-07-10T03:04:12.500209701Z [inf] │ │ │ │ ├── logout (POST)
+
+2026-07-10T03:04:12.500212849Z [inf] │ │ │ │ └── fcm-token (POST)
+
+2026-07-10T03:04:12.500215969Z [inf] │ │ │ ├── dmin/feature-flags (GET, HEAD)
+
+2026-07-10T03:04:12.500219148Z [inf] │ │ │ │ └── /
+
+2026-07-10T03:04:12.500223083Z [inf] │ │ │ │ └── :key (PATCH)
+
+2026-07-10T03:04:12.500226471Z [inf] │ │ │ └── i/
+
+2026-07-10T03:04:12.500230091Z [inf] │ │ │ ├── chat (POST)
+
+2026-07-10T03:04:12.500233490Z [inf] │ │ │ └── recommend (POST)
+
+2026-07-10T03:04:12.500237066Z [inf] │ │ ├── rooms (POST, GET, HEAD)
+
+2026-07-10T03:04:12.500240707Z [inf] │ │ │ └── /
+
+2026-07-10T03:04:12.500243924Z [inf] │ │ │ ├── join (POST)
+
+2026-07-10T03:04:12.500247305Z [inf] │ │ │ ├── mine (GET, HEAD)
+
+2026-07-10T03:04:12.500250444Z [inf] │ │ │ └── :id (DELETE)
+
+2026-07-10T03:04:12.500253476Z [inf] │ │ │ └── /
+
+2026-07-10T03:04:12.500257013Z [inf] │ │ │ ├── playback (POST)
+
+2026-07-10T03:04:12.500260019Z [inf] │ │ │ └── leave (POST)
+
+2026-07-10T03:04:12.501430692Z [inf] │ │ │ ├── verify (POST)
+
+2026-07-10T03:04:12.501434815Z [inf] │ │ ├── f
+
+2026-07-10T03:04:12.501440095Z [inf] │ │ │ ├── riends (GET, HEAD)
+
+2026-07-10T03:04:12.501443627Z [inf] │ │ │ │ └── /
+
+2026-07-10T03:04:12.501448357Z [inf] │ │ │ │ ├── request (POST)
+
+2026-07-10T03:04:12.501450884Z [inf] │ │ │ │ │ └── history (GET, HEAD)
+
+2026-07-10T03:04:12.501452739Z [inf] │ │ │ │ │ └── s/
+
+2026-07-10T03:04:12.501457501Z [inf] │ │ │ │ │ ├── incoming (GET, HEAD)
+
+2026-07-10T03:04:12.501459630Z [inf] │ │ │ │ └── :id (GET, HEAD)
+
+2026-07-10T03:04:12.501461867Z [inf] │ │ │ │ │ └── :id (PUT)
+
+2026-07-10T03:04:12.501466744Z [inf] │ │ │ └── ploads/
+
+2026-07-10T03:04:12.501467274Z [inf] │ │ │ │ ├── search (GET, HEAD)
+
+2026-07-10T03:04:12.501471299Z [inf] │ │ │ │ └── :friendId (DELETE)
+
+2026-07-10T03:04:12.501472851Z [inf] │ │ │ └── * (GET, HEAD)
+
+2026-07-10T03:04:12.501476064Z [inf] │ │ │ └── eature-flags (GET, HEAD)
+
+2026-07-10T03:04:12.501478207Z [inf] │ │ ├── billing/
+
+2026-07-10T03:04:12.501487141Z [inf] │ │ ├── u
+
+2026-07-10T03:04:12.501491536Z [inf] │ │ │ ├── sers/
+
+2026-07-10T03:04:12.501494459Z [inf] │ │ │ │ ├── me (GET, HEAD, PATCH, DELETE)
+
+2026-07-10T03:04:12.501497221Z [inf] │ │ │ │ │ └── /
+
+2026-07-10T03:04:12.501500053Z [inf] │ │ │ │ │ ├── avatar (POST)
+
+2026-07-10T03:04:12.501503146Z [inf] │ │ │ │ │ ├── create-subscription (POST)
+
+2026-07-10T03:04:12.502765322Z [inf] │ │ │ ├── status (GET, HEAD)
+
+2026-07-10T03:04:12.502767874Z [inf] [03:04:12.479] INFO (115): Server listening at http://127.0.0.1:8080
+
+2026-07-10T03:04:12.502771865Z [inf] │ │ │ └── cancel (POST)
+
+2026-07-10T03:04:12.502773702Z [inf] [03:04:12.479] INFO (115): Server listening at http://10.187.174.49:8080
+
+2026-07-10T03:04:12.502777534Z [inf] │ │ └── nonymize (POST)
+
+2026-07-10T03:04:12.502778019Z [inf] │ │ └── gdpr/
+
+2026-07-10T03:04:12.502784581Z [inf] │ ├── ws (GET, HEAD)
+
+2026-07-10T03:04:12.502784779Z [inf] │ │ ├── export (GET, HEAD)
+
+2026-07-10T03:04:12.502790945Z [inf] │ │ └── /room/
+
+2026-07-10T03:04:12.502791073Z [inf] │ │ ├── summary (GET, HEAD)
+
+2026-07-10T03:04:12.502797160Z [inf] │ │ └── :id (GET, HEAD)
+
+2026-07-10T03:04:12.502797451Z [inf] │ │ └── a
+
+2026-07-10T03:04:12.502804181Z [inf] │ ├── health (GET, HEAD)
+
+2026-07-10T03:04:12.502804413Z [inf] │ │ ├── ccount (DELETE)
+
+2026-07-10T03:04:12.502808474Z [inf] │ └── metrics (GET, HEAD)
+
+2026-07-10T03:04:12.502813137Z [inf] └── * (OPTIONS)
+
+2026-07-10T03:04:12.502816555Z [inf]
+
+2026-07-10T03:05:23.509862903Z [inf] prisma:query SELECT "public"."Friendship"."id", "public"."Friendship"."userID", "public"."Friendship"."friendID", "public"."Friendship"."friendsSince" FROM "public"."Friendship" WHERE "public"."Friendship"."userID" = $1 OFFSET $2
+
+2026-07-10T03:05:23.509870064Z [inf] [03:05:17.450] INFO (115): request completed
+
+2026-07-10T03:05:23.509873704Z [inf] reqId: "req-1"
+
+2026-07-10T03:05:23.509877242Z [inf] res: {
+
+2026-07-10T03:05:23.509881026Z [inf] "statusCode": 200
+
+2026-07-10T03:05:23.509885046Z [inf] }
+
+2026-07-10T03:05:23.509888313Z [inf] [03:05:17.362] INFO (115): incoming request
+
+2026-07-10T03:05:23.509891826Z [inf] responseTime: 88.17073154449463
+
+2026-07-10T03:05:23.509895476Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password", COALESCE("aggr_selection_0_RoomParticipant"."_aggr_count_participants", 0) AS "_aggr_count_participants" FROM "public"."Room" LEFT JOIN (SELECT "public"."RoomParticipant"."roomID", COUNT(*) AS "_aggr_count_participants" FROM "public"."RoomParticipant" WHERE 1=1 GROUP BY "public"."RoomParticipant"."roomID") AS "aggr_selection_0_RoomParticipant" ON ("public"."Room"."id" = "aggr_selection_0_RoomParticipant"."roomID") WHERE ("public"."Room"."isActive" = $1 AND "public"."Room"."privacy" = $2) ORDER BY "public"."Room"."createdAt" DESC LIMIT $3 OFFSET $4
+
+2026-07-10T03:05:23.509897628Z [inf] reqId: "req-1"
+
+2026-07-10T03:05:23.509902092Z [inf] req: {
+
+2026-07-10T03:05:23.509906411Z [inf] "method": "GET",
+
+2026-07-10T03:05:23.509910507Z [inf] "url": "/api/friends",
+
+2026-07-10T03:05:23.509914171Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:23.509917665Z [inf] "remoteAddress": "100.64.0.2",
+
+2026-07-10T03:05:23.509921419Z [inf] "remotePort": 40622
+
+2026-07-10T03:05:23.509925164Z [inf] }
+
+2026-07-10T03:05:23.509928440Z [inf] [03:05:17.367] INFO (115): incoming request
+
+2026-07-10T03:05:23.509931942Z [inf] reqId: "req-2"
+
+2026-07-10T03:05:23.509937205Z [inf] req: {
+
+2026-07-10T03:05:23.509940834Z [inf] "method": "GET",
+
+2026-07-10T03:05:23.509945049Z [inf] "url": "/api/rooms",
+
+2026-07-10T03:05:23.509948646Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:23.509954366Z [inf] "remoteAddress": "100.64.0.3",
+
+2026-07-10T03:05:23.509957985Z [inf] "remotePort": 59554
+
+2026-07-10T03:05:23.509961402Z [inf] }
+
+2026-07-10T03:05:23.511665451Z [inf] responseTime: 8.220197677612305
+
+2026-07-10T03:05:23.511672225Z [inf] [03:05:17.468] INFO (115): request completed
+
+2026-07-10T03:05:23.511676961Z [inf] reqId: "req-2"
+
+2026-07-10T03:05:23.511680604Z [inf] res: {
+
+2026-07-10T03:05:23.511684183Z [inf] "statusCode": 200
+
+2026-07-10T03:05:23.511690335Z [inf] }
+
+2026-07-10T03:05:23.511694352Z [inf] responseTime: 100.7806396484375
+
+2026-07-10T03:05:23.511698501Z [inf] [03:05:17.732] INFO (115): incoming request
+
+2026-07-10T03:05:23.511702039Z [inf] reqId: "req-3"
+
+2026-07-10T03:05:23.511706265Z [inf] req: {
+
+2026-07-10T03:05:23.511709989Z [inf] "method": "GET",
+
+2026-07-10T03:05:23.511714032Z [inf] "url": "/api/friends/requests/incoming",
+
+2026-07-10T03:05:23.511717722Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:23.511722024Z [inf] "remoteAddress": "100.64.0.2",
+
+2026-07-10T03:05:23.511725999Z [inf] "remotePort": 40622
+
+2026-07-10T03:05:23.511729845Z [inf] }
+
+2026-07-10T03:05:23.511733114Z [inf] prisma:query SELECT "public"."FriendRequest"."id", "public"."FriendRequest"."fromUserID", "public"."FriendRequest"."toUserID", "public"."FriendRequest"."status", "public"."FriendRequest"."createdAt" FROM "public"."FriendRequest" WHERE ("public"."FriendRequest"."toUserID" = $1 AND "public"."FriendRequest"."status" = $2) OFFSET $3
+
+2026-07-10T03:05:23.511736367Z [inf] [03:05:17.740] INFO (115): request completed
+
+2026-07-10T03:05:23.511739797Z [inf] reqId: "req-3"
+
+2026-07-10T03:05:23.511743672Z [inf] res: {
+
+2026-07-10T03:05:23.511746918Z [inf] "statusCode": 200
+
+2026-07-10T03:05:23.511750224Z [inf] }
+
+2026-07-10T03:05:24.218192406Z [inf] "remotePort": 42704
+
+2026-07-10T03:05:24.218197620Z [inf] }
+
+2026-07-10T03:05:24.218218753Z [inf] [03:05:24.168] INFO (115): incoming request
+
+2026-07-10T03:05:24.218222081Z [inf] reqId: "req-4"
+
+2026-07-10T03:05:24.218225465Z [inf] req: {
+
+2026-07-10T03:05:24.218229121Z [inf] "method": "GET",
+
+2026-07-10T03:05:24.218232558Z [inf] "url": "/api/media/trending?regionCode=RU&maxResults=20",
+
+2026-07-10T03:05:24.218235696Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:24.218239345Z [inf] "remoteAddress": "100.64.0.4",
+
+2026-07-10T03:05:24.442608944Z [inf] [03:05:24.439] INFO (115): request completed
+
+2026-07-10T03:05:24.442613416Z [inf] reqId: "req-4"
+
+2026-07-10T03:05:24.442616536Z [inf] res: {
+
+2026-07-10T03:05:24.442619491Z [inf] "statusCode": 200
+
+2026-07-10T03:05:24.442622694Z [inf] }
+
+2026-07-10T03:05:24.442625542Z [inf] responseTime: 271.07334423065186
+
+2026-07-10T03:05:44.500100359Z [inf] [03:05:39.813] INFO (115): incoming request
+
+2026-07-10T03:05:44.500103661Z [inf] reqId: "req-5"
+
+2026-07-10T03:05:44.500106927Z [inf] req: {
+
+2026-07-10T03:05:44.500110342Z [inf] "method": "POST",
+
+2026-07-10T03:05:44.500113636Z [inf] "url": "/api/rooms",
+
+2026-07-10T03:05:44.500116663Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:44.500119896Z [inf] "remoteAddress": "100.64.0.2",
+
+2026-07-10T03:05:44.500125919Z [inf] "remotePort": 48448
+
+2026-07-10T03:05:44.500129128Z [inf] }
+
+2026-07-10T03:05:44.500132609Z [inf] prisma:query SELECT 1
+
+2026-07-10T03:05:44.500135824Z [inf] prisma:query SELECT "public"."User"."id", "public"."User"."username" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:44.500139383Z [inf] prisma:query SELECT "public"."User"."id", "public"."User"."isPremium" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:44.500142360Z [inf] prisma:query INSERT INTO "public"."Room" ("id","name","hostID","hostName","code","mediaItem","isActive","maxParticipants","hostIsPremium","createdAt","privacy","password") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password"
+
+2026-07-10T03:05:44.500145445Z [inf] prisma:query INSERT INTO "public"."AuditLog" ("id","userId","action","ip","userAgent","metadata","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."AuditLog"."id", "public"."AuditLog"."userId", "public"."AuditLog"."action", "public"."AuditLog"."ip", "public"."AuditLog"."userAgent", "public"."AuditLog"."metadata", "public"."AuditLog"."createdAt"
+
+2026-07-10T03:05:44.501518777Z [inf] [03:05:39.850] INFO (115): request completed
+
+2026-07-10T03:05:44.501521668Z [inf] [Relay] videoId: yv5-FG08fqg b64url: false b64cookies: true b64ua: true
+
+2026-07-10T03:05:44.501524906Z [inf] reqId: "req-5"
+
+2026-07-10T03:05:44.501529567Z [inf] [Relay] ✅ Decoded cookies, length: 1135
+
+2026-07-10T03:05:44.501529691Z [inf] res: {
+
+2026-07-10T03:05:44.501534715Z [inf] "statusCode": 200
+
+2026-07-10T03:05:44.501534856Z [inf] [Relay] ✅ Decoded User-Agent, len: 135
+
+2026-07-10T03:05:44.501538585Z [inf] }
+
+2026-07-10T03:05:44.501541803Z [inf] responseTime: 37.52225399017334
+
+2026-07-10T03:05:44.501545697Z [inf] [03:05:41.777] INFO (115): incoming request
+
+2026-07-10T03:05:44.501548709Z [inf] reqId: "req-6"
+
+2026-07-10T03:05:44.501551398Z [inf] req: {
+
+2026-07-10T03:05:44.501554020Z [inf] "method": "GET",
+
+2026-07-10T03:05:44.501557018Z [inf] "url": "/ws/room/7365b14d-827e-4e47-9dfb-975e00507066?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=7365b14d-827e-4e47-9dfb-975e00507066",
+
+2026-07-10T03:05:44.501559727Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:44.501562652Z [inf] "remoteAddress": "100.64.0.5",
+
+2026-07-10T03:05:44.501565887Z [inf] "remotePort": 26698
+
+2026-07-10T03:05:44.501569734Z [inf] }
+
+2026-07-10T03:05:44.501572490Z [inf] prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:44.501576255Z [inf] [WS] 𝐑𝐀𝐆𝐄 connected
+
+2026-07-10T03:05:44.501579231Z [inf] [Relay] ====== StreamRelay request received ======
+
+2026-07-10T03:05:44.503518549Z [inf] [Relay] v100: authenticated extraction for videoId: yv5-FG08fqg
+
+2026-07-10T03:05:44.503522391Z [inf] [Extract-v100] Authenticated IOS innertube extraction for yv5-FG08fqg
+
+2026-07-10T03:05:44.503525639Z [inf] [Extract-v100] Cookies length: 1135 UA length: 135
+
+2026-07-10T03:05:44.503529122Z [inf] [Extract-v100] ⚠️ No SAPISID cookie found — request will be unauthenticated
+
+2026-07-10T03:05:44.503532347Z [inf] [Extract-v100] POST https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_...
+
+2026-07-10T03:05:44.503535482Z [inf] [03:05:42.566] INFO (115): incoming request
+
+2026-07-10T03:05:44.503538905Z [inf] reqId: "req-7"
+
+2026-07-10T03:05:44.503542209Z [inf] req: {
+
+2026-07-10T03:05:44.503545578Z [inf] "method": "GET",
+
+2026-07-10T03:05:44.503549603Z [inf] "url": "/api/media/stream?videoId=yv5-FG08fqg&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&b64cookies=X19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSW1pNnRmMXY1R1Mzd0VRa1p5THlkbkdsUU1Za1p5THlkbkdsUU0lM0Q7IF9fU2VjdXJlLVlFTklEPTE2LllURT1VY0F6YnRyOFhUUmhoMVBwR0kwQ3EtanZtYnc4bUJGTkM1ZUM4S0k5b3pJQXctWWo0OXJvNDh5Yk51aGFfcVVKWFBMdWVKVUxfWGFSemMzRUI2N0k3R2V0eHZRazA5MnNxdXlqYkhrTkhpdFljTzBCajlvY19hQ3U0TUJiR2IzeXpfNkFqWW9lRGRoUUJ4bEFaR3NCV2E4WEw1c0d2X1Fxd29jSTgzVm9QUFc3Z05NeHdyS2lCc2ZGV2dXTmNEbk9aNmJzY0VQNFVJV1MtYk9GelMzN3hpcG44OEFFZEI0TWJKbEdIYUcyVDBVY3FlMUhVMGhjQ0o3dzUxWDhMR2Zwa3QzNUY5WDRDcjhTcTNVQktYcWI1eWk2VHdpaUdXeTl1N0RsdUpGak1pSF9iX2g0Z21VckRvb0ZPMmFDS1lRcFlvRFhqS1hXSGNDeXdYd2tVZVlBOFE7IFZJU0lUT1JfUFJJVkFDWV9NRVRBREFUQT1DZ0pFUlJJRUVnQWdCdyUzRCUzRDsgX19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSzZ1OXZPUGtaaWlXUkRxLXAtMzg4T1ZBeGpxLXAtMzg4T1ZBdyUzRCUzRDsgUFJFRj1mNj00MDAwMDAwMCZ0ej1Bc2lhLk5vdm9zaWJpcnNrOyBfX1NlY3VyZS1ZRUM9Q2d0V1dWQjNka0V6TjNrM2J5aUF3OEhTQmpJS0NnSkVSUklFRWdBZ0IyTGdBZ3JkQWpFMkxsbFVSVDFWWTBGNlluUnlPRmhVVW1ob01WQndSMGt3UTNFdGFuWnRZbmM0YlVKR1RrTTFaVU00UzBrNWIzcEpRWGN0V1dvME9YSnZORGg1WWs1MWFHRmZjVlZLV0ZCTWRXVktWVXhmV0dGU2VtTXpSVUkyTjBrM1IyVjBlSFpSYXpBNU1uTnhkWGxxWWtoclRraHBkRmxqVHpCQ2FqbHZZMTloUTNVMFRVSmlSMkl6ZVhwZk5rRnFXVzlsUkdSb1VVSjRiRUZhUjNOQ1YyRTRXRXcxYzBkMlgxRnhkMjlqU1RnelZtOVFVRmMzWjA1TmVIZHlTMmxDYzJaR1YyZFhUbU5FYms5YU5tSnpZMFZRTkZWSlYxTXRZazlHZWxNek4zaHBjRzQ0T0VGRlpFSTBUV0pLYkVkSVlVY3lWREJWWTNGbE1VaFZNR2hqUTBvM2R6VXhXRGhNUjJad2EzUXpOVVk1V0RSRGNqaFRjVE5WUWt0WWNXSTFlV2syVkhkcGFVZFhlVGwxTjBSc2RVcEdhazFwU0Y5aVgyZzBaMjFWY2tSdmIwWlBNbUZEUzFsUmNGbHZSRmhxUzFoWFNHTkRlWGRZZDJ0VlpWbEJPRkUlM0Q7IFlTQz1nRHI4TzYwSDJJSQ%3D%3D&b64ua=TW96aWxsYS81LjAgKGlQaG9uZTsgQ1BVIGlQaG9uZSBPUyAxN181IGxpa2UgTWFjIE9TIFgpIEFwcGxlV2ViS2l0LzYwNS4xLjE1IChLSFRNTCwgbGlrZSBHZWNrbykgVmVyc2lvbi8xNy41IE1vYmlsZS8xNUUxNDggU2FmYXJpLzYwNC4x",
+
+2026-07-10T03:05:44.505456864Z [inf] "method": "GET",
+
+2026-07-10T03:05:44.505461045Z [inf] "url": "/ws/room/7365b14d-827e-4e47-9dfb-975e00507066?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=7365b14d-827e-4e47-9dfb-975e00507066",
+
+2026-07-10T03:05:44.505477706Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:44.505483937Z [inf] "remoteAddress": "100.64.0.6",
+
+2026-07-10T03:05:44.505488094Z [inf] "remotePort": 46678
+
+2026-07-10T03:05:44.505491543Z [inf] }
+
+2026-07-10T03:05:44.505494656Z [inf] [Extract-v100] Response status: 400
+
+2026-07-10T03:05:44.505498179Z [err] [Relay] ⚠️ v100 authenticated failed: innertube 400: {
+
+2026-07-10T03:05:44.505501181Z [err] "error": {
+
+2026-07-10T03:05:44.505504304Z [err] "code": 400,
+
+2026-07-10T03:05:44.505507648Z [err] "message": "Precondition check failed.",
+
+2026-07-10T03:05:44.505510661Z [err] "errors": [
+
+2026-07-10T03:05:44.505513857Z [err] {
+
+2026-07-10T03:05:44.505517244Z [err] "message": "Precondition check failed.",
+
+2026-07-10T03:05:44.505520392Z [err] "domain": "global",
+
+2026-07-10T03:05:44.505523371Z [err] "reason": "fai
+
+2026-07-10T03:05:44.505526289Z [inf] [Relay] Falling back to legacy extractStreamURL (yt-dlp/Piped)...
+
+2026-07-10T03:05:44.505529241Z [inf] [Extract] Trying Piped: https://pipedapi.kavin.rocks
+
+2026-07-10T03:05:44.505532249Z [inf] [Extract] Trying Piped: https://pipedapi.leptons.xyz
+
+2026-07-10T03:05:44.505535686Z [inf] [Extract] Trying Piped: https://pipedapi.r4fo.com
+
+2026-07-10T03:05:44.505538835Z [inf] [03:05:42.995] INFO (115): incoming request
+
+2026-07-10T03:05:44.505542212Z [inf] reqId: "req-8"
+
+2026-07-10T03:05:44.505545383Z [inf] req: {
+
+2026-07-10T03:05:44.507273555Z [inf] "host": "plink-backend-production-ef31.up.railway.app",
+
+2026-07-10T03:05:44.507278956Z [inf] "remoteAddress": "100.64.0.7",
+
+2026-07-10T03:05:44.507283298Z [inf] "remotePort": 28624
+
+2026-07-10T03:05:44.507286620Z [inf] }
+
+2026-07-10T03:05:44.507289972Z [inf] prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:44.507293300Z [inf] [WS] 𝐑𝐀𝐆𝐄 connected
+
+2026-07-10T03:05:44.507297346Z [inf] [Extract] Piped failed: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+
+2026-07-10T03:05:44.507301506Z [inf] [Extract] Trying yt-dlp...
+
+2026-07-10T03:05:44.522550852Z [err] WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+
+2026-07-10T03:05:44.522555449Z [err] WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (1/3)...
+
+2026-07-10T03:05:44.522558198Z [err] WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+
+2026-07-10T03:05:44.522561015Z [err] WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (2/3)...
+
+2026-07-10T03:05:44.522563915Z [err] WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+
+2026-07-10T03:05:44.522566832Z [err] WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (3/3)...
+
+2026-07-10T03:05:44.522570212Z [err] WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+
+2026-07-10T03:05:44.522572978Z [err] WARNING: [youtube] Unable to download API page: HTTP Error 400: Bad Request (caused by <HTTPError 400: 'Bad Request'>); please report this issue on https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using yt-dlp -U
+
+2026-07-10T03:05:44.522575749Z [err] ERROR: [youtube] yv5-FG08fqg: Sign in to confirm you’re not a bot. This helps protect our community. Learn more
+
+2026-07-10T03:05:44.522578651Z [inf] [Extract] yt-dlp failed: Command failed: yt-dlp -f "best[ext=mp4][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none
+
+2026-07-10T03:05:44.522581307Z [err] [Relay] ❌ All extraction methods failed: All extraction methods failed
+
+2026-07-10T03:05:44.522583956Z [inf] [03:05:44.516] INFO (115): request completed
+
+2026-07-10T03:05:44.522586713Z [inf] reqId: "req-7"
+
+2026-07-10T03:05:44.522589389Z [inf] res: {
+
+2026-07-10T03:05:44.522592058Z [inf] "statusCode": 502
+
+2026-07-10T03:05:44.522595510Z [inf] }
+
+2026-07-10T03:05:44.522598314Z [inf] responseTime: 1949.8257865905762
+
+2026-07-10T03:05:44.524332249Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:46.129864559Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:48.124603054Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:50.121391328Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:52.125835567Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:54.136117302Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:56.118985674Z [inf] prisma:query SELECT 1
+
+2026-07-10T03:05:56.120913473Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:05:58.137791547Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:00.124765764Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:02.140194003Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:04.152221834Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:06.124325642Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:08.123649508Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:10.120713177Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:12.163389052Z [inf] prisma:query SELECT 1
+
+2026-07-10T03:06:12.163393187Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:14.184680792Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:16.142808421Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:18.151147407Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+
+2026-07-10T03:06:20.275495383Z [inf] prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3 
+
+Анализ логов показывает, что мы уперлись в криптографическую стену.
+
+Диагноз: «Сигнатурная ловушка»
+Ты абсолютно прав. Тот факт, что в sparams указан ip, делает его частью подписанных данных. Когда ты удаляешь &ip= из URL, sig (подпись) становится невалидной. YouTube CDN видит: «Данные изменены, подпись не совпадает» — и выбрасывает 403 Forbidden. Это происходит независимо от того, хороший у тебя IP или плохой.
+
+Попытка «стрипнуть» IP из googlevideo URL не сработает никогда. Мы должны сменить подход.
+
+Решение: HLS-First (Динамический манифест)
+HLS-манифесты (.m3u8) — это не подписываемые на уровне IP блоки данных, это плейлисты. YouTube генерирует их динамически, и они не привязаны к IP-адресу так жестко, как прямые MP4-ссылки.
+
+Сейчас твой код ExtractionBridge нашел MP4, и мы пытаемся его проксировать (безуспешно). Нам нужно заставить ExtractionBridge искать hlsManifestUrl.
+
+Промт для GLM 5.2: Переход на HLS-First
+Скопируй и отправь это GLM 5.2. Мы меняем приоритеты экстрактора.
+
+GLM 5.2, Stripping IP ломает сигнатуру URL (sig), поэтому получаем 403. Переходим на HLS.
+
+Проблема: Прямые MP4-ссылки (itag=18 и другие) содержат ip внутри sparams. Их нельзя проксировать с изменением URL, так как это инвалидирует криптографическую подпись.
+
+Решение: HLS-манифест.
+
+Задача: >    - iOS (ExtractionBridge): Измени приоритет поиска. Сейчас экстрактор хватает MP4 (streamURL). Перепиши его так, чтобы он в первую очередь проверял streamingData.hlsManifestUrl. Если он есть — бери его.
+
+Если HLS-манифеста нет, только тогда падай в fallback на MP4.
+
+Отправляй HLS URL на бэкенд.
+
+Backend (media-v2.ts): HLS-манифесты не требуют стриппинга IP. Если пришел URL с manifest.googlevideo.com, проксируй его "как есть", просто добавив куки и User-Agent клиента.
+
+Дай обновленный код ExtractionBridge.swift, который отдает приоритет hlsManifestUrl и обновленный роут в index.ts для прозрачного проксирования HLS.
+
+Твой шаг
+Это самый верный путь. HLS — это стандарт индустрии для стриминга, он создан для того, чтобы плеер мог скачивать части видео по порядку. Если мы проксируем .m3u8 манифест, плеер сам будет дергать нужные сегменты через наш бэкенд, и YouTube будет видеть только одну сессию, не привязанную к конкретному IP.
+
+Отправляй промт.
+
+Применяй изменения.
+
+Запускай билд. Если увидишь в логах [Relay] Target: .../api/manifest/hls/... — это победа.
+
+Мы прошли через 404, 429 и 403. Остался последний рывок с HLS! 🚀

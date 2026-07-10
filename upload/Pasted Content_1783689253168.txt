@@ -1,0 +1,666 @@
+2026-07-10T02:01:00.225546808Z [inf]  ==== Step 0/4: upgrade yt-dlp ====
+2026-07-10T02:01:00.225549618Z [inf]  2023.03.04
+2026-07-10T02:01:00.225552268Z [inf]  ==== Step 0/4 done (exit 0) ====
+2026-07-10T02:01:00.225554688Z [inf]  ==== Step 1/4: prisma generate ====
+2026-07-10T02:01:00.597042724Z [inf]  Starting Container
+2026-07-10T02:01:00.641215119Z [inf]  Environment variables loaded from .env
+2026-07-10T02:01:00.641221899Z [inf]  Prisma schema loaded from prisma/schema.prisma
+2026-07-10T02:01:01.187576596Z [inf]  
+2026-07-10T02:01:01.187582366Z [inf]  Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+2026-07-10T02:01:01.187586146Z [inf]  
+2026-07-10T02:01:01.187615576Z [inf]  
+2026-07-10T02:01:01.187620286Z [inf]  ✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 192ms
+2026-07-10T02:01:01.187623976Z [inf]  
+2026-07-10T02:01:01.187627946Z [inf]  Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+2026-07-10T02:01:01.218035971Z [err]  ┌─────────────────────────────────────────────────────────┐
+2026-07-10T02:01:01.218040231Z [err]  │  Update available 5.22.0 -> 7.8.0                       │
+2026-07-10T02:01:01.218043351Z [err]  │                                                         │
+2026-07-10T02:01:01.218046451Z [err]  │  This is a major update - please follow the guide at    │
+2026-07-10T02:01:01.218049141Z [err]  │  https://pris.ly/d/major-version-upgrade                │
+2026-07-10T02:01:01.218053611Z [err]  │                                                         │
+2026-07-10T02:01:01.218056021Z [err]  │  Run the following to update                            │
+2026-07-10T02:01:01.218058301Z [err]  │    npm i --save-dev prisma@latest                       │
+2026-07-10T02:01:01.218061061Z [err]  │    npm i @prisma/client@latest                          │
+2026-07-10T02:01:01.218063541Z [err]  └─────────────────────────────────────────────────────────┘
+2026-07-10T02:01:01.411651700Z [inf]  ==== Step 1/4 done (exit 0) ====
+2026-07-10T02:01:01.411662640Z [inf]  ==== Step 2/4: prisma db push ====
+2026-07-10T02:01:02.254923169Z [inf]  Environment variables loaded from .env
+2026-07-10T02:01:02.254928519Z [inf]  Prisma schema loaded from prisma/schema.prisma
+2026-07-10T02:01:02.254933929Z [inf]  Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+2026-07-10T02:01:02.254939299Z [inf]  
+2026-07-10T02:01:02.254944759Z [inf]  The database is already in sync with the Prisma schema.
+2026-07-10T02:01:02.254949949Z [inf]  
+2026-07-10T02:01:02.254954729Z [inf]  ==== Step 2/4 done (exit 0) ====
+2026-07-10T02:01:02.254959679Z [inf]  ==== Step 3/4: starting Plink backend (tsx src/index.ts) ====
+2026-07-10T02:01:03.496485480Z [inf]  [Telemetry] No OTEL endpoint — skipping init
+2026-07-10T02:01:03.611137725Z [inf]      │   │   │   │   ├── categories (GET, HEAD)
+2026-07-10T02:01:03.611151025Z [inf]      │   │   │   │   ├── extract (GET, HEAD)
+2026-07-10T02:01:03.611155455Z [inf]      │   │   │   │   │   └── -url (POST)
+2026-07-10T02:01:03.611159805Z [inf]      │   │   │   │   ├── metadata (GET, HEAD)
+2026-07-10T02:01:03.611164085Z [inf]      │   │   │   │   └── youtube-
+2026-07-10T02:01:03.611167935Z [inf]      │   │   │   │       ├── stream (GET, HEAD)
+2026-07-10T02:01:03.611171905Z [inf]      │   │   │   │       ├── player (GET, HEAD)
+2026-07-10T02:01:03.611175644Z [inf]      │   │   │   │       └── embed (GET, HEAD)
+2026-07-10T02:01:03.611180454Z [inf]      │   │   │   └── ssages/dm (POST)
+2026-07-10T02:01:03.611184734Z [inf]      │   │   │       └── /
+2026-07-10T02:01:03.611189344Z [inf]      │   │   │           └── :friendId (GET, HEAD)
+2026-07-10T02:01:03.611249754Z [inf]  🚀 Plink backend v1.6.0 on port 8080 [development]
+2026-07-10T02:01:03.611253364Z [inf]  🤖 AI: /api/ai/chat | /api/ai/recommend
+2026-07-10T02:01:03.611256394Z [inf]  📋 REGISTERED ROUTES:
+2026-07-10T02:01:03.611260514Z [inf]  └── (empty root node)
+2026-07-10T02:01:03.611267004Z [inf]      ├── /
+2026-07-10T02:01:03.611269984Z [inf]      │   ├── api/
+2026-07-10T02:01:03.611273044Z [inf]      │   │   ├── me
+2026-07-10T02:01:03.611275964Z [inf]      │   │   │   ├── dia/
+2026-07-10T02:01:03.611278714Z [inf]      │   │   │   │   ├── s
+2026-07-10T02:01:03.611281924Z [inf]      │   │   │   │   │   ├── tream (GET, HEAD)
+2026-07-10T02:01:03.611284753Z [inf]      │   │   │   │   │   └── earch (GET, HEAD)
+2026-07-10T02:01:03.611287743Z [inf]      │   │   │   │   ├── trending (GET, HEAD)
+2026-07-10T02:01:03.612968059Z [inf]      │   │   ├── a
+2026-07-10T02:01:03.612975239Z [inf]      │   │   ├── rooms (POST, GET, HEAD)
+2026-07-10T02:01:03.612977369Z [inf]      │   │   │   ├── uth/
+2026-07-10T02:01:03.612983379Z [inf]      │   │   │   │   ├── sign
+2026-07-10T02:01:03.612987019Z [inf]      │   │   │   └── /
+2026-07-10T02:01:03.612989649Z [inf]      │   │   │   │   │   ├── up (POST)
+2026-07-10T02:01:03.612993899Z [inf]      │   │   │   │   │   └── in (POST)
+2026-07-10T02:01:03.612997909Z [inf]      │   │   │       ├── join (POST)
+2026-07-10T02:01:03.613002219Z [inf]      │   │   │   │   ├── admin-verify (POST)
+2026-07-10T02:01:03.613005249Z [inf]      │   │   │       ├── mine (GET, HEAD)
+2026-07-10T02:01:03.613011699Z [inf]      │   │   │       └── :id (DELETE)
+2026-07-10T02:01:03.613012049Z [inf]      │   │   │   │   ├── refresh (POST)
+2026-07-10T02:01:03.613018769Z [inf]      │   │   │   │   ├── logout (POST)
+2026-07-10T02:01:03.613020079Z [inf]      │   │   │           └── /
+2026-07-10T02:01:03.613025259Z [inf]      │   │   │   │   └── fcm-token (POST)
+2026-07-10T02:01:03.613028249Z [inf]      │   │   │               ├── playback (POST)
+2026-07-10T02:01:03.613034349Z [inf]      │   │   │   ├── dmin/feature-flags (GET, HEAD)
+2026-07-10T02:01:03.613034589Z [inf]      │   │   │               └── leave (POST)
+2026-07-10T02:01:03.613039809Z [inf]      │   │   │   │   └── /
+2026-07-10T02:01:03.613043679Z [inf]      │   │   │   │       └── :key (PATCH)
+2026-07-10T02:01:03.613047749Z [inf]      │   │   │   └── i/
+2026-07-10T02:01:03.613051138Z [inf]      │   │   │       ├── chat (POST)
+2026-07-10T02:01:03.613054738Z [inf]      │   │   │       └── recommend (POST)
+2026-07-10T02:01:03.614438806Z [inf]      │   │   ├── f
+2026-07-10T02:01:03.614445066Z [inf]      │   │   │   ├── riends (GET, HEAD)
+2026-07-10T02:01:03.614448906Z [inf]      │   │   │   │   └── /
+2026-07-10T02:01:03.614451166Z [inf]      │   │   │   │       │       └── :id (PUT)
+2026-07-10T02:01:03.614454046Z [inf]      │   │   │   │       ├── request (POST)
+2026-07-10T02:01:03.614458166Z [inf]      │   │   │   ├── verify (POST)
+2026-07-10T02:01:03.614458936Z [inf]      │   │   │   │       ├── search (GET, HEAD)
+2026-07-10T02:01:03.614463926Z [inf]      │   │   │   │       └── :friendId (DELETE)
+2026-07-10T02:01:03.614469556Z [inf]      │   │   │   │       │   └── s/
+2026-07-10T02:01:03.614470826Z [inf]      │   │   │   │   ├── me (GET, HEAD, PATCH, DELETE)
+2026-07-10T02:01:03.614472526Z [inf]      │   │   │   └── eature-flags (GET, HEAD)
+2026-07-10T02:01:03.614475906Z [inf]      │   │   │   │   │       ├── create-subscription (POST)
+2026-07-10T02:01:03.614477466Z [inf]      │   │   │   │       │       ├── incoming (GET, HEAD)
+2026-07-10T02:01:03.614481806Z [inf]      │   │   ├── u
+2026-07-10T02:01:03.614486605Z [inf]      │   │   │   │   │   └── /
+2026-07-10T02:01:03.614489455Z [inf]      │   │   │   │   │       └── history (GET, HEAD)
+2026-07-10T02:01:03.614492425Z [inf]      │   │   │   ├── sers/
+2026-07-10T02:01:03.614496156Z [inf]      │   │   │   │   │       ├── avatar (POST)
+2026-07-10T02:01:03.614498446Z [inf]      │   │   │   │   └── :id (GET, HEAD)
+2026-07-10T02:01:03.614502906Z [inf]      │   │   │   └── ploads/
+2026-07-10T02:01:03.614505966Z [inf]      │   │   │       └── * (GET, HEAD)
+2026-07-10T02:01:03.614509116Z [inf]      │   │   ├── billing/
+2026-07-10T02:01:03.615357709Z [inf]  [02:01:03.600] INFO (115): Server listening at http://127.0.0.1:8080
+2026-07-10T02:01:03.615363799Z [inf]  [02:01:03.600] INFO (115): Server listening at http://10.146.95.193:8080
+2026-07-10T02:01:03.615365749Z [inf]      │   │   │   ├── status (GET, HEAD)
+2026-07-10T02:01:03.615370518Z [inf]      │   │   │   └── cancel (POST)
+2026-07-10T02:01:03.615374128Z [inf]      │   │   └── gdpr/
+2026-07-10T02:01:03.615378768Z [inf]      │   │       ├── export (GET, HEAD)
+2026-07-10T02:01:03.615381518Z [inf]      │   │       ├── summary (GET, HEAD)
+2026-07-10T02:01:03.615384188Z [inf]      │   │       └── a
+2026-07-10T02:01:03.615386878Z [inf]      │   │           ├── ccount (DELETE)
+2026-07-10T02:01:03.615389588Z [inf]      │   │           └── nonymize (POST)
+2026-07-10T02:01:03.615392058Z [inf]      │   ├── ws (GET, HEAD)
+2026-07-10T02:01:03.615394658Z [inf]      │   │   └── /room/
+2026-07-10T02:01:03.615400958Z [inf]      │   │       └── :id (GET, HEAD)
+2026-07-10T02:01:03.615403468Z [inf]      │   ├── health (GET, HEAD)
+2026-07-10T02:01:03.615406028Z [inf]      │   └── metrics (GET, HEAD)
+2026-07-10T02:01:03.615408678Z [inf]      └── * (OPTIONS)
+2026-07-10T02:01:03.615411758Z [inf]  
+2026-07-10T02:01:43.641595066Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:01:43.641602286Z [inf]        "remoteAddress": "100.64.0.2",
+2026-07-10T02:01:43.641604956Z [inf]  [02:01:41.664] INFO (115): incoming request
+2026-07-10T02:01:43.641608306Z [inf]        "remotePort": 27964
+2026-07-10T02:01:43.641610926Z [inf]      reqId: "req-1"
+2026-07-10T02:01:43.641613386Z [inf]      responseTime: 72.27844333648682
+2026-07-10T02:01:43.641616106Z [inf]      }
+2026-07-10T02:01:43.641618356Z [inf]      req: {
+2026-07-10T02:01:43.641622285Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password", COALESCE("aggr_selection_0_RoomParticipant"."_aggr_count_participants", 0) AS "_aggr_count_participants" FROM "public"."Room" LEFT JOIN (SELECT "public"."RoomParticipant"."roomID", COUNT(*) AS "_aggr_count_participants" FROM "public"."RoomParticipant" WHERE 1=1 GROUP BY "public"."RoomParticipant"."roomID") AS "aggr_selection_0_RoomParticipant" ON ("public"."Room"."id" = "aggr_selection_0_RoomParticipant"."roomID") WHERE ("public"."Room"."isActive" = $1 AND "public"."Room"."privacy" = $2) ORDER BY "public"."Room"."createdAt" DESC LIMIT $3 OFFSET $4
+2026-07-10T02:01:43.641624065Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:01:43.641625125Z [inf]  [02:01:41.668] INFO (115): incoming request
+2026-07-10T02:01:43.641627715Z [inf]      reqId: "req-2"
+2026-07-10T02:01:43.641627795Z [inf]        "method": "GET",
+2026-07-10T02:01:43.641632135Z [inf]      }
+2026-07-10T02:01:43.641636785Z [inf]        "url": "/api/rooms",
+2026-07-10T02:01:43.641638685Z [inf]        "remoteAddress": "100.64.0.3",
+2026-07-10T02:01:43.641640175Z [inf]      res: {
+2026-07-10T02:01:43.641642975Z [inf]      req: {
+2026-07-10T02:01:43.641643505Z [inf]  prisma:query SELECT "public"."Friendship"."id", "public"."Friendship"."userID", "public"."Friendship"."friendID", "public"."Friendship"."friendsSince" FROM "public"."Friendship" WHERE "public"."Friendship"."userID" = $1 OFFSET $2
+2026-07-10T02:01:43.641650365Z [inf]        "remotePort": 31364
+2026-07-10T02:01:43.641650605Z [inf]        "statusCode": 200
+2026-07-10T02:01:43.641652245Z [inf]  [02:01:41.741] INFO (115): request completed
+2026-07-10T02:01:43.641655435Z [inf]      reqId: "req-2"
+2026-07-10T02:01:43.641657675Z [inf]      }
+2026-07-10T02:01:43.641663295Z [inf]        "method": "GET",
+2026-07-10T02:01:43.641668705Z [inf]        "url": "/api/friends",
+2026-07-10T02:01:43.643230222Z [inf]  [02:01:41.746] INFO (115): request completed
+2026-07-10T02:01:43.643236912Z [inf]      reqId: "req-1"
+2026-07-10T02:01:43.643242922Z [inf]      res: {
+2026-07-10T02:01:43.643249032Z [inf]        "statusCode": 200
+2026-07-10T02:01:43.643254462Z [inf]      }
+2026-07-10T02:01:43.643261702Z [inf]      responseTime: 82.23420572280884
+2026-07-10T02:01:43.643268642Z [inf]  [02:01:42.044] INFO (115): incoming request
+2026-07-10T02:01:43.643274052Z [inf]      reqId: "req-3"
+2026-07-10T02:01:43.643279331Z [inf]      req: {
+2026-07-10T02:01:43.643287291Z [inf]        "method": "GET",
+2026-07-10T02:01:43.643293161Z [inf]        "url": "/api/friends/requests/incoming",
+2026-07-10T02:01:43.643298301Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:01:43.643302921Z [inf]        "remoteAddress": "100.64.0.2",
+2026-07-10T02:01:43.643308581Z [inf]        "remotePort": 27964
+2026-07-10T02:01:43.643313961Z [inf]      }
+2026-07-10T02:01:43.643318861Z [inf]  prisma:query SELECT "public"."FriendRequest"."id", "public"."FriendRequest"."fromUserID", "public"."FriendRequest"."toUserID", "public"."FriendRequest"."status", "public"."FriendRequest"."createdAt" FROM "public"."FriendRequest" WHERE ("public"."FriendRequest"."toUserID" = $1 AND "public"."FriendRequest"."status" = $2) OFFSET $3
+2026-07-10T02:01:43.643323501Z [inf]  [02:01:42.049] INFO (115): request completed
+2026-07-10T02:01:43.643328541Z [inf]      reqId: "req-3"
+2026-07-10T02:01:43.643333311Z [inf]      res: {
+2026-07-10T02:01:43.643338351Z [inf]        "statusCode": 200
+2026-07-10T02:01:43.643343691Z [inf]      }
+2026-07-10T02:01:43.643349901Z [inf]      responseTime: 4.493871212005615
+2026-07-10T02:01:52.543039597Z [inf]  [02:01:52.371] INFO (115): incoming request
+2026-07-10T02:01:52.543043587Z [inf]      reqId: "req-4"
+2026-07-10T02:01:52.543047147Z [inf]      req: {
+2026-07-10T02:01:52.543051137Z [inf]        "method": "GET",
+2026-07-10T02:01:52.543062687Z [inf]        "url": "/api/media/trending?regionCode=RU&maxResults=20",
+2026-07-10T02:01:52.543066937Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:01:52.543070427Z [inf]        "remoteAddress": "100.64.0.4",
+2026-07-10T02:01:52.543074027Z [inf]        "remotePort": 38646
+2026-07-10T02:01:52.543077207Z [inf]      }
+2026-07-10T02:01:52.629645225Z [inf]      responseTime: 253.25531196594238
+2026-07-10T02:01:52.629764274Z [inf]  [02:01:52.625] INFO (115): request completed
+2026-07-10T02:01:52.629767124Z [inf]      reqId: "req-4"
+2026-07-10T02:01:52.629770024Z [inf]      res: {
+2026-07-10T02:01:52.629772744Z [inf]        "statusCode": 200
+2026-07-10T02:01:52.629783824Z [inf]      }
+2026-07-10T02:02:22.511967757Z [inf]  [02:02:15.920] INFO (115): incoming request
+2026-07-10T02:02:22.511972177Z [inf]      reqId: "req-5"
+2026-07-10T02:02:22.511976357Z [inf]      req: {
+2026-07-10T02:02:22.511981607Z [inf]        "method": "POST",
+2026-07-10T02:02:22.511985937Z [inf]        "url": "/api/rooms",
+2026-07-10T02:02:22.511990287Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:02:22.511993857Z [inf]        "remoteAddress": "100.64.0.5",
+2026-07-10T02:02:22.511997777Z [inf]        "remotePort": 25802
+2026-07-10T02:02:22.512001776Z [inf]      }
+2026-07-10T02:02:22.512006266Z [inf]  prisma:query SELECT 1
+2026-07-10T02:02:22.512011176Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:22.512016176Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."isPremium" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:22.512021296Z [inf]  prisma:query INSERT INTO "public"."Room" ("id","name","hostID","hostName","code","mediaItem","isActive","maxParticipants","hostIsPremium","createdAt","privacy","password") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password"
+2026-07-10T02:02:22.512025336Z [inf]  prisma:query INSERT INTO "public"."AuditLog" ("id","userId","action","ip","userAgent","metadata","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."AuditLog"."id", "public"."AuditLog"."userId", "public"."AuditLog"."action", "public"."AuditLog"."ip", "public"."AuditLog"."userAgent", "public"."AuditLog"."metadata", "public"."AuditLog"."createdAt"
+2026-07-10T02:02:22.515036540Z [inf]  [02:02:15.941] INFO (115): request completed
+2026-07-10T02:02:22.515040110Z [inf]      reqId: "req-5"
+2026-07-10T02:02:22.515043100Z [inf]      res: {
+2026-07-10T02:02:22.515046150Z [inf]        "statusCode": 200
+2026-07-10T02:02:22.515048830Z [inf]      }
+2026-07-10T02:02:22.515051440Z [inf]      responseTime: 20.633291244506836
+2026-07-10T02:02:22.515054150Z [inf]  [02:02:17.806] INFO (115): incoming request
+2026-07-10T02:02:22.515057110Z [inf]      reqId: "req-6"
+2026-07-10T02:02:22.515059750Z [inf]      req: {
+2026-07-10T02:02:22.515062290Z [inf]        "method": "GET",
+2026-07-10T02:02:22.515064600Z [inf]        "url": "/ws/room/30f819ef-ed03-4fb7-8f00-721a567530d1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=30f819ef-ed03-4fb7-8f00-721a567530d1",
+2026-07-10T02:02:22.515066910Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:02:22.515069490Z [inf]        "remoteAddress": "100.64.0.6",
+2026-07-10T02:02:22.515072030Z [inf]        "remotePort": 31566
+2026-07-10T02:02:22.515075310Z [inf]      }
+2026-07-10T02:02:22.515078010Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:22.515080660Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:02:22.515084380Z [inf]  [Relay] ====== StreamRelay request received ======
+2026-07-10T02:02:22.515087870Z [inf]  [Relay] videoId: yv5-FG08fqg b64url: false b64cookies: false b64ua: false
+2026-07-10T02:02:22.515090439Z [inf]  [Relay] Extracting stream URL for videoId: yv5-FG08fqg
+2026-07-10T02:02:22.515093539Z [inf]  [Extract] Trying Piped: https://pipedapi.kavin.rocks
+2026-07-10T02:02:22.516427708Z [inf]  [02:02:18.618] INFO (115): incoming request
+2026-07-10T02:02:22.516433068Z [inf]      reqId: "req-7"
+2026-07-10T02:02:22.516453198Z [inf]      req: {
+2026-07-10T02:02:22.516456868Z [inf]        "method": "GET",
+2026-07-10T02:02:22.516460838Z [inf]        "url": "/api/media/stream?videoId=yv5-FG08fqg&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU",
+2026-07-10T02:02:22.516465478Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:02:22.516469428Z [inf]        "remoteAddress": "100.64.0.7",
+2026-07-10T02:02:22.516482388Z [inf]        "remotePort": 26380
+2026-07-10T02:02:22.516485648Z [inf]      }
+2026-07-10T02:02:22.516489438Z [inf]  [02:02:18.734] INFO (115): incoming request
+2026-07-10T02:02:22.516493438Z [inf]      reqId: "req-8"
+2026-07-10T02:02:22.516497158Z [inf]      req: {
+2026-07-10T02:02:22.516500328Z [inf]        "method": "GET",
+2026-07-10T02:02:22.516522658Z [inf]        "url": "/ws/room/30f819ef-ed03-4fb7-8f00-721a567530d1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=30f819ef-ed03-4fb7-8f00-721a567530d1",
+2026-07-10T02:02:22.516527477Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:02:22.516533047Z [inf]        "remoteAddress": "100.64.0.8",
+2026-07-10T02:02:22.516537427Z [inf]        "remotePort": 48270
+2026-07-10T02:02:22.516541887Z [inf]      }
+2026-07-10T02:02:22.516547087Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:22.518113733Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:02:22.518117343Z [inf]  [Extract] Trying Piped: https://pipedapi.leptons.xyz
+2026-07-10T02:02:22.518120143Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:22.518122793Z [inf]  [Extract] Trying Piped: https://pipedapi.r4fo.com
+2026-07-10T02:02:22.518126053Z [inf]  [Extract] Piped failed: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2026-07-10T02:02:22.518128403Z [inf]  [Extract] Trying yt-dlp...
+2026-07-10T02:02:22.518130703Z [err]  WARNING: [youtube] Unable to download webpage: HTTP Error 429: Too Many Requests
+2026-07-10T02:02:22.518133233Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:02:22.518135863Z [err]  WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (1/3)...
+2026-07-10T02:02:22.518138753Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:02:22.518141233Z [err]  WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (2/3)...
+2026-07-10T02:02:22.518144293Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:02:22.518146883Z [err]  WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (3/3)...
+2026-07-10T02:02:22.518149213Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:02:22.518151833Z [err]  WARNING: [youtube] Unable to download API page: HTTP Error 400: Bad Request (caused by <HTTPError 400: 'Bad Request'>); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+2026-07-10T02:02:22.518154413Z [err]  WARNING: Only images are available for download. use --list-formats to see them
+2026-07-10T02:02:22.518156823Z [err]  ERROR: [youtube] yv5-FG08fqg: Requested format is not available. Use --list-formats for a list of available formats
+2026-07-10T02:02:22.519485482Z [inf]  [Extract] yt-dlp failed: Command failed: yt-dlp -f "best[ext=mp4][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none
+2026-07-10T02:02:22.519489502Z [err]  [Relay] ❌ Extraction failed: All extraction methods failed
+2026-07-10T02:02:22.519493272Z [inf]  [02:02:22.017] INFO (115): request completed
+2026-07-10T02:02:22.519496972Z [inf]      reqId: "req-7"
+2026-07-10T02:02:22.519501212Z [inf]      res: {
+2026-07-10T02:02:22.519504791Z [inf]        "statusCode": 502
+2026-07-10T02:02:22.519507801Z [inf]      }
+2026-07-10T02:02:22.519510921Z [inf]      responseTime: 3398.022032737732
+2026-07-10T02:02:22.519514551Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:22.519517691Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:24.166179052Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:26.153401008Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:28.176038677Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:30.154677798Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:32.168667162Z [inf]  prisma:query SELECT 1
+2026-07-10T02:02:32.168675082Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:34.158374217Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:36.166678961Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:38.152469581Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:40.165569044Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:42.152151236Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:44.162575443Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:46.148875419Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:48.170540218Z [inf]  prisma:query SELECT 1
+2026-07-10T02:02:48.170544968Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:50.166077084Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:52.168525790Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:54.163590390Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:56.179260993Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:02:58.200515566Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:00.219544419Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:02.255672984Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:04.339798883Z [inf]  prisma:query SELECT 1
+2026-07-10T02:03:04.339803463Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:06.364363498Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:08.157234214Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:10.161878563Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:12.156482880Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:14.158535922Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:16.156870126Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:18.155892503Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:20.153002759Z [inf]  prisma:query SELECT 1
+2026-07-10T02:03:20.153006649Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:22.168212327Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:24.157111343Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:26.158741130Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:28.175753683Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:30.153583847Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:32.155789848Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:34.158697244Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:36.161567780Z [inf]  prisma:query SELECT 1
+2026-07-10T02:03:36.161578260Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:38.207318055Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:40.158999516Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:42.157051685Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:44.152610205Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:46.153653628Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:48.156124219Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:50.161004519Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:52.162046892Z [inf]  prisma:query SELECT 1
+2026-07-10T02:03:52.162053282Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:54.153067504Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:56.182682009Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:03:58.172576460Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:00.154340142Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:02.152049675Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:04.175887492Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:06.156344265Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:08.160153956Z [inf]  prisma:query SELECT 1
+2026-07-10T02:04:08.160161116Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:10.152958962Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:12.164273449Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:14.144290536Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:16.165390008Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:18.150950007Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:20.159328320Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:22.159292005Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:24.155948610Z [inf]  prisma:query SELECT 1
+2026-07-10T02:04:24.155951970Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:26.155543438Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:28.168462871Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:30.177800426Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:32.162553934Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:34.240545193Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:36.201291280Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:38.208861831Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:40.161760776Z [inf]  prisma:query SELECT 1
+2026-07-10T02:04:40.161764426Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:42.273386704Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:44.296241023Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:46.306635349Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:48.309111695Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:50.412405655Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:52.455264112Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:54.168550165Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:56.155716034Z [inf]  prisma:query SELECT 1
+2026-07-10T02:04:56.155718824Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:04:58.168234583Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:00.170309783Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:02.171880917Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:04.156856255Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:06.240528318Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:08.160559940Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:10.157286157Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:12.147110874Z [inf]  prisma:query SELECT 1
+2026-07-10T02:05:12.147114324Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:14.148223193Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:15.348226249Z [inf]        "remoteAddress": "100.64.0.8",
+2026-07-10T02:05:15.348234179Z [inf]        "remotePort": 40956
+2026-07-10T02:05:15.348239489Z [inf]      }
+2026-07-10T02:05:15.348245098Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:15.348250028Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:05:15.348259608Z [inf]  [02:05:15.343] INFO (115): incoming request
+2026-07-10T02:05:15.348266138Z [inf]      reqId: "req-9"
+2026-07-10T02:05:15.348271078Z [inf]      req: {
+2026-07-10T02:05:15.348275218Z [inf]        "method": "GET",
+2026-07-10T02:05:15.348280248Z [inf]        "url": "/ws/room/30f819ef-ed03-4fb7-8f00-721a567530d1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=30f819ef-ed03-4fb7-8f00-721a567530d1",
+2026-07-10T02:05:15.348284458Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:05:16.153939262Z [inf]  [Relay] ====== StreamRelay request received ======
+2026-07-10T02:05:16.153945912Z [inf]  [Relay] videoId: yv5-FG08fqg b64url: false b64cookies: false b64ua: false
+2026-07-10T02:05:16.153950412Z [inf]  [Relay] Extracting stream URL for videoId: yv5-FG08fqg
+2026-07-10T02:05:16.153954272Z [inf]  [Extract] Trying Piped: https://pipedapi.kavin.rocks
+2026-07-10T02:05:16.155049673Z [inf]  [02:05:16.149] INFO (115): incoming request
+2026-07-10T02:05:16.155053733Z [inf]      reqId: "req-a"
+2026-07-10T02:05:16.155057153Z [inf]      req: {
+2026-07-10T02:05:16.155060953Z [inf]        "method": "GET",
+2026-07-10T02:05:16.155065693Z [inf]        "url": "/api/media/stream?videoId=yv5-FG08fqg&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU",
+2026-07-10T02:05:16.155069253Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:05:16.155072433Z [inf]        "remoteAddress": "100.64.0.5",
+2026-07-10T02:05:16.155076983Z [inf]        "remotePort": 14634
+2026-07-10T02:05:16.155080003Z [inf]      }
+2026-07-10T02:05:16.334166650Z [inf]  [02:05:16.327] INFO (115): incoming request
+2026-07-10T02:05:16.334172410Z [inf]      reqId: "req-b"
+2026-07-10T02:05:16.334178720Z [inf]      req: {
+2026-07-10T02:05:16.334184390Z [inf]        "method": "GET",
+2026-07-10T02:05:16.334189530Z [inf]        "url": "/ws/room/30f819ef-ed03-4fb7-8f00-721a567530d1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=30f819ef-ed03-4fb7-8f00-721a567530d1",
+2026-07-10T02:05:16.334194800Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:05:16.334200670Z [inf]        "remoteAddress": "100.64.0.9",
+2026-07-10T02:05:16.334206030Z [inf]        "remotePort": 61374
+2026-07-10T02:05:16.334211330Z [inf]      }
+2026-07-10T02:05:16.334216360Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:16.334221250Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:05:16.350483488Z [inf]  [Extract] Trying Piped: https://pipedapi.leptons.xyz
+2026-07-10T02:05:16.840422280Z [inf]  [Extract] Trying Piped: https://pipedapi.r4fo.com
+2026-07-10T02:05:16.945433330Z [inf]  [Extract] Piped failed: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2026-07-10T02:05:16.945439210Z [inf]  [Extract] Trying yt-dlp...
+2026-07-10T02:05:19.054632342Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:05:19.054642582Z [err]  WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (2/3)...
+2026-07-10T02:05:19.054650122Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:05:19.054657052Z [err]  WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (3/3)...
+2026-07-10T02:05:19.054664741Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:05:19.054665751Z [err]  WARNING: [youtube] Unable to download webpage: HTTP Error 429: Too Many Requests
+2026-07-10T02:05:19.054674251Z [err]  WARNING: [youtube] YouTube said: ERROR - Precondition check failed.
+2026-07-10T02:05:19.054676181Z [err]  WARNING: [youtube] Unable to download API page: HTTP Error 400: Bad Request (caused by <HTTPError 400: 'Bad Request'>); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+2026-07-10T02:05:19.054684941Z [err]  WARNING: Only images are available for download. use --list-formats to see them
+2026-07-10T02:05:19.054685181Z [err]  WARNING: [youtube] HTTP Error 400: Bad Request. Retrying (1/3)...
+2026-07-10T02:05:19.054691831Z [err]  ERROR: [youtube] yv5-FG08fqg: Requested format is not available. Use --list-formats for a list of available formats
+2026-07-10T02:05:19.054696741Z [inf]  [Extract] yt-dlp failed: Command failed: yt-dlp -f "best[ext=mp4][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none
+2026-07-10T02:05:19.054701791Z [err]  [Relay] ❌ Extraction failed: All extraction methods failed
+2026-07-10T02:05:19.057298019Z [inf]  [02:05:19.054] INFO (115): request completed
+2026-07-10T02:05:19.057303289Z [inf]      reqId: "req-a"
+2026-07-10T02:05:19.057308228Z [inf]      res: {
+2026-07-10T02:05:19.057313158Z [inf]        "statusCode": 502
+2026-07-10T02:05:19.057319978Z [inf]      }
+2026-07-10T02:05:19.057324768Z [inf]      responseTime: 2904.0764198303223
+2026-07-10T02:05:19.057329798Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:19.637027662Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:21.694596532Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:23.681181268Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:25.698324109Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:27.728861194Z [inf]  prisma:query SELECT 1
+2026-07-10T02:05:27.728864364Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:29.721800035Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:31.730285231Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:33.766554537Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:35.771192927Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:37.715584870Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:39.775086605Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:41.801278098Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:05:43.774948187Z [inf]  prisma:query SELECT 1
+2026-07-10T02:05:43.774951867Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:06:03.658064654Z [inf]  prisma:query SELECT 1
+2026-07-10T02:06:03.658068974Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password", COALESCE("aggr_selection_0_RoomParticipant"."_aggr_count_participants", 0) AS "_aggr_count_participants" FROM "public"."Room" LEFT JOIN (SELECT "public"."RoomParticipant"."roomID", COUNT(*) AS "_aggr_count_participants" FROM "public"."RoomParticipant" WHERE 1=1 GROUP BY "public"."RoomParticipant"."roomID") AS "aggr_selection_0_RoomParticipant" ON ("public"."Room"."id" = "aggr_selection_0_RoomParticipant"."roomID") WHERE "public"."Room"."isActive" = $1 OFFSET $2
+2026-07-10T02:06:03.658073624Z [inf]  prisma:query BEGIN
+2026-07-10T02:06:03.658078324Z [inf]  prisma:query UPDATE "public"."Room" SET "isActive" = $1 WHERE "public"."Room"."id" IN ($2)
+2026-07-10T02:06:03.658082824Z [inf]  prisma:query COMMIT
+2026-07-10T02:06:03.658087514Z [inf]  [cleanup] Auto-ended 1 orphan room(s)
+2026-07-10T02:09:24.776069616Z [inf]        "method": "GET",
+2026-07-10T02:09:24.776077266Z [inf]        "url": "/api/friends",
+2026-07-10T02:09:24.776082486Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:24.776106646Z [inf]  [02:09:23.844] INFO (115): incoming request
+2026-07-10T02:09:24.776111286Z [inf]      reqId: "req-c"
+2026-07-10T02:09:24.776115006Z [inf]        "remoteAddress": "100.64.0.10",
+2026-07-10T02:09:24.776118116Z [inf]      req: {
+2026-07-10T02:09:24.776122195Z [inf]        "remotePort": 12116
+2026-07-10T02:09:24.776126855Z [inf]      }
+2026-07-10T02:09:24.776132435Z [inf]  prisma:query SELECT "public"."Friendship"."id", "public"."Friendship"."userID", "public"."Friendship"."friendID", "public"."Friendship"."friendsSince" FROM "public"."Friendship" WHERE "public"."Friendship"."userID" = $1 OFFSET $2
+2026-07-10T02:09:24.776167565Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password", COALESCE("aggr_selection_0_RoomParticipant"."_aggr_count_participants", 0) AS "_aggr_count_participants" FROM "public"."Room" LEFT JOIN (SELECT "public"."RoomParticipant"."roomID", COUNT(*) AS "_aggr_count_participants" FROM "public"."RoomParticipant" WHERE 1=1 GROUP BY "public"."RoomParticipant"."roomID") AS "aggr_selection_0_RoomParticipant" ON ("public"."Room"."id" = "aggr_selection_0_RoomParticipant"."roomID") WHERE ("public"."Room"."isActive" = $1 AND "public"."Room"."privacy" = $2) ORDER BY "public"."Room"."createdAt" DESC LIMIT $3 OFFSET $4
+2026-07-10T02:09:24.776363873Z [inf]        "method": "GET",
+2026-07-10T02:09:24.776368293Z [inf]        "url": "/api/rooms",
+2026-07-10T02:09:24.776373923Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:24.776377753Z [inf]        "remoteAddress": "100.64.0.9",
+2026-07-10T02:09:24.776381093Z [inf]        "remotePort": 24706
+2026-07-10T02:09:24.776384383Z [inf]      }
+2026-07-10T02:09:24.776388623Z [inf]  [02:09:23.846] INFO (115): incoming request
+2026-07-10T02:09:24.776392203Z [inf]      reqId: "req-d"
+2026-07-10T02:09:24.776395523Z [inf]      req: {
+2026-07-10T02:09:24.778545066Z [inf]  [02:09:23.894] INFO (115): request completed
+2026-07-10T02:09:24.778548856Z [inf]      reqId: "req-d"
+2026-07-10T02:09:24.778551846Z [inf]      res: {
+2026-07-10T02:09:24.778556966Z [inf]        "statusCode": 200
+2026-07-10T02:09:24.778560686Z [inf]      }
+2026-07-10T02:09:24.778564206Z [inf]      responseTime: 47.458327770233154
+2026-07-10T02:09:24.778567486Z [inf]  [02:09:23.895] INFO (115): request completed
+2026-07-10T02:09:24.778570566Z [inf]      reqId: "req-c"
+2026-07-10T02:09:24.778573236Z [inf]      res: {
+2026-07-10T02:09:24.778575846Z [inf]        "statusCode": 200
+2026-07-10T02:09:24.778579126Z [inf]      }
+2026-07-10T02:09:24.778582936Z [inf]      responseTime: 50.168896198272705
+2026-07-10T02:09:24.778585996Z [inf]  [02:09:24.186] INFO (115): incoming request
+2026-07-10T02:09:24.778589166Z [inf]      reqId: "req-e"
+2026-07-10T02:09:24.778591846Z [inf]      req: {
+2026-07-10T02:09:24.778594396Z [inf]        "method": "GET",
+2026-07-10T02:09:24.778597416Z [inf]        "url": "/api/friends/requests/incoming",
+2026-07-10T02:09:24.778601326Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:24.778603846Z [inf]        "remoteAddress": "100.64.0.9",
+2026-07-10T02:09:24.778607246Z [inf]        "remotePort": 24706
+2026-07-10T02:09:24.778611606Z [inf]      }
+2026-07-10T02:09:24.778615576Z [inf]  prisma:query SELECT "public"."FriendRequest"."id", "public"."FriendRequest"."fromUserID", "public"."FriendRequest"."toUserID", "public"."FriendRequest"."status", "public"."FriendRequest"."createdAt" FROM "public"."FriendRequest" WHERE ("public"."FriendRequest"."toUserID" = $1 AND "public"."FriendRequest"."status" = $2) OFFSET $3
+2026-07-10T02:09:24.778619376Z [inf]  [02:09:24.190] INFO (115): request completed
+2026-07-10T02:09:24.778622936Z [inf]      reqId: "req-e"
+2026-07-10T02:09:24.778627506Z [inf]      res: {
+2026-07-10T02:09:24.779520948Z [inf]        "statusCode": 200
+2026-07-10T02:09:24.779523908Z [inf]      }
+2026-07-10T02:09:24.779526438Z [inf]      responseTime: 3.4145827293395996
+2026-07-10T02:09:44.634563603Z [inf]  [02:09:35.197] INFO (115): incoming request
+2026-07-10T02:09:44.634571643Z [inf]      reqId: "req-f"
+2026-07-10T02:09:44.634575963Z [inf]      req: {
+2026-07-10T02:09:44.634579343Z [inf]        "method": "GET",
+2026-07-10T02:09:44.634582613Z [inf]        "url": "/api/media/trending?regionCode=RU&maxResults=20",
+2026-07-10T02:09:44.634585653Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:44.634589673Z [inf]        "remoteAddress": "100.64.0.9",
+2026-07-10T02:09:44.634593643Z [inf]        "remotePort": 16774
+2026-07-10T02:09:44.634597642Z [inf]      }
+2026-07-10T02:09:44.634603652Z [inf]  [02:09:35.350] INFO (115): request completed
+2026-07-10T02:09:44.634607272Z [inf]      reqId: "req-f"
+2026-07-10T02:09:44.634610602Z [inf]      res: {
+2026-07-10T02:09:44.634613922Z [inf]        "statusCode": 200
+2026-07-10T02:09:44.634617132Z [inf]      }
+2026-07-10T02:09:44.634620162Z [inf]      responseTime: 152.63929986953735
+2026-07-10T02:09:50.531664295Z [inf]        "remotePort": 22856
+2026-07-10T02:09:50.531669895Z [inf]      }
+2026-07-10T02:09:50.531673375Z [inf]  [02:09:50.528] INFO (115): incoming request
+2026-07-10T02:09:50.531677225Z [inf]      reqId: "req-g"
+2026-07-10T02:09:50.531680295Z [inf]      req: {
+2026-07-10T02:09:50.531684785Z [inf]        "method": "POST",
+2026-07-10T02:09:50.531689505Z [inf]        "url": "/api/rooms",
+2026-07-10T02:09:50.531692725Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:50.531695825Z [inf]        "remoteAddress": "100.64.0.10",
+2026-07-10T02:09:50.533032105Z [inf]  prisma:query SELECT 1
+2026-07-10T02:09:50.538260084Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:50.540622645Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."isPremium" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:50.540626055Z [inf]  prisma:query INSERT INTO "public"."Room" ("id","name","hostID","hostName","code","mediaItem","isActive","maxParticipants","hostIsPremium","createdAt","privacy","password") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password"
+2026-07-10T02:09:50.547175493Z [inf]  prisma:query INSERT INTO "public"."AuditLog" ("id","userId","action","ip","userAgent","metadata","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."AuditLog"."id", "public"."AuditLog"."userId", "public"."AuditLog"."action", "public"."AuditLog"."ip", "public"."AuditLog"."userAgent", "public"."AuditLog"."metadata", "public"."AuditLog"."createdAt"
+2026-07-10T02:09:50.547182333Z [inf]  [02:09:50.543] INFO (115): request completed
+2026-07-10T02:09:50.547186383Z [inf]      reqId: "req-g"
+2026-07-10T02:09:50.547190533Z [inf]      res: {
+2026-07-10T02:09:50.547194803Z [inf]        "statusCode": 200
+2026-07-10T02:09:50.547200123Z [inf]      }
+2026-07-10T02:09:50.547204033Z [inf]      responseTime: 13.890810012817383
+2026-07-10T02:09:52.444571280Z [inf]  [02:09:52.437] INFO (115): incoming request
+2026-07-10T02:09:52.444578470Z [inf]      reqId: "req-h"
+2026-07-10T02:09:52.444587000Z [inf]      req: {
+2026-07-10T02:09:52.444592350Z [inf]        "method": "GET",
+2026-07-10T02:09:52.444598300Z [inf]        "url": "/ws/room/0a2a9cc5-8685-43b6-bc0e-3e76280b65f1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=0a2a9cc5-8685-43b6-bc0e-3e76280b65f1",
+2026-07-10T02:09:52.444603580Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:52.444608190Z [inf]        "remoteAddress": "100.64.0.7",
+2026-07-10T02:09:52.444613180Z [inf]        "remotePort": 47740
+2026-07-10T02:09:52.444620200Z [inf]      }
+2026-07-10T02:09:52.444624920Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:52.444630389Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:09:53.227548604Z [inf]        "method": "GET",
+2026-07-10T02:09:53.227554234Z [inf]  [02:09:53.167] INFO (115): incoming request
+2026-07-10T02:09:53.227558854Z [inf]      reqId: "req-i"
+2026-07-10T02:09:53.227563934Z [inf]      req: {
+2026-07-10T02:09:53.227572523Z [inf]        "url": "/ws/room/0a2a9cc5-8685-43b6-bc0e-3e76280b65f1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=0a2a9cc5-8685-43b6-bc0e-3e76280b65f1",
+2026-07-10T02:09:53.227577463Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:53.227578963Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:53.227589203Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:09:53.227607213Z [inf]        "remoteAddress": "100.64.0.11",
+2026-07-10T02:09:53.227612613Z [inf]        "remotePort": 49184
+2026-07-10T02:09:53.227617493Z [inf]      }
+2026-07-10T02:09:53.256816982Z [inf]  [Relay] ====== StreamRelay request received ======
+2026-07-10T02:09:53.256828982Z [inf]  [Relay] videoId: none b64url: true b64cookies: true b64ua: true
+2026-07-10T02:09:53.258529779Z [inf]  [Relay] ✅ Decoded cookies, length: 1135
+2026-07-10T02:09:53.258538919Z [inf]  [Relay] ✅ Decoded User-Agent, len: 135
+2026-07-10T02:09:53.258543669Z [inf]  [Relay] ✅ v97 transparent-proxy: decoded b64url + stripped `ip` param
+2026-07-10T02:09:53.258548509Z [inf]  [Relay] Before: https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4&ip=84.21.173.246&id=o-ANk16KmRsLX5cP3xl3rVJdFfw92WIjigExSsF
+2026-07-10T02:09:53.258552619Z [inf]  [Relay] After:  https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4&id=o-ANk16KmRsLX5cP3xl3rVJdFfw92WIjigExSsFzueQOKk&itag=18&s
+2026-07-10T02:09:53.258557049Z [inf]  [Relay] Target: https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4...
+2026-07-10T02:09:53.258561949Z [inf]  [Relay] ✅ Sending cookies to YouTube CDN
+2026-07-10T02:09:53.258566469Z [inf]  [Relay] Fetching from YouTube CDN with iPhone UA + cookies...
+2026-07-10T02:09:53.260768881Z [inf]  [02:09:53.254] INFO (115): incoming request
+2026-07-10T02:09:53.260773571Z [inf]      reqId: "req-j"
+2026-07-10T02:09:53.260776561Z [inf]      req: {
+2026-07-10T02:09:53.260780111Z [inf]        "method": "GET",
+2026-07-10T02:09:53.260782791Z [inf]        "url": "/api/media/stream?b64url=aHR0cHM6Ly9ycjUtLS1zbi00ZzVlZG5kZS5nb29nbGV2aWRlby5jb20vdmlkZW9wbGF5YmFjaz9leHBpcmU9MTc4MzY3MDk4OSZlaT1iRlJRYXZlUU84eWtwLW9QdjdTaWlRNCZpcD04NC4yMS4xNzMuMjQ2JmlkPW8tQU5rMTZLbVJzTFg1Y1AzeGwzclZKZEZmdzkyV0lqaWdFeFNzRnp1ZVFPS2smaXRhZz0xOCZzb3VyY2U9eW91dHViZSZyZXF1aXJlc3NsPXllcyZ4cGM9RWdWbzJhRFNOUSUzRCUzRCZjcHM9NjU3Jm1ldD0xNzgzNjQ5Mzg4JTJDJm1oPVdhJm1tPTMxJTJDMjYmbW49c24tNGc1ZWRuZGUlMkNzbi1oMGplbG5leiZtcz1hdSUyQ29uciZtdj1tJm12aT01JnBsPTI0JnJtcz1hdSUyQ2F1JmluaXRjd25kYnBzPTI0Nzg3NTAmYnVpPUFaRmxxaE1zWGVPTkdqT2hGMExjTWVOVG93bFB0a0tGSkZDU0Z4X2hlUlMyYlowbDlfOVh4VEtfOGN2V3JTYUNGYnEwVThsa25TVnA5dF9ZJnNwYz1TUS11bW5FaDdRTW9QSUFueEdjMWhBNVNKcU1FUFFxSl85ZmhRUlRJWDhRRll1YVBaN3lSUmF4SmgtTlppTmNWa2xkeFY4eEFiVERORVNyb05sQzlZZzZCWEhVJnZwcnY9MSZzdnB1Yz0xJm1pbWU9dmlkZW8lMkZtcDQmbnM9VWpNSjFDWDVFSUZEME5xellDcFlTLUVXJnJxaD0xJmdpcj15ZXMmY2xlbj05MzI5MDkwJnJhdGVieXBhc3M9eWVzJmR1cj0xNzguMDA0JmxtdD0xNzgzNTg2Nzg1MTAzNDgxJm10PTE3ODM2NDg4NjUmZnZpcD01JmZleHA9NTE1NjUxMTUlMkM1MjAxNzE0NyZjPU1XRUImc2VmYz0xJnR4cD00NDM4NTM0Jm49WXJjUWVGczhWbmU4cmlmSXImc3BhcmFtcz1leHBpcmUlMkNlaSUyQ2lwJTJDaWQlMkNpdGFnJTJDc291cmNlJTJDcmVxdWlyZXNzbCUyQ3hwYyUyQ2J1aSUyQ3NwYyUyQ3ZwcnYlMkNzdnB1YyUyQ21pbWUlMkNucyUyQ3JxaCUyQ2dpciUyQ2NsZW4lMkNyYXRlYnlwYXNzJTJDZHVyJTJDbG10JnNpZz1BSEVxTk00d1JRSWhBSTFhcGN2RkZUaDduSnVEbHExR1VjWjNvSGI4NzZIbTlacXVQWEluckhxeEFpQjhGcHY3LUNsaEhqOHJKSFFjZkpQTXlvTTBWS3lwa0JSQ2k0MWdxbkQ4MVElM0QlM0QmbHNwYXJhbXM9Y3BzJTJDbWV0JTJDbWglMkNtbSUyQ21uJTJDbXMlMkNtdiUyQ212aSUyQ3BsJTJDcm1zJTJDaW5pdGN3bmRicHMmbHNpZz1BUGFUeHhNd1JnSWhBTUJaZGxIXzR5QXJGNGRCR2gxSUlFc1EyU2xHRXhDTnYtOWlvR0tDMFJzdEFpRUFyRThLbXRtRUxSYUVUNmZyelRTbWsycGwyYlBWS3VSb3lMSkVZbmFoakR3JTNE&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&b64cookies=X19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSW1pNnRmMXY1R1Mzd0VRa1p5THlkbkdsUU1Za1p5THlkbkdsUU0lM0Q7IF9fU2VjdXJlLVlFTklEPTE2LllURT1UREhXVm9jekdtYmhBOVFhMGF0WFNVdklwR1BEZG5pVWN6Q1VrRWhqSmFOR1F0NFdHUnptR01EX0YyZkEtU09OaHhzZURrZXk0NEVFa3poZ1p5TjFoM0hxeE91WjdlVWdSUGdJa1NGeXRBTWdnLVloVWpFeWwzQ2UwTTZYTmd2SElTSnN2MGxJdTJtNVNDekFqNVhIUXhJdUtBc0t0SWY2VHlaLVlQVXNDMHZfZm9VMXFOYjNQZmgzLThCaUxEZnE3OVRINW1KX29GTHRSYzlOVkI3bk50TERuZXVDMk01UXk4WEhibUVVUFp5ZEsyN0xycXpjRTdLcGU1YzlnRlUyV1RPMFBtTVFfRU9zYUM1UTEyR09mV3J6M2oyQTRia2I2ckJGZWxyQjZoV1hWdVk3WlgxblRXNlh1a3k0WHk4aVlHYmRWTmQ3NV9fWmw5YnVka0hEckE7IFZJU0lUT1JfUFJJVkFDWV9NRVRBREFUQT1DZ0pFUlJJRUVnQWdaQSUzRCUzRDsgX19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSzZ1OXZPUGtaaWlXUkRxLXAtMzg4T1ZBeGpxLXAtMzg4T1ZBdyUzRCUzRDsgUFJFRj1mNj00MDAwMDAwMCZ0ej1Bc2lhLk5vdm9zaWJpcnNrOyBfX1NlY3VyZS1ZRUM9Q2d0TmEzTkhTR1JPVUhNemJ5anNxTUhTQmpJS0NnSkVSUklFRWdBZ1pHTGdBZ3JkQWpFMkxsbFVSVDFVUkVoWFZtOWpla2R0WW1oQk9WRmhNR0YwV0ZOVmRrbHdSMUJFWkc1cFZXTjZRMVZyUldocVNtRk9SMUYwTkZkSFVucHRSMDFFWDBZeVprRXRVMDlPYUhoelpVUnJaWGswTkVWRmEzcG9aMXA1VGpGb00waHhlRTkxV2pkbFZXZFNVR2RKYTFOR2VYUkJUV2RuTFZsb1ZXcEZlV3d6UTJVd1RUWllUbWQyU0VsVFNuTjJNR3hKZFRKdE5WTkRla0ZxTlZoSVVYaEpkVXRCYzB0MFNXWTJWSGxhTFZsUVZYTkRNSFpmWm05Vk1YRk9Zak5RWm1nekxUaENhVXhFWm5FM09WUklOVzFLWDI5R1RIUlNZemxPVmtJM2JrNTBURVJ1WlhWRE1rMDFVWGs0V0VoaWJVVlZVRnA1WkVzeU4weHljWHBqUlRkTGNHVTFZemxuUmxVeVYxUlBNRkJ0VFZGZlJVOXpZVU0xVVRFeVIwOW1WM0o2TTJveVFUUmlhMkkyY2tKR1pXeHlRalpvVjFoV2RWazNXbGd4YmxSWE5saDFhM2swV0hrNGFWbEhZbVJXVG1RM05WOWZXbXc1WW5Wa2EwaEVja0UlM0Q7IFlTQz1Dc1lWbVBTZTZhTQ%3D%3D&b64ua=TW96aWxsYS81LjAgKGlQaG9uZTsgQ1BVIGlQaG9uZSBPUyAxN181IGxpa2UgTWFjIE9TIFgpIEFwcGxlV2ViS2l0LzYwNS4xLjE1IChLSFRNTCwgbGlrZSBHZWNrbykgVmVyc2lvbi8xNy41IE1vYmlsZS8xNUUxNDggU2FmYXJpLzYwNC4x",
+2026-07-10T02:09:53.267985604Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:53.267994004Z [inf]        "remoteAddress": "100.64.0.12",
+2026-07-10T02:09:53.267999194Z [inf]        "remotePort": 25840
+2026-07-10T02:09:53.268002844Z [inf]      }
+2026-07-10T02:09:53.483572023Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:53.739005538Z [inf]  [Relay] Upstream status: 403 Content-Length: 0
+2026-07-10T02:09:53.739061858Z [err]  [Relay] ❌ Upstream error: 403 
+2026-07-10T02:09:53.739066788Z [inf]  [02:09:53.735] INFO (115): request completed
+2026-07-10T02:09:53.739070878Z [inf]      reqId: "req-j"
+2026-07-10T02:09:53.739074518Z [inf]      res: {
+2026-07-10T02:09:53.739078058Z [inf]        "statusCode": 403
+2026-07-10T02:09:53.739081378Z [inf]      }
+2026-07-10T02:09:53.739084928Z [inf]      responseTime: 480.8874468803406
+2026-07-10T02:09:54.540579504Z [inf]  [Relay] ====== StreamRelay request received ======
+2026-07-10T02:09:54.540586884Z [inf]  [Relay] videoId: none b64url: true b64cookies: true b64ua: true
+2026-07-10T02:09:54.540591344Z [inf]  [Relay] ✅ Decoded cookies, length: 1135
+2026-07-10T02:09:54.540595453Z [inf]  [Relay] ✅ Decoded User-Agent, len: 135
+2026-07-10T02:09:54.540600073Z [inf]  [Relay] ✅ v97 transparent-proxy: decoded b64url + stripped `ip` param
+2026-07-10T02:09:54.540604173Z [inf]  [Relay] Before: https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4&ip=84.21.173.246&id=o-ANk16KmRsLX5cP3xl3rVJdFfw92WIjigExSsF
+2026-07-10T02:09:54.540609223Z [inf]  [Relay] After:  https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4&id=o-ANk16KmRsLX5cP3xl3rVJdFfw92WIjigExSsFzueQOKk&itag=18&s
+2026-07-10T02:09:54.540613973Z [inf]  [Relay] Target: https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4...
+2026-07-10T02:09:54.540618923Z [inf]  [Relay] ✅ Sending cookies to YouTube CDN
+2026-07-10T02:09:54.540627103Z [inf]  [Relay] Fetching from YouTube CDN with iPhone UA + cookies...
+2026-07-10T02:09:54.540631103Z [inf]  [02:09:54.530] INFO (115): incoming request
+2026-07-10T02:09:54.540636633Z [inf]      reqId: "req-k"
+2026-07-10T02:09:54.540640963Z [inf]      req: {
+2026-07-10T02:09:54.540644503Z [inf]        "method": "GET",
+2026-07-10T02:09:54.540648223Z [inf]        "url": "/api/media/stream?b64url=aHR0cHM6Ly9ycjUtLS1zbi00ZzVlZG5kZS5nb29nbGV2aWRlby5jb20vdmlkZW9wbGF5YmFjaz9leHBpcmU9MTc4MzY3MDk4OSZlaT1iRlJRYXZlUU84eWtwLW9QdjdTaWlRNCZpcD04NC4yMS4xNzMuMjQ2JmlkPW8tQU5rMTZLbVJzTFg1Y1AzeGwzclZKZEZmdzkyV0lqaWdFeFNzRnp1ZVFPS2smaXRhZz0xOCZzb3VyY2U9eW91dHViZSZyZXF1aXJlc3NsPXllcyZ4cGM9RWdWbzJhRFNOUSUzRCUzRCZjcHM9NjU3Jm1ldD0xNzgzNjQ5Mzg4JTJDJm1oPVdhJm1tPTMxJTJDMjYmbW49c24tNGc1ZWRuZGUlMkNzbi1oMGplbG5leiZtcz1hdSUyQ29uciZtdj1tJm12aT01JnBsPTI0JnJtcz1hdSUyQ2F1JmluaXRjd25kYnBzPTI0Nzg3NTAmYnVpPUFaRmxxaE1zWGVPTkdqT2hGMExjTWVOVG93bFB0a0tGSkZDU0Z4X2hlUlMyYlowbDlfOVh4VEtfOGN2V3JTYUNGYnEwVThsa25TVnA5dF9ZJnNwYz1TUS11bW5FaDdRTW9QSUFueEdjMWhBNVNKcU1FUFFxSl85ZmhRUlRJWDhRRll1YVBaN3lSUmF4SmgtTlppTmNWa2xkeFY4eEFiVERORVNyb05sQzlZZzZCWEhVJnZwcnY9MSZzdnB1Yz0xJm1pbWU9dmlkZW8lMkZtcDQmbnM9VWpNSjFDWDVFSUZEME5xellDcFlTLUVXJnJxaD0xJmdpcj15ZXMmY2xlbj05MzI5MDkwJnJhdGVieXBhc3M9eWVzJmR1cj0xNzguMDA0JmxtdD0xNzgzNTg2Nzg1MTAzNDgxJm10PTE3ODM2NDg4NjUmZnZpcD01JmZleHA9NTE1NjUxMTUlMkM1MjAxNzE0NyZjPU1XRUImc2VmYz0xJnR4cD00NDM4NTM0Jm49WXJjUWVGczhWbmU4cmlmSXImc3BhcmFtcz1leHBpcmUlMkNlaSUyQ2lwJTJDaWQlMkNpdGFnJTJDc291cmNlJTJDcmVxdWlyZXNzbCUyQ3hwYyUyQ2J1aSUyQ3NwYyUyQ3ZwcnYlMkNzdnB1YyUyQ21pbWUlMkNucyUyQ3JxaCUyQ2dpciUyQ2NsZW4lMkNyYXRlYnlwYXNzJTJDZHVyJTJDbG10JnNpZz1BSEVxTk00d1JRSWhBSTFhcGN2RkZUaDduSnVEbHExR1VjWjNvSGI4NzZIbTlacXVQWEluckhxeEFpQjhGcHY3LUNsaEhqOHJKSFFjZkpQTXlvTTBWS3lwa0JSQ2k0MWdxbkQ4MVElM0QlM0QmbHNwYXJhbXM9Y3BzJTJDbWV0JTJDbWglMkNtbSUyQ21uJTJDbXMlMkNtdiUyQ212aSUyQ3BsJTJDcm1zJTJDaW5pdGN3bmRicHMmbHNpZz1BUGFUeHhNd1JnSWhBTUJaZGxIXzR5QXJGNGRCR2gxSUlFc1EyU2xHRXhDTnYtOWlvR0tDMFJzdEFpRUFyRThLbXRtRUxSYUVUNmZyelRTbWsycGwyYlBWS3VSb3lMSkVZbmFoakR3JTNE&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&b64cookies=X19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSW1pNnRmMXY1R1Mzd0VRa1p5THlkbkdsUU1Za1p5THlkbkdsUU0lM0Q7IF9fU2VjdXJlLVlFTklEPTE2LllURT1UREhXVm9jekdtYmhBOVFhMGF0WFNVdklwR1BEZG5pVWN6Q1VrRWhqSmFOR1F0NFdHUnptR01EX0YyZkEtU09OaHhzZURrZXk0NEVFa3poZ1p5TjFoM0hxeE91WjdlVWdSUGdJa1NGeXRBTWdnLVloVWpFeWwzQ2UwTTZYTmd2SElTSnN2MGxJdTJtNVNDekFqNVhIUXhJdUtBc0t0SWY2VHlaLVlQVXNDMHZfZm9VMXFOYjNQZmgzLThCaUxEZnE3OVRINW1KX29GTHRSYzlOVkI3bk50TERuZXVDMk01UXk4WEhibUVVUFp5ZEsyN0xycXpjRTdLcGU1YzlnRlUyV1RPMFBtTVFfRU9zYUM1UTEyR09mV3J6M2oyQTRia2I2ckJGZWxyQjZoV1hWdVk3WlgxblRXNlh1a3k0WHk4aVlHYmRWTmQ3NV9fWmw5YnVka0hEckE7IFZJU0lUT1JfUFJJVkFDWV9NRVRBREFUQT1DZ0pFUlJJRUVnQWdaQSUzRCUzRDsgX19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSzZ1OXZPUGtaaWlXUkRxLXAtMzg4T1ZBeGpxLXAtMzg4T1ZBdyUzRCUzRDsgUFJFRj1mNj00MDAwMDAwMCZ0ej1Bc2lhLk5vdm9zaWJpcnNrOyBfX1NlY3VyZS1ZRUM9Q2d0TmEzTkhTR1JPVUhNemJ5anNxTUhTQmpJS0NnSkVSUklFRWdBZ1pHTGdBZ3JkQWpFMkxsbFVSVDFVUkVoWFZtOWpla2R0WW1oQk9WRmhNR0YwV0ZOVmRrbHdSMUJFWkc1cFZXTjZRMVZyUldocVNtRk9SMUYwTkZkSFVucHRSMDFFWDBZeVprRXRVMDlPYUhoelpVUnJaWGswTkVWRmEzcG9aMXA1VGpGb00waHhlRTkxV2pkbFZXZFNVR2RKYTFOR2VYUkJUV2RuTFZsb1ZXcEZlV3d6UTJVd1RUWllUbWQyU0VsVFNuTjJNR3hKZFRKdE5WTkRla0ZxTlZoSVVYaEpkVXRCYzB0MFNXWTJWSGxhTFZsUVZYTkRNSFpmWm05Vk1YRk9Zak5RWm1nekxUaENhVXhFWm5FM09WUklOVzFLWDI5R1RIUlNZemxPVmtJM2JrNTBURVJ1WlhWRE1rMDFVWGs0V0VoaWJVVlZVRnA1WkVzeU4weHljWHBqUlRkTGNHVTFZemxuUmxVeVYxUlBNRkJ0VFZGZlJVOXpZVU0xVVRFeVIwOW1WM0o2TTJveVFUUmlhMkkyY2tKR1pXeHlRalpvVjFoV2RWazNXbGd4YmxSWE5saDFhM2swV0hrNGFWbEhZbVJXVG1RM05WOWZXbXc1WW5Wa2EwaEVja0UlM0Q7IFlTQz1Dc1lWbVBTZTZhTQ%3D%3D&b64ua=TW96aWxsYS81LjAgKGlQaG9uZTsgQ1BVIGlQaG9uZSBPUyAxN181IGxpa2UgTWFjIE9TIFgpIEFwcGxlV2ViS2l0LzYwNS4xLjE1IChLSFRNTCwgbGlrZSBHZWNrbykgVmVyc2lvbi8xNy41IE1vYmlsZS8xNUUxNDggU2FmYXJpLzYwNC4x",
+2026-07-10T02:09:54.541709475Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:09:54.541724765Z [inf]        "remoteAddress": "100.64.0.7",
+2026-07-10T02:09:54.541730155Z [inf]        "remotePort": 47752
+2026-07-10T02:09:54.541736085Z [inf]      }
+2026-07-10T02:09:54.996480117Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:54.996485487Z [inf]  [Relay] Upstream status: 403 Content-Length: 0
+2026-07-10T02:09:54.996491557Z [err]  [Relay] ❌ Upstream error: 403 
+2026-07-10T02:09:54.996495447Z [inf]  [02:09:54.979] INFO (115): request completed
+2026-07-10T02:09:54.996500407Z [inf]      reqId: "req-k"
+2026-07-10T02:09:54.996504607Z [inf]      res: {
+2026-07-10T02:09:54.996508817Z [inf]        "statusCode": 403
+2026-07-10T02:09:54.996518077Z [inf]      }
+2026-07-10T02:09:54.996523087Z [inf]      responseTime: 448.114462852478
+2026-07-10T02:09:56.781117872Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:09:58.770852374Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:00.784675461Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:02.777805355Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:04.801367895Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:06.798205841Z [inf]  prisma:query SELECT 1
+2026-07-10T02:10:06.798211291Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:08.776961603Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:10.784374405Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:12.792247868Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:14.783012792Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:16.846768093Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:18.812511754Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:20.772818144Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:22.790394525Z [inf]  prisma:query SELECT 1
+2026-07-10T02:10:22.790400995Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:24.783042689Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:26.772259206Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:28.777996657Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:30.783529364Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:32.784223995Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:34.793000238Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:36.859437047Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:38.783828960Z [inf]  prisma:query SELECT 1
+2026-07-10T02:10:38.783832850Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:40.783318690Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."hostID" FROM "public"."Room" WHERE ("public"."Room"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:42.035262670Z [inf]  [02:10:42.030] INFO (115): incoming request
+2026-07-10T02:10:42.035268710Z [inf]      reqId: "req-l"
+2026-07-10T02:10:42.035272880Z [inf]      req: {
+2026-07-10T02:10:42.035278560Z [inf]        "method": "GET",
+2026-07-10T02:10:42.035283640Z [inf]        "url": "/ws/room/0a2a9cc5-8685-43b6-bc0e-3e76280b65f1?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&roomId=0a2a9cc5-8685-43b6-bc0e-3e76280b65f1",
+2026-07-10T02:10:42.035287070Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:10:42.035290380Z [inf]        "remoteAddress": "100.64.0.5",
+2026-07-10T02:10:42.035293860Z [inf]        "remotePort": 28068
+2026-07-10T02:10:42.035297990Z [inf]      }
+2026-07-10T02:10:42.035302020Z [inf]  prisma:query SELECT "public"."User"."id", "public"."User"."username", "public"."User"."role"::text, "public"."User"."bannedUntil" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-07-10T02:10:42.035308220Z [inf]  [WS] 𝐑𝐀𝐆𝐄 connected
+2026-07-10T02:10:42.371002331Z [inf]      req: {
+2026-07-10T02:10:42.371010421Z [inf]        "method": "GET",
+2026-07-10T02:10:42.371010601Z [inf]  [Relay] ====== StreamRelay request received ======
+2026-07-10T02:10:42.371015411Z [inf]        "url": "/api/media/stream?b64url=aHR0cHM6Ly9ycjUtLS1zbi00ZzVlZG5kZS5nb29nbGV2aWRlby5jb20vdmlkZW9wbGF5YmFjaz9leHBpcmU9MTc4MzY3MDk4OSZlaT1iRlJRYXZlUU84eWtwLW9QdjdTaWlRNCZpcD04NC4yMS4xNzMuMjQ2JmlkPW8tQU5rMTZLbVJzTFg1Y1AzeGwzclZKZEZmdzkyV0lqaWdFeFNzRnp1ZVFPS2smaXRhZz0xOCZzb3VyY2U9eW91dHViZSZyZXF1aXJlc3NsPXllcyZ4cGM9RWdWbzJhRFNOUSUzRCUzRCZjcHM9NjU3Jm1ldD0xNzgzNjQ5Mzg4JTJDJm1oPVdhJm1tPTMxJTJDMjYmbW49c24tNGc1ZWRuZGUlMkNzbi1oMGplbG5leiZtcz1hdSUyQ29uciZtdj1tJm12aT01JnBsPTI0JnJtcz1hdSUyQ2F1JmluaXRjd25kYnBzPTI0Nzg3NTAmYnVpPUFaRmxxaE1zWGVPTkdqT2hGMExjTWVOVG93bFB0a0tGSkZDU0Z4X2hlUlMyYlowbDlfOVh4VEtfOGN2V3JTYUNGYnEwVThsa25TVnA5dF9ZJnNwYz1TUS11bW5FaDdRTW9QSUFueEdjMWhBNVNKcU1FUFFxSl85ZmhRUlRJWDhRRll1YVBaN3lSUmF4SmgtTlppTmNWa2xkeFY4eEFiVERORVNyb05sQzlZZzZCWEhVJnZwcnY9MSZzdnB1Yz0xJm1pbWU9dmlkZW8lMkZtcDQmbnM9VWpNSjFDWDVFSUZEME5xellDcFlTLUVXJnJxaD0xJmdpcj15ZXMmY2xlbj05MzI5MDkwJnJhdGVieXBhc3M9eWVzJmR1cj0xNzguMDA0JmxtdD0xNzgzNTg2Nzg1MTAzNDgxJm10PTE3ODM2NDg4NjUmZnZpcD01JmZleHA9NTE1NjUxMTUlMkM1MjAxNzE0NyZjPU1XRUImc2VmYz0xJnR4cD00NDM4NTM0Jm49WXJjUWVGczhWbmU4cmlmSXImc3BhcmFtcz1leHBpcmUlMkNlaSUyQ2lwJTJDaWQlMkNpdGFnJTJDc291cmNlJTJDcmVxdWlyZXNzbCUyQ3hwYyUyQ2J1aSUyQ3NwYyUyQ3ZwcnYlMkNzdnB1YyUyQ21pbWUlMkNucyUyQ3JxaCUyQ2dpciUyQ2NsZW4lMkNyYXRlYnlwYXNzJTJDZHVyJTJDbG10JnNpZz1BSEVxTk00d1JRSWhBSTFhcGN2RkZUaDduSnVEbHExR1VjWjNvSGI4NzZIbTlacXVQWEluckhxeEFpQjhGcHY3LUNsaEhqOHJKSFFjZkpQTXlvTTBWS3lwa0JSQ2k0MWdxbkQ4MVElM0QlM0QmbHNwYXJhbXM9Y3BzJTJDbWV0JTJDbWglMkNtbSUyQ21uJTJDbXMlMkNtdiUyQ212aSUyQ3BsJTJDcm1zJTJDaW5pdGN3bmRicHMmbHNpZz1BUGFUeHhNd1JnSWhBTUJaZGxIXzR5QXJGNGRCR2gxSUlFc1EyU2xHRXhDTnYtOWlvR0tDMFJzdEFpRUFyRThLbXRtRUxSYUVUNmZyelRTbWsycGwyYlBWS3VSb3lMSkVZbmFoakR3JTNE&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJjMDZiZjg1LWU2MDMtNGY5MS05YzhkLThjMTA3ZmVhYzZjMSIsInVzZXJuYW1lIjoi8J2QkfCdkIDwnZCG8J2QhCIsImlhdCI6MTc4MzY0NDk2NSwiZXhwIjoxNzg0MjQ5NzY1fQ.pDSm7h93Q2eNMzjOs5V99dV2ZEK38yvQc2wMLBlv9PU&b64cookies=X19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSW1pNnRmMXY1R1Mzd0VRa1p5THlkbkdsUU1Za1p5THlkbkdsUU0lM0Q7IF9fU2VjdXJlLVlFTklEPTE2LllURT1UREhXVm9jekdtYmhBOVFhMGF0WFNVdklwR1BEZG5pVWN6Q1VrRWhqSmFOR1F0NFdHUnptR01EX0YyZkEtU09OaHhzZURrZXk0NEVFa3poZ1p5TjFoM0hxeE91WjdlVWdSUGdJa1NGeXRBTWdnLVloVWpFeWwzQ2UwTTZYTmd2SElTSnN2MGxJdTJtNVNDekFqNVhIUXhJdUtBc0t0SWY2VHlaLVlQVXNDMHZfZm9VMXFOYjNQZmgzLThCaUxEZnE3OVRINW1KX29GTHRSYzlOVkI3bk50TERuZXVDMk01UXk4WEhibUVVUFp5ZEsyN0xycXpjRTdLcGU1YzlnRlUyV1RPMFBtTVFfRU9zYUM1UTEyR09mV3J6M2oyQTRia2I2ckJGZWxyQjZoV1hWdVk3WlgxblRXNlh1a3k0WHk4aVlHYmRWTmQ3NV9fWmw5YnVka0hEckE7IFZJU0lUT1JfUFJJVkFDWV9NRVRBREFUQT1DZ0pFUlJJRUVnQWdaQSUzRCUzRDsgX19TZWN1cmUtUk9MTE9VVF9UT0tFTj1DSzZ1OXZPUGtaaWlXUkRxLXAtMzg4T1ZBeGpxLXAtMzg4T1ZBdyUzRCUzRDsgUFJFRj1mNj00MDAwMDAwMCZ0ej1Bc2lhLk5vdm9zaWJpcnNrOyBfX1NlY3VyZS1ZRUM9Q2d0TmEzTkhTR1JPVUhNemJ5anNxTUhTQmpJS0NnSkVSUklFRWdBZ1pHTGdBZ3JkQWpFMkxsbFVSVDFVUkVoWFZtOWpla2R0WW1oQk9WRmhNR0YwV0ZOVmRrbHdSMUJFWkc1cFZXTjZRMVZyUldocVNtRk9SMUYwTkZkSFVucHRSMDFFWDBZeVprRXRVMDlPYUhoelpVUnJaWGswTkVWRmEzcG9aMXA1VGpGb00waHhlRTkxV2pkbFZXZFNVR2RKYTFOR2VYUkJUV2RuTFZsb1ZXcEZlV3d6UTJVd1RUWllUbWQyU0VsVFNuTjJNR3hKZFRKdE5WTkRla0ZxTlZoSVVYaEpkVXRCYzB0MFNXWTJWSGxhTFZsUVZYTkRNSFpmWm05Vk1YRk9Zak5RWm1nekxUaENhVXhFWm5FM09WUklOVzFLWDI5R1RIUlNZemxPVmtJM2JrNTBURVJ1WlhWRE1rMDFVWGs0V0VoaWJVVlZVRnA1WkVzeU4weHljWHBqUlRkTGNHVTFZemxuUmxVeVYxUlBNRkJ0VFZGZlJVOXpZVU0xVVRFeVIwOW1WM0o2TTJveVFUUmlhMkkyY2tKR1pXeHlRalpvVjFoV2RWazNXbGd4YmxSWE5saDFhM2swV0hrNGFWbEhZbVJXVG1RM05WOWZXbXc1WW5Wa2EwaEVja0UlM0Q7IFlTQz1Dc1lWbVBTZTZhTQ%3D%3D&b64ua=TW96aWxsYS81LjAgKGlQaG9uZTsgQ1BVIGlQaG9uZSBPUyAxN181IGxpa2UgTWFjIE9TIFgpIEFwcGxlV2ViS2l0LzYwNS4xLjE1IChLSFRNTCwgbGlrZSBHZWNrbykgVmVyc2lvbi8xNy41IE1vYmlsZS8xNUUxNDggU2FmYXJpLzYwNC4x",
+2026-07-10T02:10:42.371015521Z [inf]  [Relay] videoId: none b64url: true b64cookies: true b64ua: true
+2026-07-10T02:10:42.371020071Z [inf]  [Relay] ✅ Decoded cookies, length: 1135
+2026-07-10T02:10:42.371023391Z [inf]  [Relay] ✅ Decoded User-Agent, len: 135
+2026-07-10T02:10:42.371026871Z [inf]  [Relay] ✅ v97 transparent-proxy: decoded b64url + stripped `ip` param
+2026-07-10T02:10:42.371031411Z [inf]  [Relay] Before: https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4&ip=84.21.173.246&id=o-ANk16KmRsLX5cP3xl3rVJdFfw92WIjigExSsF
+2026-07-10T02:10:42.371035141Z [inf]  [Relay] After:  https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4&id=o-ANk16KmRsLX5cP3xl3rVJdFfw92WIjigExSsFzueQOKk&itag=18&s
+2026-07-10T02:10:42.371039341Z [inf]  [Relay] Target: https://rr5---sn-4g5ednde.googlevideo.com/videoplayback?expire=1783670989&ei=bFRQaveQO8ykp-oPv7SiiQ4...
+2026-07-10T02:10:42.371043591Z [inf]  [Relay] ✅ Sending cookies to YouTube CDN
+2026-07-10T02:10:42.371047451Z [inf]  [Relay] Fetching from YouTube CDN with iPhone UA + cookies...
+2026-07-10T02:10:42.371051121Z [inf]  [02:10:42.364] INFO (115): incoming request
+2026-07-10T02:10:42.371054741Z [inf]      reqId: "req-m"
+2026-07-10T02:10:42.371320469Z [inf]        "host": "plink-backend-production-ef31.up.railway.app",
+2026-07-10T02:10:42.371324089Z [inf]        "remoteAddress": "100.64.0.13",
+2026-07-10T02:10:42.371328329Z [inf]        "remotePort": 46522
+2026-07-10T02:10:42.371332359Z [inf]      }
+2026-07-10T02:10:42.818036238Z [inf]  [Relay] Upstream status: 403 Content-Length: 0
+2026-07-10T02:10:42.818041838Z [err]  [Relay] ❌ Upstream error: 403 
+2026-07-10T02:11:12.818305351Z [inf]  prisma:query SELECT 1
+2026-07-10T02:11:12.818311281Z [inf]  prisma:query SELECT "public"."Room"."id", "public"."Room"."name", "public"."Room"."hostID", "public"."Room"."hostName", "public"."Room"."code", "public"."Room"."mediaItem", "public"."Room"."isActive", "public"."Room"."maxParticipants", "public"."Room"."hostIsPremium", "public"."Room"."createdAt", "public"."Room"."privacy", "public"."Room"."password", COALESCE("aggr_selection_0_RoomParticipant"."_aggr_count_participants", 0) AS "_aggr_count_participants" FROM "public"."Room" LEFT JOIN (SELECT "public"."RoomParticipant"."roomID", COUNT(*) AS "_aggr_count_participants" FROM "public"."RoomParticipant" WHERE 1=1 GROUP BY "public"."RoomParticipant"."roomID") AS "aggr_selection_0_RoomParticipant" ON ("public"."Room"."id" = "aggr_selection_0_RoomParticipant"."roomID") WHERE "public"."Room"."isActive" = $1 OFFSET $2
+2026-07-10T02:11:12.818314681Z [inf]  prisma:query BEGIN
+2026-07-10T02:11:12.818317631Z [inf]  prisma:query UPDATE "public"."Room" SET "isActive" = $1 WHERE "public"."Room"."id" IN ($2)
+2026-07-10T02:11:12.818320761Z [inf]  prisma:query COMMIT
+2026-07-10T02:11:12.818324861Z [inf]  [cleanup] Auto-ended 1 orphan room(s)

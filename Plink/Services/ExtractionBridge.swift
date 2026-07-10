@@ -1,7 +1,7 @@
 import Foundation
 import WebKit
 
-// MARK: - ExtractionBridge (v102 — Async IOS Innertube + Diagnostic Logging)
+// MARK: - ExtractionBridge (v103 — Multi-client Innertube + Hardcoded Versions)
 //
 // 🔧 v90 (Gemini): Separate invisible WKWebView that ONLY extracts stream URL.
 // 🔧 v98: Switched priority to HLS-first. MP4 formats (itag 18/22) are
@@ -15,16 +15,20 @@ import WebKit
 // 🔧 v101: Async fetch in WebView to call /youtubei/v1/player with IOS client.
 //         Ran but timed out at 30s before fetch completed.
 // 🔧 v102: Diagnostic logging via separate "logger" message handler.
-//         JS side reports every step (fetch start, response, errors, retries).
 //         Timeout increased 30s → 60s. Retry fetch up to 3 times.
-//         MP4 fallback waits 7.5s + 3 fetch attempts before giving up.
+// 🔧 v103: Multi-client fallback (IOS → TVHTML5 → WEB). Hardcoded versions
+//         instead of using ytcfg (which returned MWEB version 2.20260708.05.00
+//         for IOS client → YouTube returned 404 "Requested entity not found").
+//         Now uses IOS 19.09.3 / TVHTML5 7.20240724.13.00 / WEB 2.20240726.00.00.
+//         Adds X-YouTube-Client-Name + X-YouTube-Client-Version headers.
+//         One fetch per client (no infinite retry loops).
 //
 // Strategy:
 //   1. Load m.youtube.com/watch?v=ID with iOS Safari UA
 //   2. Poll for ytInitialPlayerResponse (HTML/window/ytplayer.config)
 //   3. Priority A: hlsManifestUrl from MWEB (sometimes present)
-//   4. Priority B: async fetch /youtubei/v1/player {clientName:'IOS'} → HLS
-//                  (retry up to 3 times, with diagnostic logging)
+//   4. Priority B: try IOS, then TVHTML5, then WEB client via async fetch
+//                  — each with hardcoded clientVersion + X-YouTube-Client-* headers
 //   5. Priority C: MP4 itag 22/18 (LAST resort, IP-bound, will 403)
 //   6. Return StreamInfo to caller (NativePlayerEngine)
 //   7. Release WKWebView
@@ -32,9 +36,10 @@ import WebKit
 // Why this avoids ban:
 //   - IP = iPhone (residential, not blocked)
 //   - UA = iOS Safari (YouTube trusts mobile browsers)
-//   - IOS innertube API request runs in-page (same origin) — no CORS, no BotGuard
+//   - innertube API request runs in-page (same origin) — no CORS, no BotGuard
 //   - Cookies + INNERTUBE_API_KEY already in WebView session
 //   - Async fetch works reliably in WKWebView (sync XHR does NOT)
+//   - Hardcoded clientVersions match real YouTube app versions (no mismatch)
 
 @MainActor
 final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -175,7 +180,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         // to report fetch progress/errors. Helps debug async fetch failures.
         if message.name == "logger" {
             if let msg = message.body as? String {
-                print("🔍 v102 [JS]: \(msg)")
+                print("🔍 v103 [JS]: \(msg)")
             }
             return
         }
@@ -191,7 +196,7 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                 } else {
                     source = "MP4 (IP-bound, may 403 through proxy)"
                 }
-                print("✅ v102: ExtractionBridge — found \(source): \(url.prefix(80))")
+                print("✅ v103: ExtractionBridge — found \(source): \(url.prefix(80))")
 
                 // 🔧 v92: Capture cookies before finishing.
                 // YouTube requires matching cookies between extraction and playback.
@@ -362,88 +367,116 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                         window.webkit.messageHandlers.logger.postMessage('Priority A: found hlsManifestUrl in MWEB');
                     }
 
-                    // v101 Priority B — IOS innertube API via ASYNC fetch.
-                    // v99 used sync XHR which gets blocked/silently fails in WKWebView.
-                    // v101 uses async fetch — works reliably in WKWebView.
+                    // v103 Priority B — multi-client innertube API via ASYNC fetch.
                     //
-                    // MWEB client typically does NOT include hlsManifestUrl in
-                    // streamingData. The IOS client DOES. We POST to /youtubei/v1/player
-                    // with clientName=IOS — YouTube responds with hlsManifestUrl.
-                    // Cookies + API key are already in the WebView session (same-origin).
+                    // v102 bug: ytcfg.get('INNERTUBE_CONTEXT_CLIENT_VERSION') returned
+                    // MWEB version (2.20260708.05.00) but we sent it with clientName='IOS'
+                    // → YouTube returned 404 "Requested entity was not found".
                     //
-                    // IMPORTANT: this runs on iPhone IP, so hlsManifestUrl is bound to
-                    // iPhone IP. Backend pipes the manifest bytes only; AVPlayer then
-                    // fetches segments DIRECTLY from iPhone IP → IP matches → 200 OK.
-                    // (Railway IP is fully blocked by YouTube — v100 proved this with
-                    //  "Precondition check failed" + "Sign in to confirm you're not a bot")
+                    // v103 fix: HARDCODE IOS clientVersion (19.09.3). Don't trust ytcfg
+                    // for clientVersion — ytcfg returns MWEB version because that's the
+                    // client we're running in.
+                    //
+                    // Also: try TVHTML5 (YouTube TV app) and WEB as fallback clients.
+                    // Each client returns slightly different streamingData:
+                    //   - IOS: typically returns hlsManifestUrl (NOT IP-bound)
+                    //   - TVHTML5: also returns hlsManifestUrl
+                    //   - WEB: returns formats[] (IP-bound MP4) but may include hls
+                    //
+                    // Retry strategy: 3 client attempts total, ONE per client.
+                    // If all 3 fail → fall through to MP4.
                     if (!targetUrl && videoId && !window.__plinkIosFetchStarted) {
                         window.__plinkIosFetchStarted = true; // one-shot guard
 
                         var apiKey = window.ytcfg?.get?.('INNERTUBE_API_KEY') || 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-                        var clientVersion = window.ytcfg?.get?.('INNERTUBE_CONTEXT_CLIENT_VERSION') || '17.31.4';
                         var fetchUrl = 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey + '&prettyPrint=false';
 
-                        window.webkit.messageHandlers.logger.postMessage('Priority B: starting async fetch to innertube (videoId=' + videoId + ', clientVersion=' + clientVersion + ')');
+                        // v103: clients to try, in order. Each has its own hardcoded version.
+                        var clientsToTry = [
+                            { name: 'IOS',      version: '19.09.3' },
+                            { name: 'TVHTML5',  version: '7.20240724.13.00' },
+                            { name: 'WEB',      version: '2.20240726.00.00' }
+                        ];
+                        var clientIdx = window.__plinkClientIdx || 0;
 
-                        fetch(fetchUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                context: {
-                                    client: {
-                                        clientName: 'IOS',
-                                        clientVersion: clientVersion,
-                                        hl: 'en',
-                                        gl: 'US'
-                                    }
-                                },
-                                videoId: videoId
-                            })
-                        })
-                        .then(function(r) {
-                            window.webkit.messageHandlers.logger.postMessage('fetch response: status=' + r.status + ' ok=' + r.ok);
-                            if (!r.ok) {
-                                // Read error body for diagnostic
-                                return r.text().then(function(t) {
-                                    window.webkit.messageHandlers.logger.postMessage('fetch error body: ' + t.substring(0, 300));
-                                    window.__plinkIosFetchStarted = false;
-                                    return null;
-                                });
-                            }
-                            return r.json();
-                        })
-                        .then(function(data) {
-                            if (!data) return;
-                            var hls = data.streamingData && data.streamingData.hlsManifestUrl;
-                            var hasFormats = data.streamingData && data.streamingData.formats && data.streamingData.formats.length;
-                            var playStatus = data.playabilityStatus && data.playabilityStatus.status;
-                            window.webkit.messageHandlers.logger.postMessage('innertube response: playStatus=' + playStatus + ' hls=' + (hls ? 'YES' : 'NO') + ' formats=' + (hasFormats || 0));
-
-                            if (hls) {
-                                clearInterval(interval);
-                                window.webkit.messageHandlers.extractor.postMessage(hls);
-                            } else {
-                                // Reset guard so we can retry on next poll cycle (up to 3 times).
-                                window.__plinkIosFetchAttempts = (window.__plinkIosFetchAttempts || 0) + 1;
+                        function tryNextClient() {
+                            if (clientIdx >= clientsToTry.length) {
+                                window.webkit.messageHandlers.logger.postMessage('Priority B: ALL ' + clientsToTry.length + ' clients failed, giving up');
                                 window.__plinkIosFetchStarted = false;
-                                if (window.__plinkIosFetchAttempts >= 3) {
-                                    window.webkit.messageHandlers.logger.postMessage('innertube: no HLS after 3 attempts, giving up');
-                                }
+                                return;
                             }
-                        })
-                        .catch(function(e) {
-                            window.webkit.messageHandlers.logger.postMessage('fetch CATCH error: ' + (e && e.message ? e.message : String(e)).substring(0, 200));
-                            // Reset guard on failure so we can retry on next poll cycle.
-                            window.__plinkIosFetchStarted = false;
-                        });
+                            var c = clientsToTry[clientIdx];
+                            window.webkit.messageHandlers.logger.postMessage('Priority B: trying client #' + clientIdx + ' ' + c.name + ' v' + c.version + ' (videoId=' + videoId + ')');
+
+                            fetch(fetchUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-YouTube-Client-Name': c.name === 'IOS' ? '5' : (c.name === 'TVHTML5' ? '7' : '1'),
+                                    'X-YouTube-Client-Version': c.version
+                                },
+                                body: JSON.stringify({
+                                    context: {
+                                        client: {
+                                            clientName: c.name,
+                                            clientVersion: c.version,
+                                            hl: 'en',
+                                            gl: 'US'
+                                        }
+                                    },
+                                    videoId: videoId
+                                })
+                            })
+                            .then(function(r) {
+                                window.webkit.messageHandlers.logger.postMessage('fetch response (' + c.name + '): status=' + r.status + ' ok=' + r.ok);
+                                if (!r.ok) {
+                                    return r.text().then(function(t) {
+                                        window.webkit.messageHandlers.logger.postMessage('fetch error body (' + c.name + '): ' + t.substring(0, 200));
+                                        // Move to next client
+                                        clientIdx++;
+                                        window.__plinkClientIdx = clientIdx;
+                                        window.__plinkIosFetchStarted = false;
+                                        return null;
+                                    });
+                                }
+                                return r.json();
+                            })
+                            .then(function(data) {
+                                if (!data) return;
+                                var hls = data.streamingData && data.streamingData.hlsManifestUrl;
+                                var hasFormats = data.streamingData && data.streamingData.formats && data.streamingData.formats.length;
+                                var playStatus = data.playabilityStatus && data.playabilityStatus.status;
+                                window.webkit.messageHandlers.logger.postMessage('innertube response (' + c.name + '): playStatus=' + playStatus + ' hls=' + (hls ? 'YES' : 'NO') + ' formats=' + (hasFormats || 0));
+
+                                if (hls) {
+                                    clearInterval(interval);
+                                    window.webkit.messageHandlers.logger.postMessage('✅ SUCCESS with client ' + c.name);
+                                    window.webkit.messageHandlers.extractor.postMessage(hls);
+                                } else {
+                                    // No HLS in this client's response. Try next client.
+                                    clientIdx++;
+                                    window.__plinkClientIdx = clientIdx;
+                                    window.__plinkIosFetchStarted = false;
+                                    window.webkit.messageHandlers.logger.postMessage('No HLS in ' + c.name + ' response, will try next client on next poll');
+                                }
+                            })
+                            .catch(function(e) {
+                                window.webkit.messageHandlers.logger.postMessage('fetch CATCH error (' + c.name + '): ' + (e && e.message ? e.message : String(e)).substring(0, 200));
+                                clientIdx++;
+                                window.__plinkClientIdx = clientIdx;
+                                window.__plinkIosFetchStarted = false;
+                            });
+                        }
+
+                        tryNextClient();
                     }
 
                     // v101 Priority C — muxed MP4 (LAST resort, IP-bound, will 403 through proxy).
-                    // Only used as fallback if IOS innertube fetch fails AND no HLS available.
-                    // v102: wait 15 attempts (7.5s) instead of 6 — gives async fetch time to complete.
-                    if (!targetUrl && attempts > 15
-                        && (window.__plinkIosFetchAttempts || 0) >= 3) {
-                        window.webkit.messageHandlers.logger.postMessage('Priority C: falling back to MP4 (innertube failed 3x)');
+                    // v103: trigger when ALL 3 clients have been tried (clientIdx >= 3)
+                    // and we've waited at least 8 attempts (4s).
+                    if (!targetUrl && attempts > 16
+                        && (window.__plinkClientIdx || 0) >= 3) {
+                        window.webkit.messageHandlers.logger.postMessage('Priority C: falling back to MP4 (all innertube clients exhausted)');
                         var formats = sd.formats || [];
                         var best = formats.find(function(f) { return f.itag === 22; })
                                    || formats.find(function(f) { return f.itag === 18; })

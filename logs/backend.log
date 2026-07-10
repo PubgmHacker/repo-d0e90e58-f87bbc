@@ -1,5 +1,0 @@
-[Telemetry] No OTEL endpoint — skipping init
-🚀 Plink backend v1.6.0 on port 8080 [development]
-🤖 AI: /api/ai/chat | /api/ai/recommend
-[23:13:53.739] INFO (10935): Server listening at http://127.0.0.1:8080
-[23:13:53.739] INFO (10935): Server listening at http://21.0.6.208:8080

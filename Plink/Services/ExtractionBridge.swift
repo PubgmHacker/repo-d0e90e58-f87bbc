@@ -1,16 +1,20 @@
 import Foundation
 import WebKit
 
-// MARK: - ExtractionBridge (v90 — Headless WKWebView Scraper)
+// MARK: - ExtractionBridge (v98 — HLS-First Headless WKWebView Scraper)
 //
 // 🔧 v90 (Gemini): Separate invisible WKWebView that ONLY extracts stream URL.
-// Does NOT play video. After extraction, WKWebView is released.
+// 🔧 v98: Switched priority to HLS-first. MP4 formats (itag 18/22) are
+//         IP-bound — their sparams include `ip`, so backend's v97 transparent
+//         proxy can't strip `ip` without invalidating the signature → 403.
+//         HLS manifest URLs are NOT IP-bound (sparams doesn't include `ip`),
+//         so they survive the proxy and play through AVPlayer natively.
 //
 // Strategy:
 //   1. Load m.youtube.com/watch?v=ID with iOS Safari UA
 //   2. Poll for ytInitialPlayerResponse (in HTML or window variable)
-//   3. Extract itag 22 (720p MP4) or itag 18 (360p MP4) — AVPlayer plays natively
-//   4. Fallback: hlsManifestUrl (.m3u8) — AVPlayer handles HLS too
+//   3. Extract hlsManifestUrl (.m3u8) — NOT IP-bound, works through proxy
+//   4. Fallback: itag 22 (720p MP4) or itag 18 (360p MP4) — IP-bound
 //   5. Return StreamInfo to caller (NativePlayerEngine)
 //   6. Release WKWebView (don't keep in memory — Gemini recommendation)
 //
@@ -153,9 +157,10 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
         guard !isFinished, message.name == "extractor" else { return }
 
         if let url = message.body as? String {
-            // Accept googlevideo.com (MP4) or .m3u8 (HLS)
+            // Accept googlevideo.com (MP4 or HLS manifest) or .m3u8 (HLS)
             if url.contains("googlevideo.com") || url.contains(".m3u8") {
-                print("✅ v90: ExtractionBridge — found URL: \(url.prefix(80))")
+                let isHLS = url.contains("/manifest/hls/") || url.contains(".m3u8")
+                print("✅ v98: ExtractionBridge — found \(isHLS ? "HLS manifest" : "MP4"): \(url.prefix(80))")
 
                 // 🔧 v92: Capture cookies before finishing.
                 // YouTube requires matching cookies between extraction and playback.
@@ -307,18 +312,31 @@ final class ExtractionBridge: NSObject, WKNavigationDelegate, WKScriptMessageHan
                 if (sd) {
                     var targetUrl = null;
 
-                    // Priority A: muxed MP4 formats (itag 22=720p, 18=360p)
-                    var formats = sd.formats || [];
-                    var best = formats.find(function(f) { return f.itag === 22; })
-                               || formats.find(function(f) { return f.itag === 18; })
-                               || formats[0];
-                    if (best && best.url) {
-                        targetUrl = best.url;
+                    // v98: Priority A — HLS Manifest.
+                    // HLS URLs (hlsManifestUrl) are NOT IP-bound: their signature
+                    // (sparams=...) does NOT include `ip`, so the URL works from
+                    // any IP (including our Railway backend). The backend's v97
+                    // transparent-proxy strips `ip` from the URL — but for MP4
+                    // formats, `ip` is part of the cryptographic signature
+                    // (sparams contains `ip`), so stripping it invalidates the
+                    // signature → 403. HLS avoids this entirely.
+                    // AVPlayer natively supports HLS (.m3u8).
+                    if (sd.hlsManifestUrl) {
+                        targetUrl = sd.hlsManifestUrl;
                     }
 
-                    // Priority B: HLS Manifest
-                    if (!targetUrl && sd.hlsManifestUrl) {
-                        targetUrl = sd.hlsManifestUrl;
+                    // v98: Priority B — muxed MP4 formats (fallback if no HLS).
+                    // itag 22=720p, 18=360p. These URLs are IP-bound — may 403
+                    // through the proxy if YouTube validates signature strictly.
+                    // Kept as last-resort fallback for videos without HLS.
+                    if (!targetUrl) {
+                        var formats = sd.formats || [];
+                        var best = formats.find(function(f) { return f.itag === 22; })
+                                   || formats.find(function(f) { return f.itag === 18; })
+                                   || formats[0];
+                        if (best && best.url) {
+                            targetUrl = best.url;
+                        }
                     }
 
                     if (targetUrl) {

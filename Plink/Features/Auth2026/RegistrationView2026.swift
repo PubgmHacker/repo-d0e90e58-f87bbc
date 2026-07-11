@@ -51,11 +51,17 @@ struct RegistrationView2026: View {
             ScrollView {
                 VStack(spacing: 14) {
                     // Title overlaps poster bottom
-                    Text("Создать аккаунт")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(Cinema2026.text)
-                        .padding(.top, 10)
-                        .shadow(color: Cinema2026.background.opacity(0.8), radius: 8)
+                    // Plink branding
+                    VStack(spacing: 4) {
+                        Text("Plink")
+                            .font(.system(size: 32, weight: .heavy))
+                            .foregroundStyle(Cinema2026.text)
+                        Text("Создать аккаунт")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(Cinema2026.secondary)
+                    }
+                    .padding(.top, 10)
+                    .shadow(color: Cinema2026.background.opacity(0.8), radius: 8)
 
                     // Form card — solid surface, readable
                     VStack(spacing: 12) {

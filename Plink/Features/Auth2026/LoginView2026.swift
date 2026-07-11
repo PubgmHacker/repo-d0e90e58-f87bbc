@@ -17,8 +17,19 @@ struct LoginView2026: View {
     let onRegister: () -> Void
 
     var body: some View {
-        CinematicAuthContainer(title: "Войти") {
+        CinematicAuthContainer(title: "Plink") {
             VStack(spacing: 10) {
+                // Plink branding
+                VStack(spacing: 4) {
+                    Text("Plink")
+                        .font(.system(size: 32, weight: .heavy))
+                        .foregroundStyle(Cinema2026.text)
+                    Text("Смотрите вместе")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Cinema2026.secondary)
+                }
+                .padding(.bottom, 6)
+
                 // Apple Sign-In
                 SignInWithAppleButton(.continue) { request in
                     request.requestedScopes = [.fullName, .email]

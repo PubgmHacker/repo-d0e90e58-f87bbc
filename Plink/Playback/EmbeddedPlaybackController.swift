@@ -132,7 +132,9 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = [.audio]
         config.userContentController = content
-        config.websiteDataStore = .default()
+        // PATCH: use nonPersistent data store to prevent caching old HTML
+        // with controls=1. This ensures fresh HTML load every time.
+        config.websiteDataStore = .nonPersistent()
 
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
@@ -257,6 +259,37 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     private func handleReady() {
         isReady = true
         isBuffering = false
+
+        // PATCH: inject CSS to hide YouTube UI after player is ready
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await self.evaluate("""
+            (function() {
+                var iframe = document.querySelector('iframe');
+                if (iframe && iframe.contentWindow) {
+                    try {
+                        var doc = iframe.contentWindow.document;
+                        var style = doc.createElement('style');
+                        style.textContent = `
+                            .ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,
+                            .ytp-gradient-bottom, .ytp-gradient-top,
+                            .ytp-progress-bar-container, .ytp-player-progress,
+                            .ytp-large-play-button, .ytp-cued-thumbnail-overlay,
+                            .ytp-pause-overlay, .ytp-spinner,
+                            .iv-branding, .iv-tooltip, .ytp-title,
+                            .ytp-impression-link, .ytp-remote-button,
+                            .ytp-menu-button, .ytp-button {
+                                display: none !important;
+                                opacity: 0 !important;
+                                pointer-events: none !important;
+                            }
+                        `;
+                        doc.head.appendChild(style);
+                    } catch(e) {}
+                }
+            })();
+            """)
+        }
 
         // Drain pending commands atomically.
         let command = pending
@@ -390,6 +423,23 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                 height: 100%;
                 background: #0D001A;
                 overflow: hidden;
+              }
+              /* PATCH: hide ALL YouTube UI overlays */
+              .ytp-chrome-bottom, .ytp-chrome-top, .ytp-chrome-controls,
+              .ytp-gradient-bottom, .ytp-gradient-top,
+              .ytp-progress-bar-container, .ytp-player-progress,
+              .ytp-large-play-button, .ytp-cued-thumbnail-overlay,
+              .ytp-show-cards-title, .ytp-pause-overlay,
+              .ytp-spinner, .iv-branding, .iv-tooltip,
+              .ytp-button, .ytp-menu-button, .ytp-title,
+              .ytp-impression-link, .ytp-remote-button {
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+              }
+              /* Keep the video element itself visible */
+              video, .html5-video-container, .html5-main-video {
+                display: block !important;
               }
             </style>
           </head>

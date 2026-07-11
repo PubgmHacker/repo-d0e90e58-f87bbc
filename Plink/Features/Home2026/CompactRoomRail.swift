@@ -207,3 +207,54 @@ struct CompactRoomActions: View {
         .background(Cinema2026.background.opacity(0.96))
     }
 }
+
+// MARK: - Featured Room Banner (hero)
+
+struct FeaturedRoomBanner: View {
+    let room: Room
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack(alignment: .bottomLeading) {
+                // Backdrop
+                AsyncImage(url: URL(string: room.mediaItem?.thumbnailURL ?? "")) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Rectangle().fill(Cinema2026.surface)
+                }
+                .frame(height: 200)
+                .clipped()
+
+                // Gradient overlay
+                LinearGradient(
+                    colors: [.clear, Cinema2026.background.opacity(0.5), Cinema2026.background],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
+                    if room.isActive {
+                        Text("● В ЭФИРЕ")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1)
+                            .foregroundStyle(Cinema2026.danger)
+                    }
+                    Text(room.name)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Cinema2026.text)
+                        .lineLimit(2)
+                    Text("\(room.participantCount) смотрят")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Cinema2026.secondary)
+                }
+                .padding(16)
+            }
+            .frame(height: 200)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+    }
+}

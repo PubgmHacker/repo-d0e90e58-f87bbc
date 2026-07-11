@@ -67,23 +67,31 @@ struct PlinkPhoneTabShell: View {
                 }
 
                 if let vm = homeViewModel {
-                    if vm.activeRooms.isEmpty && vm.myRooms.isEmpty {
+                    if vm.activeRooms.isEmpty {
                         CompactNoLiveRoomsState {
                             createPresented = true
                         }
                     } else {
-                        if !vm.activeRooms.isEmpty {
-                            CompactRoomRail(
-                                title: "Сейчас в эфире",
-                                rooms: vm.activeRooms,
-                                style: .landscape,
-                                open: { navigateToRoom = $0 }
-                            )
+                        // Featured hero — first active room as large banner
+                        if let firstRoom = vm.activeRooms.first {
+                            FeaturedRoomBanner(room: firstRoom) {
+                                navigateToRoom = firstRoom
+                            }
                         }
-                        if !vm.myRooms.isEmpty {
+
+                        // Live rooms rail
+                        CompactRoomRail(
+                            title: "Сейчас смотрят",
+                            rooms: vm.activeRooms,
+                            style: .landscape,
+                            open: { navigateToRoom = $0 }
+                        )
+
+                        // Editorial — same rooms in poster style for variety
+                        if vm.activeRooms.count > 1 {
                             CompactRoomRail(
-                                title: "Мои комнаты",
-                                rooms: vm.myRooms,
+                                title: "Подборки",
+                                rooms: Array(vm.activeRooms.dropFirst()),
                                 style: .poster,
                                 open: { navigateToRoom = $0 }
                             )

@@ -11,10 +11,21 @@ options:
 # Per runbook §9: SFU required for rooms > 4 participants (mesh fallback
 # only for <= 4). LiveKit SDK provides Room, Participant, Track, and
 # DataChannel APIs that RoomRTCController wraps.
-packages:
-  LiveKit:
-    url: https://github.com/livekit/client-sdk-swift
-    from: 2.0.0
+#
+# PATCH 15: LiveKit SPM dependency temporarily disabled for builds without
+# reliable network (SPM fetch of WebRTC ~500MB fails on slow/unstable
+# connections). Re-enable by uncommenting the packages block below AND
+# the `- package: LiveKit` line in targets.Plink.dependencies AND removing
+# the `#if canImport(LiveKit)` guards in:
+#   - Plink/RTC/RoomRTCController.swift
+#   - Plink/RTC/ParticipantVideoView.swift
+# When LiveKit is re-enabled, voice/video chat works. Without it, the app
+# builds and all non-RTC features work (playback, chat, danmaku, reactions,
+# ambient, billing, admin, Rutube).
+# packages:
+#   LiveKit:
+#     url: https://github.com/livekit/client-sdk-swift
+#     from: 2.0.0
 
 settings:
   base:
@@ -41,8 +52,9 @@ targets:
       - path: Plink/Resources
         excludes:
           - "**/.DS_Store"
-    dependencies:
-      - package: LiveKit
+    # PATCH 15: LiveKit dependency disabled — see comment at top of file.
+    # dependencies:
+    #   - package: LiveKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.syncwatch.plink

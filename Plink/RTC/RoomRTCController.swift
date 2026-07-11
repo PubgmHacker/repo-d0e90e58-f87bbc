@@ -48,6 +48,12 @@
 import Foundation
 import AVFoundation
 import Observation
+
+// PATCH 15: LiveKit is optional. When the SPM dependency is disabled in
+// project.yml, this entire file is excluded from compilation. The app
+// builds without voice/video chat — all other features work.
+// Re-enable LiveKit by uncommenting the packages block in project.yml.
+#if canImport(LiveKit)
 import LiveKit
 
 @MainActor
@@ -379,3 +385,5 @@ public enum RTConnectionState: Sendable, Equatable {
         }
     }
 }
+
+#endif // canImport(LiveKit)

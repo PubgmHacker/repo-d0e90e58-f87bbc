@@ -34,6 +34,10 @@
 //     remote participant publishes, verify their avatar shows video.
 
 import SwiftUI
+
+// PATCH 15: LiveKit is optional. See Plink/RTC/RoomRTCController.swift for
+// re-enable instructions.
+#if canImport(LiveKit)
 import LiveKit
 
 /// SwiftUI wrapper for LiveKit's VideoView. Renders a participant's
@@ -130,3 +134,5 @@ struct ParticipantAvatarWithVideo: View {
         return PlinkRave.success.opacity(0.18)
     }
 }
+
+#endif // canImport(LiveKit)

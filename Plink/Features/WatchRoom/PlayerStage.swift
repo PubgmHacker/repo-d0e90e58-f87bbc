@@ -43,11 +43,14 @@ struct PlayerStage: View {
                 .ignoresSafeArea(variant == .landscape ? .all : [])
 
             // Danmaku layer above video, below chrome
-            DanmakuCanvasLayer(messages: model.danmakuMessages)
-                .allowsHitTesting(false)
-                .padding(.horizontal, 8)
-                .padding(.top, 60)
-                .padding(.bottom, 80)
+            DanmakuCanvasLayer(
+                placements: model.danmakuPlacements,
+                laneCount: model.danmakuLaneCount,
+                opacity: model.danmakuOpacity
+            )
+            .padding(.horizontal, 8)
+            .padding(.top, 60)
+            .padding(.bottom, 80)
 
             // Loading state (initial buffer)
             if model.coordinator.isPreparing {

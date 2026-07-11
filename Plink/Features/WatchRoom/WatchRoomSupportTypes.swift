@@ -17,20 +17,13 @@
 
 import SwiftUI
 
-// MARK: - Danmaku (flying comments)
-
-struct DanmakuMessage: Identifiable, Equatable {
-    let id = UUID()
-    let text: String
-    let color: Color
-    let senderName: String
-    let track: Int
-    let createdAt: Date
-    let isPremium: Bool
-    let isAdmin: Bool
-}
-
 // MARK: - RTC UI States
+//
+// Note: DanmakuMessage and DanmakuPlacement now live in
+// Plink/Features/WatchRoom/Danmaku/DanmakuEngine.swift (PATCH 05).
+// The old DanmakuMessage struct here had a `track: Int` field that was
+// never used for true lane scheduling — PATCH 05 replaces it with the
+// DanmakuEngine actor that assigns lanes dynamically based on availability.
 
 enum MicrophoneUIState: Equatable {
     case off

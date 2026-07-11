@@ -618,7 +618,15 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     var microphoneState: MicrophoneUIState { .off }
     var cameraState: CameraUIState { .off }
     var unreadCount: Int { 0 }
-    var danmakuMessages: [DanmakuMessage] { [] }
+
+    // PATCH 05: danmaku placements come from DanmakuEngine actor.
+    // The engine is owned by the model (or a sub-controller) and polled
+    // by DanmakuCanvasLayer via TimelineView. For now this is a stub
+    // returning empty — the actual engine integration is a follow-up
+    // commit that wires DanmakuEngine as a model dependency.
+    var danmakuPlacements: [DanmakuPlacement] { [] }
+    var danmakuLaneCount: Int { 5 }
+    var danmakuOpacity: Double { 0.85 }
 
     func leaveRoom() { disconnect() }
     func openPlayerSettings() {}

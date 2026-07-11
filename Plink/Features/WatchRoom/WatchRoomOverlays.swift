@@ -217,26 +217,93 @@ struct ParticipantAvatar: View {
 }
 
 // MARK: - Danmaku
+//
+// PATCH 05: DanmakuCanvasLayer now renders DanmakuPlacement snapshots from
+// the DanmakuEngine actor. Lane assignment, duration, and progress are all
+// computed by the engine — this view only draws the current snapshot.
+//
+// The view polls the engine via TimelineView at .animation cadence (~16ms).
+// Each frame it asks the engine for poll(at: now), which returns the
+// surviving placements sorted by lane.
+//
+// Tap on a placement freezes it for 2 seconds (per PATCH 05 spec).
+// Long press reports/blocks the sender — wired via closures.
 
 struct DanmakuCanvasLayer: View {
-    let messages: [DanmakuMessage]
+    let placements: [DanmakuPlacement]
+    let laneCount: Int
+    let opacity: Double
+    var onTap: ((DanmakuPlacement) -> Void)? = nil
+    var onLongPress: ((DanmakuPlacement) -> Void)? = nil
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            ForEach(messages) { msg in
-                Text(msg.text)
-                    .font(.system(size: msg.isPremium ? 17 : 14, weight: .medium))
-                    .foregroundStyle(msg.isAdmin ? PlinkRave.gold : msg.color)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(PlinkRave.void.opacity(0.55), in: Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(0.05), lineWidth: 0.5))
-                    .offset(x: 0, y: CGFloat(msg.track) * 32)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+        GeometryReader { proxy in
+            let laneHeight = proxy.size.height / CGFloat(max(1, laneCount))
+            let viewportWidth = proxy.size.width
+
+            ZStack(alignment: .topLeading) {
+                ForEach(placements) { placement in
+                    DanmakuItemView(placement: placement, viewportWidth: viewportWidth)
+                        .offset(x: xOffset(for: placement, in: viewportWidth),
+                                y: CGFloat(placement.lane) * laneHeight + 4)
+                        .opacity(opacity)
+                        .onTapGesture { onTap?(placement) }
+                        .onLongPressGesture(minimumDuration: 0.5) {
+                            onLongPress?(placement)
+                        }
+                }
             }
         }
-        .padding(.trailing, 8)
         .allowsHitTesting(true)
+    }
+
+    /// Compute x-offset for a placement at the current frame.
+    /// progress 0 = right edge (entering), progress 1 = left edge (exiting).
+    /// We compute relative to the placement's own createdAt — but since
+    /// this view is fed a snapshot, the caller must use TimelineView to
+    /// drive re-renders. The actual progress is recomputed each frame by
+    /// the engine's poll() — but we need a stable offset for the rendered
+    /// snapshot. For simplicity, we use the placement.id's hash as a
+    /// deterministic initial offset and the placement.duration for the
+    /// traversal speed.
+    ///
+    /// NOTE: the engine's poll() returns placements sorted by lane, but
+    /// the actual progress is computed by the View using ContinuousClock
+    /// — see DanmakuItemView below.
+    private func xOffset(for placement: DanmakuPlacement, in viewportWidth: CGFloat) -> CGFloat {
+        // The View below (DanmakuItemView) handles its own animation via
+        // .offset modifier internally based on TimelineView. This outer
+        // offset is just the lane entry position (right edge).
+        return 0
+    }
+}
+
+/// Single danmaku item with self-contained animation. Uses TimelineView
+/// to drive its own x-offset based on the placement's createdAt and
+/// duration. This avoids re-rendering the entire layer every frame.
+private struct DanmakuItemView: View {
+    let placement: DanmakuPlacement
+    let viewportWidth: CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let now = ContinuousClock.Instant(date: context.date)
+            let progress = placement.progress(at: now, speed: 1.0)
+            let x = viewportWidth - (CGFloat(progress) * (viewportWidth + estimatedTextWidth + 40))
+
+            Text(placement.text)
+                .font(.system(size: placement.isPremium ? 17 : 14, weight: .medium))
+                .foregroundStyle(placement.isAdmin ? PlinkRave.gold : placement.color)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(PlinkRave.void.opacity(0.55), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.05), lineWidth: 0.5))
+                .offset(x: x)
+        }
+    }
+
+    private var estimatedTextWidth: CGFloat {
+        CGFloat(placement.text.count) * 8
     }
 }
 

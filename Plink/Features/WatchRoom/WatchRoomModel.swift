@@ -16,6 +16,7 @@
 
 import Foundation
 import Observation
+import UIKit  // PATCH 16: UIApplication + UIWindowScene for Rutube fallback presentation
 
 @MainActor
 @Observable
@@ -115,11 +116,12 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
         // PATCH 14: instantiate engine + sampler. Lane count 5 (portrait)
         // — reconfigured on rotation via updateDanmakuLaneCount().
+        // PATCH 16: DanmakuEngine has no startSampling() — caller polls
+        // via poll(at:) which is started in connect().
         self.danmakuEngine = DanmakuEngine()
         self.ambientSampler = AmbientVideoSampler()
         Task { @MainActor [danmakuEngine] in
             await danmakuEngine.configure(laneCount: 5)
-            await danmakuEngine.startSampling()
         }
     }
 
@@ -175,12 +177,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         connectionState = .idle
 
         // PATCH 14: stop engine + sampler
+        // PATCH 16: DanmakuEngine has no stopSampling() — cancelling the
+        // poll task is sufficient (engine itself is passive).
         danmakuPollTask?.cancel()
         danmakuPollTask = nil
         ambientSampleTask?.cancel()
         ambientSampleTask = nil
         Task { [danmakuEngine, ambientSampler] in
-            await danmakuEngine.stopSampling()
             await danmakuEngine.clear()
             await ambientSampler.stopSampling()
             await ambientSampler.detach()

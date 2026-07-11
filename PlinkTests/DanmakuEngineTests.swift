@@ -264,7 +264,8 @@ final class DanmakuEngineTests: XCTestCase {
         let now = ContinuousClock.now
         let placement = DanmakuPlacement(
             id: UUID(), lane: 0, duration: 10, color: .white,
-            text: "x", isPremium: false, isAdmin: false, createdAt: now
+            text: "x", isPremium: false, isAdmin: false, createdAt: now,
+            createdAtDate: Date()
         )
         let progress = placement.progress(at: now, speed: 1.0)
         XCTAssertEqual(progress, 0.0, accuracy: 0.001,
@@ -275,7 +276,8 @@ final class DanmakuEngineTests: XCTestCase {
         let now = ContinuousClock.now
         let placement = DanmakuPlacement(
             id: UUID(), lane: 0, duration: 10, color: .white,
-            text: "x", isPremium: false, isAdmin: false, createdAt: now
+            text: "x", isPremium: false, isAdmin: false, createdAt: now,
+            createdAtDate: Date()
         )
         let atEnd = now.advanced(by: .seconds(10))
         let progress = placement.progress(at: atEnd, speed: 1.0)
@@ -287,7 +289,8 @@ final class DanmakuEngineTests: XCTestCase {
         let now = ContinuousClock.now
         let placement = DanmakuPlacement(
             id: UUID(), lane: 0, duration: 10, color: .white,
-            text: "x", isPremium: false, isAdmin: false, createdAt: now
+            text: "x", isPremium: false, isAdmin: false, createdAt: now,
+            createdAtDate: Date()
         )
         // At 5s elapsed with speed 2.0, progress should be 5 / (10 * 2.0) = 0.25
         let atFiveSeconds = now.advanced(by: .seconds(5))

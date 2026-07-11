@@ -43,6 +43,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import UIKit
 import Observation
+import SwiftUI  // PATCH 16: Color type used in AmbientPalette extension
 
 // MARK: - Public types
 

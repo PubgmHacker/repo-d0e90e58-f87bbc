@@ -54,7 +54,10 @@ extension WatchRoomLayoutState {
 /// Smooth spring used for all layout transitions in WatchRoom.
 /// Damping 0.92, response 0.42 — feels weighted, not bouncy.
 extension Animation {
-    static let plinkLayout = .smooth(duration: 0.42, extraBounce: 0.04)
-    static let plinkControls = .easeOut(duration: 0.22)
-    static let plinkDrawer = .smooth(duration: 0.38, extraBounce: 0.06)
+    // PATCH 16: use .spring(duration:bounce:) which is available on iOS 13+,
+    // instead of .smooth(duration:extraBounce:) which requires iOS 17+
+    // and was failing to resolve in some Xcode contexts.
+    static let plinkLayout = Animation.spring(duration: 0.42, bounce: 0.04)
+    static let plinkControls = Animation.easeOut(duration: 0.22)
+    static let plinkDrawer = Animation.spring(duration: 0.38, bounce: 0.06)
 }

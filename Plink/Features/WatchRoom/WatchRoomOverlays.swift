@@ -287,8 +287,10 @@ private struct DanmakuItemView: View {
 
     var body: some View {
         TimelineView(.animation) { context in
-            let now = ContinuousClock.Instant(date: context.date)
-            let progress = placement.progress(at: now, speed: 1.0)
+            // PATCH 16: use Date-based progress overload — TimelineView
+            // provides context.date as Date, and DanmakuPlacement stores
+            // a parallel createdAtDate for this purpose.
+            let progress = placement.progress(at: context.date, speed: 1.0)
             let x = viewportWidth - (CGFloat(progress) * (viewportWidth + estimatedTextWidth + 40))
 
             Text(placement.text)

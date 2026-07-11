@@ -79,11 +79,24 @@ struct DanmakuPlacement: Identifiable, Equatable, Sendable {
     let isPremium: Bool
     let isAdmin: Bool
     let createdAt: ContinuousClock.Instant
+    /// PATCH 16: Date representation of createdAt for View-side progress
+    /// computation. TimelineView provides context.date as Date, and
+    /// converting Date → ContinuousClock.Instant is not directly possible.
+    /// Storing a parallel Date lets the View compute progress without
+    /// actor calls.
+    let createdAtDate: Date
 
     /// 0...1 progress through the lane. View computes x-offset from this.
     /// progress = (now - createdAt) / (duration * speed)
     func progress(at now: ContinuousClock.Instant, speed: Double) -> Double {
-        let elapsed = now.duration(to: createdAt).seconds
+        let elapsed = -now.duration(to: createdAt).seconds
+        guard duration > 0 else { return 1 }
+        return elapsed / (duration * max(0.1, speed))
+    }
+
+    /// PATCH 16: Date-based progress for View rendering (TimelineView).
+    func progress(at date: Date, speed: Double) -> Double {
+        let elapsed = date.timeIntervalSince(createdAtDate)
         guard duration > 0 else { return 1 }
         return elapsed / (duration * max(0.1, speed))
     }
@@ -178,7 +191,8 @@ actor DanmakuEngine {
             text: message.text,
             isPremium: message.isPremium,
             isAdmin: message.isAdmin,
-            createdAt: now
+            createdAt: now,
+            createdAtDate: Date()  // PATCH 16: parallel Date for View-side progress
         )
 
         // Lane becomes available again when the head of the message has

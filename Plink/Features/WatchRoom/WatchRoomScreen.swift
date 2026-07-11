@@ -93,6 +93,9 @@ struct WatchRoomScreen: View {
         .onDisappear {
             controlsHideTask?.cancel()
             model.disconnect()
+            // PATCH: restore portrait when leaving room
+            OrientationManager.shared.unlockOrientation()
+            OrientationManager.shared.forcePortrait()
         }
         .onChange(of: model.connectionState) { _, newState in
             // PATCH 26: auto-dismiss when disconnected (after leaveRoom)

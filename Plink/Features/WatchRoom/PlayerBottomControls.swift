@@ -56,6 +56,12 @@ struct PlayerBottomControls: View {
                         model.enterFullscreen()
                     }
                     .accessibilityLabel("Fullscreen")
+                } else {
+                    // Landscape: show exit fullscreen button
+                    PlayerSmallButton(systemName: "arrow.down.left.and.arrow.up.right") {
+                        model.exitFullscreen()
+                    }
+                    .accessibilityLabel("Exit fullscreen")
                 }
             }
         }

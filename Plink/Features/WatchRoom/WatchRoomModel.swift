@@ -795,7 +795,15 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     func leaveRoom() { disconnect() }
     func openPlayerSettings() {}
     func startPiP() {}
-    func enterFullscreen() {}
+    func enterFullscreen() {
+        // PATCH: force landscape rotation like YouTube does
+        OrientationManager.shared.lockToLandscape()
+    }
+
+    func exitFullscreen() {
+        // Return to portrait when leaving fullscreen
+        OrientationManager.shared.lockToPortrait()
+    }
     func openEmojiPicker() {}  // PATCH 14: kept for back-compat; picker is now shown by composer
     func toggleMicrophone() async {}
     func toggleCamera() async {}

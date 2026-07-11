@@ -16,6 +16,7 @@ import SwiftUI
 public enum WatchRoomCompositionRoot {
     /// Creates the watch room screen — v2 or legacy based on feature flag.
     /// P0-37: single composition root, no parallel paths.
+    @MainActor
     public static func makeScreen(
         roomId: String,
         userId: String,
@@ -27,28 +28,24 @@ public enum WatchRoomCompositionRoot {
         authToken: String
     ) -> some View {
         if FeatureFlags.realtimeProtocolV2 {
-            return AnyView(
-                WatchRoomScreen(
-                    model: makeV2Model(
-                        roomId: roomId,
-                        userId: userId,
-                        username: username,
-                        mediaSource: mediaSource,
-                        mediaId: mediaId,
-                        apiBaseURL: apiBaseURL,
-                        wsBaseURL: wsBaseURL,
-                        authToken: authToken
-                    )
-                )
+            let model = makeV2Model(
+                roomId: roomId,
+                userId: userId,
+                username: username,
+                mediaSource: mediaSource,
+                mediaId: mediaId,
+                apiBaseURL: apiBaseURL,
+                wsBaseURL: wsBaseURL,
+                authToken: authToken
             )
+            return AnyView(WatchRoomScreen(model: model))
         } else {
-            // Legacy path — RoomView + WebSocketClient + SyncEngine
-            // Still in repo for rollback per runbook §0
             return AnyView(LegacyRoomViewWrapper(roomId: roomId, authToken: authToken))
         }
     }
 
     /// Creates the v2 WatchRoomModel with all dependencies wired.
+    @MainActor
     private static func makeV2Model(
         roomId: String,
         userId: String,

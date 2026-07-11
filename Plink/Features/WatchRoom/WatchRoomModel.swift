@@ -30,7 +30,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public private(set) var clockSynced: Bool = false
     public private(set) var hardCorrectionCount: Int = 0
     public private(set) var lastDriftMs: Double = 0
-    public private(set) var reactions: [ReactionEvent] = []  // P0-36: uses existing ReactionEvent from SyncEvents.swift
+    // P0-36: reactions array — uses existing ReactionEvent from SyncEvents.swift
+    // Note: @Observable macro needs explicit type annotation to resolve ambiguity
+    public private(set) var reactions: [Plink.ReactionEvent] = []
 
     // MARK: - Owned components
     public let realtimeClient: RealtimeClient
@@ -52,15 +54,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // P0-35: REST client for chat catch-up
     private let chatCatchupClient: ChatCatchupClient?
 
+    // P0-5: @MainActor init — class is @MainActor, init inherits isolation.
+    // Default params use nil-coalescing inside body to avoid @MainActor
+    // default expression evaluation in nonisolated context.
+    @MainActor
     public init(
         roomId: String,
-        currentUserId: String,  // P1-32
-        currentUsername: String,  // P1-32
+        currentUserId: String,
+        currentUsername: String,
         baseEndpoint: URL,
         ticketProvider: @escaping (String) async throws -> RealtimeTicket,
         mediaSource: PlaybackSource? = nil,
-        mediaId: String? = nil,  // P1-33
-        chatCatchupClient: ChatCatchupClient? = nil,  // P0-35
+        mediaId: String? = nil,
+        chatCatchupClient: ChatCatchupClient? = nil,
         clock: ClockSynchronizer? = nil,
         coordinator: PlaybackCoordinator? = nil
     ) {
@@ -289,7 +295,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // P0-36: reaction stream — append to reactions array for UI
     // Uses existing ReactionEvent from SyncEvents.swift
     private func handleReaction(_ reaction: RealtimeServerMessage.ReactionBroadcast) {
-        let event = ReactionEvent(emoji: reaction.emoji, senderName: reaction.username)
+        let event = Plink.ReactionEvent(emoji: reaction.emoji, senderName: reaction.username)
         reactions.append(event)
         if reactions.count > 50 {
             reactions.removeFirst(reactions.count - 50)

@@ -532,7 +532,9 @@ extension RealtimeClient: URLSessionWebSocketDelegate {
             guard let self else { return }
             // P0-20: only handle if this is the current task
             guard self.transport.isCurrent(webSocketTask) else { return }
-            if closeCode == .normal || closeCode == .goingAway {
+            // P0-5: URLSessionWebSocketTask.CloseCode uses .protocolNormal / .protocolGoingAway
+            // for protocol-level close codes (1000/1001), not .normal.
+            if closeCode == .protocolNormal || closeCode == .protocolGoingAway || closeCode.rawValue == 1000 || closeCode.rawValue == 1001 {
                 self.setState(.idle)
             } else if closeCode.rawValue == 4001 {
                 self.setState(.failed(reason: "Auth rejected (4001)"))

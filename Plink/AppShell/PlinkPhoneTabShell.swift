@@ -42,7 +42,7 @@ struct PlinkPhoneTabShell: View {
                 .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.symbol) }
 
             // Настройки — existing SettingsView (has real settings)
-            SettingsView()
+            SettingsView(authService: dependencies.authService)
                 .tag(AppSection.settings)
                 .tabItem { Label(AppSection.settings.title, systemImage: AppSection.settings.symbol) }
         }

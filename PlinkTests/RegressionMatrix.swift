@@ -88,13 +88,13 @@ enum RegressionSystem: String, CaseIterable, Identifiable {
     var testFile: String {
         switch self {
         case .auth:          return "PlinkTests/AuthTests.swift (16 tests via FakeAuthService)"
-        case .rooms:         return "PlinkTests/RoomServiceTests.swift (TBD)"
+        case .rooms:         return "PlinkTests/RoomServiceTests.swift (15 tests via FakeRoomService)"
         case .lifecycle:     return "PlinkTests/LifecycleTests.swift (TBD)"
         case .websockets:    return "PlinkTests/RealtimeClientTests.swift (TBD)"
         case .playback:      return "PlinkTests/OrderedSyncControllerTests.swift, PlinkTests/YouTubePlaybackControllerRuntimeTests.swift, PlinkTests/AmbientVideoSamplerTests.swift"
         case .chat:          return "PlinkTests/ChatComposerStateTests.swift"
         case .reactions:     return "PlinkTests/ReactionPaletteTests.swift"
-        case .presence:      return "PlinkTests/PresenceTests.swift (TBD)"
+        case .presence:      return "PlinkTests/PresenceTests.swift (11 tests)"
         case .sync:          return "PlinkTests/OrderedSyncControllerTests.swift (6) + PlinkTests/ClockSynchronizerTests.swift (11)"
         case .profile:       return "PlinkTests/ProfileTests.swift (TBD)"
         case .friends:       return "PlinkTests/FriendsTests.swift (TBD)"
@@ -136,9 +136,11 @@ enum RegressionSystem: String, CaseIterable, Identifiable {
         case .playback:  return .green   // OrderedSyncControllerTests (6) + YouTube runtime (10, gated) + Ambient (11)
         case .chat:      return .green   // ChatComposerStateTests (26)
         case .reactions: return .green   // ReactionPaletteTests (23)
-        case .auth:      return .green   // PATCH 17: AuthTests (16) via FakeAuthService
+        case .auth:      return .green   // PATCH 17: AuthTests (18) via FakeAuthService
         case .sync:      return .green   // PATCH 17: ClockSynchronizerTests (11) + OrderedSyncControllerTests (6)
-        case .rooms, .lifecycle, .websockets, .presence, .profile,
+        case .rooms:     return .green   // PATCH 19: RoomServiceTests (15) via FakeRoomService
+        case .presence:  return .green   // PATCH 19: PresenceTests (11)
+        case .lifecycle, .websockets, .profile,
              .friends, .dms, .deeplinks, .notifications, .settings, .gdpr,
              .billing, .admin:
             return .red      // Test files TBD

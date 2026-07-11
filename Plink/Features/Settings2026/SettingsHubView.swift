@@ -240,7 +240,7 @@ struct SettingsDetailView: View {
     let model: SettingsHubViewModel
 
     var body: some View {
-        Text("Settings detail: \(route)")
+        Text("Settings detail: \(String(describing: route))")
             .cinematicScreen()
     }
 }

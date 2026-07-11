@@ -7,6 +7,15 @@ options:
   generateEmptyDirectories: true
   groupSortPosition: top
 
+# PATCH 07: LiveKit Swift SDK — official SFU client for voice/video chat.
+# Per runbook §9: SFU required for rooms > 4 participants (mesh fallback
+# only for <= 4). LiveKit SDK provides Room, Participant, Track, and
+# DataChannel APIs that RoomRTCController wraps.
+packages:
+  LiveKit:
+    url: https://github.com/livekit/client-sdk-swift
+    from: 2.0.0
+
 settings:
   base:
     MARKETING_VERSION: "1.0"
@@ -32,6 +41,8 @@ targets:
       - path: Plink/Resources
         excludes:
           - "**/.DS_Store"
+    dependencies:
+      - package: LiveKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.syncwatch.plink

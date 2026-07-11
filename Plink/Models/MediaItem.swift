@@ -11,7 +11,6 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
     let mediaType: MediaType
     let source: MediaSource
     /// 🔧 v97: YouTube video ID for server-side extraction.
-    /// When present, NativePlayerEngine sends ?videoId=ID to backend
     /// instead of ?b64url=... — backend extracts URL with its own IP.
     var videoId: String?
 
@@ -78,7 +77,6 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
         // Format: https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
         // This is our own backend endpoint that proxies the googlevideo stream.
         // AVPlayer should treat it as a direct stream (NOT webview) so it uses
-        // AVPlayer with the Authorization header (set in SyncEngine.loadMedia).
         if lower.contains("plink-backend") && lower.contains("youtube-stream") {
             return .directStream
         }

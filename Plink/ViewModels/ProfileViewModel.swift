@@ -165,7 +165,7 @@ final class ProfileViewModel {
 
     nonisolated deinit {
         // 🔧 FIX: Remove the notification observer to avoid leaks / zombie callbacks.
-        // nonisolated to match RoomViewModel pattern — safe for Swift 6 strict concurrency.
+        // nonisolated to match Swift 6 pattern — safe for Swift 6 strict concurrency.
         if let avatarObserver {
             NotificationCenter.default.removeObserver(avatarObserver)
         }

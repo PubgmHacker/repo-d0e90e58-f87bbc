@@ -6,7 +6,6 @@ import os
 /// Uses `os.Logger` (unified logging) in release for efficient, filterable logs,
 /// and falls back to `print` in debug for readability.
 ///
-/// Domains: ws (WebSocket), sync (SyncEngine), webrtc (VoiceChat).
 /// Levels: info, warn, error.
 enum Logger {
 

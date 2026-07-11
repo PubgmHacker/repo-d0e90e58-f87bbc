@@ -366,7 +366,6 @@ struct ServiceWebView: UIViewRepresentable {
         // search browser.
         //
         // The previous call to WKWebsiteDataStore.default() returned the
-        // app-wide SHARED store. That store is shared with VideoContainerView
         // (the room player), which uses a custom plink-media:// scheme handler
         // and a modified User-Agent. Once that store accumulated cookies +
         // cache entries from the room player, YouTube's anti-bot heuristics

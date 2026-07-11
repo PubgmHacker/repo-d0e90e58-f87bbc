@@ -10,8 +10,6 @@ import Combine
 /// - При `isSpeaking == true` плавно (0.3 сек) приглушает видеоплеер (1.0 → 0.3).
 /// - При `isSpeaking == false` возвращает громкость на 100%.
 ///
-/// Интегрируется с `SyncEngine` (управляет `AVPlayer.volume`) и
-/// `VoiceChatService` (поставляет флаг `isSpeaking`).
 @MainActor
 final class AudioManager: ObservableObject {
 
@@ -53,7 +51,6 @@ final class AudioManager: ObservableObject {
 
     // MARK: - Player Binding
 
-    /// Привязывает AVPlayer (из SyncEngine) для управления громкостью.
     func attach(player: AVPlayer) {
         self.player = player
         player.volume = normalVolume

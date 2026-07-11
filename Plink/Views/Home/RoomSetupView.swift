@@ -416,11 +416,8 @@ struct RoomSetupView: View {
         // the 153/bot-check issues, but at least the room can be created and
         // user can retry).
         Task {
-            // 🔧 v90 (Gemini): Extraction Bridge → NativePlayerEngine (AVPlayer)
             //
-            // v90: We use a headless WKWebView (ExtractionBridge) to scrape
             // the direct stream URL from YouTube's HTML. The URL is then
-            // played by NativePlayerEngine (AVPlayer) in a separate UIWindow.
             //
             // If extraction fails (DRM, age-restricted, timeout), we fall back
             // to WebView mode (.youtube source) — the old WKWebView approach.
@@ -436,37 +433,9 @@ struct RoomSetupView: View {
                     }
                     return
                 }
-
-                // 🔧 v93: Try PipedClient first (API extraction, no WKWebView needed)
-                do {
-                    print("🔧 RoomSetupView v93: calling PipedClient for videoId='\(videoId)'")
-                    let streamInfo = try await PipedClient.shared.extract(videoId: videoId)
-                    finalStreamURL = streamInfo.streamURL
-                    finalSource = .url  // AVPlayer mode!
-                    finalDuration = streamInfo.duration > 0 ? streamInfo.duration : nil
-                    print("✅ RoomSetupView v93: Piped extraction succeeded — AVPlayer mode, URL prefix=\(finalStreamURL.prefix(60))")
-                } catch {
-                    // 🔧 v93: Fallback to ExtractionBridge (WKWebView scraper)
-                    print("⚠️ RoomSetupView v93: Piped failed (\(error.localizedDescription)) — trying ExtractionBridge")
-                    do {
-                        let streamInfo = try await ExtractionBridge.shared.extract(videoId: videoId)
-                        finalStreamURL = streamInfo.streamURL
-                        finalSource = .url
-                        finalDuration = streamInfo.duration > 0 ? streamInfo.duration : nil
-                        print("✅ RoomSetupView v93: ExtractionBridge succeeded — AVPlayer mode")
-                    } catch {
-                        // 🔧 v93: Final fallback to WebView mode
-                        print("⚠️ RoomSetupView v93: ExtractionBridge also failed (\(error.localizedDescription)) — WebView fallback")
-                        var embedComponents = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
-                        embedComponents.queryItems = [
-                            URLQueryItem(name: "playsinline", value: "1"),
-                            URLQueryItem(name: "rel", value: "0"),
-                        ]
-                        finalStreamURL = embedComponents.url?.absoluteString ?? "https://www.youtube.com/embed/\(videoId)"
-                        finalSource = .youtube  // WebView mode (fallback)
-                        finalDuration = nil
-                    }
-                }
+                finalStreamURL = contentURL
+                finalSource = .youtube
+                finalDuration = nil
             } else {
                 finalStreamURL = contentURL
                 finalSource = mediaSource

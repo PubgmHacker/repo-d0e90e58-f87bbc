@@ -132,3 +132,17 @@ private struct ReactionButton: View {
     ])
     .background(Color.black)
 }
+
+// ReactionEvent moved from SyncEvents.swift (deleted in legacy cleanup)
+struct ReactionEvent: Identifiable, Sendable {
+    let id = UUID()
+    let emoji: String
+    let senderName: String?
+    let horizontalOffset: CGFloat
+
+    init(emoji: String, senderName: String?) {
+        self.emoji = emoji
+        self.senderName = senderName
+        self.horizontalOffset = CGFloat.random(in: -80...80)
+    }
+}

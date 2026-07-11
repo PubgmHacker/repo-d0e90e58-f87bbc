@@ -51,7 +51,6 @@ struct PlinkApp: App {
     private let apiClient: APIClient
     private let authService: AuthService
     private let mediaService: MediaService
-    private let wsClient: WebSocketClient
     private let roomService: RoomService
 
     // Социальный слой (Блок 3)
@@ -98,7 +97,6 @@ struct PlinkApp: App {
         apiClient = api
         authService = AuthService(api: api)
         mediaService = MediaService()
-        wsClient = WebSocketClient()
         roomService = RoomService(api: api)
         // 🔧 FIX C5: Shared authenticated client injected into social layer
         _friendManager = State(initialValue: FriendManager(api: api))
@@ -155,7 +153,6 @@ struct PlinkApp: App {
             // 🔧 FIX C4+C6: Inject shared services for DM and Admin panels
             .environmentObject(dmChatService)
             .environmentObject(apiClient)
-            // 🔧 FIX 1.4: Inject shared WebSocketClient so RoomView doesn't create its own
             .environmentObject(wsClient)
     }
 
@@ -232,7 +229,6 @@ struct PlinkApp: App {
     // MARK: - Token Bridge
 
     /// Прокидывает текущий JWT из AuthService во все сервисы:
-    /// - WebSocketClient (?token= + Authorization header)
     /// - MediaService (Authorization: Bearer на extraction-запросах)
     /// APIClient обновляется внутри AuthService.
     private func bridgeAuthToken() {

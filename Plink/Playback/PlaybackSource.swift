@@ -24,6 +24,13 @@ public enum PlaybackSource: Sendable, Equatable {
     /// with YouTube IFrame API). App Store compliant; NO extraction/relay.
     case youtube(String)
 
+    /// PATCH 10: Rutube video ID — rendered via official Rutube embed
+    /// (WKWebView with rutube.ru/play/embed/<id>). App Store compliant;
+    /// NO extraction. Synchronized playback is unsupported when Rutube's
+    /// JS API does not expose play/pause/seek — controller falls back to
+    /// external provider (SFSafariViewController) in that case.
+    case rutube(String)
+
     /// External playback route (AirPlay, CarPlay).
     case external(URL)
 
@@ -35,6 +42,7 @@ public enum PlaybackSource: Sendable, Equatable {
         case .hls: return "hls"
         case .mp4: return "mp4"
         case .youtube: return "youtube"
+        case .rutube: return "rutube"
         case .external: return "external"
         }
     }

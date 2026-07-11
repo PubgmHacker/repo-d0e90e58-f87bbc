@@ -43,8 +43,15 @@ public final class PlaybackCoordinator: AnyObject {
     }
 
     /// Embedded view (nil for native HLS/MP4 source).
+    /// Returns the embedded view for YouTube OR Rutube controllers.
     public var embeddedView: UIView? {
-        (currentController as? EmbeddedPlaybackController)?.embeddedView
+        if let youtube = currentController as? EmbeddedPlaybackController {
+            return youtube.embeddedView
+        }
+        if let rutube = currentController as? RutubePlaybackController {
+            return rutube.embeddedView
+        }
+        return nil
     }
 
     public init() {}
@@ -57,6 +64,7 @@ public final class PlaybackCoordinator: AnyObject {
         if let prev = currentController {
             if let native = prev as? NativePlayerController { native.teardown() }
             if let embedded = prev as? EmbeddedPlaybackController { embedded.teardown() }
+            if let rutube = prev as? RutubePlaybackController { rutube.teardown() }
         }
         currentController = nil
 
@@ -71,6 +79,10 @@ public final class PlaybackCoordinator: AnyObject {
                 let embedded = EmbeddedPlaybackController()
                 try await embedded.prepare(source)
                 controller = embedded
+            case .rutube:
+                let rutube = RutubePlaybackController()
+                try await rutube.prepare(source)
+                controller = rutube
             }
             currentController = controller
             currentSource = source
@@ -85,6 +97,7 @@ public final class PlaybackCoordinator: AnyObject {
     public func teardown() {
         if let native = currentController as? NativePlayerController { native.teardown() }
         if let embedded = currentController as? EmbeddedPlaybackController { embedded.teardown() }
+        if let rutube = currentController as? RutubePlaybackController { rutube.teardown() }
         currentController = nil
         currentSource = nil
         lastError = nil

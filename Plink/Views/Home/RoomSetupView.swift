@@ -433,7 +433,8 @@ struct RoomSetupView: View {
                     }
                     return
                 }
-                finalStreamURL = contentURL
+                // PATCH 26: use clean video ID as streamURL, not full URL with tracking params
+                finalStreamURL = "https://www.youtube.com/watch?v=\(videoId)"
                 finalSource = .youtube
                 finalDuration = nil
             } else {

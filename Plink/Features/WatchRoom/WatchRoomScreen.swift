@@ -26,6 +26,7 @@ struct WatchRoomScreen: View {
     @Environment(\.horizontalSizeClass) private var widthClass
     @Environment(\.verticalSizeClass) private var heightClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss  // PATCH 26: dismiss fullScreenCover on leave
 
     @State private var ui = WatchRoomUIState()
     @State private var controlsHideTask: Task<Void, Never>?
@@ -92,6 +93,12 @@ struct WatchRoomScreen: View {
         .onDisappear {
             controlsHideTask?.cancel()
             model.disconnect()
+        }
+        .onChange(of: model.connectionState) { _, newState in
+            // PATCH 26: auto-dismiss when disconnected (after leaveRoom)
+            if newState == .idle {
+                dismiss()
+            }
         }
         .onTapGesture {
             guard !ui.chatPresented else { return }

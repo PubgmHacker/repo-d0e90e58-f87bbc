@@ -1,6 +1,6 @@
 // Plink/AppShell/PlinkAppShell.swift — Unified iOS/iPad/macOS shell
 //
-// PLINK_UNIFIED_IOS_MAC_CINEMATIC_PATCH §2: Unified shell
+// PATCH 26: removed create tab interception, AI tab restored
 
 import SwiftUI
 

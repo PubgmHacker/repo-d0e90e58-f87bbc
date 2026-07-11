@@ -1,7 +1,6 @@
 // Plink/AppShell/PlinkSidebarShell.swift — iPad/macOS sidebar
 //
-// PATCH 25: use existing views (HomeView, RoomsTabContent, SettingsView)
-// instead of new cinematic placeholders.
+// PATCH 26: AI tab restored, no Create section
 
 import SwiftUI
 
@@ -23,12 +22,8 @@ struct PlinkSidebarShell: View {
                 Section("Смотреть") {
                     nav(.home)
                     nav(.rooms)
+                    nav(.ai)
                     nav(.friends)
-                }
-
-                Section("Вы") {
-                    nav(.profile)
-                    nav(.settings)
                 }
 
                 Section {
@@ -39,6 +34,10 @@ struct PlinkSidebarShell: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(CinemaColor.plink)
+                }
+
+                Section {
+                    nav(.settings)
                 }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
@@ -62,21 +61,18 @@ struct PlinkSidebarShell: View {
         switch section {
         case .home:
             HomeTabContent(
-                onProfileTap: { },
+                onProfileTap: { createPresented = true },
                 onSwitchToAITab: nil,
                 onSwitchToJoinTab: nil
             )
         case .rooms:
             RoomsTabContent()
+        case .ai:
+            AIAssistantView()
         case .friends:
             FriendsView()
-        case .profile:
-            Text("Профиль")
-                .cinematicScreen()
         case .settings:
             SettingsTabContent(authService: dependencies.authService)
-        case .create:
-            EmptyView()
         }
     }
 }

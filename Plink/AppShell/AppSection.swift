@@ -1,15 +1,14 @@
 // Plink/AppShell/AppSection.swift — Navigation sections
 //
-// PLINK_UNIFIED_IOS_MAC_CINEMATIC_PATCH §2: App sections
+// PATCH 26: removed .create (was intercepting tab), added .ai back
 
 import Foundation
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case home
     case rooms
-    case create
+    case ai
     case friends
-    case profile
     case settings
 
     var id: String { rawValue }
@@ -18,9 +17,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .home: return "Главная"
         case .rooms: return "Комнаты"
-        case .create: return "Создать"
+        case .ai: return "ИИ"
         case .friends: return "Друзья"
-        case .profile: return "Профиль"
         case .settings: return "Настройки"
         }
     }
@@ -29,9 +27,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .home: return "house"
         case .rooms: return "play.rectangle.on.rectangle"
-        case .create: return "plus"
+        case .ai: return "sparkles"
         case .friends: return "person.2"
-        case .profile: return "person.crop.circle"
         case .settings: return "gearshape"
         }
     }

@@ -1,24 +1,18 @@
 // Plink/Features/WatchRoom/WatchRoomModel.swift
-// Single owner of room session lifecycle (runbook §21, Brain Review 4 P0-28)
+// Single owner of room session lifecycle (runbook §21, Brain Review 5 P0-29..P0-37)
 //
-// This is the composition root for the v2 realtime + playback path.
-// Implements RealtimeClientDelegate — receives clock probes, snapshots,
-// session ready, and other server messages, routing them to the right
-// controller.
-//
-// Lifecycle:
-//   1. init(roomId, ticket, realtimeClient, clock, syncController, coordinator)
-//   2. connect() → RealtimeClient.connect(roomId:)
-//   3. RealtimeClient session.ready → .synchronizing → snapshot → .connected
-//   4. Clock probes ingested via ClockSynchronizer
-//   5. Snapshots + live states applied via OrderedSyncController
-//   6. Chat messages routed to chatTimeline
-//   7. Reactions/participant events routed to UI
-//   8. disconnect() → RealtimeClient.disconnect() + PlaybackCoordinator.teardown()
-//
-// Feature flag: WatchRoomModel is only instantiated when
-// FeatureFlag.realtime_protocol_v2 is true. Otherwise legacy
-// RoomViewModel + WebSocketClient + SyncEngine path is used.
+// Brain Review 5 fixes:
+//   P0-29: PlaybackProxy — syncController talks to stable proxy, not dummy player
+//   P0-30: RoomRole — sessionDidConnect(role:) sets isHost
+//   P0-31: stateChanges stream — connectionState reflects all states
+//   P0-33: functional host controls (optimistic local apply + v2 command)
+//   P0-34: chat button opens sheet (handled in WatchRoomScreen)
+//   P0-35: fetchChatCatchup REST client with cursor paging
+//   P0-36: presence snapshot + reaction stream
+//   P0-37: composition root (wiring in MainTabView handled separately)
+//   P1-32: current user identity via init
+//   P1-33: typed mediaId in host commands
+//   P1-34: lastError + hardCorrectionCount + driftMs wired to UI
 
 import Foundation
 import Observation
@@ -29,41 +23,60 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // MARK: - Public state (UI binds to these)
     public private(set) var connectionState: RealtimeConnectionState = .idle
     public private(set) var isHost: Bool = false
+    public private(set) var role: RoomRole = .viewer
     public private(set) var participants: [ParticipantInfo] = []
     public private(set) var chatMessages: [ChatMessageInfo] = []
     public private(set) var lastError: String?
     public private(set) var clockSynced: Bool = false
     public private(set) var hardCorrectionCount: Int = 0
+    public private(set) var lastDriftMs: Double = 0
+    public private(set) var reactions: [ReactionEvent] = []  // P0-36: reaction stream
 
     // MARK: - Owned components
     public let realtimeClient: RealtimeClient
     public let clock: ClockSynchronizer
     public let syncController: OrderedSyncController
     public let coordinator: PlaybackCoordinator
+    private let playbackProxy: PlaybackProxy  // P0-29: stable proxy for syncController
 
     // MARK: - Config
     public let roomId: String
-    private let mediaSource: PlaybackSource?
-    private var chatCatchupCursor: String?  // last messageId received
-    private var clientMessageIds = Set<String>()  // dedupe (P1-11)
+    public let mediaSource: PlaybackSource?
+    public let mediaId: String?  // P1-33: typed media ID for host commands
+    public let currentUserId: String  // P1-32: identity via init, not UserDefaults
+    public let currentUsername: String  // P1-32
+    private var chatCatchupCursor: String?
+    private var clientMessageIds = Set<String>()
+    private var stateChangesTask: Task<Void, Never>?
+
+    // P0-35: REST client for chat catch-up
+    private let chatCatchupClient: ChatCatchupClient?
 
     public init(
         roomId: String,
+        currentUserId: String,  // P1-32
+        currentUsername: String,  // P1-32
         baseEndpoint: URL,
         ticketProvider: @escaping (String) async throws -> RealtimeTicket,
         mediaSource: PlaybackSource? = nil,
+        mediaId: String? = nil,  // P1-33
+        chatCatchupClient: ChatCatchupClient? = nil,  // P0-35
         clock: ClockSynchronizer = ClockSynchronizer(),
         coordinator: PlaybackCoordinator = PlaybackCoordinator()
     ) {
         self.roomId = roomId
+        self.currentUserId = currentUserId
+        self.currentUsername = currentUsername
         self.mediaSource = mediaSource
+        self.mediaId = mediaId
+        self.chatCatchupClient = chatCatchupClient
         self.clock = clock
         self.coordinator = coordinator
 
-        // Create sync controller with clock + coordinator's current controller
-        // (coordinator.currentController is set after prepare)
-        let player = coordinator.currentController ?? NativePlayerController()
-        self.syncController = OrderedSyncController(clock: clock, player: player)
+        // P0-29: create stable proxy — syncController talks to proxy, not dummy
+        let proxy = PlaybackProxy()
+        self.playbackProxy = proxy
+        self.syncController = OrderedSyncController(clock: clock, player: proxy)
 
         self.realtimeClient = RealtimeClient(baseEndpoint: baseEndpoint, ticketProvider: ticketProvider)
         self.realtimeClient.delegate = self
@@ -72,59 +85,95 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // MARK: - Lifecycle
 
     public func connect() async {
+        // P0-31: subscribe to stateChanges stream
+        startStateChangesSubscription()
+
+        // P0-29: prepare media, then wire proxy.target to real controller
         if let source = mediaSource {
-            await coordinator.prepare(source)
-            // Re-create syncController with the now-prepared controller
-            // (coordinator.currentController was nil at init time)
+            do {
+                try await coordinator.prepare(source)
+                // P0-29: wire proxy to the now-prepared real controller
+                playbackProxy.target = coordinator.currentController
+            } catch {
+                // P1-36: prepare failed — don't connect realtime, show error
+                lastError = "Media prepare failed: \(error.localizedDescription)"
+                connectionState = .failed(reason: "Media prepare failed")
+                return
+            }
         }
         realtimeClient.connect(roomId: roomId)
     }
 
     public func disconnect() {
+        stateChangesTask?.cancel()
+        stateChangesTask = nil
         realtimeClient.disconnect()
         coordinator.teardown()
         syncController.resetCompletely()
         clock.reset()
         participants = []
         chatMessages = []
+        reactions = []
         clientMessageIds.removeAll()
+        connectionState = .idle
     }
 
-    // MARK: - Host commands (host only)
+    // P0-31: subscribe to RealtimeClient.stateChanges
+    private func startStateChangesSubscription() {
+        stateChangesTask?.cancel()
+        stateChangesTask = Task { [weak self] in
+            guard let self else { return }
+            for await state in self.realtimeClient.stateChanges {
+                guard !Task.isCancelled else { return }
+                self.connectionState = state
+            }
+        }
+    }
 
-    public func sendPlayCommand(positionMs: Int64) {
+    // MARK: - Host commands (P0-33: functional with optimistic local apply)
+
+    public func sendPlayCommand() async {
         guard isHost else { return }
+        let positionMs = Int64((coordinator.position) * 1000)
+        // P0-33: optimistic local apply
+        await coordinator.currentController?.play()
         let actionId = UUID().uuidString
         realtimeClient.send(.syncCommand(.init(
             roomId: roomId,
             actionId: actionId,
-            mediaId: nil,
+            mediaId: mediaId,  // P1-33: typed mediaId
             positionMs: positionMs,
             playing: true
         )))
     }
 
-    public func sendPauseCommand(positionMs: Int64) {
+    public func sendPauseCommand() {
         guard isHost else { return }
+        let positionMs = Int64((coordinator.position) * 1000)
+        // P0-33: optimistic local apply
+        coordinator.currentController?.pause()
         let actionId = UUID().uuidString
         realtimeClient.send(.syncCommand(.init(
             roomId: roomId,
             actionId: actionId,
-            mediaId: nil,
+            mediaId: mediaId,
             positionMs: positionMs,
             playing: false
         )))
     }
 
-    public func sendSeekCommand(positionMs: Int64, playing: Bool) {
+    public func sendSeekCommand(to seconds: TimeInterval) async {
         guard isHost else { return }
+        let positionMs = Int64(seconds * 1000)
+        // P0-33: optimistic local seek
+        _ = await coordinator.currentController?.seek(to: seconds, precise: true)
         let actionId = UUID().uuidString
         realtimeClient.send(.syncCommand(.init(
             roomId: roomId,
             actionId: actionId,
-            mediaId: nil,
+            mediaId: mediaId,
             positionMs: positionMs,
-            playing: playing
+            playing: coordinator.isPlaying
         )))
     }
 
@@ -132,23 +181,20 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     public func sendChat(text: String) {
         let clientMessageId = UUID().uuidString
-        // Optimistic local add
         let optimistic = ChatMessageInfo(
             messageId: nil,
             clientMessageId: clientMessageId,
-            senderId: currentUserId ?? "",
-            senderName: currentUsername ?? "me",
+            senderId: currentUserId,  // P1-32: real identity
+            senderName: currentUsername,
             text: text,
             createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
             isPending: true
         )
         chatMessages.append(optimistic)
         clientMessageIds.insert(clientMessageId)
-        // Trim to maxMessages=200 (runbook §19)
         if chatMessages.count > 200 {
             chatMessages.removeFirst(chatMessages.count - 200)
         }
-        // Send to server — server will broadcast back with messageId
         realtimeClient.send(.chatSend(.init(
             roomId: roomId,
             clientMessageId: clientMessageId,
@@ -169,12 +215,20 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public func applySnapshot(_ state: RealtimeRoomState?) {
         guard let state = state else { return }
         Task { await syncController.apply(state) }
+        // P1-34: wire syncController metrics to UI
+        hardCorrectionCount = syncController.hardCorrectionCount
+        lastDriftMs = syncController.lastDriftMs
     }
 
-    public func sessionDidConnect() {
+    // P0-30: sessionDidConnect now carries role
+    public func sessionDidConnect(role: RoomRole) {
+        self.role = role
+        self.isHost = (role == .host)
         connectionState = .connected
-        // P1-11: request chat catch-up after reconnect
+        // P0-35: request chat catch-up after reconnect
         Task { await fetchChatCatchup() }
+        // P0-36: request presence snapshot
+        Task { await fetchPresenceSnapshot() }
     }
 
     public func handleOtherMessage(_ message: RealtimeServerMessage) {
@@ -189,27 +243,18 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             handleParticipantLeft(event)
         case .serverDraining(let drain):
             lastError = drain.message
-            // Reconnect will be triggered by RealtimeClient on close
         case .error(let err):
             lastError = "\(err.code): \(err.message)"
         case .syncState, .syncStateSnapshot, .clockProbeReply, .sessionReady:
-            // Handled by RealtimeClient directly
             break
         }
     }
 
     // MARK: - Private handlers
 
-    private var currentUserId: String?
-    private var currentUsername: String?
-
     private func handleChatBroadcast(_ chat: RealtimeServerMessage.ChatBroadcast) {
-        // P1-11: dedupe by clientMessageId — if we sent this optimistically,
-        // reconcile (replace pending with confirmed) instead of appending.
         if let cmid = chat.clientMessageId, clientMessageIds.contains(cmid) {
-            // Find optimistic message and mark as confirmed
             if let idx = chatMessages.firstIndex(where: { $0.clientMessageId == cmid }) {
-                let optimistic = chatMessages[idx]
                 chatMessages[idx] = ChatMessageInfo(
                     messageId: chat.messageId,
                     clientMessageId: cmid,
@@ -219,11 +264,11 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     createdAtMs: chat.createdAtMs,
                     isPending: false
                 )
-                _ = optimistic
             }
+            // P0-35: update cursor for confirmed own messages too
+            chatCatchupCursor = chat.messageId
             return
         }
-        // New message from another user
         let msg = ChatMessageInfo(
             messageId: chat.messageId,
             clientMessageId: chat.clientMessageId,
@@ -236,17 +281,25 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         chatMessages.append(msg)
         if let cmid = chat.clientMessageId { clientMessageIds.insert(cmid) }
         chatCatchupCursor = chat.messageId
-        // Trim to maxMessages=200
         if chatMessages.count > 200 {
             chatMessages.removeFirst(chatMessages.count - 200)
         }
     }
 
+    // P0-36: reaction stream — append to reactions array for UI
     private func handleReaction(_ reaction: RealtimeServerMessage.ReactionBroadcast) {
-        // UI layer (WatchRoomScreen) subscribes to reactionStream and displays
-        // flying emoji. We just forward — no state to track here.
-        // (Future: expose as AsyncStream)
-        lastError = nil  // clear error on activity
+        let event = ReactionEvent(
+            id: UUID(),
+            userId: reaction.userId,
+            username: reaction.username,
+            emoji: reaction.emoji,
+            timestampMs: reaction.serverTimeMs
+        )
+        reactions.append(event)
+        // Trim reactions to last 50
+        if reactions.count > 50 {
+            reactions.removeFirst(reactions.count - 50)
+        }
     }
 
     private func handleParticipantJoined(_ event: RealtimeServerMessage.ParticipantEvent) {
@@ -260,19 +313,53 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         participants.removeAll { $0.userId == event.userId }
     }
 
-    // MARK: - Chat catch-up (P1-11)
+    // MARK: - Chat catch-up (P0-35: implemented REST client)
 
-    /// After reconnect, fetch chat messages that may have been missed during
-    /// offline/PubSub outage. Uses REST endpoint with after-cursor.
     private func fetchChatCatchup() async {
-        // TODO: call GET /api/rooms/:id/messages?after=<chatCatchupCursor>
-        // For now, this is a stub — the REST endpoint must be implemented
-        // on the backend (P1-11 deferred item).
-        // When implemented:
-        //   1. Fetch messages after chatCatchupCursor
-        //   2. Filter out clientMessageIds already in clientMessageIds set
-        //   3. Append to chatMessages
-        //   4. Update chatCatchupCursor to last received messageId
+        guard let client = chatCatchupClient else { return }
+        do {
+            var cursor = chatCatchupCursor
+            repeat {
+                let response = try await client.fetchMessages(roomId: roomId, after: cursor)
+                for msg in response.messages {
+                    // Dedupe by clientMessageId
+                    if let cmid = msg.clientMessageId, clientMessageIds.contains(cmid) {
+                        continue
+                    }
+                    let info = ChatMessageInfo(
+                        messageId: msg.messageId,
+                        clientMessageId: msg.clientMessageId,
+                        senderId: msg.senderId,
+                        senderName: msg.senderName,
+                        text: msg.text,
+                        createdAtMs: msg.createdAtMs,
+                        isPending: false
+                    )
+                    chatMessages.append(info)
+                    if let cmid = msg.clientMessageId { clientMessageIds.insert(cmid) }
+                    cursor = msg.messageId
+                }
+                chatCatchupCursor = cursor
+                if chatMessages.count > 200 {
+                    chatMessages.removeFirst(chatMessages.count - 200)
+                }
+            } while response.hasMore
+        } catch {
+            lastError = "Chat catch-up failed: \(error.localizedDescription)"
+        }
+    }
+
+    // P0-36: presence snapshot — fetch current participants
+    private func fetchPresenceSnapshot() async {
+        guard let client = chatCatchupClient else { return }
+        do {
+            let snapshot = try await client.fetchParticipants(roomId: roomId)
+            participants = snapshot.map { p in
+                ParticipantInfo(userId: p.userId, username: p.username, isLocal: p.userId == currentUserId)
+            }
+        } catch {
+            // Non-fatal — participant events will still arrive
+        }
     }
 }
 
@@ -294,4 +381,39 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public let createdAtMs: Int64
     public let isPending: Bool
     public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
+}
+
+// P0-36: reaction event for UI
+public struct ReactionEvent: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let userId: String
+    public let username: String
+    public let emoji: String
+    public let timestampMs: Int64
+}
+
+// MARK: - P0-35: Chat catch-up REST client protocol
+
+public protocol ChatCatchupClient: Sendable {
+    func fetchMessages(roomId: String, after: String?) async throws -> ChatCatchupResponse
+    func fetchParticipants(roomId: String) async throws -> [ParticipantSnapshot]
+}
+
+public struct ChatCatchupResponse: Sendable, Equatable {
+    public let messages: [ChatCatchupMessage]
+    public let hasMore: Bool
+}
+
+public struct ChatCatchupMessage: Sendable, Equatable {
+    public let messageId: String
+    public let clientMessageId: String?
+    public let senderId: String
+    public let senderName: String
+    public let text: String
+    public let createdAtMs: Int64
+}
+
+public struct ParticipantSnapshot: Sendable, Equatable {
+    public let userId: String
+    public let username: String
 }

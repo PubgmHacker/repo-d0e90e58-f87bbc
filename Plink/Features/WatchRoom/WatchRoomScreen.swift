@@ -1,27 +1,14 @@
 // Plink/Features/WatchRoom/WatchRoomScreen.swift
-// Adaptive watch room UI (runbook §10, §21, Brain Review 4 P0-28)
+// Adaptive watch room UI (runbook §10, §21, Brain Review 5 P0-33, P0-34)
 //
-// Replaces legacy RoomView.swift (819 lines) with a stable component tree:
-//   - PlayerSurface (video)
-//   - PlayerControlsOverlay (host controls; viewer disabled)
-//   - ChatTimeline (messages list + composer)
-//   - ParticipantStrip (avatars)
-//   - ConnectionBanner (state indicator)
-//   - SyncIndicator (drift display)
+// Brain Review 5 fixes:
+//   P0-33: functional host controls — play/pause/seek with optimistic local apply
+//   P0-34: chat button opens sheet on iPhone
 //
 // Adaptive layout:
-//   - iPhone portrait: player on top, chat as slide-up sheet
+//   - iPhone portrait: player on top, chat as slide-up sheet (button to open)
 //   - iPhone landscape: player full-screen, chat overlay
 //   - iPad: split view — player leading, chat trailing column
-//
-// HIG compliance (runbook §10):
-//   - 44x44pt minimum touch targets
-//   - Dynamic Type support (no clipping)
-//   - VoiceOver labels for controls and sync status
-//   - Reduce Motion disables flying reactions
-//   - High contrast states not color-only
-//   - Controls auto-hide via cancellable Task
-//   - Reconnect banner does not cover video controls
 
 import SwiftUI
 
@@ -31,8 +18,9 @@ public struct WatchRoomScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showControls = true
-    @State private var chatSheetPresented = false
+    @State private var chatSheetPresented = false  // P0-34: now toggleable
     @State private var controlsHideTask: Task<Void, Never>?
+    @State private var seekPosition: Double = 0
 
     public init(model: WatchRoomModel) {
         self.model = model
@@ -41,10 +29,8 @@ public struct WatchRoomScreen: View {
     public var body: some View {
         Group {
             if sizeClass == .regular {
-                // iPad: split layout
                 iPadLayout
             } else {
-                // iPhone: adaptive portrait/landscape
                 iPhoneLayout
             }
         }
@@ -62,16 +48,16 @@ public struct WatchRoomScreen: View {
 
     private var iPadLayout: some View {
         HStack(spacing: 0) {
-            // Player (leading)
             VStack {
                 PlayerSurface(coordinator: model.coordinator)
                 if model.isHost {
-                    PlayerControlsOverlay(model: model, showControls: $showControls)
+                    PlayerControlsOverlay(model: model, showControls: $showControls, seekPosition: $seekPosition)
+                } else {
+                    ViewerControlsBar(model: model)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Chat trailing column
             ChatTimeline(messages: model.chatMessages, onSend: model.sendChat)
                 .frame(width: 360)
                 .background(Color(.systemBackground))
@@ -82,30 +68,43 @@ public struct WatchRoomScreen: View {
 
     private var iPhoneLayout: some View {
         ZStack {
-            // Player fills screen
             PlayerSurface(coordinator: model.coordinator)
                 .ignoresSafeArea()
 
-            // Controls overlay (host only; viewers see read-only state)
             if model.isHost {
-                PlayerControlsOverlay(model: model, showControls: $showControls)
+                PlayerControlsOverlay(model: model, showControls: $showControls, seekPosition: $seekPosition)
                     .opacity(showControls ? 1 : 0)
                     .animation(.easeInOut(duration: 0.2), value: showControls)
+            } else {
+                ViewerControlsBar(model: model)
+                    .opacity(showControls ? 1 : 0)
             }
 
-            // Top: connection banner
             VStack {
                 ConnectionBanner(state: model.connectionState, lastError: model.lastError)
                 Spacer()
+                // P0-34: bottom bar with chat button + participants
+                HStack {
+                    if !model.participants.isEmpty {
+                        ParticipantStrip(participants: model.participants)
+                    }
+                    Spacer()
+                    // P0-34: chat button — opens sheet
+                    Button(action: { chatSheetPresented = true }) {
+                        Image(systemName: "message.fill")
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.5), in: Circle())
+                    }
+                    .accessibilityLabel("Open chat")
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
 
-            // Bottom: chat button + participant strip
-            VStack {
-                Spacer()
-                if !model.participants.isEmpty {
-                    ParticipantStrip(participants: model.participants)
-                        .padding(.horizontal)
-                }
+            // P0-36: reaction overlay
+            if !model.reactions.isEmpty {
+                ReactionOverlayView(reactions: model.reactions, reduceMotion: reduceMotion)
             }
         }
         .onTapGesture {
@@ -131,36 +130,72 @@ public struct WatchRoomScreen: View {
     }
 }
 
-// MARK: - Subviews (defined in separate files for clarity)
+// MARK: - P0-33: Functional host controls
 
 struct PlayerControlsOverlay: View {
     let model: WatchRoomModel
     @Binding var showControls: Bool
+    @Binding var seekPosition: Double
 
     var body: some View {
         VStack {
             Spacer()
             HStack(spacing: 32) {
-                if model.isHost {
-                    Button(action: { /* model.sendPauseCommand */ }) {
-                        Image(systemName: "pause.fill")
-                            .font(.title)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Pause")
-                    Button(action: { /* model.sendPlayCommand */ }) {
-                        Image(systemName: "play.fill")
-                            .font(.title)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Play")
-                } else {
-                    Text("Viewer — host controls playback")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                // P0-33: functional play/pause buttons
+                Button(action: {
+                    Task { await model.sendPauseCommand() }
+                }) {
+                    Image(systemName: "pause.fill")
+                        .font(.title)
+                        .frame(width: 44, height: 44)
                 }
+                .accessibilityLabel("Pause")
+
+                Button(action: {
+                    Task { await model.sendPlayCommand() }
+                }) {
+                    Image(systemName: "play.fill")
+                        .font(.title)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Play")
+
                 Spacer()
-                SyncIndicator(driftMs: 0, synced: model.clockSynced)
+
+                // P0-33: seek slider
+                Slider(value: $seekPosition, in: 0...max(model.coordinator.duration, 1), onEditingChanged: { editing in
+                    if !editing {
+                        Task { await model.sendSeekCommand(to: seekPosition) }
+                    }
+                })
+                .frame(width: 120)
+                .accessibilityLabel("Seek position")
+
+                SyncIndicator(driftMs: model.lastDriftMs, synced: model.clockSynced)
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding()
+        }
+        .onAppear {
+            seekPosition = model.coordinator.position
+        }
+    }
+}
+
+// P0-33: viewer controls — read-only, no play/pause/seek
+struct ViewerControlsBar: View {
+    let model: WatchRoomModel
+
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Text("Viewer — host controls playback")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                SyncIndicator(driftMs: model.lastDriftMs, synced: model.clockSynced)
             }
             .padding()
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -240,11 +275,11 @@ struct SyncIndicator: View {
             Text(synced ? "Synced" : "Syncing")
                 .font(.caption2)
         }
-        .accessibilityLabel(synced ? "Clock synchronized" : "Clock synchronizing")
+        .accessibilityLabel(synced ? "Clock synchronized, drift \(Int(driftMs))ms" : "Clock synchronizing")
     }
 }
 
-// MARK: - ChatTimeline (simplified — full version in ChatTimeline.swift)
+// MARK: - ChatTimeline
 
 struct ChatTimeline: View {
     let messages: [ChatMessageInfo]
@@ -282,5 +317,24 @@ struct ChatTimeline: View {
             }
             .padding()
         }
+    }
+}
+
+// P0-36: Reaction overlay
+struct ReactionOverlayView: View {
+    let reactions: [ReactionEvent]
+    let reduceMotion: Bool
+
+    var body: some View {
+        ZStack {
+            ForEach(reactions.suffix(5)) { reaction in
+                Text(reaction.emoji)
+                    .font(.largeTitle)
+                    .offset(x: reduceMotion ? 0 : CGFloat.random(in: -100...100),
+                            y: reduceMotion ? 0 : CGFloat.random(in: -200...(-50)))
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

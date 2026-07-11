@@ -87,7 +87,13 @@ public struct RealtimeTicket: Sendable, Equatable {
     }
 }
 
-// MARK: - Delegate protocol
+// P0-30: typed RoomRole — not raw String
+public enum RoomRole: String, Sendable, Equatable, Codable {
+    case host
+    case viewer
+}
+
+// MARK: - Delegate protocol (P0-30: sessionDidConnect now carries role)
 @MainActor
 public protocol RealtimeClientDelegate: AnyObject {
     var roomId: String? { get }
@@ -95,7 +101,8 @@ public protocol RealtimeClientDelegate: AnyObject {
     var lastSeq: Int64 { get }
     func ingestClockProbe(clientSentMs: Double, serverMs: Double, clientReceivedMs: Double)
     func applySnapshot(_ state: RealtimeRoomState?)
-    func sessionDidConnect()
+    /// P0-30: role from session.ready — host or viewer
+    func sessionDidConnect(role: RoomRole)
     func handleOtherMessage(_ message: RealtimeServerMessage)
 }
 
@@ -107,6 +114,8 @@ public final class RealtimeClient: NSObject {
     public private(set) var lastError: String?
     public private(set) var clockSynced: Bool = false
     public private(set) var snapshotReceived: Bool = false
+    // P0-30: role from session.ready — exposed to delegate via sessionDidConnect(role:)
+    public private(set) var role: RoomRole = .viewer
 
     private var messageSinks: [MessageSink] = []
     private var stateSinks: [StateSink] = []
@@ -340,6 +349,8 @@ public final class RealtimeClient: NSObject {
 
     private func handleSessionReady(_ ready: RealtimeServerMessage.SessionReady, generation: UUID) {
         guard generation == self.generation else { return }
+        // P0-30: store role from session.ready for sessionDidConnect(role:)
+        self.role = RoomRole(rawValue: ready.role) ?? .viewer
         setState(.synchronizing)
         startClockProbes(generation: generation)
         startClockTimeout(generation: generation)
@@ -373,7 +384,8 @@ public final class RealtimeClient: NSObject {
         snapshotTimeoutTask = nil
         if state != .connected {
             setState(.connected)
-            delegate?.sessionDidConnect()
+            // P0-30: pass role to delegate — host or viewer
+            delegate?.sessionDidConnect(role: self.role)
             reconnectAttempt = 0
         }
     }
@@ -403,6 +415,9 @@ public final class RealtimeClient: NSObject {
             }
         }
     }
+
+    // P0-31: handshake timeout — was previously in startHandshakeTimeout,
+    // now split into clock + snapshot timeouts above.
 
     private func handleReceiveError(_ error: Error) {
         let nsError = error as NSError

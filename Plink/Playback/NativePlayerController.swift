@@ -37,9 +37,16 @@ public final class NativePlayerController: PlaybackControlling {
     private var likelyKeepUpObservation: NSKeyValueObservation?
     private var isPlaybackBufferEmptyObservation: NSKeyValueObservation?
 
-    // P1-23/P0-27: serial latest-target seek coordinator with SeekResult
+    // P0-32/P0-27: serial latest-target seek coordinator with SeekResult.
+    // activeSeek is the seek currently being executed by AVPlayer — its
+    // continuation resumes EXACTLY ONCE on completion.
+    // queuedSeek is the latest pending seek — superseded by a newer seek.
+    // Double-resume crash fixed: active and queued are separate, never
+    // overlap.
     private var seekGeneration = 0
     private var pendingSeekTask: Task<Void, Never>?
+    private var activeSeek: SeekWaiter?
+    private var queuedSeek: SeekWaiter?
 
     // P1-17/P1-24: preroll state — only preroll after prepare, not every play()
     // P1-24: seek invalidates isPrerolled only for precise transition seeks
@@ -96,16 +103,15 @@ public final class NativePlayerController: PlaybackControlling {
         isPlaying = false
     }
 
-    // P0-27/P1-23: serial latest-target seek with SeekResult.
-    // Each caller gets a continuation. When their target is executed,
-    // their continuation resumes with .applied. If a newer seek supersedes
-    // them before execution, their continuation resumes with .superseded.
+    // P0-32/P0-27: serial latest-target seek with SeekResult.
+    // activeSeek: currently executing — resumed EXACTLY ONCE on completion.
+    // queuedSeek: latest pending — superseded by newer seek (resumed once).
+    // Double-resume crash fixed: active and queued are SEPARATE.
     private struct SeekWaiter {
         let id: UUID
         let target: (seconds: TimeInterval, precise: Bool)
         let continuation: CheckedContinuation<SeekResult, Never>
     }
-    private var seekWaiters: [SeekWaiter] = []
 
     public func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult {
         guard let p = player else { return .applied }
@@ -118,40 +124,37 @@ public final class NativePlayerController: PlaybackControlling {
             clamped = seconds
         }
 
-        // P0-27: resume all previous waiters with .superseded — their
-        // target will NOT be executed because this newer seek takes over.
-        let superseded = seekWaiters
-        seekWaiters.removeAll()
-        for waiter in superseded {
-            waiter.continuation.resume(returning: .superseded)
+        // P0-32: if there's a queuedSeek (not yet started), resume it as superseded
+        if let queued = queuedSeek {
+            queuedSeek = nil
+            queued.continuation.resume(returning: .superseded)
         }
 
-        // P0-27: add ourselves as a waiter
+        // P0-32: this seek becomes the new queuedSeek
         return await withCheckedContinuation { (continuation: CheckedContinuation<SeekResult, Never>) in
             let waiter = SeekWaiter(id: UUID(), target: (clamped, precise), continuation: continuation)
-            seekWaiters.append(waiter)
+            self.queuedSeek = waiter
 
-            // If no seek is in progress, start executing
-            if pendingSeekTask == nil {
-                Task { await executeNextSeek(p) }
+            // If no active seek, start executing immediately
+            if self.activeSeek == nil {
+                Task { await self.executeNextSeek(p) }
             }
         }
     }
 
     private func executeNextSeek(_ p: AVPlayer) async {
-        while !seekWaiters.isEmpty {
-            // P0-27: take the LATEST waiter — latest-wins semantics
-            guard let waiter = seekWaiters.last else { return }
-            // Remove all waiters EXCEPT the one we're executing — if a new
-            // seek arrives during execution, it becomes a new waiter.
-            seekWaiters.removeAll { $0.id != waiter.id }
+        // P0-32: loop while there's a queued seek to execute
+        while let queued = queuedSeek {
+            // P0-32: promote queued → active (remove from queued FIRST)
+            queuedSeek = nil
+            activeSeek = queued
 
             seekGeneration += 1
             let generation = seekGeneration
             p.cancelPendingPrerolls()
 
-            let cmTarget = CMTime(seconds: waiter.target.seconds, preferredTimescale: 600)
-            let tolerance: CMTime = waiter.target.precise
+            let cmTarget = CMTime(seconds: queued.target.seconds, preferredTimescale: 600)
+            let tolerance: CMTime = queued.target.precise
                 ? .zero
                 : CMTime(seconds: 0.15, preferredTimescale: 600)
 
@@ -169,7 +172,7 @@ public final class NativePlayerController: PlaybackControlling {
                       let self else { return }
                 guard generation == self.seekGeneration else { return }
                 // P1-24: only invalidate isPrerolled for precise transition seeks
-                if waiter.target.precise {
+                if queued.target.precise {
                     self.isPrerolled = false
                 }
             }
@@ -178,8 +181,11 @@ public final class NativePlayerController: PlaybackControlling {
                 pendingSeekTask = nil
             }
 
-            // P0-27: resume this waiter with .applied — their seek completed
-            waiter.continuation.resume(returning: .applied)
+            // P0-32: resume activeSeek EXACTLY ONCE as .applied
+            // Clear activeSeek BEFORE resume to prevent double-resume
+            let completed = activeSeek
+            activeSeek = nil
+            completed?.continuation.resume(returning: .applied)
         }
     }
 
@@ -189,15 +195,18 @@ public final class NativePlayerController: PlaybackControlling {
     }
 
     public func teardown() {
-        // P0-27/P1-23: cancel pending seek + resume all waiters as superseded
+        // P0-32: cancel pending seek + resume active/queued exactly once
         seekGeneration += 1
         pendingSeekTask?.cancel()
         pendingSeekTask = nil
-        // P0-27: resume all pending waiters — they'll never complete otherwise
-        let pending = seekWaiters
-        seekWaiters.removeAll()
-        for waiter in pending {
-            waiter.continuation.resume(returning: .superseded)
+        // P0-32: resume activeSeek and queuedSeek exactly once as .superseded
+        if let active = activeSeek {
+            activeSeek = nil
+            active.continuation.resume(returning: .superseded)
+        }
+        if let queued = queuedSeek {
+            queuedSeek = nil
+            queued.continuation.resume(returning: .superseded)
         }
         player?.cancelPendingPrerolls()
 

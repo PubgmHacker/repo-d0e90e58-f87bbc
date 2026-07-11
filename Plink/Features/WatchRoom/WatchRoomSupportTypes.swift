@@ -282,7 +282,7 @@ struct RoomIdentityBar: View {
 
     var body: some View {
         HStack {
-            Text(model.roomId.isEmpty ? "Plink Room" : "Room")
+            Text((model.roomId ?? "Plink Room"))
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(PlinkRave.text)
             Spacer()

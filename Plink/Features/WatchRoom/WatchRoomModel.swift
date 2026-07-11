@@ -266,8 +266,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // P0-54: clear pending action when authoritative state arrives
     private func clearPendingActionsIfConfirmed(state: RealtimeRoomState) {
-        // If authoritative state matches our intent, clear pending actions
-        pendingActions = pendingActions.filter { action in
+        // Clear confirmed/stale pending actions
+        pendingActions = pendingActions.filter { (_, action) in
             Date().timeIntervalSince(action.timestamp) < Double(Self.actionTimeoutMs / 1000)
         }
     }

@@ -276,7 +276,7 @@ public final class RealtimeClient: NSObject {
         var components = URLComponents(url: baseEndpoint, resolvingAgainstBaseURL: false)
         guard let scheme = components?.scheme,
               scheme == "ws" || scheme == "wss",
-              let host = components?.host else {
+              components?.host != nil else {
             throw NSError(domain: "RealtimeClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "baseEndpoint must be ws:// or wss://"])
         }
         var path = components?.path ?? ""

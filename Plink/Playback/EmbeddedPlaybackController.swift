@@ -137,19 +137,23 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         guard ready else { pendingSeekSeconds = seconds; return .applied }
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
         guard let web = webView else { return .applied }
+        // callAsyncJavaScript may not throw on all platforms — use do/catch
+        // defensively, but compiler may warn if it doesn't throw.
+        let result: Any?
         do {
-            _ = try await web.callAsyncJavaScript(
+            result = try await web.callAsyncJavaScript(
                 "ytPlayer && ytPlayer.seekTo(seconds, true);",
                 arguments: ["seconds": clamped],
                 in: nil,
                 in: .page
             )
-            position = clamped
-            return .applied
         } catch {
             lastError = "seek failed: \(error.localizedDescription)"
-            return .applied  // P0-27: still resume — don't block caller
+            return .applied
         }
+        _ = result
+        position = clamped
+        return .applied
     }
 
     public func setRate(_ rate: Float) {

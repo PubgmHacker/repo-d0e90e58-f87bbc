@@ -144,7 +144,7 @@ struct PlayerControlsOverlay: View {
             HStack(spacing: 32) {
                 // P0-33: functional play/pause buttons
                 Button(action: {
-                    Task { await model.sendPauseCommand() }
+                    Task { model.sendPauseCommand() }
                 }) {
                     Image(systemName: "pause.fill")
                         .font(.title)

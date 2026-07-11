@@ -102,11 +102,10 @@ public struct WatchRoomScreen: View {
                 .padding(.bottom, 8)
             }
 
-            // P0-36: reaction overlay — temporarily disabled (reactions array
-            // removed from WatchRoomModel to resolve @Observable macro ambiguity)
-            // if !model.reactions.isEmpty {
-            //     ReactionOverlayView(reactions: model.reactions)
-            // }
+            // P1-51: reaction overlay — re-enabled with WatchReactionEvent
+            if !model.reactions.isEmpty {
+                WatchReactionOverlay(reactions: model.reactions)
+            }
         }
         .onTapGesture {
             toggleControls()
@@ -137,40 +136,42 @@ struct PlayerControlsOverlay: View {
     let model: WatchRoomModel
     @Binding var showControls: Bool
     @Binding var seekPosition: Double
+    @State private var isDragging = false
+    // P1-52: periodic position tracking
+    @State private var positionTimer: Timer?
 
     var body: some View {
         VStack {
             Spacer()
             HStack(spacing: 32) {
-                // P0-33: functional play/pause buttons
+                // P1-53: single play/pause toggle based on actual state
                 Button(action: {
-                    Task { model.sendPauseCommand() }
+                    if model.coordinator.isPlaying {
+                        model.sendPauseCommand()
+                    } else {
+                        Task { await model.sendPlayCommand() }
+                    }
                 }) {
-                    Image(systemName: "pause.fill")
+                    Image(systemName: model.coordinator.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title)
                         .frame(width: 44, height: 44)
                 }
-                .accessibilityLabel("Pause")
-
-                Button(action: {
-                    Task { await model.sendPlayCommand() }
-                }) {
-                    Image(systemName: "play.fill")
-                        .font(.title)
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("Play")
+                .accessibilityLabel(model.coordinator.isPlaying ? "Pause" : "Play")
+                // P1-53: disable while disconnected/synchronizing/buffering
+                .disabled(model.connectionState != .connected || model.coordinator.isBuffering)
 
                 Spacer()
 
-                // P0-33: seek slider
+                // P1-52: seek slider — tracks player position while not dragging
                 Slider(value: $seekPosition, in: 0...max(model.coordinator.duration, 1), onEditingChanged: { editing in
+                    isDragging = editing
                     if !editing {
                         Task { await model.sendSeekCommand(to: seekPosition) }
                     }
                 })
                 .frame(width: 120)
                 .accessibilityLabel("Seek position")
+                .disabled(model.connectionState != .connected)
 
                 SyncIndicator(driftMs: model.lastDriftMs, synced: model.clockSynced)
             }
@@ -180,6 +181,22 @@ struct PlayerControlsOverlay: View {
         }
         .onAppear {
             seekPosition = model.coordinator.position
+            startPositionTracking()
+        }
+        .onDisappear {
+            positionTimer?.invalidate()
+        }
+    }
+
+    // P1-52: track player position while not dragging
+    private func startPositionTracking() {
+        positionTimer?.invalidate()
+        positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor in
+                if !isDragging {
+                    seekPosition = model.coordinator.position
+                }
+            }
         }
     }
 }
@@ -321,5 +338,18 @@ struct ChatTimeline: View {
     }
 }
 
-// P0-36: Reaction overlay — uses existing ReactionOverlayView from Views/Room/
-// (defined in Plink/Views/Room/ReactionOverlayView.swift)
+// P1-51: WatchReactionOverlay — uses WatchReactionEvent (not legacy ReactionEvent)
+struct WatchReactionOverlay: View {
+    let reactions: [WatchReactionEvent]
+
+    var body: some View {
+        ZStack {
+            ForEach(reactions.suffix(5)) { reaction in
+                Text(reaction.emoji)
+                    .font(.largeTitle)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}

@@ -18,6 +18,7 @@ import Foundation
 public enum SeekResult: Sendable, Equatable {
     case applied
     case superseded
+    case unavailable  // P0-53: proxy has no target — player not ready
 }
 
 @MainActor

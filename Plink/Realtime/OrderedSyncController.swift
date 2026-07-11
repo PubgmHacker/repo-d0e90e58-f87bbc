@@ -112,7 +112,10 @@ public final class OrderedSyncController {
             // next action — we must NOT call play() on stale target.
             let seekResult = await player.seek(to: target, precise: true)
             if seekResult == .superseded {
-                // A newer seek took over — abandon this transition.
+                return
+            }
+            if seekResult == .unavailable {
+                // P0-53: proxy has no target — skip transition, state will replay
                 return
             }
             if state.playing {
@@ -131,7 +134,7 @@ public final class OrderedSyncController {
             if absDrift >= 80 {
                 cancelRateCorrection()
                 let seekResult = await player.seek(to: target, precise: true)
-                if seekResult == .superseded { return }  // P0-27
+                if seekResult == .superseded || seekResult == .unavailable { return }  // P0-27, P0-53
                 player.setRate(Float(state.rate))
             }
             return
@@ -188,10 +191,9 @@ public final class OrderedSyncController {
             return
         }
         if correctionWindowCount >= 3 {
-            // Give up on rate nudge — precise seek
             cancelRateCorrection()
             let seekResult = await player.seek(to: target, precise: true)
-            if seekResult == .superseded { return }  // P0-27
+            if seekResult == .superseded || seekResult == .unavailable { return }  // P0-27, P0-53
             player.setRate(baseRate)
             hardCorrectionCount += 1
             correctionWindowCount = 0

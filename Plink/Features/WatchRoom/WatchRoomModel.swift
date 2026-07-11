@@ -30,9 +30,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public private(set) var clockSynced: Bool = false
     public private(set) var hardCorrectionCount: Int = 0
     public private(set) var lastDriftMs: Double = 0
-    // P0-36: reactions — temporarily removed to resolve @Observable macro
-    // ambiguity with existing ReactionEvent from SyncEvents.swift.
-    // Will re-add in follow-up commit with explicit type resolution.
+    // P1-51: reactions — renamed to WatchReactionEvent to avoid @Observable
+    // macro type ambiguity with existing ReactionEvent from SyncEvents.swift
+    public private(set) var reactions: [WatchReactionEvent] = []
 
     // MARK: - Owned components
     public let realtimeClient: RealtimeClient
@@ -52,6 +52,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     private var chatCatchupCursor: String?
     private var clientMessageIds = Set<String>()
     private var stateChangesTask: Task<Void, Never>?
+    // P0-52: serial state pump — enqueue states, await each apply in order
+    private var statePumpTask: Task<Void, Never>?
+    private var pendingStates: [RealtimeRoomState] = []
 
     // P0-35: REST client for chat catch-up
     private let chatCatchupClient: ChatCatchupClient?
@@ -100,10 +103,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         if let source = mediaSource {
             do {
                 try await coordinator.prepare(source)
-                // P0-29: wire proxy to the now-prepared real controller
-                playbackProxy.target = coordinator.currentController
+                // P0-29/P0-53: wire proxy to the now-prepared real controller
+                playbackProxy.attachTarget(coordinator.currentController)
             } catch {
-                // P1-36: prepare failed — don't connect realtime, show error
                 lastError = "Media prepare failed: \(error.localizedDescription)"
                 connectionState = .failed(reason: "Media prepare failed")
                 return
@@ -115,12 +117,17 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public func disconnect() {
         stateChangesTask?.cancel()
         stateChangesTask = nil
+        statePumpTask?.cancel()
+        statePumpTask = nil
+        pendingStates.removeAll()
+        pendingActions.removeAll()
         realtimeClient.disconnect()
         coordinator.teardown()
         syncController.resetCompletely()
         clock.reset()
         participants = []
         chatMessages = []
+        reactions = []
         clientMessageIds.removeAll()
         connectionState = .idle
     }
@@ -137,29 +144,58 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
-    // MARK: - Host commands (P0-33: functional with optimistic local apply)
+    // P0-54: pending actions for reconciliation/rollback
+    private struct PendingAction {
+        let actionId: String
+        let preActionPosition: Double
+        let preActionPlaying: Bool
+        let timestamp: Date
+    }
+    private var pendingActions: [String: PendingAction] = [:]
+    private static let actionTimeoutMs: Int64 = 10_000
+
+    // MARK: - Host commands (P0-33: functional with optimistic local apply + P0-54: reconciliation)
 
     public func sendPlayCommand() async {
         guard isHost else { return }
         let positionMs = Int64((coordinator.position) * 1000)
+        let prePosition = coordinator.position
+        let prePlaying = coordinator.isPlaying
         // P0-33: optimistic local apply
         await coordinator.currentController?.play()
         let actionId = UUID().uuidString
+        // P0-54: track pending action for rollback
+        pendingActions[actionId] = PendingAction(
+            actionId: actionId,
+            preActionPosition: prePosition,
+            preActionPlaying: prePlaying,
+            timestamp: Date()
+        )
         realtimeClient.send(.syncCommand(.init(
             roomId: _roomId,
             actionId: actionId,
-            mediaId: mediaId,  // P1-33: typed mediaId
+            mediaId: mediaId,
             positionMs: positionMs,
             playing: true
         )))
+        scheduleActionTimeout(actionId)
     }
 
     public func sendPauseCommand() {
         guard isHost else { return }
         let positionMs = Int64((coordinator.position) * 1000)
+        let prePosition = coordinator.position
+        let prePlaying = coordinator.isPlaying
         // P0-33: optimistic local apply
         coordinator.currentController?.pause()
         let actionId = UUID().uuidString
+        // P0-54: track pending action
+        pendingActions[actionId] = PendingAction(
+            actionId: actionId,
+            preActionPosition: prePosition,
+            preActionPlaying: prePlaying,
+            timestamp: Date()
+        )
         realtimeClient.send(.syncCommand(.init(
             roomId: _roomId,
             actionId: actionId,
@@ -167,14 +203,24 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             positionMs: positionMs,
             playing: false
         )))
+        scheduleActionTimeout(actionId)
     }
 
     public func sendSeekCommand(to seconds: TimeInterval) async {
         guard isHost else { return }
         let positionMs = Int64(seconds * 1000)
+        let prePosition = coordinator.position
+        let prePlaying = coordinator.isPlaying
         // P0-33: optimistic local seek
         _ = await coordinator.currentController?.seek(to: seconds, precise: true)
         let actionId = UUID().uuidString
+        // P0-54: track pending action
+        pendingActions[actionId] = PendingAction(
+            actionId: actionId,
+            preActionPosition: prePosition,
+            preActionPlaying: prePlaying,
+            timestamp: Date()
+        )
         realtimeClient.send(.syncCommand(.init(
             roomId: _roomId,
             actionId: actionId,
@@ -182,6 +228,48 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             positionMs: positionMs,
             playing: coordinator.isPlaying
         )))
+        scheduleActionTimeout(actionId)
+    }
+
+    // P0-54: rollback on server error
+    private func handleActionRejection(_ errorCode: String) {
+        // Rollback all pending actions — request fresh snapshot
+        for (_, action) in pendingActions {
+            Task {
+                _ = await coordinator.currentController?.seek(to: action.preActionPosition, precise: true)
+                if action.preActionPlaying {
+                    await coordinator.currentController?.play()
+                } else {
+                    coordinator.currentController?.pause()
+                }
+            }
+        }
+        pendingActions.removeAll()
+        // P0-54: request fresh snapshot to reconcile
+        if let roomId = realtimeClient.delegate?.roomId {
+            realtimeClient.send(.stateRequest(.init(roomId: roomId, afterSeq: lastSeq)))
+        }
+        lastError = "Command rejected: \(errorCode) — state rolled back"
+    }
+
+    // P0-54: timeout pending actions
+    private func scheduleActionTimeout(_ actionId: String) {
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.actionTimeoutMs) * 1_000_000)
+            guard let self else { return }
+            if self.pendingActions[actionId] != nil {
+                self.pendingActions.removeValue(forKey: actionId)
+                self.lastError = "Command timeout — no server confirmation"
+            }
+        }
+    }
+
+    // P0-54: clear pending action when authoritative state arrives
+    private func clearPendingActionsIfConfirmed(state: RealtimeRoomState) {
+        // If authoritative state matches our intent, clear pending actions
+        pendingActions = pendingActions.filter { action in
+            Date().timeIntervalSince(action.timestamp) < Double(Self.actionTimeoutMs / 1000)
+        }
     }
 
     // MARK: - Chat (optimistic + reconciliation)
@@ -223,12 +311,28 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         clockSynced = clock.isSynchronized
     }
 
+    // P0-52: serial state pump — enqueue state, process in order
     public func applySnapshot(_ state: RealtimeRoomState?) {
         guard let state = state else { return }
-        Task { await syncController.apply(state) }
-        // P1-34: wire syncController metrics to UI
-        hardCorrectionCount = syncController.hardCorrectionCount
-        lastDriftMs = syncController.lastDriftMs
+        pendingStates.append(state)
+        startStatePumpIfNeeded()
+    }
+
+    private func startStatePumpIfNeeded() {
+        guard statePumpTask == nil, !pendingStates.isEmpty else { return }
+        statePumpTask = Task { [weak self] in
+            guard let self else { return }
+            while !self.pendingStates.isEmpty && !Task.isCancelled {
+                let state = self.pendingStates.removeFirst()
+                await self.syncController.apply(state)
+                // P1-34: update UI metrics AFTER each apply completes
+                self.hardCorrectionCount = self.syncController.hardCorrectionCount
+                self.lastDriftMs = self.syncController.lastDriftMs
+                // P0-54: clear confirmed pending actions
+                self.clearPendingActionsIfConfirmed(state: state)
+            }
+            self.statePumpTask = nil
+        }
     }
 
     // P0-30: sessionDidConnect now carries role
@@ -256,6 +360,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             lastError = drain.message
         case .error(let err):
             lastError = "\(err.code): \(err.message)"
+            // P0-54: rollback on rejection errors
+            if err.code == "NOT_HOST" || err.code == "STALE_EPOCH" || err.code == "RATE_LIMITED" {
+                handleActionRejection(err.code)
+            }
         case .syncState, .syncStateSnapshot, .clockProbeReply, .sessionReady:
             break
         }
@@ -297,10 +405,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
-    // P0-36: reaction handler — reactions array temporarily removed
-    // (will re-add when @Observable macro ambiguity is resolved)
+    // P1-51: reaction handler — uses WatchReactionEvent (renamed to avoid ambiguity)
     private func handleReaction(_ reaction: RealtimeServerMessage.ReactionBroadcast) {
-        // No-op for now — reaction overlay will be wired in follow-up commit
+        let event = WatchReactionEvent(
+            id: UUID(),
+            userId: reaction.userId,
+            username: reaction.username,
+            emoji: reaction.emoji,
+            timestampMs: reaction.serverTimeMs
+        )
+        reactions.append(event)
+        if reactions.count > 50 {
+            reactions.removeFirst(reactions.count - 50)
+        }
     }
 
     private func handleParticipantJoined(_ event: RealtimeServerMessage.ParticipantEvent) {
@@ -321,13 +438,26 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         do {
             var cursor = chatCatchupCursor
             var hasMore = true
-            while hasMore {
+            var pageCount = 0
+            let maxPages = 20  // P0-51: cap pages to prevent infinite loop
+            var seenMessageIds = Set<String>()  // P0-51: dedupe by messageId
+
+            while hasMore && pageCount < maxPages {
                 let response = try await client.fetchMessages(roomId: _roomId, after: cursor)
+                pageCount += 1
+
+                var newCursor = cursor
+                var addedAny = false
+
                 for msg in response.messages {
-                    // Dedupe by clientMessageId
+                    // P0-51: dedupe by messageId (authoritative), not just clientMessageId
+                    if seenMessageIds.contains(msg.messageId) { continue }
                     if let cmid = msg.clientMessageId, clientMessageIds.contains(cmid) {
+                        seenMessageIds.insert(msg.messageId)
                         continue
                     }
+                    seenMessageIds.insert(msg.messageId)
+
                     let info = ChatMessageInfo(
                         messageId: msg.messageId,
                         clientMessageId: msg.clientMessageId,
@@ -339,9 +469,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     )
                     chatMessages.append(info)
                     if let cmid = msg.clientMessageId { clientMessageIds.insert(cmid) }
-                    cursor = msg.messageId
+                    newCursor = msg.messageId
+                    addedAny = true
                 }
+
+                // P0-51: unchanged-cursor guard — if cursor didn't advance and
+                // hasMore is true, break to prevent infinite loop
+                if newCursor == cursor && response.hasMore && !addedAny {
+                    break
+                }
+
+                cursor = newCursor
                 chatCatchupCursor = cursor
+
                 if chatMessages.count > 200 {
                     chatMessages.removeFirst(chatMessages.count - 200)
                 }
@@ -384,6 +524,15 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public let createdAtMs: Int64
     public let isPending: Bool
     public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
+}
+
+// P1-51: renamed from ReactionEvent to avoid @Observable macro ambiguity
+public struct WatchReactionEvent: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let userId: String
+    public let username: String
+    public let emoji: String
+    public let timestampMs: Int64
 }
 
 // MARK: - P0-35: Chat catch-up REST client protocol

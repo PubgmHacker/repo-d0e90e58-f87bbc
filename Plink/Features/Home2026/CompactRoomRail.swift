@@ -258,3 +258,61 @@ struct FeaturedRoomBanner: View {
         .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
     }
 }
+
+// MARK: - Trending Rail (YouTube videos)
+
+struct TrendingRail: View {
+    let title: String
+    let videos: [YouTubeVideoSummary]
+    let onSelect: (YouTubeVideoSummary) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Cinema2026.text)
+                Spacer()
+                Text("\(videos.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Cinema2026.secondary)
+            }
+            .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: CompactPhoneMetrics.railSpacing) {
+                    ForEach(videos) { video in
+                        Button {
+                            onSelect(video)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                AsyncImage(url: URL(string: video.thumbnailURLString ?? "")) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Rectangle().fill(Cinema2026.surface)
+                                }
+                                .frame(width: CompactPhoneMetrics.posterWidth,
+                                       height: CGFloat(CompactPhoneMetrics.posterWidth) / 0.70)
+                                .clipShape(RoundedRectangle(cornerRadius: CompactPhoneMetrics.posterRadius))
+
+                                Text(video.title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(Cinema2026.text)
+                                    .lineLimit(2)
+                                    .frame(width: CompactPhoneMetrics.posterWidth, alignment: .leading)
+
+                                Text(video.channelTitle)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Cinema2026.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+}

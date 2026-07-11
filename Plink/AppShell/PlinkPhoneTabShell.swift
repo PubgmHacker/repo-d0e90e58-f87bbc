@@ -11,6 +11,7 @@ struct PlinkPhoneTabShell: View {
 
     @State private var navigateToRoom: Room?
     @State private var homeViewModel: HomeViewModel?
+    @State private var trendingVideos: [YouTubeVideoSummary] = []
 
     var body: some View {
         TabView(selection: $selection) {
@@ -67,11 +68,7 @@ struct PlinkPhoneTabShell: View {
                 }
 
                 if let vm = homeViewModel {
-                    if vm.activeRooms.isEmpty {
-                        CompactNoLiveRoomsState {
-                            createPresented = true
-                        }
-                    } else {
+                    if !vm.activeRooms.isEmpty {
                         // Featured hero — first active room as large banner
                         if let firstRoom = vm.activeRooms.first {
                             FeaturedRoomBanner(room: firstRoom) {
@@ -86,16 +83,17 @@ struct PlinkPhoneTabShell: View {
                             style: .landscape,
                             open: { navigateToRoom = $0 }
                         )
+                    }
 
-                        // Editorial — same rooms in poster style for variety
-                        if vm.activeRooms.count > 1 {
-                            CompactRoomRail(
-                                title: "Подборки",
-                                rooms: Array(vm.activeRooms.dropFirst()),
-                                style: .poster,
-                                open: { navigateToRoom = $0 }
-                            )
-                        }
+                    // Trending подборки — ALWAYS visible (even without active rooms)
+                    if !trendingVideos.isEmpty {
+                        TrendingRail(
+                            title: "Популярное на YouTube",
+                            videos: trendingVideos,
+                            onSelect: { video in
+                                createPresented = true
+                            }
+                        )
                     }
                 } else {
                     ProgressView()
@@ -109,17 +107,6 @@ struct PlinkPhoneTabShell: View {
         .scrollIndicators(.hidden)
         .background(Cinema2026.background)
         .navigationTitle("")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    createPresented = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Cinema2026.accent)
-                }
-            }
-        }
         .task {
             if homeViewModel == nil {
                 homeViewModel = HomeViewModel(
@@ -128,6 +115,10 @@ struct PlinkPhoneTabShell: View {
                 )
                 await homeViewModel?.loadRooms()
                 await homeViewModel?.loadMyRooms()
+            }
+            // Load trending for подборки
+            if trendingVideos.isEmpty {
+                await loadTrending()
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -203,6 +194,18 @@ struct PlinkPhoneTabShell: View {
         .fullScreenCover(item: $navigateToRoom) { room in
             watchRoom(for: room)
         }
+    }
+
+    // MARK: - Load trending
+
+    private func loadTrending() async {
+        let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app"
+        guard let url = URL(string: "\(apiBaseURL)/api/media/trending?regionCode=RU&maxResults=20") else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
+            let resp = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
+            trendingVideos = resp.results
+        } catch {}
     }
 
     // MARK: - Watch Room

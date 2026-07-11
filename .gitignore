@@ -74,3 +74,4 @@ plink-backend/
 .env.*
 !.env.example
 
+Plink.xcodeproj/

@@ -30,7 +30,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public private(set) var clockSynced: Bool = false
     public private(set) var hardCorrectionCount: Int = 0
     public private(set) var lastDriftMs: Double = 0
-    public private(set) var reactions: [ReactionEvent] = []  // P0-36: reaction stream
+    public private(set) var reactions: [ReactionEvent] = []  // P0-36: uses existing ReactionEvent from SyncEvents.swift
 
     // MARK: - Owned components
     public let realtimeClient: RealtimeClient
@@ -61,8 +61,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         mediaSource: PlaybackSource? = nil,
         mediaId: String? = nil,  // P1-33
         chatCatchupClient: ChatCatchupClient? = nil,  // P0-35
-        clock: ClockSynchronizer = ClockSynchronizer(),
-        coordinator: PlaybackCoordinator = PlaybackCoordinator()
+        clock: ClockSynchronizer? = nil,
+        coordinator: PlaybackCoordinator? = nil
     ) {
         self.roomId = roomId
         self.currentUserId = currentUserId
@@ -70,8 +70,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         self.mediaSource = mediaSource
         self.mediaId = mediaId
         self.chatCatchupClient = chatCatchupClient
-        self.clock = clock
-        self.coordinator = coordinator
+        self.clock = clock ?? ClockSynchronizer()
+        self.coordinator = coordinator ?? PlaybackCoordinator()
 
         // P0-29: create stable proxy — syncController talks to proxy, not dummy
         let proxy = PlaybackProxy()
@@ -287,16 +287,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     }
 
     // P0-36: reaction stream — append to reactions array for UI
+    // Uses existing ReactionEvent from SyncEvents.swift
     private func handleReaction(_ reaction: RealtimeServerMessage.ReactionBroadcast) {
-        let event = ReactionEvent(
-            id: UUID(),
-            userId: reaction.userId,
-            username: reaction.username,
-            emoji: reaction.emoji,
-            timestampMs: reaction.serverTimeMs
-        )
+        let event = ReactionEvent(emoji: reaction.emoji, senderName: reaction.username)
         reactions.append(event)
-        // Trim reactions to last 50
         if reactions.count > 50 {
             reactions.removeFirst(reactions.count - 50)
         }
@@ -319,7 +313,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         guard let client = chatCatchupClient else { return }
         do {
             var cursor = chatCatchupCursor
-            repeat {
+            var hasMore = true
+            while hasMore {
                 let response = try await client.fetchMessages(roomId: roomId, after: cursor)
                 for msg in response.messages {
                     // Dedupe by clientMessageId
@@ -343,7 +338,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 if chatMessages.count > 200 {
                     chatMessages.removeFirst(chatMessages.count - 200)
                 }
-            } while response.hasMore
+                hasMore = response.hasMore
+            }
         } catch {
             lastError = "Chat catch-up failed: \(error.localizedDescription)"
         }
@@ -383,15 +379,6 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
 }
 
-// P0-36: reaction event for UI
-public struct ReactionEvent: Identifiable, Sendable, Equatable {
-    public let id: UUID
-    public let userId: String
-    public let username: String
-    public let emoji: String
-    public let timestampMs: Int64
-}
-
 // MARK: - P0-35: Chat catch-up REST client protocol
 
 public protocol ChatCatchupClient: Sendable {
@@ -411,6 +398,15 @@ public struct ChatCatchupMessage: Sendable, Equatable {
     public let senderName: String
     public let text: String
     public let createdAtMs: Int64
+
+    public init(messageId: String, clientMessageId: String?, senderId: String, senderName: String, text: String, createdAtMs: Int64) {
+        self.messageId = messageId
+        self.clientMessageId = clientMessageId
+        self.senderId = senderId
+        self.senderName = senderName
+        self.text = text
+        self.createdAtMs = createdAtMs
+    }
 }
 
 public struct ParticipantSnapshot: Sendable, Equatable {

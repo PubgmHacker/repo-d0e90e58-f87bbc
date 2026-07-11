@@ -14,6 +14,7 @@
 
 import Foundation
 import AVFoundation
+import UIKit
 
 @MainActor
 public final class NativeHLSProvider: ProviderAdapter {

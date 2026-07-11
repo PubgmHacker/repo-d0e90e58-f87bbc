@@ -19,6 +19,7 @@
 //   - YouTube controls + branding visible (ToS)
 
 import Foundation
+import AVFoundation
 import UIKit
 import WebKit
 

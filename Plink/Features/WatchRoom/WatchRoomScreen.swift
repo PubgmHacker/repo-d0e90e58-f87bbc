@@ -102,9 +102,9 @@ public struct WatchRoomScreen: View {
                 .padding(.bottom, 8)
             }
 
-            // P0-36: reaction overlay
+            // P0-36: reaction overlay — uses existing ReactionOverlayView from Views/Room/
             if !model.reactions.isEmpty {
-                ReactionOverlayView(reactions: model.reactions, reduceMotion: reduceMotion)
+                ReactionOverlayView(reactions: model.reactions)
             }
         }
         .onTapGesture {
@@ -320,21 +320,5 @@ struct ChatTimeline: View {
     }
 }
 
-// P0-36: Reaction overlay
-struct ReactionOverlayView: View {
-    let reactions: [ReactionEvent]
-    let reduceMotion: Bool
-
-    var body: some View {
-        ZStack {
-            ForEach(reactions.suffix(5)) { reaction in
-                Text(reaction.emoji)
-                    .font(.largeTitle)
-                    .offset(x: reduceMotion ? 0 : CGFloat.random(in: -100...100),
-                            y: reduceMotion ? 0 : CGFloat.random(in: -200...(-50)))
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
+// P0-36: Reaction overlay — uses existing ReactionOverlayView from Views/Room/
+// (defined in Plink/Views/Room/ReactionOverlayView.swift)

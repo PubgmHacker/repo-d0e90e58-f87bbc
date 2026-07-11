@@ -49,7 +49,8 @@ public final class PlaybackCoordinator {
 
     public init() {}
 
-    public func prepare(_ source: PlaybackSource) async {
+    // P1-36: prepare now throws — caller can catch and decide not to connect
+    public func prepare(_ source: PlaybackSource) async throws {
         isPreparing = true
         lastError = nil
         // Teardown any previous controller
@@ -75,6 +76,8 @@ public final class PlaybackCoordinator {
             currentSource = source
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            isPreparing = false
+            throw error
         }
         isPreparing = false
     }

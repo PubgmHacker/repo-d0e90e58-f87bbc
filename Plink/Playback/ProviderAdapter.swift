@@ -20,6 +20,8 @@ import Foundation
 import AVFoundation
 import UIKit
 
+// UIKit needed for UIView (embeddedView in ProviderAdapter protocol)
+
 @MainActor
 public protocol ProviderAdapter: AnyObject {
     var capabilities: PlaybackCapabilities { get }

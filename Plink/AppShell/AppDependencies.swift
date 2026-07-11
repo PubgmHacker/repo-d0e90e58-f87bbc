@@ -18,16 +18,17 @@ final class AppDependencies {
         authService: AuthService,
         roomService: RoomService,
         discoveryService: DiscoveryService? = nil,
-        premiumStatusManager: PremiumStatusManager = .shared
+        premiumStatusManager: PremiumStatusManager? = nil
     ) {
         self.apiClient = apiClient
         self.authService = authService
         self.roomService = roomService
         self.discoveryService = discoveryService ?? DiscoveryService(apiClient: apiClient, roomService: roomService)
-        self.premiumStatusManager = premiumStatusManager
+        self.premiumStatusManager = premiumStatusManager ?? PremiumStatusManager.shared
     }
 
     /// Live dependencies wired from existing app state.
+    @MainActor
     static var live: AppDependencies {
         let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app/api"
         let apiClient = APIClient(baseURL: apiBaseURL)

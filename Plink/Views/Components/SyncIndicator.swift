@@ -56,6 +56,7 @@ struct SyncIndicatorView: View {
         case .synced: return .raveGreen
         case .syncing: return .raveWarning
         case .lagging: return .raveDanger
+        case .offline: return .raveDanger
         }
     }
 }

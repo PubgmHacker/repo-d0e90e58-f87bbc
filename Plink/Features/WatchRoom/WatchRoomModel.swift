@@ -608,6 +608,25 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
         snapshotInFlight = false
     }
+
+    // MARK: - Blueprint UI properties (stubs — wire to real data)
+
+    var bufferedFraction: Double { 0 }
+    var qualityLabel: String { coordinator.capabilities.supportsPiP ? "HD" : "SD" }
+    var hostId: String? { nil }
+    var activeSpeakerName: String? { nil }
+    var microphoneState: MicrophoneUIState { .off }
+    var cameraState: CameraUIState { .off }
+    var unreadCount: Int { 0 }
+    var danmakuMessages: [DanmakuMessage] { [] }
+
+    func leaveRoom() { disconnect() }
+    func openPlayerSettings() {}
+    func startPiP() {}
+    func enterFullscreen() {}
+    func openEmojiPicker() {}
+    func toggleMicrophone() async {}
+    func toggleCamera() async {}
 }
 
 // MARK: - UI models
@@ -628,6 +647,8 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public let createdAtMs: Int64
     public let isPending: Bool
     public var isFailed: Bool  // P1-54: failed messages can be retried
+    public var isAdmin: Bool = false
+    public var isPremium: Bool = false
     public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
 
     // P1-54: convenience init without isFailed
@@ -652,6 +673,29 @@ public struct WatchReactionEvent: Identifiable, Sendable, Equatable {
     public let username: String
     public let emoji: String
     public let timestampMs: Int64
+    // Blueprint: reaction animation properties
+    public let startX: CGFloat
+    public let rotation: Double
+    public let scale: CGFloat
+    public let opacity: Double
+
+    public init(id: UUID = UUID(), userId: String, username: String, emoji: String, timestampMs: Int64) {
+        self.id = id
+        self.userId = userId
+        self.username = username
+        self.emoji = emoji
+        self.timestampMs = timestampMs
+        self.startX = CGFloat.random(in: 0.1...0.9)
+        self.rotation = Double.random(in: -30...30)
+        self.scale = 1.5
+        self.opacity = 1.0
+    }
+
+    public func currentY(in height: CGFloat) -> CGFloat {
+        let elapsed = max(0, Date().timeIntervalSince1970 * 1000 - Double(timestampMs))
+        let progress = min(1, elapsed / 2500)
+        return height * (1 - CGFloat(progress) * 0.8)
+    }
 }
 
 // MARK: - P0-35: Chat catch-up REST client protocol

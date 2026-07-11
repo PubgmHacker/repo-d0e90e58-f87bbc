@@ -135,7 +135,10 @@ struct ServiceSelectionView: View {
         // 🔧 v28: YouTube opens YouTubeSearchView (native API search).
         // Bypasses YouTube's WKWebView bot check entirely.
         .sheet(isPresented: $showYouTubeSearch) {
-            YouTubeSearchView()
+            YouTubeSearchView { contentURL, contentTitle, thumbnailURL in
+                    showYouTubeSearch = false
+                    onContentSelected(.youtube, contentURL, contentTitle, thumbnailURL)
+                }
         }
         // 🔧 FIX: was .sheet — накапливал окна (sheet on sheet on sheet).
         // Now: .fullScreenCover — заменяет предыдущий экран, не накапливает.

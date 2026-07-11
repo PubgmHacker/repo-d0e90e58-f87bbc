@@ -45,6 +45,12 @@ struct AuthLaunchGate: View {
         }
         .task { await restoreSession() }
         .animation(.easeOut(duration: 0.32), value: destination)
+        .onReceive(NotificationCenter.default.publisher(for: .plinkSignedOut)) { _ in
+            // PATCH: immediately show login screen when user signs out
+            withAnimation(.easeOut(duration: 0.3)) {
+                destination = .authentication
+            }
+        }
         .onOpenURL { url in
             if destination == .app {
                 // Forward to app shell
@@ -131,4 +137,9 @@ struct CinematicSplashView: View {
             }
         }
     }
+}
+
+// MARK: - Auth notifications
+extension Notification.Name {
+    static let plinkSignedOut = Notification.Name("plinkSignedOut")
 }

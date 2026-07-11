@@ -312,6 +312,10 @@ struct SettingsView: View {
             Button("Выйти", role: .destructive) {
                 Task {
                     try? await authService.signOut()
+                    // PATCH: notify AuthLaunchGate to show login screen
+                    await MainActor.run {
+                        NotificationCenter.default.post(name: .plinkSignedOut, object: nil)
+                    }
                 }
             }
         } message: {

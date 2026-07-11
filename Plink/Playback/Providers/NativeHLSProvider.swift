@@ -48,9 +48,11 @@ public final class NativeHLSProvider: ProviderAdapter {
             throw ProviderError.unsupportedSource
         }
 
+        // P0-7: AVURLAssetHTTPHeaderFieldsKey is not public API in all SDKs.
+        // Use string key "AVURLAssetHTTPHeaderFieldsKey" directly.
         let options: [String: Any] = headers.isEmpty
             ? [:]
-            : [AVURLAssetHTTPHeaderFieldsKey: headers]
+            : ["AVURLAssetHTTPHeaderFieldsKey": headers]
         let asset = AVURLAsset(url: url, options: options)
         urlAsset = asset
         playerItem = AVPlayerItem(asset: asset)

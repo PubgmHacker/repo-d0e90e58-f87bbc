@@ -245,7 +245,7 @@ public final class NativePlayerController: PlaybackControlling {
                     self.isPlaying = true
                 case .paused:
                     self.isPlaying = false
-                case .waitingToPlay:
+                case .waitingToPlayAtSpecifiedRate:
                     self.isPlaying = false
                 @unknown default:
                     break
@@ -298,7 +298,7 @@ public final class NativePlayerController: PlaybackControlling {
         let ready = item.status == .readyToPlay
 
         let buffering: Bool
-        if controlStatus == .waitingToPlay {
+        if controlStatus == .waitingToPlayAtSpecifiedRate {
             buffering = true
         } else if !ready {
             buffering = true

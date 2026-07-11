@@ -15,7 +15,7 @@ struct WatchRoomScreen: View {
 
     var body: some View {
         ZStack {
-            PurpleAmbientBackdrop()
+            PurpleAmbientBackdrop(state: ui.ambient)
 
             if isTablet {
                 TabletWatchLayout(model: model, ui: $ui)

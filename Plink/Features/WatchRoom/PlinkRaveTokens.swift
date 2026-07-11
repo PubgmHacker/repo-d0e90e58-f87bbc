@@ -1,64 +1,133 @@
+// Plink/Features/WatchRoom/PlinkRaveTokens.swift — PATCH 01: purple neon token set
+//
+// GLM-5.2 master implementation patch — Commit Group 1.
+//
+// Replaces the WatchRoom-local warm/amethyst palette with the spec'd
+// purple-neon rave set, scoped to WatchRoom only. Legacy screens that still
+// use Color.raveBackground / Color.bioCyan / etc are NOT touched in this
+// commit — global palette migration is a separate commit per global rule 1
+// ("Do not globally break legacy screens in the same commit").
+//
+// Acceptance (per PATCH 01 spec):
+//   - No pure black player chrome (use PlinkRave.void, never Color.black).
+//   - Accent occupies less than 10% of pixels in baseline screenshot.
+//   - Body text contrast passes 4.5:1 against the surface it sits on.
+//
+// Color choices (hex, sRGB):
+//   void         0x0D001A  L*≈0.012  hue 280°  — purple-shifted near-black
+//   surface      0x1A0A2E  L*≈0.030           — card / sheet
+//   raised       0x271040  L*≈0.060           — pressed / focused
+//   text         0xF6F0FA  contrast vs void ≈ 16.8:1 (passes AAA)
+//   secondaryText 0xB9AFC4 contrast vs void ≈ 9.4:1  (passes AAA)
+//
+// Backwards-compat: aliases (primary/secondary/accent/gold/textSecondary/
+// primaryAction/timeline/ambientGlow) are preserved so existing WatchRoom
+// files compile unchanged. New code should prefer the spec names
+// (magenta/cyan/hotPink/success/warning/danger/text/secondaryText).
+
 import SwiftUI
 
-// Refined palette — deep, warm dark, NOT cyberpunk neon.
-// Inspired by professional streaming apps (Twitch, Discord dark, Apple Music).
-// Colors are muted but rich — they glow subtly, not scream.
-
 enum PlinkRave {
-    // Base — warm dark, not pure black. Like a dim cinema.
-    static let void = Color(hex: 0x0F0D14)        // very dark warm grey-purple
-    static let surface = Color(hex: 0x1C1923)      // card background, slightly lighter
-    static let raised = Color(hex: 0x2A2533)       // buttons, raised elements
+    // MARK: - Surfaces (PATCH 01 spec)
 
-    // Accents — rich, not neon. Like gemstones, not LEDs.
-    static let primary = Color(hex: 0x7C5CFF)      // amethyst purple (soft, not magenta)
-    static let primaryDim = Color(hex: 0x4A3A8F)   // dimmer purple for tracks
-    static let secondary = Color(hex: 0x5EC8F5)    // soft sky blue (not cyan)
-    static let accent = Color(hex: 0xE8506B)       // warm coral pink (not hot pink)
-    static let gold = Color(hex: 0xE8B647)         // warm gold for host/premium
+    /// Deepest background. Purple-shifted near-black, NOT pure black.
+    static let void = Color(hex: 0x0D001A)
 
-    // Status — clear but not aggressive
-    static let success = Color(hex: 0x3DD68C)      // soft mint green
-    static let warning = Color(hex: 0xE8B647)      // same gold
-    static let danger = Color(hex: 0xE8506B)       // same coral
+    /// Card / sheet background. One step above `void`.
+    static let surface = Color(hex: 0x1A0A2E)
 
-    // Text — warm whites, not pure
-    static let text = Color(hex: 0xF2EDF7)         // warm white
-    static let textSecondary = Color(hex: 0x8E85A0) // muted lavender grey
-    static let textTertiary = Color(hex: 0x5A5266)  // very muted
+    /// Raised surface (taps, pressed states, focused borders).
+    static let raised = Color(hex: 0x271040)
 
-    // Lines
-    static let divider = Color(hex: 0x2D2838)
+    // MARK: - Accents (PATCH 01 spec)
 
-    // Gradients — subtle, not flashy
+    /// Primary brand accent. Use sparingly — spec's "<10% of pixels" rule.
+    static let magenta = Color(hex: 0xFF00FF)
+    static let cyan = Color(hex: 0x00FFFF)
+    static let hotPink = Color(hex: 0xFF1493)
+
+    // MARK: - Semantic (PATCH 01 spec)
+
+    static let success = Color(hex: 0x39FF14)
+    static let warning = Color(hex: 0xFFFF00)
+    static let danger = Color(hex: 0xFF0040)
+
+    // MARK: - Text (PATCH 01 spec)
+
+    /// Primary text. Off-white, slight lavender tint to sit on purple.
+    static let text = Color(hex: 0xF6F0FA)
+
+    /// Secondary text / metadata.
+    static let secondaryText = Color(hex: 0xB9AFC4)
+
+    /// Tertiary text (placeholders, disabled). Kept from previous palette
+    /// for components that reference it; not part of PATCH 01 spec.
+    static let textTertiary = Color(hex: 0x5A5266)
+
+    // MARK: - Structure
+
+    static let divider = Color(hex: 0x4A315C)
+
+    // MARK: - Fills
+
+    /// Outgoing chat bubble fill. Magenta → deep magenta diagonal.
     static let outgoingBubble = LinearGradient(
-        colors: [Color(hex: 0x7C5CFF), Color(hex: 0x5A3FD6)],
+        colors: [magenta, Color(hex: 0x8B008B)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
+    // MARK: - Backwards-compat aliases
+    //
+    // Existing WatchRoom files (PlayerStage, WatchChatComposer, WatchLayouts,
+    // WatchReactionLayer, etc.) reference these names. Renaming them all in
+    // this commit would break the "one reviewable commit per section" rule
+    // — alias migration is part of a later cleanup commit.
+    //
+    // Mapping (old → spec):
+    //   primary        → magenta
+    //   primaryDim     → magenta.opacity(0.5) on raised
+    //   secondary      → cyan
+    //   accent         → hotPink
+    //   gold           → warning (same yellow)
+    //   textSecondary  → secondaryText
+    //   primaryAction  → outgoingBubble
+    //   timeline       → magenta→cyan horizontal
+    //   ambientGlow    → magenta.opacity(0.06) vertical
+
+    static let primary = magenta
+    static let primaryDim = Color(hex: 0x4A3A8F)   // muted purple for tracks
+    static let secondary = cyan
+    static let accent = hotPink
+    static let gold = warning
+    static let textSecondary = secondaryText
+
     static let primaryAction = LinearGradient(
-        colors: [Color(hex: 0x7C5CFF), Color(hex: 0x9B7CFF)],
+        colors: [magenta, Color(hex: 0x9B7CFF)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
     static let timeline = LinearGradient(
-        colors: [Color(hex: 0x7C5CFF), Color(hex: 0x5EC8F5)],
+        colors: [magenta, cyan],
         startPoint: .leading,
         endPoint: .trailing
     )
 
-    // Ambient — for background glow
     static let ambientGlow = LinearGradient(
-        colors: [Color(hex: 0x7C5CFF).opacity(0.06), .clear],
+        colors: [magenta.opacity(0.06), .clear],
         startPoint: .top,
         endPoint: .bottom
     )
 }
 
+// MARK: - Glow modifier (PATCH 01 spec)
+
 extension View {
-    func plinkGlow(_ color: Color, radius: CGFloat = 8) -> some View {
-        shadow(color: color.opacity(0.25), radius: radius)
+    /// Soft outer glow used to lift accents off the dark surface.
+    /// Default radius 12pt; tune per component. Keep opacity <= 0.4 —
+    /// the spec's "<10% accent pixel" rule is violated fast when glows stack.
+    func plinkGlow(_ color: Color, radius: CGFloat = 12) -> some View {
+        shadow(color: color.opacity(0.34), radius: radius)
     }
 }

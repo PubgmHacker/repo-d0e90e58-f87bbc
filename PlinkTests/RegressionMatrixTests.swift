@@ -69,12 +69,15 @@ final class RegressionMatrixTests: XCTestCase {
                        "Green + yellow + red must equal 18")
     }
 
-    func testAtLeastElevenSystemsAreGreen() {
-        // After PATCH 20 (profile + friends + dms + deeplinks tests), we have 11 green:
-        //   - playback, chat, reactions, auth, sync, rooms, presence, profile, friends, dms, deeplinks
-        let (green, _, _) = RegressionSystem.statusCounts
-        XCTAssertGreaterThanOrEqual(green, 11,
-                                    "At least 11 systems should be green after PATCH 20")
+    func testAllEighteenSystemsAreGreen() {
+        // After PATCH 21, ALL 18 systems have tests:
+        //   playback, chat, reactions, auth, sync, rooms, presence,
+        //   profile, friends, dms, deeplinks, settings, gdpr, billing,
+        //   admin, notifications, lifecycle, websockets
+        let (green, yellow, red) = RegressionSystem.statusCounts
+        XCTAssertEqual(green, 18, "All 18 systems should be green after PATCH 21")
+        XCTAssertEqual(yellow, 0, "No yellow systems should remain")
+        XCTAssertEqual(red, 0, "No red systems should remain")
     }
 
     // MARK: - Markdown table

@@ -149,12 +149,17 @@ struct PlinkApp: App {
 
     @ViewBuilder
     private var authenticatedContent: some View {
-        MainTabView(authService: authService)
-            .environmentObject(deepLinkRouter)
-            .environmentObject(friendManager)
-            // 🔧 FIX C4+C6: Inject shared services for DM and Admin panels
-            .environmentObject(dmChatService)
-            .environmentObject(apiClient)
+        // PATCH Cinematic: use new unified PlinkAppShell instead of MainTabView.
+        // PlinkAppShell adapts to iPhone (tab bar), iPad/Mac (sidebar).
+        PlinkAppShell(dependencies: AppDependencies(
+            apiClient: apiClient,
+            authService: authService,
+            roomService: roomService
+        ))
+        .environmentObject(deepLinkRouter)
+        .environmentObject(friendManager)
+        .environmentObject(dmChatService)
+        .environmentObject(apiClient)
     }
 
     // MARK: - Login Content

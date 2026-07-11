@@ -60,7 +60,11 @@ struct PlinkSidebarShell: View {
         case .home: DiscoveryHomeView(dependencies: dependencies)
         case .rooms: RoomsHubView(dependencies: dependencies)
         case .friends: FriendsView()
-        case .profile: ProfileView()
+        case .profile:
+            // ProfileView requires viewModel — use a basic placeholder
+            // until full migration wires ProfileViewModel from AppDependencies.
+            Text("Профиль")
+                .cinematicScreen()
         case .settings: SettingsHubView(dependencies: dependencies)
         case .create: EmptyView()
         }

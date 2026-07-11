@@ -32,7 +32,7 @@ final class AppDependencies {
     static var live: AppDependencies {
         let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app/api"
         let apiClient = APIClient(baseURL: apiBaseURL)
-        let authService = AuthService()
+        let authService = AuthService(api: apiClient)
         let roomService = RoomService(api: apiClient)
         return AppDependencies(
             apiClient: apiClient,

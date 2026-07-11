@@ -38,7 +38,9 @@ struct WatchRoomScreen: View {
 
     var body: some View {
         ZStack {
-            PurpleAmbientBackdrop(state: ui.ambient)
+            // PATCH 14: ambient state now comes from model (driven by
+            // AmbientVideoSampler). ui.ambient is no longer used.
+            PurpleAmbientBackdrop(state: model.ambientState)
 
             switch layoutVariant {
             case .portrait:
@@ -64,6 +66,17 @@ struct WatchRoomScreen: View {
         .background(PlinkRave.void.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .animation(.plinkLayout, value: layoutVariant)
+        .onChange(of: layoutVariant) { _, newVariant in
+            // PATCH 14: update danmaku lane count on rotation.
+            // Portrait = 5 lanes, landscape = 7 lanes, tablet = 5 lanes.
+            let laneCount: Int
+            switch newVariant {
+            case .portrait:  laneCount = 5
+            case .landscape: laneCount = 7
+            case .tablet:    laneCount = 5
+            }
+            model.updateDanmakuLaneCount(laneCount)
+        }
         .task { await model.connect() }
         .onDisappear {
             controlsHideTask?.cancel()

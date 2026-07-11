@@ -43,6 +43,18 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public let coordinator: PlaybackCoordinator
     private let playbackProxy: PlaybackProxy  // P0-29: stable proxy for syncController
 
+    // PATCH 14: DanmakuEngine + AmbientVideoSampler owned by the model.
+    // One per room session — never global singletons (runbook §16).
+    // The engine is fed by chat broadcast handler (chat messages become
+    // danmaku placements). The sampler is fed by coordinator.nativePlayer
+    // (palette drives PurpleAmbientBackdrop).
+    private let danmakuEngine: DanmakuEngine
+    private let ambientSampler: AmbientVideoSampler
+    private var danmakuSnapshot: [DanmakuPlacement] = []
+    private var ambientPalette: AmbientPalette = .defaultPalette
+    private var danmakuPollTask: Task<Void, Never>?
+    private var ambientSampleTask: Task<Void, Never>?
+
     // MARK: - Config
     // P0-30: roomId stored as _roomId (private) + protocol conformance via
     // computed var roomId: String? { _roomId }. Only ONE declaration.
@@ -100,6 +112,15 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
         self.realtimeClient = RealtimeClient(baseEndpoint: baseEndpoint, ticketProvider: ticketProvider)
         self.realtimeClient.delegate = self
+
+        // PATCH 14: instantiate engine + sampler. Lane count 5 (portrait)
+        // — reconfigured on rotation via updateDanmakuLaneCount().
+        self.danmakuEngine = DanmakuEngine()
+        self.ambientSampler = AmbientVideoSampler()
+        Task { @MainActor [danmakuEngine] in
+            await danmakuEngine.configure(laneCount: 5)
+            await danmakuEngine.startSampling()
+        }
     }
 
     // MARK: - Lifecycle
@@ -114,6 +135,16 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 try await coordinator.prepare(source)
                 // P0-29/P0-53: wire proxy to the now-prepared real controller
                 playbackProxy.attachTarget(coordinator.currentController)
+
+                // PATCH 14: attach native player to AmbientVideoSampler.
+                // Only native HLS/MP4 sources have an AVPlayer — YouTube
+                // and Rutube use WKWebView, so sampler falls back to
+                // default palette (no sampling).
+                if let player = coordinator.nativePlayer {
+                    await ambientSampler.attach(player: player)
+                    await ambientSampler.startSampling()
+                    startAmbientPalettePolling()
+                }
             } catch {
                 lastError = "Media prepare failed: \(error.localizedDescription)"
                 connectionState = .failed(reason: "Media prepare failed")
@@ -121,6 +152,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             }
         }
         realtimeClient.connect(roomId: _roomId)
+
+        // PATCH 14: start polling danmaku engine for snapshot.
+        startDanmakuPolling()
     }
 
     public func disconnect() {
@@ -139,6 +173,64 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         reactions = []
         clientMessageIds.removeAll()
         connectionState = .idle
+
+        // PATCH 14: stop engine + sampler
+        danmakuPollTask?.cancel()
+        danmakuPollTask = nil
+        ambientSampleTask?.cancel()
+        ambientSampleTask = nil
+        Task { [danmakuEngine, ambientSampler] in
+            await danmakuEngine.stopSampling()
+            await danmakuEngine.clear()
+            await ambientSampler.stopSampling()
+            await ambientSampler.detach()
+        }
+        danmakuSnapshot = []
+        ambientPalette = .defaultPalette
+    }
+
+    // MARK: - PATCH 14: Danmaku polling
+
+    /// Polls the DanmakuEngine every 250ms for the current placement
+    /// snapshot. Caches in danmakuSnapshot so views can read without
+    /// awaiting on the actor during render.
+    private func startDanmakuPolling() {
+        danmakuPollTask?.cancel()
+        danmakuPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let now = ContinuousClock.now
+                let snapshot = await self.danmakuEngine.poll(at: now)
+                self.danmakuSnapshot = snapshot
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+    }
+
+    /// Updates the danmaku lane count based on orientation. Called by
+    /// WatchRoomScreen on rotation.
+    public func updateDanmakuLaneCount(_ count: Int) {
+        Task { [danmakuEngine] in
+            await danmakuEngine.configure(laneCount: count)
+        }
+    }
+
+    // MARK: - PATCH 14: Ambient palette polling
+
+    /// Polls the AmbientVideoSampler every 500ms for the current palette.
+    /// Caches in ambientPalette so views can read without awaiting.
+    private func startAmbientPalettePolling() {
+        ambientSampleTask?.cancel()
+        ambientSampleTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let palette = await self.ambientSampler.currentPalette()
+                let enabled = AmbientCapability.shouldEnableLivingBackground()
+                self.ambientPalette = enabled ? palette : .defaultPalette
+                await self.ambientSampler.setEnabled(enabled)
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
     }
 
     // P0-31: subscribe to RealtimeClient.stateChanges
@@ -467,6 +559,28 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         if chatMessages.count > 200 {
             chatMessages.removeFirst(chatMessages.count - 200)
         }
+
+        // PATCH 14: enqueue danmaku placement for this chat message.
+        // Skip system/admin messages (they don't fly as danmaku).
+        // Text width is estimated at 8pt per character — close enough
+        // for lane scheduling; the actual rendered width is irrelevant
+        // to lane availability.
+        let danmakuMsg = DanmakuMessage(
+            text: msg.text,
+            color: .white,
+            senderName: msg.senderName,
+            createdAt: Date(),
+            isPremium: msg.isPremium,
+            isAdmin: msg.isAdmin
+        )
+        let estimatedWidth = CGFloat(msg.text.count * 8)
+        Task { [danmakuEngine] in
+            await danmakuEngine.enqueue(
+                danmakuMsg,
+                textWidth: estimatedWidth,
+                viewportWidth: 400  // conservative default; engine clamps duration anyway
+            )
+        }
     }
 
     // P1-51/P1-61: reaction handler with auto-expiry
@@ -609,7 +723,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         snapshotInFlight = false
     }
 
-    // MARK: - Blueprint UI properties (stubs — wire to real data)
+    // MARK: - UI properties (some stubs, some wired)
 
     var bufferedFraction: Double { 0 }
     var qualityLabel: String { coordinator.capabilities.supportsPiP ? "HD" : "SD" }
@@ -619,14 +733,24 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     var cameraState: CameraUIState { .off }
     var unreadCount: Int { 0 }
 
-    // PATCH 05: danmaku placements come from DanmakuEngine actor.
-    // The engine is owned by the model (or a sub-controller) and polled
-    // by DanmakuCanvasLayer via TimelineView. For now this is a stub
-    // returning empty — the actual engine integration is a follow-up
-    // commit that wires DanmakuEngine as a model dependency.
-    var danmakuPlacements: [DanmakuPlacement] { [] }
+    // PATCH 14: danmaku placements come from DanmakuEngine. The model
+    // polls the engine every 250ms (display-linked cadence) and caches
+    // the snapshot in danmakuSnapshot. Views read from this cached array
+    // — they never await on the actor during render.
+    var danmakuPlacements: [DanmakuPlacement] { danmakuSnapshot }
     var danmakuLaneCount: Int { 5 }
     var danmakuOpacity: Double { 0.85 }
+
+    // PATCH 14: ambient palette comes from AmbientVideoSampler. Drives
+    // PurpleAmbientBackdrop's primaryColor + secondaryColor so the room
+    // haze breathes with the movie.
+    var ambientState: AmbientState {
+        AmbientState(
+            intensity: AmbientCapability.shouldEnableLivingBackground() ? 0.55 : 0.0,
+            primaryColor: ambientPalette.primaryColor,
+            secondaryColor: ambientPalette.secondaryColor
+        )
+    }
 
     func leaveRoom() { disconnect() }
     func openPlayerSettings() {}

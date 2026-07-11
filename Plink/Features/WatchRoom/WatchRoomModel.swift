@@ -752,6 +752,36 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         )
     }
 
+    // PATCH 14: Rutube fallback indicator. True when source is .rutube
+    // and the embedded player's JS API is unavailable — UI shows a toast
+    // prompting the user to open the video in Rutube's external app.
+    var requiresRutubeFallback: Bool {
+        guard case .rutube = coordinator.currentSource else { return false }
+        guard let rutube = coordinator.currentController as? RutubePlaybackController else {
+            return false
+        }
+        return rutube.requiresExternalFallback
+    }
+
+    // PATCH 14: open current Rutube video in SFSafariViewController.
+    // Called by WatchRoomScreen when user taps "Open in Rutube" toast.
+    func openInRutubeExternal() {
+        guard let rutube = coordinator.currentController as? RutubePlaybackController else {
+            return
+        }
+        // Find the top-most view controller to present from.
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first(where: { $0.isKeyWindow }),
+              let rootVC = window.rootViewController else {
+            return
+        }
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController {
+            topVC = presented
+        }
+        rutube.openInExternalPlayer(from: topVC)
+    }
+
     func leaveRoom() { disconnect() }
     func openPlayerSettings() {}
     func startPiP() {}

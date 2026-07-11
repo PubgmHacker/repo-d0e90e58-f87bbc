@@ -62,6 +62,17 @@ struct WatchRoomScreen: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                     .zIndex(100)
             }
+
+            // PATCH 14: Rutube fallback toast — shown when source is .rutube
+            // and the embedded player's JS API is unavailable. Tapping
+            // "Open" launches SFSafariViewController with the Rutube video URL.
+            if model.requiresRutubeFallback {
+                RutubeFallbackToast(onOpen: {
+                    model.openInRutubeExternal()
+                })
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .zIndex(101)
+            }
         }
         .background(PlinkRave.void.ignoresSafeArea())
         .preferredColorScheme(.dark)

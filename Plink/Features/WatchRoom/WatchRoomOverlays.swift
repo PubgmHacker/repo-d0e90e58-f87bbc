@@ -377,3 +377,51 @@ struct CameraActionButton: View {
         state == .on ? "video.fill" : "video.slash.fill"
     }
 }
+
+// MARK: - PATCH 14: Rutube fallback toast
+
+/// Toast shown when source is .rutube and the embedded player's JS API
+/// is unavailable. Tapping "Open" launches SFSafariViewController with
+/// the Rutube video URL.
+struct RutubeFallbackToast: View {
+    let onOpen: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(PlinkRave.warning)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Sync unavailable")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(PlinkRave.text)
+                Text("Open in Rutube to watch")
+                    .font(.system(size: 11))
+                    .foregroundStyle(PlinkRave.secondaryText)
+            }
+
+            Spacer()
+
+            Button(action: onOpen) {
+                Text("Open")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(PlinkRave.primaryAction, in: Capsule())
+            }
+            .accessibilityLabel("Open in Rutube")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(PlinkRave.warning.opacity(0.3), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 90)  // above the composer
+    }
+}

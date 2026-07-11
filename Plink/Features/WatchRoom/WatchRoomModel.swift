@@ -42,10 +42,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     private let playbackProxy: PlaybackProxy  // P0-29: stable proxy for syncController
 
     // MARK: - Config
-    // P0-30: roomId stored as _roomId (private) + public computed roomId
-    // + protocol conformance via computed var roomId: String? { _roomId }
+    // P0-30: roomId stored as _roomId (private) + protocol conformance via
+    // computed var roomId: String? { _roomId }. Only ONE declaration.
     private let _roomId: String
-    public var roomId: String { _roomId }
     public let mediaSource: PlaybackSource?
     public let mediaId: String?  // P1-33: typed media ID for host commands
     public let currentUserId: String  // P1-32: identity via init, not UserDefaults
@@ -110,7 +109,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 return
             }
         }
-        realtimeClient.connect(roomId: roomId)
+        realtimeClient.connect(roomId: _roomId)
     }
 
     public func disconnect() {
@@ -147,7 +146,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         await coordinator.currentController?.play()
         let actionId = UUID().uuidString
         realtimeClient.send(.syncCommand(.init(
-            roomId: roomId,
+            roomId: _roomId,
             actionId: actionId,
             mediaId: mediaId,  // P1-33: typed mediaId
             positionMs: positionMs,
@@ -162,7 +161,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         coordinator.currentController?.pause()
         let actionId = UUID().uuidString
         realtimeClient.send(.syncCommand(.init(
-            roomId: roomId,
+            roomId: _roomId,
             actionId: actionId,
             mediaId: mediaId,
             positionMs: positionMs,
@@ -177,7 +176,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         _ = await coordinator.currentController?.seek(to: seconds, precise: true)
         let actionId = UUID().uuidString
         realtimeClient.send(.syncCommand(.init(
-            roomId: roomId,
+            roomId: _roomId,
             actionId: actionId,
             mediaId: mediaId,
             positionMs: positionMs,
@@ -204,7 +203,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             chatMessages.removeFirst(chatMessages.count - 200)
         }
         realtimeClient.send(.chatSend(.init(
-            roomId: roomId,
+            roomId: _roomId,
             clientMessageId: clientMessageId,
             text: text
         )))
@@ -323,7 +322,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             var cursor = chatCatchupCursor
             var hasMore = true
             while hasMore {
-                let response = try await client.fetchMessages(roomId: roomId, after: cursor)
+                let response = try await client.fetchMessages(roomId: _roomId, after: cursor)
                 for msg in response.messages {
                     // Dedupe by clientMessageId
                     if let cmid = msg.clientMessageId, clientMessageIds.contains(cmid) {
@@ -357,7 +356,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     private func fetchPresenceSnapshot() async {
         guard let client = chatCatchupClient else { return }
         do {
-            let snapshot = try await client.fetchParticipants(roomId: roomId)
+            let snapshot = try await client.fetchParticipants(roomId: _roomId)
             participants = snapshot.map { p in
                 ParticipantInfo(userId: p.userId, username: p.username, isLocal: p.userId == currentUserId)
             }

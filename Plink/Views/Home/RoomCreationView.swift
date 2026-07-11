@@ -70,15 +70,7 @@ struct RoomCreationView: View {
                         // 🔧 v33: forward thumbnailURL to RoomSetupView.
                         print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)', thumbnailURL='\(thumbnailURL ?? "nil")'")
 
-                        // 🔧 v61 (Gemini): Zero-Latency Init — prewarm the WKWebView
-                        // immediately when user selects a YouTube video. By the time
-                        // RoomView's makeUIView runs, the player is already loaded.
-                        if service == .youtube,
-                           let videoId = YouTubeExtractor.extractVideoId(from: contentURL) {
-                            print("🔥 v61: prewarming WKWebView for videoId='\(videoId)'")
-                            WebViewControl.shared.prewarm(videoId: videoId)
-                        }
-
+                        // v2: No prewarming — EmbeddedPlaybackController handles YouTube
                         roomSetupConfig = RoomSetupConfig(
                             service: service,
                             contentURL: contentURL,
@@ -106,7 +98,6 @@ struct RoomCreationView: View {
         // → black screen.
         //
         // The prewarmed WKWebView is now consumed by RoomView.makeUIView when
-        // a room is created, OR released when WebViewControl.shared is
         // deallocated (app exit) OR replaced by a new prewarm() call.
         .sheet(isPresented: $showPaywallForLimit) {
             PaywallView(

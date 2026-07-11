@@ -70,3 +70,5 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.syncwatch.plink.tests
         DEVELOPMENT_TEAM: "2QAMUC4Z4P"
         CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: PlinkTests

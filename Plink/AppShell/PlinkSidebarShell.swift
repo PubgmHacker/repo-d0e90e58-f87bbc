@@ -1,6 +1,4 @@
-// Plink/AppShell/PlinkSidebarShell.swift — iPad/macOS sidebar
-//
-// PATCH 26: AI tab restored, no Create section
+// Plink/AppShell/PlinkSidebarShell.swift — §4 Final Architecture
 
 import SwiftUI
 
@@ -61,7 +59,7 @@ struct PlinkSidebarShell: View {
         switch section {
         case .home:
             HomeTabContent(
-                onProfileTap: { createPresented = true },
+                onProfileTap: { selection = .settings },
                 onSwitchToAITab: nil,
                 onSwitchToJoinTab: nil
             )

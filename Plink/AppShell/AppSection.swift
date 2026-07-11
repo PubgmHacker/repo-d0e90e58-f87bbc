@@ -1,6 +1,6 @@
-// Plink/AppShell/AppSection.swift — Navigation sections
+// Plink/AppShell/AppSection.swift — §4 Final Architecture
 //
-// PATCH 26: removed .create (was intercepting tab), added .ai back
+// Exactly 5 tabs: Главная, Комнаты, ИИ, Друзья, Настройки
 
 import Foundation
 
@@ -15,21 +15,21 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .home: return "Главная"
-        case .rooms: return "Комнаты"
-        case .ai: return "ИИ"
-        case .friends: return "Друзья"
-        case .settings: return "Настройки"
+        case .home: "Главная"
+        case .rooms: "Комнаты"
+        case .ai: "ИИ"
+        case .friends: "Друзья"
+        case .settings: "Настройки"
         }
     }
 
     var symbol: String {
         switch self {
-        case .home: return "house"
-        case .rooms: return "play.rectangle.on.rectangle"
-        case .ai: return "sparkles"
-        case .friends: return "person.2"
-        case .settings: return "gearshape"
+        case .home: "house"
+        case .rooms: "rectangle.stack.badge.play"
+        case .ai: "sparkles"
+        case .friends: "person.2"
+        case .settings: "gearshape"
         }
     }
 }

@@ -1,7 +1,7 @@
-// Plink/AppShell/PlinkPhoneTabShell.swift — iPhone tab bar
+// Plink/AppShell/PlinkPhoneTabShell.swift — §4 Final Architecture
 //
-// PATCH 26: 5 tabs (Home, Rooms, AI, Friends, Settings), no Create tab.
-// Create is triggered from Home/Rooms toolbar buttons like before.
+// 5 canonical tabs. Profile → Settings (not Create).
+// Create Room via sheet from Home/Rooms toolbar.
 
 import SwiftUI
 
@@ -13,30 +13,32 @@ struct PlinkPhoneTabShell: View {
     var body: some View {
         TabView(selection: $selection) {
             HomeTabContent(
-                onProfileTap: { createPresented = true },
+                onProfileTap: { selection = .settings },
                 onSwitchToAITab: { selection = .ai },
                 onSwitchToJoinTab: { selection = .rooms }
             )
             .tag(AppSection.home)
-            .tabItem { Label("Главная", systemImage: "house") }
+            .tabItem { Label(AppSection.home.title, systemImage: AppSection.home.symbol) }
 
             RoomsTabContent()
                 .tag(AppSection.rooms)
-                .tabItem { Label("Комнаты", systemImage: "play.rectangle.on.rectangle") }
+                .tabItem { Label(AppSection.rooms.title, systemImage: AppSection.rooms.symbol) }
 
             AIAssistantView()
                 .tag(AppSection.ai)
-                .tabItem { Label("ИИ", systemImage: "sparkles") }
+                .tabItem { Label(AppSection.ai.title, systemImage: AppSection.ai.symbol) }
 
             FriendsView()
                 .tag(AppSection.friends)
-                .tabItem { Label("Друзья", systemImage: "person.2") }
+                .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.symbol) }
 
             SettingsTabContent(authService: dependencies.authService)
                 .tag(AppSection.settings)
-                .tabItem { Label("Настройки", systemImage: "gearshape") }
+                .tabItem { Label(AppSection.settings.title, systemImage: AppSection.settings.symbol) }
         }
         .tint(CinemaColor.plink)
+        .toolbarBackground(CinemaColor.background.opacity(0.96), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .environmentObject(dependencies.apiClient)
     }
 }

@@ -1,4 +1,25 @@
+// SyncQuality moved from SyncState.swift (deleted in legacy cleanup)
 import SwiftUI
+
+enum SyncQuality: String, Sendable {
+    case synced, syncing, lagging, offline
+    var icon: String {
+        switch self {
+        case .synced: return "checkmark.circle.fill"
+        case .syncing: return "arrow.triangle.2.circlepath"
+        case .lagging: return "exclamationmark.triangle.fill"
+        case .offline: return "wifi.slash"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .synced: return .green
+        case .syncing: return .blue
+        case .lagging: return .orange
+        case .offline: return .red
+        }
+    }
+}
 
 // MARK: - Sync Indicator Component
 /// Visual indicator showing the quality of synchronization between participants.

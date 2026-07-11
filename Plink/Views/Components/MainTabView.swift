@@ -176,11 +176,11 @@ struct RoomsTabContent: View {
                 // P0-48: composition root — v2 WatchRoomScreen or legacy RoomView
                 WatchRoomCompositionRoot.makeScreenForRoom(
                     room: room,
-                    userId: authService.currentUser?.id ?? "",
-                    username: authService.currentUser?.username ?? "",
+                    userId: UserDefaults.standard.string(forKey: "plink_user_id") ?? "",
+                    username: UserDefaults.standard.string(forKey: "plink_username") ?? "",
                     apiBaseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")!,
                     wsBaseURL: URL(string: "wss://plink-backend-production-ef31.up.railway.app/ws")!,
-                    authToken: authService.authToken ?? ""
+                    authToken: KeychainHelper.read(for: "rave_auth_token") ?? ""
                 )
             }
         }

@@ -1,38 +1,40 @@
 // Plink/Views/Home/YouTubeSearchView.swift — Brain §4: Native YouTube picker
 //
-// Replaces URL paste with search + trending + tap-to-select.
-// Uses backend /api/media/youtube/search and /api/media/youtube/trending.
+// Uses backend /api/media/search and /api/media/trending.
 // Shows embeddability status. URL paste is secondary action only.
 
 import SwiftUI
 
-// MARK: - Data models
+// MARK: - Data models (match backend response format)
 
 struct YouTubeVideoSummary: Decodable, Identifiable, Sendable {
-    let videoId: String
+    let id: String
     let title: String
-    let channelTitle: String
+    let channel: String
     let thumbnailURL: String?
-    let durationSeconds: Int?
-    let liveBroadcastContent: String
-    let embeddable: Bool?
+    let duration: Int?
+    let url: String?
 
-    var id: String { videoId }
+    var videoId: String { id }
+    var channelTitle: String { channel }
+    var durationSeconds: Int? { duration }
+    var thumbnailURLString: String? { thumbnailURL }
+    var liveBroadcastContent: String { "none" }
+    var embeddable: Bool? { nil }
 
     var durationText: String? {
-        guard let seconds = durationSeconds, seconds > 0 else { return nil }
+        guard let seconds = duration, seconds > 0 else { return nil }
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
         let s = seconds % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 
-    var isLive: Bool { liveBroadcastContent == "live" }
+    var isLive: Bool { false }
 }
 
-struct YouTubeSearchPage: Decodable, Sendable {
-    let items: [YouTubeVideoSummary]
-    let nextPageToken: String?
+struct YouTubeSearchResponse: Decodable, Sendable {
+    let results: [YouTubeVideoSummary]
 }
 
 // MARK: - Service
@@ -75,18 +77,14 @@ final class YouTubePickerModel {
     func loadTrending() async {
         state = .loading
         do {
-            let url = URL(string: "\(apiBaseURL)/api/media/youtube/trending?regionCode=RU&limit=20")!
-            var request = URLRequest(url: url)
-            if let token = KeychainHelper.read(for: "rave_auth_token") {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let url = URL(string: "\(apiBaseURL)/api/media/trending?regionCode=RU&maxResults=20")!
+            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url))
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 state = .failed("Не удалось загрузить")
                 return
             }
-            let page = try JSONDecoder().decode(YouTubeSearchPage.self, from: data)
-            items = page.items
+            let resp = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
+            items = resp.results
             state = items.isEmpty ? .empty : .loaded
         } catch {
             state = .failed(error.localizedDescription)
@@ -97,18 +95,14 @@ final class YouTubePickerModel {
         state = .loading
         do {
             let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-            let url = URL(string: "\(apiBaseURL)/api/media/youtube/search?q=\(encoded)&limit=20")!
-            var request = URLRequest(url: url)
-            if let token = KeychainHelper.read(for: "rave_auth_token") {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let url = URL(string: "\(apiBaseURL)/api/media/search?q=\(encoded)&limit=20")!
+            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url))
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 state = .failed("Не удалось найти")
                 return
             }
-            let page = try JSONDecoder().decode(YouTubeSearchPage.self, from: data)
-            items = page.items
+            let resp = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
+            items = resp.results
             state = items.isEmpty ? .empty : .loaded
         } catch {
             state = .failed(error.localizedDescription)
@@ -125,13 +119,12 @@ final class YouTubePickerModel {
         let videoId = extractVideoId(from: urlText) ?? urlText
         guard videoId.count == 11 else { return }
         selected = YouTubeVideoSummary(
-            videoId: videoId,
+            id: videoId,
             title: "YouTube: \(videoId)",
-            channelTitle: "",
+            channel: "",
             thumbnailURL: "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg",
-            durationSeconds: nil,
-            liveBroadcastContent: "none",
-            embeddable: nil
+            duration: nil,
+            url: nil
         )
     }
 
@@ -205,7 +198,6 @@ struct YouTubeSearchView: View {
             } label: {
                 YouTubeResultRow(item: item, isSelected: model.selected?.id == item.id)
             }
-            .disabled(item.embeddable == false)
             .buttonStyle(.plain)
         }
         .listStyle(.plain)
@@ -304,7 +296,7 @@ struct YouTubeSearchView: View {
     private func selectedBar(item: YouTubeVideoSummary) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                AsyncImage(url: URL(string: item.thumbnailURL ?? "")) { image in
+                AsyncImage(url: URL(string: item.thumbnailURLString ?? "")) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle().fill(Cinema2026.surface)
@@ -346,7 +338,7 @@ struct YouTubeSearchView: View {
 
     private func confirmSelection(_ item: YouTubeVideoSummary) {
         let url = "https://www.youtube.com/watch?v=\(item.videoId)"
-        let thumb = item.thumbnailURL ?? "https://img.youtube.com/vi/\(item.videoId)/mqdefault.jpg"
+        let thumb = item.thumbnailURLString ?? "https://img.youtube.com/vi/\(item.videoId)/mqdefault.jpg"
         onSelect(url, item.title, thumb)
         dismiss()
     }
@@ -360,9 +352,8 @@ struct YouTubeResultRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Thumbnail
             ZStack(alignment: .bottomTrailing) {
-                AsyncImage(url: URL(string: item.thumbnailURL ?? "")) { image in
+                AsyncImage(url: URL(string: item.thumbnailURLString ?? "")) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle().fill(Cinema2026.surface)
@@ -378,18 +369,8 @@ struct YouTubeResultRow: View {
                         .background(.black.opacity(0.8), in: Capsule())
                         .padding(4)
                 }
-
-                if item.isLive {
-                    Text("LIVE")
-                        .font(.system(size: 8, weight: .black))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Cinema2026.danger, in: Capsule())
-                        .padding(4)
-                }
             }
 
-            // Info
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.system(size: 14, weight: .medium))
@@ -400,12 +381,6 @@ struct YouTubeResultRow: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Cinema2026.secondary)
                     .lineLimit(1)
-
-                if item.embeddable == false {
-                    Text("Нельзя встроить")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Cinema2026.danger)
-                }
             }
 
             Spacer()

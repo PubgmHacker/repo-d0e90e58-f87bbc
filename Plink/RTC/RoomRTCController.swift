@@ -232,12 +232,54 @@ public final class RoomRTCController: RoomDelegate {
         }
     }
 
+    // PATCH 09: Track publication delegates — fire when remote participants
+    // publish/unpublish video tracks. UI uses these to mount/unmount VideoView.
+    nonisolated public func room(_ room: Room, participant: RemoteParticipant, didPublish publication: RemoteTrackPublication) {
+        Task { @MainActor in
+            self.refreshParticipants(from: room)
+        }
+    }
+
+    nonisolated public func room(_ room: Room, participant: RemoteParticipant, didUnpublish publication: RemoteTrackPublication) {
+        Task { @MainActor in
+            self.refreshParticipants(from: room)
+        }
+    }
+
     nonisolated public func room(_ room: Room, didFailToConnect error: any Error) {
         Task { @MainActor in
             self.lastError = "LiveKit connect failed: \(error.localizedDescription)"
             self.isConnected = false
             self.connectionState = .failed(error.localizedDescription)
         }
+    }
+
+    // MARK: - Video track access (PATCH 09)
+
+    /// Returns the remote participant's video track for rendering, or nil
+    /// if the participant has no camera published. UI calls this when
+    /// mounting a VideoView for a participant avatar.
+    public func videoTrack(forParticipantIdentity identity: String) -> VideoTrack? {
+        guard let room = room else { return nil }
+
+        // Local participant's camera track.
+        if identity == room.localParticipant.identity {
+            return cameraTrack
+        }
+
+        // Remote participant's video track.
+        guard let remote = room.remoteParticipants[identity] else { return nil }
+        for (_, publication) in remote.videoTracks {
+            if let track = publication.track as? VideoTrack {
+                return track
+            }
+        }
+        return nil
+    }
+
+    /// Returns the local participant's camera track for self-preview.
+    public func localCameraTrack() -> VideoTrack? {
+        cameraTrack
     }
 
     // MARK: - Participants

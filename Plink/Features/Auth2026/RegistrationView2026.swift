@@ -98,6 +98,10 @@ struct RegistrationView2026: View {
         do {
             let authService = AuthService(api: apiClient)
             _ = try await authService.signUp(email: email, password: password, username: username)
+            // Save token to Keychain
+            if let token = authService.authToken {
+                KeychainHelper.save(token, for: "rave_auth_token")
+            }
             onRegistered()
         } catch {
             errorMessage = "Ошибка регистрации. Попробуйте другой username или email."

@@ -79,6 +79,10 @@ struct LoginView2026: View {
         do {
             let authService = AuthService(api: apiClient)
             _ = try await authService.signIn(email: email, password: password)
+            // Save token to Keychain
+            if let token = authService.authToken {
+                KeychainHelper.save(token, for: "rave_auth_token")
+            }
             onAuthenticated()
         } catch {
             errorMessage = "Ошибка входа. Проверьте email и пароль."

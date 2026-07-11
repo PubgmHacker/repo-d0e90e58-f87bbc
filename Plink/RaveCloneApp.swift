@@ -108,37 +108,22 @@ struct PlinkApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                // ── Корневой биолюминесцентный фон (виден на всех экранах) ──
-                BioluminescentBackground()
-                    .ignoresSafeArea()
-
-                if launchPhase == .launching {
-                    SplashView()
-                        .transition(.opacity)
-                } else if isSignedIn {
-                    authenticatedContent
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                            removal: .opacity
-                        ))
-                } else {
-                    loginContent
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                            removal: .opacity
-                        ))
-                }
-            }
-            .animation(.easeInOut(duration: 0.5), value: launchPhase == .ready)
-            .animation(.easeInOut(duration: 0.4), value: isSignedIn)
-            .onAppear {
-                Task {
-                    await bridgeAuthToken()
-                    checkAuth()
-                }
-            }
-            // ── Universal Links / Deep-Linking (Блок 3) ───────────────
+            // PATCH: new cinematic launch gate
+            AuthLaunchGate(
+                dependencies: AppDependencies(
+                    apiClient: apiClient,
+                    authService: authService,
+                    roomService: roomService,
+                    mediaService: mediaService,
+                    friendManager: friendManager,
+                    dmChatService: dmChatService
+                ),
+                onboardingStore: UserDefaultsOnboardingStore()
+            )
+            .environmentObject(deepLinkRouter)
+            .environmentObject(friendManager)
+            .environmentObject(dmChatService)
+            .environmentObject(apiClient)
             .onOpenURL { url in
                 handleDeepLink(url)
             }

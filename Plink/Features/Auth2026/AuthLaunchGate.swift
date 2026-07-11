@@ -73,12 +73,25 @@ struct AuthLaunchGate: View {
     private func restoreSession() async {
         async let minimumSplash: Void = Task.sleep(for: .milliseconds(650))
 
-        // Check if we have a valid auth token
-        let token = KeychainHelper.read(for: "rave_auth_token")
+        // Check if we have a valid auth token + can fetch user
+        let authService = dependencies.authService
+        let token = authService.authToken
         _ = try? await minimumSplash
 
         if token != nil {
-            destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+            // Verify token is still valid by fetching current user
+            let user = await authService.currentUser()
+            if user != nil {
+                destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+            } else {
+                // Token expired — try refresh
+                let refreshed = await authService.getFreshToken()
+                if refreshed != nil {
+                    destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+                } else {
+                    destination = .authentication
+                }
+            }
         } else {
             destination = .authentication
         }

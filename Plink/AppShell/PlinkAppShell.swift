@@ -36,7 +36,7 @@ struct PlinkAppShell: View {
             #endif
         }
         .sheet(isPresented: $createPresented) {
-            CreateRoomView()
+            CreateRoomView(onRoomCreated: { _ in createPresented = false })
         }
     }
 }

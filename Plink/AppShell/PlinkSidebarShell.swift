@@ -11,7 +11,7 @@ struct PlinkSidebarShell: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List {
                 Section {
                     Label("Plink", systemImage: "play.fill")
                         .font(.headline)

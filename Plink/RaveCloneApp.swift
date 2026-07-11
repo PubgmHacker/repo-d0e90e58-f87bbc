@@ -133,8 +133,10 @@ struct PlinkApp: App {
             .animation(.easeInOut(duration: 0.5), value: launchPhase == .ready)
             .animation(.easeInOut(duration: 0.4), value: isSignedIn)
             .onAppear {
-                bridgeAuthToken()
-                checkAuth()
+                Task {
+                    await bridgeAuthToken()
+                    checkAuth()
+                }
             }
             // ── Universal Links / Deep-Linking (Блок 3) ───────────────
             .onOpenURL { url in
@@ -163,10 +165,11 @@ struct PlinkApp: App {
             LoginView(
                 viewModel: AuthViewModel(authService: authService),
                 onSignIn: {
-                    bridgeAuthToken()   // push jwt to WS + MediaService before entering
-                    isSignedIn = true
-                    // 🔧 FIX M13: Trigger friends load after sign-in
-                    Task { await friendManager.loadAll() }
+                    Task {
+                        await bridgeAuthToken()
+                        await MainActor.run { isSignedIn = true }
+                        await friendManager.loadAll()
+                    }
                 }
             )
         }
@@ -184,13 +187,13 @@ struct PlinkApp: App {
             Task {
                 do {
                     let room = try await roomService.joinRoom(code: code)
-                    await MainActor.run {
+                await MainActor.run {
                         deepLinkRoom = room
                         deepLinkRouter.clear()
                     }
                 } catch {
                     // Комната не найдена — сбрасываем.
-                    await MainActor.run { deepLinkRouter.clear() }
+                await MainActor.run { deepLinkRouter.clear() }
                 }
             }
 
@@ -198,7 +201,7 @@ struct PlinkApp: App {
             // 🔧 FIX L10: Fetch real username from server (was: hardcoded "Пользователь").
             Task {
                 let username = await fetchUsername(userId: userId)
-                await MainActor.run {
+            await MainActor.run {
                     friendInviteAlert = FriendInviteAlert(userId: userId, username: username)
                     deepLinkRouter.clear()
                 }
@@ -230,11 +233,10 @@ struct PlinkApp: App {
     /// Прокидывает текущий JWT из AuthService во все сервисы:
     /// - MediaService (Authorization: Bearer на extraction-запросах)
     /// APIClient обновляется внутри AuthService.
-    private func bridgeAuthToken() {
-            let token = await authService.getFreshToken()
-            await MainActor.run {
-                mediaService.setAuthToken(token)
-            }
+    private func bridgeAuthToken() async {
+        let token = await authService.getFreshToken()
+        await MainActor.run {
+            mediaService.setAuthToken(token)
         }
     }
 
@@ -248,16 +250,18 @@ struct PlinkApp: App {
     private func checkAuth() {
         Task { [authService, friendManager] in
             // Проверяем токен (getFreshToken рефрешит если истёк)
-            let token = await authService.getFreshToken()
+        let token = await authService.getFreshToken()
             let user = await authService.currentUser()
             try? await Task.sleep(nanoseconds: 900_000_000)
 
-            await MainActor.run {
+        await MainActor.run {
                 // Токен валиден И пользователь есть → показываем приложение
                 if token != nil && user != nil {
-                    bridgeAuthToken()
                     isSignedIn = true
-                    Task { await friendManager.loadAll() }
+                    Task {
+                        await bridgeAuthToken()
+                        await friendManager.loadAll()
+                    }
                 } else {
                     // Токен истёк/невалиден → очищаем сессию → login screen
                     Task { try? await authService.signOut() }

@@ -1,0 +1,202 @@
+// Plink/Features/Premium2026/PlinkPlusPaywall.swift — Contextual paywall
+//
+// PLINK_UNIFIED_IOS_MAC_CINEMATIC_PATCH §8
+
+import SwiftUI
+import StoreKit
+
+struct PlinkPlusPaywall: View {
+    enum Trigger { case emoji, theme, capacity, cameraFilter, settings }
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedID: String?
+
+    let trigger: Trigger
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            CinemaColor.background.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    PaywallArtwork(trigger: trigger)
+                        .frame(height: 250)
+
+                    VStack(spacing: 8) {
+                        Text(headline)
+                            .font(.system(size: 28, weight: .bold))
+                            .multilineTextAlignment(.center)
+                        Text("Темы, реакции и больше друзей. Базовая синхронизация остаётся одинаково быстрой для всех.")
+                            .font(.subheadline)
+                            .foregroundStyle(CinemaColor.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 24)
+
+                    PaywallBenefits(trigger: trigger)
+                    PlanPicker(selectedID: $selectedID)
+
+                    Button(action: purchase) {
+                        Text(ctaText)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CinematicPrimaryButtonStyle())
+                    .disabled(selectedID == nil)
+                    .padding(.horizontal, 24)
+
+                    Button("Восстановить покупки") {
+                        Task { await StoreManager.shared.restorePurchases() }
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(CinemaColor.secondary)
+
+                    HStack(spacing: 14) {
+                        Link("Условия", destination: URL(string: "https://plink.app/terms")!)
+                        Link("Конфиденциальность", destination: URL(string: "https://plink.app/privacy")!)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(CinemaColor.secondary)
+                }
+                .padding(.bottom, 30)
+            }
+
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .frame(width: 44, height: 44)
+                    .background(CinemaColor.surface, in: Circle())
+            }
+            .padding(14)
+            .accessibilityLabel("Закрыть")
+        }
+        .task {
+            await StoreManager.shared.loadProducts()
+            selectedID = StoreManager.shared.products.first { $0.id.contains("yearly") }?.id
+                ?? StoreManager.shared.products.first?.id
+        }
+    }
+
+    private var headline: String {
+        switch trigger {
+        case .emoji: return "Реагируйте по-своему."
+        case .theme: return "Сделайте комнату своей."
+        case .capacity: return "Соберите всех друзей."
+        case .cameraFilter: return "Выглядите лучше в кадре."
+        case .settings: return "Больше характера с Plink+."
+        }
+    }
+
+    private var ctaText: String {
+        if let product = StoreManager.shared.products.first(where: { $0.id == selectedID }) {
+            return "Попробовать \(product.displayPrice)"
+        }
+        return "Попробовать Plink+"
+    }
+
+    private func purchase() {
+        guard let product = StoreManager.shared.products.first(where: { $0.id == selectedID }) else { return }
+        Task {
+            await StoreManager.shared.purchase(product)
+            if PremiumStatusManager.shared.isPremium { dismiss() }
+        }
+    }
+}
+
+struct PaywallArtwork: View {
+    let trigger: PlinkPlusPaywall.Trigger
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [CinemaColor.plink.opacity(0.2), CinemaColor.background],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            Image(systemName: symbol)
+                .font(.system(size: 60))
+                .foregroundStyle(CinemaColor.plink)
+        }
+    }
+
+    private var symbol: String {
+        switch trigger {
+        case .emoji: return "face.smiling.fill"
+        case .theme: return "paintpalette.fill"
+        case .capacity: return "person.3.fill"
+        case .cameraFilter: return "camera.filters"
+        case .settings: return "star.circle.fill"
+        }
+    }
+}
+
+struct PaywallBenefits: View {
+    let trigger: PlinkPlusPaywall.Trigger
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(benefits, id: \.self) { benefit in
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(CinemaColor.plink)
+                    Text(benefit)
+                        .font(.subheadline)
+                        .foregroundStyle(CinemaColor.text)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var benefits: [String] {
+        switch trigger {
+        case .emoji: return ["Премиум-реакции", "Кастомные эмодзи", "Без рекламы"]
+        case .theme: return ["Эксклюзивные темы", "Кастомные рамки аватара", "Без рекламы"]
+        case .capacity: return ["До 20 участников", "Приоритетный хостинг", "Без рекламы"]
+        case .cameraFilter: return ["Видео-фильтры", "HD качество", "Без рекламы"]
+        case .settings: return ["Все премиум-фичи", "Эксклюзивные темы", "Без рекламы"]
+        }
+    }
+}
+
+struct PlanPicker: View {
+    @Binding var selectedID: String?
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ForEach(StoreManager.shared.products, id: \.id) { product in
+                Button {
+                    selectedID = product.id
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(product.displayName)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(CinemaColor.text)
+                            Text(product.description)
+                                .font(.caption)
+                                .foregroundStyle(CinemaColor.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(product.displayPrice)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(CinemaColor.text)
+
+                        Image(systemName: selectedID == product.id ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(selectedID == product.id ? CinemaColor.plink : CinemaColor.tertiary)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: CinemaRadius.control)
+                            .fill(selectedID == product.id ? CinemaColor.plink.opacity(0.08) : CinemaColor.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CinemaRadius.control)
+                            .stroke(selectedID == product.id ? CinemaColor.plink.opacity(0.4) : .clear, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+}

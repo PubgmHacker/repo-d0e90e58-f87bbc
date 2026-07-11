@@ -28,13 +28,10 @@ struct LivingVideoBackdrop: View {
             if let player = player, player.currentItem != nil {
                 LivingVideoFrameView(player: player)
             } else {
-                // PATCH 16: AnimatedGradientBackground in Components/ uses
-                // (orbColors:hasActiveRooms:) signature and forwards to
-                // BioluminescentBackground. The fallbackColors parameter
-                // is ignored — BioluminescentBackground has its own palette.
-                // This is acceptable: when no video is playing, the room
-                // shows the standard cyan/teal bg instead of brand magenta.
-                AnimatedGradientBackground(orbColors: fallbackColors, hasActiveRooms: false)
+                // PATCH 18 (P1-72): use BioluminescentBackground with .rave
+                // palette directly — preserves purple neon design instead
+                // of falling back to cyan/teal.
+                BioluminescentBackground(energy: 0.5, dimming: 0, palette: .rave)
             }
         }
         .clipped()

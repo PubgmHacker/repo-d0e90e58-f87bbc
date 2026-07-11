@@ -262,6 +262,7 @@ enum BioPalette {
     case amber       // AI
     case emerald     // Friends
     case mono        // Settings (B&W)
+    case rave        // PATCH 18: WatchRoom purple neon (PlinkRave tokens)
 
     func color(for index: Int) -> Color {
         let colors: [Color]
@@ -307,6 +308,17 @@ enum BioPalette {
                 Color(white: 0.95),    // near white
                 Color(hex: 0x4A5568),  // steel blue-grey
                 Color(white: 0.65),    // silver
+            ]
+        case .rave:
+            // PATCH 18 (P1-72): WatchRoom purple neon palette.
+            // Uses PlinkRave tokens so the room ambient breathes with
+            // purple/magenta/cyan instead of cyan/teal.
+            colors = [
+                PlinkRave.magenta,     // 0xFF00FF
+                PlinkRave.cyan,        // 0x00FFFF
+                PlinkRave.hotPink,     // 0xFF1493
+                Color(hex: 0x8B008B),  // dark magenta
+                PlinkRave.magenta.opacity(0.7),
             ]
         }
         return colors[index % colors.count]

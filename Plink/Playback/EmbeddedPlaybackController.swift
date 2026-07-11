@@ -76,10 +76,32 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     /// PATCH 03: Pending enum consolidates pending seek + play state.
     /// Drained atomically when isReady becomes true.
+    /// PATCH 18 (P1-69): merge instead of overwrite — when a new command
+    /// arrives before ready, merge it with the existing pending state so
+    /// we don't lose position or play intent. The last seek wins (most
+    /// recent user intent), but play/pause is preserved across seeks.
     private var pending: Pending = .none
     private enum Pending {
         case none
         case state(position: Double?, playing: Bool?)
+
+        /// Merge a new command into existing pending state.
+        /// - position: if non-nil, overrides existing position (last seek wins).
+        /// - playing: if non-nil, overrides existing playing (last play/pause wins).
+        /// If both are nil, returns self unchanged.
+        func merging(position: Double?, playing: Bool?) -> Pending {
+            switch self {
+            case .none:
+                if position == nil && playing == nil {
+                    return .none
+                }
+                return .state(position: position, playing: playing)
+            case .state(let existingPos, let existingPlaying):
+                let mergedPos = position ?? existingPos
+                let mergedPlaying = playing ?? existingPlaying
+                return .state(position: mergedPos, playing: mergedPlaying)
+            }
+        }
     }
 
     private var pollTask: Task<Void, Never>?
@@ -172,7 +194,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     public func play() async {
         guard isReady else {
-            pending = .state(position: nil, playing: true)
+            pending = pending.merging(position: nil, playing: true)
             return
         }
         await evaluate("window.plinkPlay && window.plinkPlay();")
@@ -180,7 +202,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     public func pause() {
         guard isReady else {
-            pending = .state(position: nil, playing: false)
+            pending = pending.merging(position: nil, playing: false)
             return
         }
         Task { await evaluate("window.plinkPause && window.plinkPause();") }
@@ -189,7 +211,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     public func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult {
         let target = max(0, duration > 0 ? min(seconds, duration) : seconds)
         guard isReady else {
-            pending = .state(position: target, playing: nil)
+            pending = pending.merging(position: target, playing: nil)
             return .unavailable
         }
         // PATCH 03: plinkSeek returns true on success, undefined if not loaded.

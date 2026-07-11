@@ -16,38 +16,11 @@ struct PlinkPhoneTabShell: View {
     var body: some View {
         TabView(selection: $selection) {
             // Home — use existing HomeView with real HomeViewModel
-            NavigationStack {
-                ZStack {
-                    if let homeViewModel {
-                        HomeView(
-                            viewModel: homeViewModel,
-                            onProfileTap: { selection = .profile },
-                            onSwitchToAITab: { },
-                            onSwitchToJoinTab: { }
-                        )
-                    } else {
-                        ProgressView().tint(CinemaColor.plink)
-                    }
-                }
-                .fullScreenCover(item: $navigateToRoom) { room in
-                    WatchRoomCompositionRoot.makeScreenForRoom(
-                        room: room,
-                        userId: UserDefaults.standard.string(forKey: "plink_user_id") ?? "",
-                        username: UserDefaults.standard.string(forKey: "plink_username") ?? "",
-                        apiBaseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")!,
-                        wsBaseURL: URL(string: "wss://plink-backend-production-ef31.up.railway.app/ws")!,
-                        authToken: KeychainHelper.read(for: "rave_auth_token") ?? ""
-                    )
-                }
-            }
-            .onAppear {
-                if homeViewModel == nil {
-                    homeViewModel = HomeViewModel(
-                        roomService: dependencies.roomService,
-                        authService: dependencies.authService
-                    )
-                }
-            }
+            HomeTabContent(
+                onProfileTap: { selection = .profile },
+                onSwitchToAITab: nil,
+                onSwitchToJoinTab: nil
+            )
             .tag(AppSection.home)
             .tabItem { Label("Главная", systemImage: "house") }
 
@@ -64,7 +37,7 @@ struct PlinkPhoneTabShell: View {
                 .tag(AppSection.friends)
                 .tabItem { Label("Друзья", systemImage: "person.2") }
 
-            SettingsView()
+            SettingsTabContent(authService: dependencies.authService)
                 .tag(AppSection.settings)
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
         }

@@ -74,7 +74,7 @@ struct PlinkSidebarShell: View {
             Text("Профиль")
                 .cinematicScreen()
         case .settings:
-            SettingsView()
+            SettingsTabContent(authService: dependencies.authService)
         case .create:
             EmptyView()
         }

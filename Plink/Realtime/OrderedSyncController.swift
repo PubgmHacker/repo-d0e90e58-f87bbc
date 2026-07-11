@@ -107,7 +107,14 @@ public final class OrderedSyncController {
 
         if playingMismatch || absDrift >= 750 {
             cancelRateCorrection()
-            await player.seek(to: target, precise: true)
+            // P0-27: only proceed with play/pause if our seek was APPLIED.
+            // If superseded by a newer seek, that seek's caller owns the
+            // next action — we must NOT call play() on stale target.
+            let seekResult = await player.seek(to: target, precise: true)
+            if seekResult == .superseded {
+                // A newer seek took over — abandon this transition.
+                return
+            }
             if state.playing {
                 await player.play()
             } else {
@@ -123,7 +130,8 @@ public final class OrderedSyncController {
         if !state.playing {
             if absDrift >= 80 {
                 cancelRateCorrection()
-                await player.seek(to: target, precise: true)
+                let seekResult = await player.seek(to: target, precise: true)
+                if seekResult == .superseded { return }  // P0-27
                 player.setRate(Float(state.rate))
             }
             return
@@ -182,7 +190,8 @@ public final class OrderedSyncController {
         if correctionWindowCount >= 3 {
             // Give up on rate nudge — precise seek
             cancelRateCorrection()
-            await player.seek(to: target, precise: true)
+            let seekResult = await player.seek(to: target, precise: true)
+            if seekResult == .superseded { return }  // P0-27
             player.setRate(baseRate)
             hardCorrectionCount += 1
             correctionWindowCount = 0

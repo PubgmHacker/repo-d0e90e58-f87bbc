@@ -133,11 +133,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         isPlaying = false
     }
 
-    public func seek(to seconds: TimeInterval, precise: Bool) async {
-        guard ready else { pendingSeekSeconds = seconds; return }
+    public func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult {
+        guard ready else { pendingSeekSeconds = seconds; return .applied }
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
-        // P1-15: use callAsyncJavaScript for safe argument passing
-        guard let web = webView else { return }
+        guard let web = webView else { return .applied }
         do {
             _ = try await web.callAsyncJavaScript(
                 "ytPlayer && ytPlayer.seekTo(seconds, true);",
@@ -146,8 +145,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                 in: .page
             )
             position = clamped
+            return .applied
         } catch {
             lastError = "seek failed: \(error.localizedDescription)"
+            return .applied  // P0-27: still resume — don't block caller
         }
     }
 

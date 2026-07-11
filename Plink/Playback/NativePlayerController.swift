@@ -37,10 +37,9 @@ public final class NativePlayerController: PlaybackControlling {
     private var likelyKeepUpObservation: NSKeyValueObservation?
     private var isPlaybackBufferEmptyObservation: NSKeyValueObservation?
 
-    // P1-23: serial latest-target seek coordinator
+    // P1-23/P0-27: serial latest-target seek coordinator with SeekResult
     private var seekGeneration = 0
     private var pendingSeekTask: Task<Void, Never>?
-    private var latestTargetSeek: (seconds: TimeInterval, precise: Bool)?
 
     // P1-17/P1-24: preroll state — only preroll after prepare, not every play()
     // P1-24: seek invalidates isPrerolled only for precise transition seeks
@@ -97,11 +96,19 @@ public final class NativePlayerController: PlaybackControlling {
         isPlaying = false
     }
 
-    // P1-23: serial latest-target seek. Queue stores only the latest target;
-    // next seek executes after current completion. Generation guard ensures
-    // cancelled seek's completion does not mutate state.
-    public func seek(to seconds: TimeInterval, precise: Bool) async {
-        guard let p = player else { return }
+    // P0-27/P1-23: serial latest-target seek with SeekResult.
+    // Each caller gets a continuation. When their target is executed,
+    // their continuation resumes with .applied. If a newer seek supersedes
+    // them before execution, their continuation resumes with .superseded.
+    private struct SeekWaiter {
+        let id: UUID
+        let target: (seconds: TimeInterval, precise: Bool)
+        let continuation: CheckedContinuation<SeekResult, Never>
+    }
+    private var seekWaiters: [SeekWaiter] = []
+
+    public func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult {
+        guard let p = player else { return .applied }
         let clamped: Double
         if seconds.isNaN || seconds.isInfinite || seconds < 0 {
             clamped = 0
@@ -111,28 +118,40 @@ public final class NativePlayerController: PlaybackControlling {
             clamped = seconds
         }
 
-        // P1-23: store latest target — if a seek is in progress, the new
-        // target will be executed after current completion.
-        latestTargetSeek = (clamped, precise)
+        // P0-27: resume all previous waiters with .superseded — their
+        // target will NOT be executed because this newer seek takes over.
+        let superseded = seekWaiters
+        seekWaiters.removeAll()
+        for waiter in superseded {
+            waiter.continuation.resume(returning: .superseded)
+        }
 
-        // If a seek is already in progress, just store the target — the
-        // pending task will pick it up after current completion.
-        if pendingSeekTask != nil { return }
+        // P0-27: add ourselves as a waiter
+        return await withCheckedContinuation { (continuation: CheckedContinuation<SeekResult, Never>) in
+            let waiter = SeekWaiter(id: UUID(), target: (clamped, precise), continuation: continuation)
+            seekWaiters.append(waiter)
 
-        await executeNextSeek(p)
+            // If no seek is in progress, start executing
+            if pendingSeekTask == nil {
+                Task { await executeNextSeek(p) }
+            }
+        }
     }
 
     private func executeNextSeek(_ p: AVPlayer) async {
-        repeat {
-            guard let target = latestTargetSeek else { return }
-            latestTargetSeek = nil
+        while !seekWaiters.isEmpty {
+            // P0-27: take the LATEST waiter — latest-wins semantics
+            guard let waiter = seekWaiters.last else { return }
+            // Remove all waiters EXCEPT the one we're executing — if a new
+            // seek arrives during execution, it becomes a new waiter.
+            seekWaiters.removeAll { $0.id != waiter.id }
 
             seekGeneration += 1
             let generation = seekGeneration
             p.cancelPendingPrerolls()
 
-            let cmTarget = CMTime(seconds: target.seconds, preferredTimescale: 600)
-            let tolerance: CMTime = target.precise
+            let cmTarget = CMTime(seconds: waiter.target.seconds, preferredTimescale: 600)
+            let tolerance: CMTime = waiter.target.precise
                 ? .zero
                 : CMTime(seconds: 0.15, preferredTimescale: 600)
 
@@ -149,9 +168,8 @@ public final class NativePlayerController: PlaybackControlling {
                 guard !Task.isCancelled,
                       let self else { return }
                 guard generation == self.seekGeneration else { return }
-                // P1-24: only invalidate isPrerolled for precise transition
-                // seeks, not for drift corrections (which don't need preroll).
-                if target.precise {
+                // P1-24: only invalidate isPrerolled for precise transition seeks
+                if waiter.target.precise {
                     self.isPrerolled = false
                 }
             }
@@ -159,7 +177,10 @@ public final class NativePlayerController: PlaybackControlling {
             if generation == seekGeneration {
                 pendingSeekTask = nil
             }
-        } while latestTargetSeek != nil  // P1-23: process queued latest target
+
+            // P0-27: resume this waiter with .applied — their seek completed
+            waiter.continuation.resume(returning: .applied)
+        }
     }
 
     public func setRate(_ rate: Float) {
@@ -168,11 +189,16 @@ public final class NativePlayerController: PlaybackControlling {
     }
 
     public func teardown() {
-        // P1-23: cancel pending seek on teardown
+        // P0-27/P1-23: cancel pending seek + resume all waiters as superseded
         seekGeneration += 1
         pendingSeekTask?.cancel()
         pendingSeekTask = nil
-        latestTargetSeek = nil
+        // P0-27: resume all pending waiters — they'll never complete otherwise
+        let pending = seekWaiters
+        seekWaiters.removeAll()
+        for waiter in pending {
+            waiter.continuation.resume(returning: .superseded)
+        }
         player?.cancelPendingPrerolls()
 
         if let token = timeObserverToken {

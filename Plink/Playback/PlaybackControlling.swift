@@ -12,6 +12,14 @@
 
 import Foundation
 
+// P0-27: SeekResult — caller knows whether their seek was applied or
+// superseded by a newer seek. OrderedSyncController must NOT call play()
+// after a superseded seek — the newer seek's caller owns the next action.
+public enum SeekResult: Sendable, Equatable {
+    case applied
+    case superseded
+}
+
 @MainActor
 public protocol PlaybackControlling: AnyObject {
     var position: TimeInterval { get }
@@ -29,7 +37,10 @@ public protocol PlaybackControlling: AnyObject {
     func prepare(_ source: PlaybackSource) async throws
     func play() async
     func pause()
-    func seek(to seconds: TimeInterval, precise: Bool) async
+    /// P0-27: seek returns SeekResult. Caller MUST check result before
+    /// proceeding with play/pause — superseded means a newer seek owns
+    /// the next action.
+    func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult
     func setRate(_ rate: Float)
 }
 

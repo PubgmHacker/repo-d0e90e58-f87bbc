@@ -144,7 +144,7 @@ public enum FeatureFlags {
             return true
         }
         // P1-59: check cached remote config
-        return cachedRemoteFlags["realtime_protocol_v2"] ?? false
+        return true  // P1-56: temporarily forced TRUE for v2 testing
     }
 
     /// P1-56: cached remote flags fetched from backend

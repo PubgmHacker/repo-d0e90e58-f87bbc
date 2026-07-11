@@ -118,8 +118,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         // — reconfigured on rotation via updateDanmakuLaneCount().
         // PATCH 16: DanmakuEngine has no startSampling() — caller polls
         // via poll(at:) which is started in connect().
-        self.danmakuEngine = DanmakuEngine()
-        self.ambientSampler = AmbientVideoSampler()
+        // PATCH 16g: capture local let before assigning to self, so the
+        // Task can configure it without requiring self to be fully
+        // initialized.
+        let danmakuEngine = DanmakuEngine()
+        let ambientSampler = AmbientVideoSampler()
+        self.danmakuEngine = danmakuEngine
+        self.ambientSampler = ambientSampler
         Task { @MainActor [danmakuEngine] in
             await danmakuEngine.configure(laneCount: 5)
         }

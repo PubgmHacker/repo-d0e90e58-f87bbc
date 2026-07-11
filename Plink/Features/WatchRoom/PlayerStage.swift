@@ -9,7 +9,7 @@ struct PlayerStage: View {
 
     var body: some View {
         ZStack {
-            PlinkRave.void
+            Color.black
             PlayerSurfaceView(coordinator: model.coordinator)
 
             if model.coordinator.isPreparing {
@@ -35,18 +35,14 @@ struct PlayerStage: View {
 
             DanmakuCanvasLayer(messages: model.danmakuMessages)
         }
-        .clipShape(RoundedRectangle(cornerRadius: style == .landscape ? 0 : 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: style == .landscape ? 0 : 10, style: .continuous))
         .overlay {
             if style != .landscape {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(PlinkRave.magenta.opacity(0.34), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(PlinkRave.primary.opacity(0.15), lineWidth: 0.5)
             }
         }
-        .shadow(
-            color: style == .landscape ? .clear : PlinkRave.magenta.opacity(0.20),
-            radius: 8
-        )
-        .animation(.easeInOut(duration: 0.22), value: ui.controlsVisible)
+        .animation(.easeInOut(duration: 0.2), value: ui.controlsVisible)
     }
 }
 
@@ -62,8 +58,8 @@ struct PlayerTopChrome: View {
                 SyncHealthPill(driftMs: model.lastDriftMs, connected: model.connectionState == .connected)
                 PlayerChromeButton(systemName: "ellipsis", action: model.openPlayerSettings)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, style == .landscape ? 10 : 8)
+            .padding(.horizontal, 10)
+            .padding(.top, style == .landscape ? 8 : 6)
             Spacer()
         }
     }
@@ -83,13 +79,12 @@ struct PlayerCenterControl: View {
             }
         } label: {
             Image(systemName: model.coordinator.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 25, weight: .semibold))
-                .foregroundStyle(PlinkRave.text)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
                 .offset(x: model.coordinator.isPlaying ? 0 : 1.5)
-                .frame(width: 58, height: 58)
-                .background(PlinkRave.surface.opacity(0.92), in: Circle())
-                .overlay(Circle().stroke(PlinkRave.magenta.opacity(0.55), lineWidth: 1))
-                .plinkGlow(PlinkRave.magenta, radius: 14)
+                .frame(width: 52, height: 52)
+                .background(.black.opacity(0.5), in: Circle())
+                .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .disabled(!model.isHost || model.connectionState != .connected)

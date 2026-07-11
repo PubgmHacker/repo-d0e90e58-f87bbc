@@ -7,55 +7,56 @@ struct WatchChatBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            if isOwn { Spacer(minLength: 62) }
+            if isOwn { Spacer(minLength: 52) }
             if !isOwn { ChatAvatar(message: message) }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 3) {
                 if !isOwn {
-                    Text(message.senderName.uppercased())
-                        .font(.system(size: 11, weight: .bold))
+                    Text(message.senderName)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(roleColor)
                 }
 
                 Text(message.text)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(isOwn ? PlinkRave.text : Color(hex: 0xE6DCEB))
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(isOwn ? .white : PlinkRave.text)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
+                    .padding(.vertical, 8)
                     .background(bubbleBackground)
                     .clipShape(BubbleShape(isOwn: isOwn))
-                    .overlay {
-                        if !isOwn {
-                            BubbleShape(isOwn: false)
-                                .stroke(Color.white.opacity(0.26), lineWidth: 1)
-                        }
-                    }
 
                 if message.isPending {
-                    Label("Sending", systemImage: "clock")
-                        .font(.caption2)
-                        .foregroundStyle(PlinkRave.textSecondary)
+                    Text("Sending...")
+                        .font(.system(size: 10))
+                        .foregroundStyle(PlinkRave.textTertiary)
                 } else if message.isFailed {
                     Button(action: onRetry) {
-                        Label("Tap to retry", systemImage: "arrow.clockwise")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(PlinkRave.danger)
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Retry")
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(PlinkRave.danger)
                     }
                 }
             }
 
             if isOwn { ChatAvatar(message: message) }
-            if !isOwn { Spacer(minLength: 62) }
+            if !isOwn { Spacer(minLength: 52) }
         }
-        .transition(.opacity.combined(with: .move(edge: .bottom)).combined(with: .scale(scale: 0.96)))
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
     @ViewBuilder private var bubbleBackground: some View {
-        if isOwn { PlinkRave.outgoingBubble } else { PlinkRave.surface }
+        if isOwn {
+            PlinkRave.outgoingBubble
+        } else {
+            PlinkRave.surface.opacity(0.85)
+        }
     }
 
     private var roleColor: Color {
-        message.isAdmin ? Color(hex: 0xFFD700) : message.isPremium ? PlinkRave.hotPink : PlinkRave.cyan
+        message.isAdmin ? PlinkRave.gold : message.isPremium ? PlinkRave.accent : PlinkRave.textSecondary
     }
 }
 

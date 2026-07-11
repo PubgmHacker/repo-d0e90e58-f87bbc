@@ -7,19 +7,22 @@ struct WatchChatComposer: View {
     var body: some View {
         HStack(spacing: 8) {
             Button(action: model.openEmojiPicker) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(PlinkRave.hotPink)
-                    .frame(width: 42, height: 42)
+                Image(systemName: "face.smiling")
+                    .font(.system(size: 16))
+                    .foregroundStyle(PlinkRave.textSecondary)
+                    .frame(width: 38, height: 38)
                     .background(PlinkRave.raised, in: Circle())
             }
-            .accessibilityLabel("Custom emoji")
+            .accessibilityLabel("Emoji")
 
-            TextField("Say something...", text: $text, axis: .vertical)
+            TextField("Message...", text: $text, axis: .vertical)
                 .lineLimit(1...4)
+                .font(.system(size: 15))
                 .foregroundStyle(PlinkRave.text)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 10)
-                .background(PlinkRave.void, in: RoundedRectangle(cornerRadius: 20))
+                .tint(PlinkRave.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(PlinkRave.raised, in: RoundedRectangle(cornerRadius: 20))
 
             Button {
                 let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -27,20 +30,29 @@ struct WatchChatComposer: View {
                 model.sendChat(text: value)
                 text = ""
             } label: {
-                Image(systemName: "paperplane.fill")
-                    .foregroundStyle(PlinkRave.text)
-                    .frame(width: 40, height: 40)
-                    .background(PlinkRave.magenta, in: Circle())
-                    .plinkGlow(PlinkRave.cyan, radius: 8)
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Group {
+                            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                PlinkRave.raised
+                            } else {
+                                PlinkRave.primaryAction
+                            }
+                        },
+                        in: Circle()
+                    )
             }
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.connectionState != .connected)
-            .accessibilityLabel("Send message")
+            .accessibilityLabel("Send")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(PlinkRave.surface)
+        .background(PlinkRave.surface.opacity(0.95))
         .overlay(alignment: .top) {
-            Rectangle().fill(PlinkRave.magenta.opacity(0.30)).frame(height: 1)
+            Rectangle().fill(PlinkRave.divider.opacity(0.5)).frame(height: 0.5)
         }
     }
 }

@@ -7,7 +7,7 @@ struct WatchChatView: View {
     var body: some View {
         ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(model.chatMessages) { message in
                         WatchChatBubble(
                             message: message,
@@ -18,10 +18,14 @@ struct WatchChatView: View {
                     }
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+                .padding(.vertical, 12)
             }
-            .scrollIndicators(.visible)
-            .background(PlinkRave.void.opacity(0.76))
+            .scrollIndicators(.hidden)
+            .background(
+                // Living video backdrop — chat breathes with the movie
+                LivingVideoBackdrop(player: model.coordinator.nativePlayer)
+                    .opacity(0.4)
+            )
             .onChange(of: model.chatMessages.count) { _, _ in
                 guard atBottom, let last = model.chatMessages.last else { return }
                 withAnimation(.easeOut(duration: 0.2)) { reader.scrollTo(last.id, anchor: .bottom) }
@@ -34,7 +38,7 @@ struct WatchChatView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PlinkRave.text)
                     .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(PlinkRave.magenta, in: Capsule())
+                    .background(PlinkRave.primary, in: Capsule())
                     .padding(12)
                 }
             }

@@ -15,14 +15,13 @@ struct PlinkSeekBar: View {
             let loaded = CGFloat(max(0, min(1, buffered))) * width
 
             ZStack(alignment: .leading) {
-                Capsule().fill(PlinkRave.divider.opacity(0.45)).frame(height: isScrubbing ? 5 : 3)
-                Capsule().fill(Color(hex: 0xD8B4FE).opacity(0.42)).frame(width: loaded, height: isScrubbing ? 5 : 3)
-                Capsule().fill(PlinkRave.timeline).frame(width: played, height: isScrubbing ? 5 : 3)
+                Capsule().fill(.white.opacity(0.15)).frame(height: isScrubbing ? 4 : 2)
+                Capsule().fill(.white.opacity(0.25)).frame(width: loaded, height: isScrubbing ? 4 : 2)
+                Capsule().fill(PlinkRave.timeline).frame(width: played, height: isScrubbing ? 4 : 2)
                 Circle()
-                    .fill(PlinkRave.cyan)
-                    .frame(width: isScrubbing ? 22 : 14, height: isScrubbing ? 22 : 14)
-                    .plinkGlow(PlinkRave.cyan, radius: isScrubbing ? 12 : 7)
-                    .offset(x: max(0, min(width - (isScrubbing ? 22 : 14), played - 7)))
+                    .fill(.white)
+                    .frame(width: isScrubbing ? 16 : 10, height: isScrubbing ? 16 : 10)
+                    .offset(x: max(0, min(width - (isScrubbing ? 16 : 10), played - 5)))
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
@@ -40,7 +39,7 @@ struct PlinkSeekBar: View {
                     }
             )
         }
-        .frame(height: 26)
-        .opacity(enabled ? 1 : 0.7)
+        .frame(height: 24)
+        .opacity(enabled ? 1 : 0.5)
     }
 }

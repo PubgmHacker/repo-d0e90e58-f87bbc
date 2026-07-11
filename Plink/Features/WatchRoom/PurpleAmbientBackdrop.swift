@@ -1,26 +1,16 @@
 import SwiftUI
 
+// Subtle ambient backdrop — NOT flashy neon.
+// Deep warm dark with faint purple glow, like a cinema at night.
+
 struct PurpleAmbientBackdrop: View {
-    let primary: Color
-    let secondary: Color
-
-    init(primary: Color = PlinkRave.magenta, secondary: Color = PlinkRave.cyan) {
-        self.primary = primary
-        self.secondary = secondary
-    }
-
     var body: some View {
         ZStack {
             PlinkRave.void
+            // Very subtle top glow — barely visible, creates depth
             RadialGradient(
-                colors: [primary.opacity(0.16), .clear],
+                colors: [PlinkRave.primary.opacity(0.05), .clear],
                 center: .topTrailing,
-                startRadius: 4,
-                endRadius: 320
-            )
-            RadialGradient(
-                colors: [secondary.opacity(0.08), .clear],
-                center: .bottomLeading,
                 startRadius: 4,
                 endRadius: 360
             )

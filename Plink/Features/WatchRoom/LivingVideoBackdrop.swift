@@ -206,4 +206,11 @@ final class LivingVideoFrameUIView: UIView {
 // PATCH 16: AnimatedGradientBackground moved to its own file
 // Plink/Views/Components/AnimatedGradientBackground.swift (r2).
 // Removed duplicate declaration here.
-// Color.uiColor helper kept here — no duplicate found elsewhere.
+
+// MARK: - Color UIColor helper
+
+extension Color {
+    var uiColor: UIColor {
+        UIColor(self)
+    }
+}

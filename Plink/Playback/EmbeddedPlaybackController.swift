@@ -137,14 +137,11 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         guard ready else { pendingSeekSeconds = seconds; return .applied }
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
         guard let web = webView else { return .applied }
-        // P1-15: use evaluateJavaScript (synchronous callback) instead of
-        // callAsyncJavaScript (which may not throw/async on all SDKs).
-        web.evaluateJavaScript("ytPlayer && ytPlayer.seekTo(\(clamped), true);") { _, error in
-            if let error {
-                Task { @MainActor [weak self] in
-                    self?.lastError = "seek failed: \(error.localizedDescription)"
-                }
-            }
+        // P1-15: use async evaluateJavaScript (Apple recommended)
+        do {
+            _ = try await web.evaluateJavaScript("ytPlayer && ytPlayer.seekTo(\(clamped), true);")
+        } catch {
+            lastError = "seek failed: \(error.localizedDescription)"
         }
         position = clamped
         return .applied
@@ -246,20 +243,18 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let web = self.webView else { return }
-                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                    web.evaluateJavaScript("ytPlayer ? ytPlayer.getCurrentTime() : 0") { result, _ in
-                        if let t = result as? Double, t.isFinite {
-                            self.position = t
-                        }
-                        cont.resume()
-                    }
+                if let result = try? await web.evaluateJavaScript("ytPlayer ? ytPlayer.getCurrentTime() : 0"),
+                   let t = result as? Double, t.isFinite {
+                    self.position = t
                 }
             }
         }
     }
 
     private func evaluate(_ js: String, completion: ((Any?) -> Void)? = nil) {
-        webView?.evaluateJavaScript(js) { result, _ in
+        Task { @MainActor [weak self] in
+            guard let self, let web = self.webView else { return }
+            let result = try? await web.evaluateJavaScript(js)
             completion?(result)
         }
     }

@@ -211,8 +211,13 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
     }
 
     private var _fixedToken: String?
-    private var currentToken: String? {
-        tokenProvider?.currentToken ?? _fixedToken
+
+    // P1-55: currentToken must hop to MainActor since AuthTokenProvider is @MainActor
+    private func currentToken() async -> String? {
+        if let provider = tokenProvider {
+            return await MainActor.run { provider.currentToken }
+        }
+        return _fixedToken
     }
 
     // P1-55: refresh-on-401 helper
@@ -225,7 +230,7 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
 
     // P1-55: make request with auth, retry on 401
     private func makeAuthenticatedRequest(url: URL) async throws -> (Data, HTTPURLResponse) {
-        guard let token = currentToken else {
+        guard let token = await currentToken() else {
             throw URLError(.userAuthenticationRequired)
         }
         var request = URLRequest(url: url)

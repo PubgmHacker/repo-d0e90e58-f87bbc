@@ -14,6 +14,8 @@ protocol AuthServiceProtocol: AnyObject {
     func verifyAdminCode(email: String, code: String) async throws -> User
     func deleteAccount() async throws
     func fetchCurrentUser() async throws -> User
+    func updateCachedUser(_ user: User)
+    func updateProfile(username: String?, avatarURL: String?, displayName: String?, coverURL: String?) async throws -> User
 }
 
 @MainActor

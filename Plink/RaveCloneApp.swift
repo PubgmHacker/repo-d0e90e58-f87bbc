@@ -153,7 +153,6 @@ struct PlinkApp: App {
             // 🔧 FIX C4+C6: Inject shared services for DM and Admin panels
             .environmentObject(dmChatService)
             .environmentObject(apiClient)
-            .environmentObject(wsClient)
     }
 
     // MARK: - Login Content
@@ -232,10 +231,8 @@ struct PlinkApp: App {
     /// - MediaService (Authorization: Bearer на extraction-запросах)
     /// APIClient обновляется внутри AuthService.
     private func bridgeAuthToken() {
-        Task { [wsClient, mediaService, authService] in
             let token = await authService.getFreshToken()
             await MainActor.run {
-                wsClient.setAuthToken(token)
                 mediaService.setAuthToken(token)
             }
         }

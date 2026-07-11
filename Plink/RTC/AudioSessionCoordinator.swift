@@ -51,7 +51,7 @@ public final class AudioSessionCoordinator {
                 .playAndRecord,
                 mode: .voiceChat,
                 options: [
-                    .allowBluetooth,
+                    .allowBluetoothHFP,
                     .defaultToSpeaker,
                     .duckOthers,  // P1-17: duck media by 30% during voice
                 ]
@@ -94,7 +94,7 @@ public final class AudioSessionCoordinator {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            self?.handleRouteChange(notification)
+            Task { @MainActor in self?.handleRouteChange(notification) }
         }
 
         NotificationCenter.default.addObserver(
@@ -102,7 +102,7 @@ public final class AudioSessionCoordinator {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            self?.handleInterruption(notification)
+            Task { @MainActor in self?.handleInterruption(notification) }
         }
     }
 

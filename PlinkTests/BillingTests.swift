@@ -13,14 +13,14 @@ final class BillingTests: XCTestCase {
     func testPlinkProductID_allThreeProducts() {
         XCTAssertEqual(PlinkProductID.all.count, 3)
         XCTAssertTrue(PlinkProductID.all.contains(PlinkProductID.monthly))
+        XCTAssertTrue(PlinkProductID.all.contains(PlinkProductID.quarterly))
         XCTAssertTrue(PlinkProductID.all.contains(PlinkProductID.yearly))
-        XCTAssertTrue(PlinkProductID.all.contains(PlinkProductID.lifetime))
     }
 
     func testPlinkProductID_productIdStrings() {
-        XCTAssertEqual(PlinkProductID.monthly, "com.syncwatch.plink.premium.monthly")
-        XCTAssertEqual(PlinkProductID.yearly, "com.syncwatch.plink.premium.yearly")
-        XCTAssertEqual(PlinkProductID.lifetime, "com.syncwatch.plink.premium.lifetime")
+        XCTAssertEqual(PlinkProductID.monthly, "plink.plus.1m")
+        XCTAssertEqual(PlinkProductID.quarterly, "plink.plus.3m")
+        XCTAssertEqual(PlinkProductID.yearly, "plink.plus.12m")
     }
 
     // MARK: - PremiumTier
@@ -41,12 +41,12 @@ final class BillingTests: XCTestCase {
         XCTAssertEqual(PlinkProductID.tier(for: PlinkProductID.monthly), .premium)
     }
 
-    func testPlinkProductID_tierForYearly() {
-        XCTAssertEqual(PlinkProductID.tier(for: PlinkProductID.yearly), .premium)
+    func testPlinkProductID_tierForQuarterly() {
+        XCTAssertEqual(PlinkProductID.tier(for: PlinkProductID.quarterly), .premium)
     }
 
-    func testPlinkProductID_tierForLifetime() {
-        XCTAssertEqual(PlinkProductID.tier(for: PlinkProductID.lifetime), .lifetime)
+    func testPlinkProductID_tierForYearly() {
+        XCTAssertEqual(PlinkProductID.tier(for: PlinkProductID.yearly), .premium)
     }
 
     func testPlinkProductID_tierForUnknown_returnsNil() {

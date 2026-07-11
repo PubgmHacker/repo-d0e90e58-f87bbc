@@ -48,18 +48,19 @@ import StoreKit
 // MARK: - Product IDs
 
 enum PlinkProductID {
-    static let monthly = "com.syncwatch.plink.premium.monthly"
-    static let yearly = "com.syncwatch.plink.premium.yearly"
-    static let lifetime = "com.syncwatch.plink.premium.lifetime"
+    // PATCH Final §12: exactly 1m, 3m, 12m per final unified spec
+    static let monthly = "plink.plus.1m"
+    static let quarterly = "plink.plus.3m"
+    static let yearly = "plink.plus.12m"
 
-    static let all: Set<String> = [monthly, yearly, lifetime]
+    static let all: Set<String> = [monthly, quarterly, yearly]
 
     /// Returns the product tier for a given product ID.
     static func tier(for id: String) -> PremiumTier? {
         switch id {
-        case monthly: return .premium
-        case yearly:  return .premium
-        case lifetime: return .lifetime
+        case monthly:   return .premium
+        case quarterly: return .premium
+        case yearly:    return .premium
         default: return nil
         }
     }

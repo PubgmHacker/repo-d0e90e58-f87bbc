@@ -49,6 +49,15 @@ final class PremiumStatusManager: ObservableObject {
         onPremiumStatusChanged?(true)
     }
 
+    /// PATCH 08: Activate lifetime premium (non-consumable purchase).
+    /// No expiry date — entitlement persists forever.
+    func activateLifetime() {
+        isPremium = true
+        subscriptionExpiry = nil  // nil expiry = lifetime
+        persist()
+        onPremiumStatusChanged?(true)
+    }
+
     func deactivatePremium() {
         isPremium = false
         subscriptionExpiry = nil

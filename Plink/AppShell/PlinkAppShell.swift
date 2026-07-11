@@ -36,7 +36,10 @@ struct PlinkAppShell: View {
             #endif
         }
         .sheet(isPresented: $createPresented) {
-            CreateRoomView(onRoomCreated: { _ in createPresented = false })
+            CreateRoomView(
+                mediaService: dependencies.mediaService,
+                onRoomCreated: { _ in createPresented = false }
+            )
         }
     }
 }

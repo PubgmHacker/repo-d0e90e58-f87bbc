@@ -65,7 +65,7 @@ struct PlinkSidebarShell: View {
             // until full migration wires ProfileViewModel from AppDependencies.
             Text("Профиль")
                 .cinematicScreen()
-        case .settings: SettingsHubView(dependencies: dependencies)
+        case .settings: SettingsView()
         case .create: EmptyView()
         }
     }

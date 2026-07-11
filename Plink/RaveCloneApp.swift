@@ -154,7 +154,10 @@ struct PlinkApp: App {
         PlinkAppShell(dependencies: AppDependencies(
             apiClient: apiClient,
             authService: authService,
-            roomService: roomService
+            roomService: roomService,
+            mediaService: mediaService,
+            friendManager: friendManager,
+            dmChatService: dmChatService
         ))
         .environmentObject(deepLinkRouter)
         .environmentObject(friendManager)

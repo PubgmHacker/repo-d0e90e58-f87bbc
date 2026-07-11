@@ -27,7 +27,10 @@ struct PlinkPhoneTabShell: View {
                 .tag(AppSection.friends)
                 .tabItem { Label("Друзья", systemImage: "person.2") }
 
-            SettingsHubView(dependencies: dependencies)
+            // Use existing SettingsView (has real settings) instead of
+            // SettingsHubView placeholder. SettingsHubView is kept as
+            // follow-up for full cinematic migration.
+            SettingsView()
                 .tag(AppSection.settings)
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
         }

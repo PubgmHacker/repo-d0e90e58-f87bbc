@@ -87,7 +87,7 @@ enum RegressionSystem: String, CaseIterable, Identifiable {
 
     var testFile: String {
         switch self {
-        case .auth:          return "PlinkTests/AuthTests.swift (TBD)"
+        case .auth:          return "PlinkTests/AuthTests.swift (16 tests via FakeAuthService)"
         case .rooms:         return "PlinkTests/RoomServiceTests.swift (TBD)"
         case .lifecycle:     return "PlinkTests/LifecycleTests.swift (TBD)"
         case .websockets:    return "PlinkTests/RealtimeClientTests.swift (TBD)"
@@ -95,7 +95,7 @@ enum RegressionSystem: String, CaseIterable, Identifiable {
         case .chat:          return "PlinkTests/ChatComposerStateTests.swift"
         case .reactions:     return "PlinkTests/ReactionPaletteTests.swift"
         case .presence:      return "PlinkTests/PresenceTests.swift (TBD)"
-        case .sync:          return "PlinkTests/OrderedSyncControllerTests.swift, PlinkTests/ClockSynchronizerTests.swift (TBD)"
+        case .sync:          return "PlinkTests/OrderedSyncControllerTests.swift (6) + PlinkTests/ClockSynchronizerTests.swift (11)"
         case .profile:       return "PlinkTests/ProfileTests.swift (TBD)"
         case .friends:       return "PlinkTests/FriendsTests.swift (TBD)"
         case .dms:           return "PlinkTests/DMTests.swift (TBD)"
@@ -136,8 +136,9 @@ enum RegressionSystem: String, CaseIterable, Identifiable {
         case .playback:  return .green   // OrderedSyncControllerTests (6) + YouTube runtime (10, gated) + Ambient (11)
         case .chat:      return .green   // ChatComposerStateTests (26)
         case .reactions: return .green   // ReactionPaletteTests (23)
-        case .sync:      return .yellow  // OrderedSyncControllerTests (6) — ClockSynchronizerTests TBD
-        case .auth, .rooms, .lifecycle, .websockets, .presence, .profile,
+        case .auth:      return .green   // PATCH 17: AuthTests (16) via FakeAuthService
+        case .sync:      return .green   // PATCH 17: ClockSynchronizerTests (11) + OrderedSyncControllerTests (6)
+        case .rooms, .lifecycle, .websockets, .presence, .profile,
              .friends, .dms, .deeplinks, .notifications, .settings, .gdpr,
              .billing, .admin:
             return .red      // Test files TBD

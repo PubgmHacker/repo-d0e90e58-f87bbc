@@ -69,14 +69,16 @@ final class RegressionMatrixTests: XCTestCase {
                        "Green + yellow + red must equal 18")
     }
 
-    func testAtLeastThreeSystemsAreGreen() {
-        // After Commit Groups 3-7, we have:
+    func testAtLeastFiveSystemsAreGreen() {
+        // After PATCH 17 (auth + sync tests), we have 5 green:
         //   - playback (green) — OrderedSyncControllerTests + YouTube runtime + Ambient
         //   - chat (green) — ChatComposerStateTests
         //   - reactions (green) — ReactionPaletteTests
+        //   - auth (green) — AuthTests via FakeAuthService
+        //   - sync (green) — ClockSynchronizerTests + OrderedSyncControllerTests
         let (green, _, _) = RegressionSystem.statusCounts
-        XCTAssertGreaterThanOrEqual(green, 3,
-                                    "At least 3 systems should be green after Commit Groups 3-7")
+        XCTAssertGreaterThanOrEqual(green, 5,
+                                    "At least 5 systems should be green after PATCH 17")
     }
 
     // MARK: - Markdown table

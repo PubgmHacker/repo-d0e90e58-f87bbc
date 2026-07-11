@@ -130,44 +130,143 @@ public enum WatchRoomCompositionRoot {
     }
 }
 
-// MARK: - Feature flags (P1-56: production should use remote config)
+// MARK: - Feature flags (P1-56/P1-59: remote config with cached fallback)
 
 public enum FeatureFlags {
+    private static let cacheKey = "plink.feature_flags_cache"
+    private static let cacheTTL: TimeInterval = 300  // 5 minutes
+
     /// P0-37: master switch for v2 realtime + playback path.
-    /// P1-56: UserDefaults is DEBUG override only.
-    /// Production should use backend FeatureFlag service with cached fallback.
+    /// P1-56: checks remote config first (cached), falls back to UserDefaults.
     public static var realtimeProtocolV2: Bool {
-        UserDefaults.standard.bool(forKey: "plink.realtime_protocol_v2")
+        // P1-56: UserDefaults is DEBUG override only
+        if UserDefaults.standard.bool(forKey: "plink.realtime_protocol_v2_debug") {
+            return true
+        }
+        // P1-59: check cached remote config
+        return cachedRemoteFlags["realtime_protocol_v2"] ?? false
+    }
+
+    /// P1-56: cached remote flags fetched from backend
+    private static var cachedRemoteFlags: [String: Bool] {
+        guard let data = UserDefaults.standard.data(forKey: cacheKey),
+              let cache = try? JSONDecoder().decode(RemoteFlagCache.self, from: data),
+              Date().timeIntervalSince(cache.fetchedAt) < cacheTTL else {
+            return [:]
+        }
+        return cache.flags
+    }
+
+    /// P1-56: fetch remote flags from backend — call on app launch
+    public static func fetchRemoteFlags(apiBaseURL: URL, authToken: String) async {
+        var request = URLRequest(url: apiBaseURL.appendingPathComponent("api/feature-flags"))
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            let decoded = try JSONDecoder().decode([RemoteFlagDTO].self, from: data)
+            var flags: [String: Bool] = [:]
+            for flag in decoded {
+                flags[flag.key] = (flag.value.lowercased() == "true")
+            }
+            let cache = RemoteFlagCache(flags: flags, fetchedAt: Date())
+            if let cacheData = try? JSONEncoder().encode(cache) {
+                UserDefaults.standard.set(cacheData, forKey: cacheKey)
+            }
+        } catch {
+            // Network error — keep using cached/UserDefaults
+        }
     }
 }
 
-// MARK: - REST chat catch-up client (P0-35)
+private struct RemoteFlagCache: Codable {
+    let flags: [String: Bool]
+    let fetchedAt: Date
+}
+
+private struct RemoteFlagDTO: Decodable {
+    let key: String
+    let value: String
+}
+
+// MARK: - REST chat catch-up client (P0-35 + P1-55 auth refresh)
 
 public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable {
     private let baseURL: URL
-    private let authToken: String
+    // P1-55: use AuthTokenProvider instead of fixed String
+    private let tokenProvider: AuthTokenProvider?
 
     public init(baseURL: URL, authToken: String) {
         self.baseURL = baseURL
-        self.authToken = authToken
+        self.tokenProvider = nil  // Legacy mode — fixed token
+        self._fixedToken = authToken
+    }
+
+    // P1-55: init with token provider for refresh support
+    public init(baseURL: URL, tokenProvider: AuthTokenProvider) {
+        self.baseURL = baseURL
+        self.tokenProvider = tokenProvider
+        self._fixedToken = nil
+    }
+
+    private var _fixedToken: String?
+    private var currentToken: String? {
+        tokenProvider?.currentToken ?? _fixedToken
+    }
+
+    // P1-55: refresh-on-401 helper
+    private func refreshToken() async -> String? {
+        if let provider = tokenProvider {
+            return await provider.refreshToken()
+        }
+        return _fixedToken
+    }
+
+    // P1-55: make request with auth, retry on 401
+    private func makeAuthenticatedRequest(url: URL) async throws -> (Data, HTTPURLResponse) {
+        guard let token = currentToken else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        var (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        // P1-55: on 401, refresh token and retry once
+        if http.statusCode == 401, let newToken = await refreshToken() {
+            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+            (data, response) = try await URLSession.shared.data(for: request)
+            guard let http2 = response as? HTTPURLResponse else {
+                throw URLError(.badServerResponse)
+            }
+            if http2.statusCode == 401 {
+                throw URLError(.userAuthenticationRequired)
+            }
+            if http2.statusCode != 200 {
+                throw URLError(.badServerResponse)
+            }
+            return (data, http2)
+        }
+
+        if http.statusCode != 200 {
+            throw URLError(.badServerResponse)
+        }
+        return (data, http)
     }
 
     public func fetchMessages(roomId: String, after: String?) async throws -> ChatCatchupResponse {
         var components = URLComponents(url: baseURL.appendingPathComponent("api/rooms/\(roomId)/messages"), resolvingAgainstBaseURL: false)!
         var items = [URLQueryItem(name: "limit", value: "100")]
-        // P0-59: use 'cursor' param for opaque cursor (was 'after' with messageId)
         if let after = after {
             items.append(URLQueryItem(name: "cursor", value: after))
         }
         components.queryItems = items
 
-        var request = URLRequest(url: components.url!)
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+        let (data, _) = try await makeAuthenticatedRequest(url: components.url!)
         let decoded = try JSONDecoder().decode(MessagesResponse.self, from: data)
         return ChatCatchupResponse(
             messages: decoded.messages.map { m in
@@ -181,20 +280,13 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
                 )
             },
             hasMore: decoded.hasMore,
-            nextCursor: decoded.nextCursor  // P0-59: opaque cursor
+            nextCursor: decoded.nextCursor
         )
     }
 
-    // P0-50: fetchParticipants — calls GET /api/rooms/:id/participants
     public func fetchParticipants(roomId: String) async throws -> [ParticipantSnapshot] {
         let url = baseURL.appendingPathComponent("api/rooms/\(roomId)/participants")
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+        let (data, _) = try await makeAuthenticatedRequest(url: url)
         let decoded = try JSONDecoder().decode(ParticipantsResponse.self, from: data)
         return decoded.participants.map { p in
             ParticipantSnapshot(userId: p.userId, username: p.username)

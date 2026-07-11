@@ -57,3 +57,16 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: Plink/Resources/Plink.entitlements
+
+  PlinkTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PlinkTests
+    dependencies:
+      - target: Plink
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.syncwatch.plink.tests
+        DEVELOPMENT_TEAM: "2QAMUC4Z4P"
+        CODE_SIGN_STYLE: Automatic

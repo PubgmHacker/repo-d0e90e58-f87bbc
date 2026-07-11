@@ -338,16 +338,26 @@ struct ChatTimeline: View {
     }
 }
 
-// P1-51: WatchReactionOverlay — uses WatchReactionEvent (not legacy ReactionEvent)
+// P1-51/P1-62: WatchReactionOverlay — Reduce Motion respected
 struct WatchReactionOverlay: View {
     let reactions: [WatchReactionEvent]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             ForEach(reactions.suffix(5)) { reaction in
-                Text(reaction.emoji)
-                    .font(.largeTitle)
-                    .transition(.scale.combined(with: .opacity))
+                if reduceMotion {
+                    // P1-62: static display when Reduce Motion is on
+                    Text(reaction.emoji)
+                        .font(.title)
+                        .opacity(0.8)
+                } else {
+                    Text(reaction.emoji)
+                        .font(.largeTitle)
+                        .offset(x: CGFloat.random(in: -100...100),
+                                y: CGFloat.random(in: -200...(-50)))
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
         }
         .allowsHitTesting(false)

@@ -32,7 +32,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public private(set) var lastDriftMs: Double = 0
     // P1-51: reactions — renamed to WatchReactionEvent to avoid @Observable
     // macro type ambiguity with existing ReactionEvent from SyncEvents.swift
+    // P1-61: reactions auto-expire after 3 seconds
     public private(set) var reactions: [WatchReactionEvent] = []
+    private var reactionExpiryTask: Task<Void, Never>?
 
     // MARK: - Owned components
     public let realtimeClient: RealtimeClient
@@ -281,18 +283,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
-    // MARK: - Chat (optimistic + reconciliation)
+    // MARK: - Chat (optimistic + reconciliation + P1-54 failure/retry)
 
     public func sendChat(text: String) {
         let clientMessageId = UUID().uuidString
         let optimistic = ChatMessageInfo(
             messageId: nil,
             clientMessageId: clientMessageId,
-            senderId: currentUserId,  // P1-32: real identity
+            senderId: currentUserId,
             senderName: currentUsername,
             text: text,
             createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-            isPending: true
+            isPending: true,
+            isFailed: false
         )
         chatMessages.append(optimistic)
         clientMessageIds.insert(clientMessageId)
@@ -304,6 +307,56 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             clientMessageId: clientMessageId,
             text: text
         )))
+        // P1-54: schedule 5s timeout — mark as failed if no server echo
+        scheduleChatSendTimeout(clientMessageId: clientMessageId)
+    }
+
+    // P1-54: retry a failed chat message
+    public func retryChatMessage(_ message: ChatMessageInfo) {
+        guard message.isFailed, let cmid = message.clientMessageId else { return }
+        // Find and update the message back to pending
+        if let idx = chatMessages.firstIndex(where: { $0.clientMessageId == cmid }) {
+            chatMessages[idx] = ChatMessageInfo(
+                messageId: nil,
+                clientMessageId: cmid,
+                senderId: message.senderId,
+                senderName: message.senderName,
+                text: message.text,
+                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                isPending: true,
+                isFailed: false
+            )
+        }
+        realtimeClient.send(.chatSend(.init(
+            roomId: _roomId,
+            clientMessageId: cmid,
+            text: message.text
+        )))
+        scheduleChatSendTimeout(clientMessageId: cmid)
+    }
+
+    // P1-54: mark message as failed after 5s if no server confirmation
+    private func scheduleChatSendTimeout(clientMessageId: String) {
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard let self else { return }
+            // If still pending (no server echo), mark as failed
+            if let idx = self.chatMessages.firstIndex(where: {
+                $0.clientMessageId == clientMessageId && $0.isPending
+            }) {
+                let msg = self.chatMessages[idx]
+                self.chatMessages[idx] = ChatMessageInfo(
+                    messageId: msg.messageId,
+                    clientMessageId: msg.clientMessageId,
+                    senderId: msg.senderId,
+                    senderName: msg.senderName,
+                    text: msg.text,
+                    createdAtMs: msg.createdAtMs,
+                    isPending: false,
+                    isFailed: true
+                )
+            }
+        }
     }
 
     // MARK: - RealtimeClientDelegate
@@ -416,7 +469,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
-    // P1-51: reaction handler — uses WatchReactionEvent (renamed to avoid ambiguity)
+    // P1-51/P1-61: reaction handler with auto-expiry
     private func handleReaction(_ reaction: RealtimeServerMessage.ReactionBroadcast) {
         let event = WatchReactionEvent(
             id: UUID(),
@@ -428,6 +481,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         reactions.append(event)
         if reactions.count > 50 {
             reactions.removeFirst(reactions.count - 50)
+        }
+        // P1-61: auto-expire reactions after 3 seconds
+        scheduleReactionExpiry()
+    }
+
+    // P1-61: remove old reactions after 3s
+    private func scheduleReactionExpiry() {
+        reactionExpiryTask?.cancel()
+        reactionExpiryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 3000
+            self.reactions.removeAll { $0.timestampMs < cutoff }
         }
     }
 
@@ -561,7 +627,22 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public let text: String
     public let createdAtMs: Int64
     public let isPending: Bool
+    public var isFailed: Bool  // P1-54: failed messages can be retried
     public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
+
+    // P1-54: convenience init without isFailed
+    public init(messageId: String?, clientMessageId: String?, senderId: String,
+                senderName: String, text: String, createdAtMs: Int64,
+                isPending: Bool, isFailed: Bool = false) {
+        self.messageId = messageId
+        self.clientMessageId = clientMessageId
+        self.senderId = senderId
+        self.senderName = senderName
+        self.text = text
+        self.createdAtMs = createdAtMs
+        self.isPending = isPending
+        self.isFailed = isFailed
+    }
 }
 
 // P1-51: renamed from ReactionEvent to avoid @Observable macro ambiguity

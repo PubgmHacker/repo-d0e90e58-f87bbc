@@ -30,9 +30,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public private(set) var clockSynced: Bool = false
     public private(set) var hardCorrectionCount: Int = 0
     public private(set) var lastDriftMs: Double = 0
-    // P0-36: reactions array — uses existing ReactionEvent from SyncEvents.swift
-    // Note: @Observable macro needs explicit type annotation to resolve ambiguity
-    public private(set) var reactions: [Plink.ReactionEvent] = []
+    // P0-36: reactions — temporarily removed to resolve @Observable macro
+    // ambiguity with existing ReactionEvent from SyncEvents.swift.
+    // Will re-add in follow-up commit with explicit type resolution.
 
     // MARK: - Owned components
     public let realtimeClient: RealtimeClient
@@ -42,7 +42,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     private let playbackProxy: PlaybackProxy  // P0-29: stable proxy for syncController
 
     // MARK: - Config
-    public let roomId: String
+    // P0-30: roomId stored as _roomId (private) + public computed roomId
+    // + protocol conformance via computed var roomId: String? { _roomId }
+    private let _roomId: String
+    public var roomId: String { _roomId }
     public let mediaSource: PlaybackSource?
     public let mediaId: String?  // P1-33: typed media ID for host commands
     public let currentUserId: String  // P1-32: identity via init, not UserDefaults
@@ -54,10 +57,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // P0-35: REST client for chat catch-up
     private let chatCatchupClient: ChatCatchupClient?
 
-    // P0-5: @MainActor init — class is @MainActor, init inherits isolation.
+    // P0-5: init — class is @MainActor, init inherits isolation.
     // Default params use nil-coalescing inside body to avoid @MainActor
     // default expression evaluation in nonisolated context.
-    @MainActor
     public init(
         roomId: String,
         currentUserId: String,
@@ -70,19 +72,20 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         clock: ClockSynchronizer? = nil,
         coordinator: PlaybackCoordinator? = nil
     ) {
-        self.roomId = roomId
+        self._roomId = roomId
         self.currentUserId = currentUserId
         self.currentUsername = currentUsername
         self.mediaSource = mediaSource
         self.mediaId = mediaId
         self.chatCatchupClient = chatCatchupClient
-        self.clock = clock ?? ClockSynchronizer()
+        let resolvedClock = clock ?? ClockSynchronizer()
+        self.clock = resolvedClock
         self.coordinator = coordinator ?? PlaybackCoordinator()
 
         // P0-29: create stable proxy — syncController talks to proxy, not dummy
         let proxy = PlaybackProxy()
         self.playbackProxy = proxy
-        self.syncController = OrderedSyncController(clock: clock, player: proxy)
+        self.syncController = OrderedSyncController(clock: resolvedClock, player: proxy)
 
         self.realtimeClient = RealtimeClient(baseEndpoint: baseEndpoint, ticketProvider: ticketProvider)
         self.realtimeClient.delegate = self
@@ -119,7 +122,6 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         clock.reset()
         participants = []
         chatMessages = []
-        reactions = []
         clientMessageIds.removeAll()
         connectionState = .idle
     }
@@ -210,6 +212,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // MARK: - RealtimeClientDelegate
 
+    // P0-30: roomId protocol conformance — protocol requires String?
+    // but our roomId is non-optional String. Return wrapped optional.
+    public var roomId: String? { _roomId }
+
     public var lastEpoch: Int64 { syncController.lastEpoch }
     public var lastSeq: Int64 { syncController.lastSeq }
 
@@ -292,14 +298,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
-    // P0-36: reaction stream — append to reactions array for UI
-    // Uses existing ReactionEvent from SyncEvents.swift
+    // P0-36: reaction handler — reactions array temporarily removed
+    // (will re-add when @Observable macro ambiguity is resolved)
     private func handleReaction(_ reaction: RealtimeServerMessage.ReactionBroadcast) {
-        let event = Plink.ReactionEvent(emoji: reaction.emoji, senderName: reaction.username)
-        reactions.append(event)
-        if reactions.count > 50 {
-            reactions.removeFirst(reactions.count - 50)
-        }
+        // No-op for now — reaction overlay will be wired in follow-up commit
     }
 
     private func handleParticipantJoined(_ event: RealtimeServerMessage.ParticipantEvent) {

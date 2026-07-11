@@ -55,3 +55,6 @@ public final class PlaybackProxy: PlaybackControlling {
         target?.setRate(rate)
     }
 }
+
+// MARK: - Make PlaybackProxy public (was internal, caused 'Property cannot be
+// declared public because its type uses an internal type' error)

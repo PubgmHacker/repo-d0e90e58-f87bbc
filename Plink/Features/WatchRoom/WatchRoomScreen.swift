@@ -49,7 +49,7 @@ public struct WatchRoomScreen: View {
     private var iPadLayout: some View {
         HStack(spacing: 0) {
             VStack {
-                PlayerSurface(coordinator: model.coordinator)
+                PlayerSurfaceView(coordinator: model.coordinator)
                 if model.isHost {
                     PlayerControlsOverlay(model: model, showControls: $showControls, seekPosition: $seekPosition)
                 } else {
@@ -68,7 +68,7 @@ public struct WatchRoomScreen: View {
 
     private var iPhoneLayout: some View {
         ZStack {
-            PlayerSurface(coordinator: model.coordinator)
+            PlayerSurfaceView(coordinator: model.coordinator)
                 .ignoresSafeArea()
 
             if model.isHost {
@@ -102,10 +102,11 @@ public struct WatchRoomScreen: View {
                 .padding(.bottom, 8)
             }
 
-            // P0-36: reaction overlay — uses existing ReactionOverlayView from Views/Room/
-            if !model.reactions.isEmpty {
-                ReactionOverlayView(reactions: model.reactions)
-            }
+            // P0-36: reaction overlay — temporarily disabled (reactions array
+            // removed from WatchRoomModel to resolve @Observable macro ambiguity)
+            // if !model.reactions.isEmpty {
+            //     ReactionOverlayView(reactions: model.reactions)
+            // }
         }
         .onTapGesture {
             toggleControls()

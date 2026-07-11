@@ -20,7 +20,7 @@ import Observation
 
 @MainActor
 @Observable
-public final class PlaybackCoordinator {
+public final class PlaybackCoordinator: AnyObject {
     /// Current active controller — either NativePlayerController or
     /// EmbeddedPlaybackController depending on source type.
     public private(set) var currentController: PlaybackControlling?

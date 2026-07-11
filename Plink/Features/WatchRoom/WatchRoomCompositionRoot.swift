@@ -82,8 +82,8 @@ public enum WatchRoomCompositionRoot {
         if lower.contains("youtu.be/") {
             let parts = url.split(separator: "/")
             if let last = parts.last {
-                let id = String(last).split(separator: "?").first ?? String(last)
-                if id.count == 11 { return String(id) }
+                let id = String(last).split(separator: "?").first.map(String.init) ?? String(last)
+                if id.count == 11 { return id }
             }
         }
 
@@ -98,8 +98,8 @@ public enum WatchRoomCompositionRoot {
         if lower.contains("/embed/") || lower.contains("/shorts/") {
             let parts = url.split(separator: "/")
             if let last = parts.last {
-                let id = String(last).split(separator: "?").first ?? String(last)
-                if id.count == 11 { return String(id) }
+                let id = String(last).split(separator: "?").first.map(String.init) ?? String(last)
+                if id.count == 11 { return id }
             }
         }
 

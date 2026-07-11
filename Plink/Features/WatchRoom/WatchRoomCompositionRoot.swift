@@ -12,8 +12,9 @@ import SwiftUI
 public enum WatchRoomCompositionRoot {
     /// P0-48: Creates the watch room screen for a Room model — v2 or legacy.
     /// Called from MainTabView's fullScreenCover.
+    /// Not public — Room is internal type, method must match.
     @MainActor
-    public static func makeScreenForRoom(
+    static func makeScreenForRoom(
         room: Room,
         userId: String,
         username: String,

@@ -111,13 +111,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         self.playbackProxy = proxy
         self.syncController = OrderedSyncController(clock: resolvedClock, player: proxy)
 
-        self.realtimeClient = RealtimeClient(baseEndpoint: baseEndpoint, ticketProvider: ticketProvider)
-        self.realtimeClient.delegate = self
-
-        // PATCH 14: instantiate engine + sampler. Lane count 5 (portrait)
-        // — reconfigured on rotation via updateDanmakuLaneCount().
-        // PATCH 16: DanmakuEngine has no startSampling() — caller polls
-        // via poll(at:) which is started in connect().
+        // PATCH 14: instantiate engine + sampler BEFORE any use of self
+        // (delegate = self below requires all stored properties initialized).
         // PATCH 16g: capture local let before assigning to self, so the
         // Task can configure it without requiring self to be fully
         // initialized.
@@ -125,6 +120,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         let ambientSampler = AmbientVideoSampler()
         self.danmakuEngine = danmakuEngine
         self.ambientSampler = ambientSampler
+
+        // Now all stored properties are initialized — safe to use self.
+        self.realtimeClient = RealtimeClient(baseEndpoint: baseEndpoint, ticketProvider: ticketProvider)
+        self.realtimeClient.delegate = self
+
+        // PATCH 16: DanmakuEngine has no startSampling() — caller polls
+        // via poll(at:) which is started in connect().
         Task { @MainActor [danmakuEngine] in
             await danmakuEngine.configure(laneCount: 5)
         }

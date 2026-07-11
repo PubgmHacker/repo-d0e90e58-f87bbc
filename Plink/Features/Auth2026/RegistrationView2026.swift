@@ -1,6 +1,6 @@
 // Plink/Features/Auth2026/RegistrationView2026.swift — §8 Final Unified
 //
-// Cinematic registration with poster mosaic. Uses existing AuthService.
+// Registration with clean background (no posters). Compact living backdrop only.
 
 import SwiftUI
 
@@ -33,63 +33,82 @@ struct RegistrationView2026: View {
     }
 
     var body: some View {
-        CinematicAuthContainer(title: "Создать аккаунт") {
-            VStack(spacing: 10) {
-                CompactAuthField(title: "Имя", text: $displayName, contentType: .name)
-                CompactAuthField(title: "Username", text: $username, contentType: .username)
-                CompactAuthField(title: "Email", text: $email, contentType: .emailAddress)
-                CompactAuthField(title: "Пароль", text: $password, contentType: .newPassword, secure: true)
+        ZStack {
+            Cinema2026.background.ignoresSafeArea()
+            CompactLivingBackdrop(primary: Cinema2026.accent, secondary: Cinema2026.amber)
 
-                if !passwordIssues.isEmpty {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(passwordIssues, id: \.self) { issue in
-                            HStack(spacing: 4) {
-                                Image(systemName: "circle")
-                                    .font(.system(size: 8))
-                                Text(issue)
-                                    .font(.system(size: 11))
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text("Создать аккаунт")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(Cinema2026.text)
+                        .padding(.top, 20)
+
+                    CompactAuthField(title: "Имя", text: $displayName, contentType: .name)
+                    CompactAuthField(title: "Username", text: $username, contentType: .username)
+                    CompactAuthField(title: "Email", text: $email, contentType: .emailAddress)
+                    CompactAuthField(title: "Пароль", text: $password, contentType: .newPassword, secure: true)
+
+                    if !passwordIssues.isEmpty {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(passwordIssues, id: \.self) { issue in
+                                HStack(spacing: 4) {
+                                    Image(systemName: "circle")
+                                        .font(.system(size: 8))
+                                    Text(issue)
+                                        .font(.system(size: 11))
+                                }
+                                .foregroundStyle(Cinema2026.secondary)
                             }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Toggle(isOn: $acceptsTerms) {
+                        Text("Принимаю Условия и Политику")
+                            .font(.caption)
                             .foregroundStyle(Cinema2026.secondary)
+                    }
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(Cinema2026.danger)
+                    }
+
+                    Button {
+                        Task { await register() }
+                    } label: {
+                        HStack {
+                            if isLoading { ProgressView().tint(Cinema2026.background) }
+                            Text("Создать аккаунт")
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Cinema2026.background)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: CompactPhoneMetrics.primaryButtonHeight)
+                    .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
+                    .disabled(!canRegister || isLoading)
 
-                Toggle(isOn: $acceptsTerms) {
-                    Text("Принимаю Условия и Политику")
-                        .font(.caption)
-                        .foregroundStyle(Cinema2026.secondary)
-                }
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(Cinema2026.danger)
-                }
-
-                Button {
-                    Task { await register() }
-                } label: {
-                    HStack {
-                        if isLoading { ProgressView().tint(Cinema2026.background) }
-                        Text("Создать аккаунт")
+                    HStack(spacing: 4) {
+                        Text("Уже есть аккаунт?")
+                            .foregroundStyle(Cinema2026.secondary)
+                        Button("Войти", action: onLogin)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Cinema2026.accent)
                     }
-                }
-                .buttonStyle(AuthPrimaryButtonStyle())
-                .disabled(!canRegister || isLoading)
+                    .font(.footnote)
 
-                HStack(spacing: 4) {
-                    Text("Уже есть аккаунт?")
-                        .foregroundStyle(Cinema2026.secondary)
-                    Button("Войти", action: onLogin)
-                        .fontWeight(.semibold)
+                    LegalConsentFooter()
+                        .padding(.top, 8)
                 }
-                .font(.footnote)
-
-                LegalConsentFooter()
-                    .padding(.top, 8)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 30)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
+        .foregroundStyle(Cinema2026.text)
     }
 
     private func register() async {
@@ -98,7 +117,6 @@ struct RegistrationView2026: View {
         do {
             let authService = AuthService(api: apiClient)
             _ = try await authService.signUp(email: email, password: password, username: username)
-            // Save token to Keychain
             if let token = authService.authToken {
                 KeychainHelper.save(token, for: "rave_auth_token")
             }

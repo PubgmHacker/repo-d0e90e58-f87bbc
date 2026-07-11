@@ -91,11 +91,10 @@ struct WatchRoomScreen: View {
         }
         .task { await model.connect() }
         .onDisappear {
+            // PATCH: do NOT disconnect here — onDisappear fires on rotation
+            // when SwiftUI rebuilds the view. Disconnect only on explicit
+            // leaveRoom (X button) or when fullScreenCover is dismissed.
             controlsHideTask?.cancel()
-            model.disconnect()
-            // PATCH: restore portrait ONLY when actually leaving the room
-            // (not on rotation). unlockOrientation allows all orientations
-            // for the rest of the app.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 OrientationManager.shared.unlockOrientation()
             }

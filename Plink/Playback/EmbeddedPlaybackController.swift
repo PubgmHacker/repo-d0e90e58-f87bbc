@@ -26,7 +26,7 @@
 //   - NO server-side extraction (no Innertube, no yt-dlp, no Piped).
 //   - NO cookie relay — cookies never leave the device.
 //   - NO raw CDN proxy.
-//   - YouTube controls + branding visible (ToS): controls=1, modestbranding=1.
+//   - YouTube controls hidden (controls=0) — Plink provides its own controls.
 //
 // Capability limitations (runbook §19):
 //   - supportsRateCorrection = false → OrderedSyncController uses less

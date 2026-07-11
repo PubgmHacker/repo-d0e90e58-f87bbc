@@ -159,7 +159,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         let jsonId = String(decoding: encoded, as: UTF8.self)
         web.loadHTMLString(
             Self.buildHTML(videoIdJSON: jsonId),
-            baseURL: URL(string: "https://www.youtube.com")
+            baseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")
         )
 
         // PATCH 03: 8s prepare timeout via task group race.
@@ -308,14 +308,16 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     private func handleError(code: Int) {
+        // Brain §5.1: map official YouTube IFrame API error codes.
         // https://developers.google.com/youtube/iframe_api_reference#onError
         let message: String
         switch code {
-        case 2:   message = "Invalid video parameter"
-        case 5:   message = "HTML5 player error"
-        case 100: message = "Video not found or private"
-        case 101, 150: message = "Video not allowed to be embedded"
-        default:  message = "YouTube error code \(code)"
+        case 2:        message = "Invalid video parameter"
+        case 5:        message = "HTML5 player error"
+        case 100:      message = "Video not found or private"
+        case 101, 150: message = "This video cannot be embedded in Plink"
+        case 153:      message = "Missing client identity — try another video"
+        default:       message = "YouTube error \(code) — try another video"
         }
         lastError = message
         isBuffering = false
@@ -409,7 +411,8 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                     'controls': 1,
                     'modestbranding': 1,
                     'rel': 0,
-                    'iv_load_policy': 3
+                    'iv_load_policy': 3,
+                    'origin': 'https://plink-backend-production-ef31.up.railway.app'
                   },
                   events: {
                     'onReady': function() { post('ready'); },

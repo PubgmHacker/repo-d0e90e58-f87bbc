@@ -1,28 +1,22 @@
-// Plink/Features/WatchRoom/WatchChatComposer.swift — PATCH 02 polish
+// Plink/Features/WatchRoom/WatchChatComposer.swift — PATCH 02 polish + Commit Group 4
 //
 // Commit Group 1: fixed ShapeStyle conformance error (Group<Color|LinearGradient>
 // → AnyShapeStyle).
 // Commit Group 2: professional sizing — 40pt send button (was 36pt),
 // 22pt corner radius (was 20pt), 14pt emoji button (was 16pt icon in 38pt circle).
-//
-// Token usage (PATCH 01 spec):
-//   - magenta for send glyph background (via outgoingBubble/primaryAction)
-//   - raised for disabled state and emoji button
-//   - secondaryText for placeholder icon
-//   - text for input
+// Commit Group 4: extract state into ChatComposerState for testability;
+// add length cap enforcement (2000 chars, matches backend ChatSendSchema);
+// route emoji picker through insertAtCursor (cursor-aware insertion).
 
 import SwiftUI
 
 struct WatchChatComposer: View {
     let model: WatchRoomModel
-    @State private var text = ""
 
-    private var trimmedText: String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    @State private var state = ChatComposerState()
 
     private var canSend: Bool {
-        !trimmedText.isEmpty && model.connectionState == .connected
+        state.canSend(connected: model.connectionState == .connected)
     }
 
     var body: some View {
@@ -37,24 +31,41 @@ struct WatchChatComposer: View {
             }
             .accessibilityLabel("Emoji")
 
-            TextField("Message…", text: $text, axis: .vertical)
-                .lineLimit(1...4)
-                .font(.system(size: 15))
-                .foregroundStyle(PlinkRave.text)
-                .tint(PlinkRave.magenta)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(PlinkRave.raised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(.white.opacity(0.05), lineWidth: 0.5)
-                )
+            VStack(spacing: 4) {
+                TextField("Message…", text: $state.text, axis: .vertical)
+                    .lineLimit(1...4)
+                    .font(.system(size: 15))
+                    .foregroundStyle(PlinkRave.text)
+                    .tint(PlinkRave.magenta)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(PlinkRave.raised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(
+                                state.isOverLength ? PlinkRave.danger : .white.opacity(0.05),
+                                lineWidth: state.isOverLength ? 1 : 0.5
+                            )
+                    )
+
+                if state.isOverLength {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                        Text("\(state.trimmedText.count)/\(ChatComposerState.maxLength) — too long")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(PlinkRave.danger)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                }
+            }
 
             Button {
-                let value = trimmedText
-                guard !value.isEmpty else { return }
+                let value = state.trimmedText
+                guard state.canSend(connected: model.connectionState == .connected) else { return }
                 model.sendChat(text: value)
-                text = ""
+                state.clearAfterSend()
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 15, weight: .bold))
@@ -68,7 +79,7 @@ struct WatchChatComposer: View {
                     )
                     .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
             }
-            .disabled(!canSend)
+            .disabled(!canSend || state.isOverLength)
             .accessibilityLabel("Send")
         }
         .padding(.horizontal, 14)
@@ -79,5 +90,18 @@ struct WatchChatComposer: View {
                 .fill(PlinkRave.divider.opacity(0.4))
                 .frame(height: 0.5)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkInsertAtCursor)) { note in
+            if let insertion = note.userInfo?["text"] as? String {
+                state.insertAtCursor(insertion)
+            }
+        }
     }
+}
+
+// MARK: - Emoji picker notification
+
+extension Notification.Name {
+    /// Posted by the emoji picker (or any other source) to insert text at
+    /// the composer's cursor position. UserInfo: ["text": String].
+    static let plinkInsertAtCursor = Notification.Name("plinkInsertAtCursor")
 }

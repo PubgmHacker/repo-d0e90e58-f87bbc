@@ -49,12 +49,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public let mediaId: String?  // P1-33: typed media ID for host commands
     public let currentUserId: String  // P1-32: identity via init, not UserDefaults
     public let currentUsername: String  // P1-32
-    private var chatCatchupCursor: String?
+    private var chatCatchupCursor: String?  // P0-59: opaque server cursor
+    // P0-60: persistent messageIds set — initialized from current chatMessages
+    private var knownMessageIds = Set<String>()
     private var clientMessageIds = Set<String>()
     private var stateChangesTask: Task<Void, Never>?
-    // P0-52: serial state pump — enqueue states, await each apply in order
+    // P0-52/P1-63: serial state pump — coalesce to latest state
     private var statePumpTask: Task<Void, Never>?
     private var pendingStates: [RealtimeRoomState] = []
+    // P0-58: snapshot revision — buffer participant events during snapshot fetch
+    private var snapshotInFlight = false
+    private var bufferedParticipantEvents: [(isJoin: Bool, userId: String, username: String)] = []
+    // P0-61: single authoritative rollback state
+    private var lastAuthoritativeState: RealtimeRoomState?
 
     // P0-35: REST client for chat catch-up
     private let chatCatchupClient: ChatCatchupClient?
@@ -231,25 +238,27 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         scheduleActionTimeout(actionId)
     }
 
-    // P0-54: rollback on server error
+    // P0-62: single authoritative rollback — NOT concurrent Tasks per action.
+    // Rollback to last authoritative state, request fresh snapshot.
     private func handleActionRejection(_ errorCode: String) {
-        // Rollback all pending actions — request fresh snapshot
-        for (_, action) in pendingActions {
-            Task {
-                _ = await coordinator.currentController?.seek(to: action.preActionPosition, precise: true)
-                if action.preActionPlaying {
-                    await coordinator.currentController?.play()
+        pendingActions.removeAll()
+        // P0-61/P0-62: restore to last authoritative state in a single operation
+        if let state = lastAuthoritativeState {
+            Task { [weak self] in
+                guard let self else { return }
+                let target = Double(state.positionMs) / 1000.0
+                _ = await self.coordinator.currentController?.seek(to: target, precise: true)
+                if state.playing {
+                    await self.coordinator.currentController?.play()
                 } else {
-                    coordinator.currentController?.pause()
+                    self.coordinator.currentController?.pause()
                 }
+                self.coordinator.currentController?.setRate(Float(state.rate))
             }
         }
-        pendingActions.removeAll()
-        // P0-54: request fresh snapshot to reconcile
-        if let roomId = realtimeClient.delegate?.roomId {
-            realtimeClient.send(.stateRequest(.init(roomId: roomId, afterSeq: lastSeq)))
-        }
-        lastError = "Command rejected: \(errorCode) — state rolled back"
+        // P0-62: request fresh snapshot immediately
+        realtimeClient.send(.stateRequest(.init(roomId: _roomId, afterSeq: lastSeq)))
+        lastError = "Command rejected: \(errorCode) — rolled back to authoritative state"
     }
 
     // P0-54: timeout pending actions
@@ -325,10 +334,12 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             while !self.pendingStates.isEmpty && !Task.isCancelled {
                 let state = self.pendingStates.removeFirst()
                 await self.syncController.apply(state)
+                // P0-61: store last authoritative state for rollback
+                self.lastAuthoritativeState = state
                 // P1-34: update UI metrics AFTER each apply completes
                 self.hardCorrectionCount = self.syncController.hardCorrectionCount
                 self.lastDriftMs = self.syncController.lastDriftMs
-                // P0-54: clear confirmed pending actions
+                // P0-61: clear pending actions that match this state
                 self.clearPendingActionsIfConfirmed(state: state)
             }
             self.statePumpTask = nil
@@ -421,6 +432,11 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     }
 
     private func handleParticipantJoined(_ event: RealtimeServerMessage.ParticipantEvent) {
+        // P0-58: buffer if snapshot is in flight
+        if snapshotInFlight {
+            bufferedParticipantEvents.append((isJoin: true, userId: event.userId, username: event.username))
+            return
+        }
         let info = ParticipantInfo(userId: event.userId, username: event.username, isLocal: event.userId == currentUserId)
         if !participants.contains(where: { $0.userId == info.userId }) {
             participants.append(info)
@@ -428,35 +444,43 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     }
 
     private func handleParticipantLeft(_ event: RealtimeServerMessage.ParticipantEvent) {
+        // P0-58: buffer if snapshot is in flight
+        if snapshotInFlight {
+            bufferedParticipantEvents.append((isJoin: false, userId: event.userId, username: event.username))
+            return
+        }
         participants.removeAll { $0.userId == event.userId }
     }
 
     // MARK: - Chat catch-up (P0-35: implemented REST client)
 
+    // P0-59/P0-60: fetchChatCatchup with opaque cursor + persistent dedupe
     private func fetchChatCatchup() async {
         guard let client = chatCatchupClient else { return }
+
+        // P0-60: initialize knownMessageIds from current chatMessages
+        for msg in chatMessages {
+            if let mid = msg.messageId { knownMessageIds.insert(mid) }
+        }
+
         do {
             var cursor = chatCatchupCursor
             var hasMore = true
             var pageCount = 0
-            let maxPages = 20  // P0-51: cap pages to prevent infinite loop
-            var seenMessageIds = Set<String>()  // P0-51: dedupe by messageId
+            let maxPages = 20
 
             while hasMore && pageCount < maxPages {
                 let response = try await client.fetchMessages(roomId: _roomId, after: cursor)
                 pageCount += 1
 
-                var newCursor = cursor
-                var addedAny = false
-
                 for msg in response.messages {
-                    // P0-51: dedupe by messageId (authoritative), not just clientMessageId
-                    if seenMessageIds.contains(msg.messageId) { continue }
+                    // P0-60: dedupe by messageId using persistent set
+                    if knownMessageIds.contains(msg.messageId) { continue }
                     if let cmid = msg.clientMessageId, clientMessageIds.contains(cmid) {
-                        seenMessageIds.insert(msg.messageId)
+                        knownMessageIds.insert(msg.messageId)
                         continue
                     }
-                    seenMessageIds.insert(msg.messageId)
+                    knownMessageIds.insert(msg.messageId)
 
                     let info = ChatMessageInfo(
                         messageId: msg.messageId,
@@ -469,40 +493,54 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     )
                     chatMessages.append(info)
                     if let cmid = msg.clientMessageId { clientMessageIds.insert(cmid) }
-                    newCursor = msg.messageId
-                    addedAny = true
                 }
 
-                // P0-51: unchanged-cursor guard — if cursor didn't advance and
-                // hasMore is true, break to prevent infinite loop
-                if newCursor == cursor && response.hasMore && !addedAny {
-                    break
+                // P0-59: use server-provided opaque nextCursor, not messageId
+                if let next = response.nextCursor {
+                    cursor = next
+                    chatCatchupCursor = next
+                } else {
+                    hasMore = false
                 }
-
-                cursor = newCursor
-                chatCatchupCursor = cursor
+                hasMore = response.hasMore && cursor != nil
 
                 if chatMessages.count > 200 {
                     chatMessages.removeFirst(chatMessages.count - 200)
                 }
-                hasMore = response.hasMore
             }
+            // P0-60: sort chronologically after merge
+            chatMessages.sort { $0.createdAtMs < $1.createdAtMs }
         } catch {
             lastError = "Chat catch-up failed: \(error.localizedDescription)"
         }
     }
 
-    // P0-36: presence snapshot — fetch current participants
+    // P0-58/P0-36: presence snapshot with event buffering
     private func fetchPresenceSnapshot() async {
         guard let client = chatCatchupClient else { return }
+        snapshotInFlight = true  // P0-58: buffer events during fetch
         do {
             let snapshot = try await client.fetchParticipants(roomId: _roomId)
+            // P0-58: apply snapshot, then merge buffered events
             participants = snapshot.map { p in
                 ParticipantInfo(userId: p.userId, username: p.username, isLocal: p.userId == currentUserId)
             }
+            // P0-58: replay buffered participant events
+            for event in bufferedParticipantEvents {
+                if event.isJoin {
+                    let info = ParticipantInfo(userId: event.userId, username: event.username, isLocal: event.userId == currentUserId)
+                    if !participants.contains(where: { $0.userId == info.userId }) {
+                        participants.append(info)
+                    }
+                } else {
+                    participants.removeAll { $0.userId == event.userId }
+                }
+            }
+            bufferedParticipantEvents.removeAll()
         } catch {
             // Non-fatal — participant events will still arrive
         }
+        snapshotInFlight = false
     }
 }
 
@@ -545,6 +583,7 @@ public protocol ChatCatchupClient: Sendable {
 public struct ChatCatchupResponse: Sendable, Equatable {
     public let messages: [ChatCatchupMessage]
     public let hasMore: Bool
+    public let nextCursor: String?  // P0-59: opaque server cursor
 }
 
 public struct ChatCatchupMessage: Sendable, Equatable {

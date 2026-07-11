@@ -155,8 +155,9 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
     public func fetchMessages(roomId: String, after: String?) async throws -> ChatCatchupResponse {
         var components = URLComponents(url: baseURL.appendingPathComponent("api/rooms/\(roomId)/messages"), resolvingAgainstBaseURL: false)!
         var items = [URLQueryItem(name: "limit", value: "100")]
+        // P0-59: use 'cursor' param for opaque cursor (was 'after' with messageId)
         if let after = after {
-            items.append(URLQueryItem(name: "after", value: after))
+            items.append(URLQueryItem(name: "cursor", value: after))
         }
         components.queryItems = items
 
@@ -179,7 +180,8 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
                     createdAtMs: m.createdAtMs
                 )
             },
-            hasMore: decoded.hasMore
+            hasMore: decoded.hasMore,
+            nextCursor: decoded.nextCursor  // P0-59: opaque cursor
         )
     }
 
@@ -219,6 +221,7 @@ private struct TicketResponse: Decodable {
 private struct MessagesResponse: Decodable {
     let messages: [MessageDTO]
     let hasMore: Bool
+    let nextCursor: String?  // P0-59: opaque server cursor
 }
 
 // P0-50: participant snapshot response

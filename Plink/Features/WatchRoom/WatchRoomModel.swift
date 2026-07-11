@@ -756,9 +756,23 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     func openPlayerSettings() {}
     func startPiP() {}
     func enterFullscreen() {}
-    func openEmojiPicker() {}
+    func openEmojiPicker() {}  // PATCH 14: kept for back-compat; picker is now shown by composer
     func toggleMicrophone() async {}
     func toggleCamera() async {}
+
+    // PATCH 14: send a reaction emoji via RealtimeClient.
+    // Validates against ReactionPalette — free emojis always sendable,
+    // premium requires Plink+ entitlement.
+    func sendReaction(emoji: String, hasPremium: Bool) {
+        guard ReactionPalette.canSend(emoji, hasPremium: hasPremium) else {
+            lastError = "Cannot send emoji: \(emoji) requires Plink+"
+            return
+        }
+        let msg = RealtimeClientMessage.reactionSend(
+            .init(roomId: _roomId, emoji: emoji)
+        )
+        realtimeClient.send(msg)
+    }
 }
 
 // MARK: - UI models

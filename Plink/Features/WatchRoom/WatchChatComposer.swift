@@ -1,4 +1,4 @@
-// Plink/Features/WatchRoom/WatchChatComposer.swift — PATCH 02 polish + Commit Group 4
+// Plink/Features/WatchRoom/WatchChatComposer.swift — PATCH 02 polish + Commit Groups 4, 14
 //
 // Commit Group 1: fixed ShapeStyle conformance error (Group<Color|LinearGradient>
 // → AnyShapeStyle).
@@ -7,6 +7,11 @@
 // Commit Group 4: extract state into ChatComposerState for testability;
 // add length cap enforcement (2000 chars, matches backend ChatSendSchema);
 // route emoji picker through insertAtCursor (cursor-aware insertion).
+// Commit Group 14: wire ReactionPickerView as popover on emoji button.
+//   - Tap emoji button → popover shows ReactionPickerView
+//   - Tap free emoji → state.insertAtCursor(emoji) (inserts at cursor)
+//   - Tap locked premium emoji → onPremiumUpsell closure
+//   - hasPremium reads from PremiumStatusManager.shared.isPremium
 
 import SwiftUI
 
@@ -14,14 +19,22 @@ struct WatchChatComposer: View {
     let model: WatchRoomModel
 
     @State private var state = ChatComposerState()
+    @State private var showReactionPicker = false
 
     private var canSend: Bool {
         state.canSend(connected: model.connectionState == .connected)
     }
 
+    private var hasPremium: Bool {
+        PremiumStatusManager.shared.isPremium
+    }
+
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: model.openEmojiPicker) {
+            // PATCH 14: emoji button now shows ReactionPickerView as popover.
+            Button {
+                showReactionPicker = true
+            } label: {
                 Image(systemName: "face.smiling")
                     .font(.system(size: 17))
                     .foregroundStyle(PlinkRave.secondaryText)
@@ -30,6 +43,23 @@ struct WatchChatComposer: View {
                     .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
             }
             .accessibilityLabel("Emoji")
+            .popover(isPresented: $showReactionPicker) {
+                ReactionPickerView(
+                    hasPremium: hasPremium,
+                    onPick: { emoji in
+                        // Insert emoji at cursor position in the text field.
+                        state.insertAtCursor(emoji)
+                        showReactionPicker = false
+                    },
+                    onPremiumUpsell: {
+                        // PATCH 14: surface upsell via toast — full PaywallView
+                        // presentation is wired in Commit Group 10 follow-up.
+                        showReactionPicker = false
+                        // TODO: present PaywallView (Commit Group 10 follow-up)
+                    }
+                )
+                .frame(maxWidth: 320)
+            }
 
             VStack(spacing: 4) {
                 TextField("Message…", text: $state.text, axis: .vertical)

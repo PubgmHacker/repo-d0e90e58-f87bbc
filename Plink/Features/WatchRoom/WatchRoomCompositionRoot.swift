@@ -1,35 +1,32 @@
 // Plink/Features/WatchRoom/WatchRoomCompositionRoot.swift
-// Composition root for v2 realtime + playback path (Brain Review 5 P0-37)
+// Composition root for v2 realtime + playback path (Brain Review 5 P0-37, 7 P0-48/P0-49)
+//
+// P0-48: wired into MainTabView via makeScreenForRoom(room:...)
+// P0-49: real legacy fallback — returns actual RoomView, not placeholder
 //
 // This is the SINGLE entry point that decides whether to use v2 (WatchRoomScreen)
-// or legacy (RoomView) path. Controlled by FeatureFlag.realtime_protocol_v2.
-//
-// Callers (MainTabView, RoomCardView, etc.) call:
-//   WatchRoomCompositionRoot.makeScreen(roomId:userId:username:mediaSource:)
-// and get back a SwiftUI View — either WatchRoomScreen (v2) or legacy RoomView.
-//
-// IMPORTANT: only ONE path is active. No parallel WS sessions, no mixed
-// RealtimeClient + WebSocketClient. Feature flag switches the WHOLE composition.
+// or legacy (RoomView) path. Controlled by FeatureFlags.realtimeProtocolV2.
 
 import SwiftUI
 
 public enum WatchRoomCompositionRoot {
-    /// Creates the watch room screen — v2 or legacy based on feature flag.
-    /// P0-37: single composition root, no parallel paths.
+    /// P0-48: Creates the watch room screen for a Room model — v2 or legacy.
+    /// Called from MainTabView's fullScreenCover.
     @MainActor
-    public static func makeScreen(
-        roomId: String,
+    public static func makeScreenForRoom(
+        room: Room,
         userId: String,
         username: String,
-        mediaSource: PlaybackSource?,
-        mediaId: String?,
         apiBaseURL: URL,
         wsBaseURL: URL,
         authToken: String
     ) -> some View {
         if FeatureFlags.realtimeProtocolV2 {
+            // Derive PlaybackSource from room.mediaItem
+            let mediaSource = mediaSourceFromRoom(room)
+            let mediaId = mediaIdFromRoom(room)
             let model = makeV2Model(
-                roomId: roomId,
+                roomId: room.id,
                 userId: userId,
                 username: username,
                 mediaSource: mediaSource,
@@ -40,8 +37,33 @@ public enum WatchRoomCompositionRoot {
             )
             return AnyView(WatchRoomScreen(model: model))
         } else {
-            return AnyView(LegacyRoomViewWrapper(roomId: roomId, authToken: authToken))
+            // P0-49: real legacy fallback — actual RoomView, not placeholder
+            return AnyView(RoomView(room: room))
         }
+    }
+
+    /// Derive PlaybackSource from room.mediaItem
+    private static func mediaSourceFromRoom(_ room: Room) -> PlaybackSource? {
+        guard let mediaItem = room.mediaItem else { return nil }
+        // YouTube videoId → embedded player (App Store compliant)
+        if let videoId = mediaItem.videoId, !videoId.isEmpty {
+            return .youtube(videoId)
+        }
+        // Direct stream URL → native AVPlayer
+        let urlString = mediaItem.streamURL
+        if let url = URL(string: urlString) {
+            if urlString.contains(".m3u8") {
+                return .hls(url, headers: [:])
+            }
+            return .mp4(url, headers: [:])
+        }
+        return nil
+    }
+
+    /// Derive mediaId from room.mediaItem
+    private static func mediaIdFromRoom(_ room: Room) -> String? {
+        guard let mediaItem = room.mediaItem else { return nil }
+        return mediaItem.videoId ?? mediaItem.id
     }
 
     /// Creates the v2 WatchRoomModel with all dependencies wired.
@@ -56,13 +78,11 @@ public enum WatchRoomCompositionRoot {
         wsBaseURL: URL,
         authToken: String
     ) -> WatchRoomModel {
-        // P0-35: REST client for chat catch-up + presence snapshot
         let catchupClient = RESTChatCatchupClient(
             baseURL: apiBaseURL,
             authToken: authToken
         )
 
-        // Ticket provider — calls POST /api/realtime/ticket
         let ticketProvider: (String) async throws -> RealtimeTicket = { roomId in
             try await fetchTicket(
                 apiBaseURL: apiBaseURL,
@@ -73,13 +93,13 @@ public enum WatchRoomCompositionRoot {
 
         return WatchRoomModel(
             roomId: roomId,
-            currentUserId: userId,        // P1-32: identity via init
-            currentUsername: username,    // P1-32
+            currentUserId: userId,
+            currentUsername: username,
             baseEndpoint: wsBaseURL,
             ticketProvider: ticketProvider,
             mediaSource: mediaSource,
-            mediaId: mediaId,             // P1-33
-            chatCatchupClient: catchupClient  // P0-35
+            mediaId: mediaId,
+            chatCatchupClient: catchupClient
         )
     }
 
@@ -109,14 +129,13 @@ public enum WatchRoomCompositionRoot {
     }
 }
 
-// MARK: - Feature flags
+// MARK: - Feature flags (P1-56: production should use remote config)
 
 public enum FeatureFlags {
     /// P0-37: master switch for v2 realtime + playback path.
-    /// When true: WatchRoomScreen + RealtimeClient + OrderedSyncController.
-    /// When false: legacy RoomView + WebSocketClient + SyncEngine.
+    /// P1-56: UserDefaults is DEBUG override only.
+    /// Production should use backend FeatureFlag service with cached fallback.
     public static var realtimeProtocolV2: Bool {
-        // Read from UserDefaults or remote config — default false for safety
         UserDefaults.standard.bool(forKey: "plink.realtime_protocol_v2")
     }
 }
@@ -163,10 +182,20 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
         )
     }
 
+    // P0-50: fetchParticipants — calls GET /api/rooms/:id/participants
     public func fetchParticipants(roomId: String) async throws -> [ParticipantSnapshot] {
-        // TODO: GET /api/rooms/:id/participants — needs backend endpoint
-        // For now, return empty — participant events will still arrive via WS
-        return []
+        let url = baseURL.appendingPathComponent("api/rooms/\(roomId)/participants")
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        let decoded = try JSONDecoder().decode(ParticipantsResponse.self, from: data)
+        return decoded.participants.map { p in
+            ParticipantSnapshot(userId: p.userId, username: p.username)
+        }
     }
 }
 
@@ -191,6 +220,16 @@ private struct MessagesResponse: Decodable {
     let hasMore: Bool
 }
 
+// P0-50: participant snapshot response
+private struct ParticipantsResponse: Decodable {
+    let participants: [ParticipantDTO]
+}
+
+private struct ParticipantDTO: Decodable {
+    let userId: String
+    let username: String
+}
+
 private struct MessageDTO: Decodable {
     let messageId: String
     let clientMessageId: String?
@@ -198,29 +237,4 @@ private struct MessageDTO: Decodable {
     let senderName: String
     let text: String
     let createdAtMs: Int64
-}
-
-// MARK: - Legacy wrapper (for rollback path)
-
-/// Wrapper for legacy RoomView when feature flag is off.
-/// Real RoomView is still in Plink/Views/Room/RoomView.swift.
-private struct LegacyRoomViewWrapper: View {
-    let roomId: String
-    let authToken: String
-
-    var body: some View {
-        // Placeholder — real legacy RoomView would be here.
-        // For now, show a message that legacy path is active.
-        VStack {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.largeTitle)
-                .foregroundStyle(.orange)
-            Text("Legacy path active")
-                .font(.headline)
-            Text("Enable plink.realtime_protocol_v2 in UserDefaults to use v2.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-    }
 }

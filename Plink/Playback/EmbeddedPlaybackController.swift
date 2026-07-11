@@ -146,7 +146,14 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         // Whichever finishes first wins; the other is cancelled.
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { [weak self] in
-                while await MainActor.run(body: { self?.isReady == false }) {
+                // PATCH 16j: bind weak self to a local const to avoid
+                // "Reference to captured var 'self' in concurrently-
+                // executing code" Swift 6 error.
+                while true {
+                    let notReady = await MainActor.run {
+                        self?.isReady == false
+                    }
+                    if !notReady { return }
                     try await Task.sleep(for: .milliseconds(80))
                 }
             }

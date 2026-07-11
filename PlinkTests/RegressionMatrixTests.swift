@@ -89,7 +89,7 @@ final class RegressionMatrixTests: XCTestCase {
     }
 
     func testMarkdownTable_has18DataRows() {
-        let table = RegressionMatrix.markdownTable
+        let table = RegressionSystem.markdownTable
         let lines = table.components(separatedBy: "\n")
         // Header + separator + 18 data rows = 20 lines
         XCTAssertEqual(lines.count, 20,
@@ -97,7 +97,7 @@ final class RegressionMatrixTests: XCTestCase {
     }
 
     func testMarkdownTable_containsAllDisplayNames() {
-        let table = RegressionMatrix.markdownTable
+        let table = RegressionSystem.markdownTable
         for system in RegressionSystem.allCases {
             XCTAssertTrue(table.contains(system.displayName),
                           "Markdown table must contain \(system.displayName)")

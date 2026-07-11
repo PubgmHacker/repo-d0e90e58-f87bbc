@@ -118,12 +118,12 @@ public final class RutubePlaybackController: PlaybackControlling {
         // 8s prepare timeout. If Rutube doesn't load, throw.
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { [weak self] in
-                // PATCH 16j: bind weak self to a local const to avoid
-                // "Reference to captured var 'self' in concurrently-
-                // executing code" Swift 6 error.
+                // PATCH 22: guard let self to bind to strong local const,
+                // avoiding "Reference to captured var 'self'" Swift 6 error.
+                guard let self else { return }
                 while true {
                     let notReady = await MainActor.run {
-                        self?.isReady == false
+                        self.isReady == false
                     }
                     if !notReady { return }
                     try await Task.sleep(for: .milliseconds(100))

@@ -71,8 +71,9 @@ final class SettingsTests: XCTestCase {
     // MARK: - LocalizationManager
 
     func testLocalizationManager_defaultLanguage() {
-        let manager = LocalizationManager()
-        // Just verify it initializes without crash.
+        // PATCH 22: LocalizationManager has private init() — use singleton.
+        let manager = LocalizationManager.shared
+        // Just verify it doesn't crash.
         _ = manager.currentLanguage
     }
 }

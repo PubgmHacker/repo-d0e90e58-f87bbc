@@ -68,7 +68,7 @@ final class FakeRoomService: RoomServiceProtocol {
             throw FakeRoomError.roomFull
         }
         // Add fake participant.
-        let participant = UserPreview(id: UUID().uuidString, username: "Joiner", avatarURL: nil)
+        let participant = UserPreview(id: UUID().uuidString, username: "Joiner", avatarURL: nil, isOnline: true)
         room.participants.append(participant)
         rooms[roomId] = room
         myRoomIds.insert(roomId)

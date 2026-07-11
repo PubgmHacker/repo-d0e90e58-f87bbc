@@ -148,10 +148,12 @@ final class RoomServiceTests: XCTestCase {
     func testLeaveRoom_removesFromMyRooms() async throws {
         let room = service.seedRoom(id: "leave1", name: "Leave Me")
         _ = try await service.joinRoom(code: room.code, password: nil)
-        XCTAssertEqual(try await service.fetchMyRooms().count, 1)
+        let beforeLeave = try await service.fetchMyRooms()
+        XCTAssertEqual(beforeLeave.count, 1)
 
         try await service.leaveRoom(roomID: "leave1")
-        XCTAssertEqual(try await service.fetchMyRooms().count, 0)
+        let afterLeave = try await service.fetchMyRooms()
+        XCTAssertEqual(afterLeave.count, 0)
     }
 
     // MARK: - deleteRoom

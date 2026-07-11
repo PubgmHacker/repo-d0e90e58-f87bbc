@@ -1,6 +1,4 @@
 // PlinkTests/LifecycleTests.swift — PATCH 21: lifecycle system tests
-//
-// Tests app lifecycle: background/foreground, reconnect, state transitions.
 
 import XCTest
 @testable import Plink
@@ -13,7 +11,8 @@ final class LifecycleTests: XCTestCase {
     func testRealtimeConnectionState_allCases() {
         let states: [RealtimeConnectionState] = [
             .idle, .connecting, .authenticating, .joining,
-            .synchronizing, .connected, .reconnecting, .failed(reason: "test")
+            .synchronizing, .connected, .reconnecting(attempt: 1),
+            .failed(reason: "test")
         ]
         XCTAssertEqual(states.count, 8)
     }
@@ -29,7 +28,7 @@ final class LifecycleTests: XCTestCase {
         XCTAssertTrue(RealtimeConnectionState.authenticating.isTransient)
         XCTAssertTrue(RealtimeConnectionState.joining.isTransient)
         XCTAssertTrue(RealtimeConnectionState.synchronizing.isTransient)
-        XCTAssertTrue(RealtimeConnectionState.reconnecting.isTransient)
+        XCTAssertTrue(RealtimeConnectionState.reconnecting(attempt: 1).isTransient)
         XCTAssertFalse(RealtimeConnectionState.connected.isTransient)
         XCTAssertFalse(RealtimeConnectionState.idle.isTransient)
     }
@@ -37,11 +36,10 @@ final class LifecycleTests: XCTestCase {
     // MARK: - Reconnect
 
     func testReconnect_stateTransitionsThroughConnecting() {
-        // Simulate: connected → disconnected → connecting → connected.
         var state: RealtimeConnectionState = .connected
         XCTAssertTrue(state.isOnline)
 
-        state = .reconnecting
+        state = .reconnecting(attempt: 1)
         XCTAssertTrue(state.isTransient)
         XCTAssertFalse(state.isOnline)
 
@@ -61,7 +59,6 @@ final class LifecycleTests: XCTestCase {
         clock.ingest(clientSentMs: 3000, serverMs: 3050, clientReceivedMs: 3100)
         XCTAssertTrue(clock.isSynchronized)
 
-        // Simulate background → reset.
         clock.reset()
 
         XCTAssertFalse(clock.isSynchronized)

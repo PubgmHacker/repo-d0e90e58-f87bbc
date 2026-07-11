@@ -53,10 +53,9 @@ struct SyncIndicatorView: View {
 
     private var color: Color {
         switch quality {
-        case .perfect: return .raveGreen
-        case .good: return .raveWarning
-        case .syncing: return .orange
-        case .poor: return .raveDanger
+        case .synced: return .raveGreen
+        case .syncing: return .raveWarning
+        case .lagging: return .raveDanger
         }
     }
 }

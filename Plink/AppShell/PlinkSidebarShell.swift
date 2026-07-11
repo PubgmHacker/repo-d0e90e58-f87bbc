@@ -1,6 +1,7 @@
 // Plink/AppShell/PlinkSidebarShell.swift — iPad/macOS sidebar
 //
-// PLINK_UNIFIED_IOS_MAC_CINEMATIC_PATCH §2: Sidebar shell
+// PATCH 25: use existing views (HomeView, RoomsTabContent, SettingsView)
+// instead of new cinematic placeholders.
 
 import SwiftUI
 
@@ -47,26 +48,35 @@ struct PlinkSidebarShell: View {
             detail(for: selection)
         }
         .navigationSplitViewStyle(.balanced)
+        .environmentObject(dependencies.apiClient)
     }
 
     private func nav(_ section: AppSection) -> some View {
-        Label(section.title, systemImage: section.symbol)
-            .tag(section)
+        NavigationLink(value: section) {
+            Label(section.title, systemImage: section.symbol)
+        }
     }
 
     @ViewBuilder
     private func detail(for section: AppSection) -> some View {
         switch section {
-        case .home: DiscoveryHomeView(dependencies: dependencies)
-        case .rooms: RoomsHubView(dependencies: dependencies)
-        case .friends: FriendsView()
+        case .home:
+            HomeTabContent(
+                onProfileTap: { },
+                onSwitchToAITab: nil,
+                onSwitchToJoinTab: nil
+            )
+        case .rooms:
+            RoomsTabContent()
+        case .friends:
+            FriendsView()
         case .profile:
-            // ProfileView requires viewModel — use a basic placeholder
-            // until full migration wires ProfileViewModel from AppDependencies.
             Text("Профиль")
                 .cinematicScreen()
-        case .settings: SettingsView()
-        case .create: EmptyView()
+        case .settings:
+            SettingsView()
+        case .create:
+            EmptyView()
         }
     }
 }

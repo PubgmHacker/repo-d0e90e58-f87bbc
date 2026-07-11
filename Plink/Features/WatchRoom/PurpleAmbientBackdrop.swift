@@ -27,7 +27,8 @@ struct PurpleAmbientBackdrop: View {
             RadialGradient(
                 colors: [state.primaryColor.opacity(0.20), .clear],
                 center: .topLeading,
-                outerRadius: 420
+                startRadius: 0,
+                endRadius: 420
             )
             .blur(radius: 70)
             .opacity(state.intensity)
@@ -36,7 +37,8 @@ struct PurpleAmbientBackdrop: View {
             RadialGradient(
                 colors: [state.secondaryColor.opacity(0.14), .clear],
                 center: .bottomTrailing,
-                outerRadius: 520
+                startRadius: 0,
+                endRadius: 520
             )
             .blur(radius: 90)
             .opacity(state.intensity)

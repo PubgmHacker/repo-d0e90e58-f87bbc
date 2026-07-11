@@ -89,8 +89,12 @@ struct DanmakuPlacement: Identifiable, Equatable, Sendable {
     /// 0...1 progress through the lane. View computes x-offset from this.
     /// progress = (now - createdAt) / (duration * speed)
     func progress(at now: ContinuousClock.Instant, speed: Double) -> Double {
-        // PATCH 16: Duration.seconds is a method, not a property — call it.
-        let elapsed = -now.duration(to: createdAt).seconds()
+        // PATCH 16: Duration has no .seconds method/property. Use .components
+        // tuple (seconds: Int64, attoseconds: Int64) and convert to Double.
+        // createdAt.duration(to: now) returns positive duration when
+        // createdAt < now (no unary minus needed).
+        let (secs, attos) = createdAt.duration(to: now).components
+        let elapsed = Double(secs) + Double(attos) * 1e-18
         guard duration > 0 else { return 1 }
         return elapsed / (duration * max(0.1, speed))
     }

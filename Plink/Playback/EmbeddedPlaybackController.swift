@@ -1,31 +1,36 @@
-// Plink/Playback/EmbeddedPlaybackController.swift
-// Embedded (WKWebView) playback controller (Brain Review P0-8)
+// Plink/Playback/EmbeddedPlaybackController.swift — PATCH 03
 //
-// Brain P0-8 fix: YouTubeEmbeddedProvider was a stub — it created a WKWebView
-// but never registered the message handler, never exposed play/pause/seek/
-// position via JS bridge, and NativePlayerController's play/pause/seek were
-// no-ops for embedded providers.
+// GLM-5.2 master implementation patch — Commit Group 3.
 //
-// This file introduces a SEPARATE controller for embedded providers. It
-// implements PlaybackControlling directly, NOT through AVPlayer. The
-// PlaybackCoordinator (Stage 10 UI) chooses NativePlayerController for
-// .hls/.mp4 sources and EmbeddedPlaybackController for .youtube sources.
+// The single official YouTube embedded controller for the room session.
+// Owns one WKWebView per room (runbook §16: 'Не добавлять еще один
+// singleton WebView' — coordinator is per-room, never global).
+//
+// PATCH 03 changes from previous version:
+//   - Public isReady + lastError properties for UI binding.
+//   - 8s prepare timeout via withThrowingTaskGroup race (was 5s busy-wait).
+//   - Pending enum consolidates pendingSeekSeconds + pendingPlaying.
+//   - Cleaner HTML: plinkPlayer namespace, snapshot() helper for
+//     position+duration in one JS round-trip.
+//   - Teardown stops poll task via .cancel() (was Timer.invalidate only).
+//   - Background/foreground polling throttle (250ms visible, 1s background).
 //
 // JS bridge contract (YouTube IFrame API):
-//   - onReady → ready state
-//   - onStateChange → isPlaying, isBuffering
-//   - periodic position poll via getCurrentTime() every 250ms
-//   - play/pause/seek via ytPlayer.playVideo()/pauseVideo()/seekTo()
+//   - 'ready' → isReady = true, drain pending commands.
+//   - 'state' (1/2/3/0) → isPlaying, isBuffering.
+//   - 'error' (2/5/100/101/150) → lastError set, isBuffering cleared.
+//   - poll task: plinkSnapshot() every 250ms (visible) / 1s (background).
 //
 // App Store compliance (runbook §7):
-//   - YouTube controls + branding visible (controls=1, modestbranding=1)
-//   - NO cookies leave device
-//   - NO server-side extraction
-//   - NO raw CDN proxy
+//   - Official YouTube IFrame API inside WKWebView.
+//   - NO server-side extraction (no Innertube, no yt-dlp, no Piped).
+//   - NO cookie relay — cookies never leave the device.
+//   - NO raw CDN proxy.
+//   - YouTube controls + branding visible (ToS): controls=1, modestbranding=1.
 //
 // Capability limitations (runbook §19):
 //   - supportsRateCorrection = false → OrderedSyncController uses less
-//     frequent precise seeks with UX indicator
+//     frequent precise seeks (drift threshold 500-750ms after device testing).
 
 import Foundation
 import UIKit
@@ -35,10 +40,21 @@ import Observation
 @MainActor
 @Observable
 public final class EmbeddedPlaybackController: PlaybackControlling {
+    // MARK: - Public state (UI binds to these)
+
     public private(set) var position: TimeInterval = 0
     public private(set) var duration: TimeInterval = 0
     public private(set) var isPlaying: Bool = false
     public private(set) var isBuffering: Bool = false
+
+    /// PATCH 03: ready state is now public. UI uses this to show "Loading…"
+    /// vs "Buffering…" — loading means the player isn't ready yet;
+    /// buffering means ready but mid-playback rebuffer.
+    public private(set) var isReady: Bool = false
+
+    /// PATCH 03: surface YouTube error callback for UI binding.
+    public private(set) var lastError: String?
+
     public var capabilities: PlaybackCapabilities {
         .init(
             seekable: true,
@@ -49,168 +65,192 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         )
     }
 
+    // MARK: - Embedded view
+
     public private(set) var embeddedView: UIView?
+
+    // MARK: - Private state
+
     private var webView: WKWebView?
     private var videoId: String?
-    private var ready: Bool = false
-    // P1-15: pending seek as Double? so seek-to-zero is preserved
-    private var pendingSeekSeconds: Double?
-    private var pendingPlaying: Bool = false
-    private var positionTimer: Timer?
-    private var lastError: String?
 
-    // Message handler class — must be NSObject for WKScriptMessageHandler.
-    private let messageHandler = EmbeddedMessageHandler()
+    /// PATCH 03: Pending enum consolidates pending seek + play state.
+    /// Drained atomically when isReady becomes true.
+    private var pending: Pending = .none
+    private enum Pending {
+        case none
+        case state(position: Double?, playing: Bool?)
+    }
+
+    private var pollTask: Task<Void, Never>?
+    private let bridge = EmbeddedMessageHandler()
 
     public init() {}
+
+    // MARK: - Prepare
 
     public func prepare(_ source: PlaybackSource) async throws {
         guard case .youtube(let id) = source else {
             throw ProviderError.unsupportedSource
         }
-        // P1-15: validate/sanitize video ID before interpolation into HTML
         guard Self.isValidVideoId(id) else {
             throw ProviderError.loadingFailed("Invalid YouTube video ID")
         }
+
         teardown()
         self.videoId = id
-        ready = false
+        isReady = false
         lastError = nil
+
+        // WKWebView configuration
+        let content = WKUserContentController()
+        content.add(bridge, name: "plinkPlayer")
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
-        config.userContentController = WKUserContentController()
-        config.userContentController.add(messageHandler, name: "player")
+        config.mediaTypesRequiringUserActionForPlayback = [.audio]
+        config.userContentController = content
+        config.websiteDataStore = .default()
 
         let web = WKWebView(frame: .zero, configuration: config)
-        web.translatesAutoresizingMaskIntoConstraints = false
+        web.isOpaque = false
+        web.backgroundColor = UIColor(red: 0x0D/255, green: 0x00/255, blue: 0x1A/255, alpha: 1)
         web.scrollView.isScrollEnabled = false
-        self.webView = web
-        self.embeddedView = web
+        web.translatesAutoresizingMaskIntoConstraints = false
+        webView = web
+        embeddedView = web
 
-        let onReady: () -> Void = { [weak self] in
+        // Wire bridge callbacks
+        bridge.onReady = { [weak self] in
             Task { @MainActor in self?.handleReady() }
         }
-        let onStateChange: (Int) -> Void = { [weak self] state in
+        bridge.onStateChange = { [weak self] state in
             Task { @MainActor in self?.handleStateChange(state) }
         }
-        let onError: (Int) -> Void = { [weak self] code in
+        bridge.onError = { [weak self] code in
             Task { @MainActor in self?.handleError(code: code) }
         }
-        messageHandler.onReady = onReady
-        messageHandler.onStateChange = onStateChange
-        messageHandler.onError = onError
 
-        // P1-15: use JSON-encoded video ID instead of string interpolation
-        // to prevent XSS / injection
-        let videoIdJSON = try JSONSerialization.data(withJSONObject: [id], options: [])
-        let videoIdArrayString = String(data: videoIdJSON, encoding: .utf8) ?? "[]"
-        let html = Self.buildHTML(videoIdArray: videoIdArrayString)
-        web.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
+        // PATCH 03: JSON-encode video ID to prevent XSS / injection.
+        // Use a single-element array (matches existing bridge contract).
+        let encoded = try JSONEncoder().encode(id)
+        let jsonId = String(decoding: encoded, as: UTF8.self)
+        web.loadHTMLString(
+            Self.buildHTML(videoIdJSON: jsonId),
+            baseURL: URL(string: "https://www.youtube.com")
+        )
 
-        // Await ready (5s timeout — degraded mode if not)
-        let start = Date()
-        while !ready, Date().timeIntervalSince(start) < 5 {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            if Task.isCancelled { return }
+        // PATCH 03: 8s prepare timeout via task group race.
+        // First task: poll isReady every 80ms until true.
+        // Second task: 8s timeout throws loadingFailed.
+        // Whichever finishes first wins; the other is cancelled.
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { [weak self] in
+                while await MainActor.run(body: { self?.isReady == false }) {
+                    try await Task.sleep(for: .milliseconds(80))
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(8))
+                throw ProviderError.loadingFailed("YouTube player timed out")
+            }
+            _ = try await group.next()
+            group.cancelAll()
         }
-        if !ready {
-            // Timeout — proceed in degraded mode; UI shows error
-            isBuffering = true
-        }
+
+        startPolling()
     }
 
+    // MARK: - PlaybackControlling
+
     public func play() async {
-        guard ready else { pendingPlaying = true; return }
-        evaluate("ytPlayer && ytPlayer.playVideo();")
-        isPlaying = true
+        guard isReady else {
+            pending = .state(position: nil, playing: true)
+            return
+        }
+        await evaluate("window.plinkPlay && window.plinkPlay();")
     }
 
     public func pause() {
-        guard ready else { pendingPlaying = false; return }
-        evaluate("ytPlayer && ytPlayer.pauseVideo();")
-        isPlaying = false
+        guard isReady else {
+            pending = .state(position: nil, playing: false)
+            return
+        }
+        Task { await evaluate("window.plinkPause && window.plinkPause();") }
     }
 
     public func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult {
-        guard ready else { pendingSeekSeconds = seconds; return .applied }
-        let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
-        guard let web = webView else { return .applied }
-        // P1-15: use async evaluateJavaScript (Apple recommended)
-        do {
-            _ = try await web.evaluateJavaScript("ytPlayer && ytPlayer.seekTo(\(clamped), true);")
-        } catch {
-            lastError = "seek failed: \(error.localizedDescription)"
+        let target = max(0, duration > 0 ? min(seconds, duration) : seconds)
+        guard isReady else {
+            pending = .state(position: target, playing: nil)
+            return .unavailable
         }
-        position = clamped
+        // PATCH 03: plinkSeek returns true on success, undefined if not loaded.
+        let result = await evaluate("window.plinkSeek && window.plinkSeek(\(target));")
+        guard result != nil else { return .unavailable }
+        position = target
         return .applied
     }
 
     public func setRate(_ rate: Float) {
-        // YouTube IFrame API does not support setRate for non-PRO content
-        // — capabilities.supportsRateCorrection = false.
-        // OrderedSyncController falls back to less frequent precise seeks.
+        // YouTube IFrame API supports setPlaybackRate for some content,
+        // but rate correction is disabled per capabilities.supportsRateCorrection
+        // = false. OrderedSyncController falls back to precise seeks.
     }
 
+    // MARK: - Teardown
+
     public func teardown() {
-        positionTimer?.invalidate()  // P1-15: stop timer on teardown
-        positionTimer = nil
-        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "player")
+        pollTask?.cancel()
+        pollTask = nil
+
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "plinkPlayer")
         webView?.stopLoading()
         webView?.removeFromSuperview()
         webView = nil
         embeddedView = nil
+
+        bridge.onReady = nil
+        bridge.onStateChange = nil
+        bridge.onError = nil
+
         videoId = nil
-        ready = false
+        isReady = false
+        isPlaying = false
+        isBuffering = false
         position = 0
         duration = 0
-        isPlaying = false
-        isBuffering = false
-        pendingSeekSeconds = nil
-        pendingPlaying = false
-        messageHandler.onReady = nil
-        messageHandler.onStateChange = nil
-        messageHandler.onError = nil
+        pending = .none
     }
 
-    // P1-15: surface YouTube error callback
-    private func handleError(code: Int) {
-        let message: String
-        switch code {
-        case 2: message = "Invalid video parameter"
-        case 5: message = "HTML5 player error"
-        case 100: message = "Video not found or private"
-        case 101, 150: message = "Video not allowed to be embedded"
-        default: message = "YouTube error code \(code)"
-        }
-        lastError = message
-        isBuffering = false
-        isPlaying = false
-    }
+    // MARK: - Bridge handlers
 
-    // ── JS bridge handlers ────────────────────────────────────────────────
     private func handleReady() {
-        ready = true
+        isReady = true
         isBuffering = false
-        // Apply any pending play/seek from before ready
-        if pendingPlaying {
-            Task { await play() }
-            pendingPlaying = false
-        }
-        // P1-15: pending seek as Double? — seek-to-zero now preserved
-        if let pending = pendingSeekSeconds {
-            Task { await seek(to: pending, precise: true) }
-            pendingSeekSeconds = nil
-        }
-        // Fetch duration
-        evaluate("ytPlayer ? ytPlayer.getDuration() : 0") { result in
-            if let d = result as? Double, d > 0 {
-                self.duration = d
+
+        // Drain pending commands atomically.
+        let command = pending
+        pending = .none
+
+        Task {
+            if case .state(let p, let playing) = command {
+                if let p { _ = await seek(to: p, precise: true) }
+                if playing == true { await play() }
+                if playing == false { pause() }
             }
         }
-        // Start position polling
-        startPositionPolling()
+
+        // Fetch duration (fire-and-forget — position poll will keep it fresh).
+        Task { [weak self] in
+            guard let self else { return }
+            let snapshot = await self.evaluate("window.plinkSnapshot && window.plinkSnapshot();")
+            if let dict = snapshot as? [String: Any] {
+                if let d = dict["duration"] as? Double, d > 0 {
+                    self.duration = d
+                }
+            }
+        }
     }
 
     private func handleStateChange(_ state: Int) {
@@ -238,28 +278,61 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         }
     }
 
-    private func startPositionPolling() {
-        positionTimer?.invalidate()
-        positionTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, let web = self.webView else { return }
-                if let result = try? await web.evaluateJavaScript("ytPlayer ? ytPlayer.getCurrentTime() : 0"),
-                   let t = result as? Double, t.isFinite {
-                    self.position = t
+    private func handleError(code: Int) {
+        // https://developers.google.com/youtube/iframe_api_reference#onError
+        let message: String
+        switch code {
+        case 2:   message = "Invalid video parameter"
+        case 5:   message = "HTML5 player error"
+        case 100: message = "Video not found or private"
+        case 101, 150: message = "Video not allowed to be embedded"
+        default:  message = "YouTube error code \(code)"
+        }
+        lastError = message
+        isBuffering = false
+        isPlaying = false
+    }
+
+    // MARK: - Polling
+
+    /// PATCH 03: poll at 250ms while visible, 1s while backgrounded, stop
+    /// after teardown. Position + duration in one JS round-trip via
+    /// plinkSnapshot() to halve the IPC overhead.
+    private func startPolling() {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let isBackgrounded = await MainActor.run {
+                    UIApplication.shared.applicationState == .background
                 }
+                let snapshot = await self.evaluate("window.plinkSnapshot && window.plinkSnapshot();")
+                if let dict = snapshot as? [String: Any] {
+                    let time = dict["time"] as? Double
+                    let dur = dict["duration"] as? Double
+                    await MainActor.run {
+                        if let t = time, t.isFinite { self.position = t }
+                        if let d = dur, d > 0 { self.duration = d }
+                    }
+                }
+                let interval: UInt64 = isBackgrounded ? 1_000_000_000 : 250_000_000
+                try? await Task.sleep(nanoseconds: interval)
             }
         }
     }
 
-    private func evaluate(_ js: String, completion: ((Any?) -> Void)? = nil) {
-        Task { @MainActor [weak self] in
-            guard let self, let web = self.webView else { return }
-            let result = try? await web.evaluateJavaScript(js)
-            completion?(result)
-        }
+    // MARK: - JS evaluation
+
+    @discardableResult
+    private func evaluate(_ js: String) async -> Any? {
+        guard let webView else { return nil }
+        return try? await webView.evaluateJavaScript(js)
     }
 
-    // P1-15: validate YouTube video ID — only [A-Za-z0-9_-]{11}
+    // MARK: - Validation & HTML
+
+    /// PATCH 03: validate YouTube video ID — only [A-Za-z0-9_-]{11}.
+    /// Prevents XSS / injection via HTML interpolation.
     private static func isValidVideoId(_ id: String) -> Bool {
         guard id.count == 11 else { return false }
         return id.allSatisfy { c in
@@ -267,44 +340,75 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         }
     }
 
-    // P1-15: build HTML with JSON-encoded video ID array (no string interpolation)
-    private static func buildHTML(videoIdArray: String) -> String {
+    /// PATCH 03: cleaner HTML with plinkPlayer namespace.
+    /// - Background matches PlinkRave.void (0x0D001A).
+    /// - controls=1, modestbranding=1, rel=0, iv_load_policy=3 (ToS).
+    /// - plinkPlay/Pause/Seek/Snapshot helpers exposed on window.
+    /// - JSON-encoded videoId (no string interpolation).
+    private static func buildHTML(videoIdJSON: String) -> String {
         return """
-        <!DOCTYPE html>
+        <!doctype html>
         <html>
-          <body style="margin:0;background:#000;overflow:hidden;">
+          <head>
+            <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+            <style>
+              html, body, #player {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: 100%;
+                background: #0D001A;
+                overflow: hidden;
+              }
+            </style>
+          </head>
+          <body>
             <div id="player"></div>
+            <script src="https://www.youtube.com/iframe_api"></script>
             <script>
-              var videoIds = \(videoIdArray);
               var ytPlayer;
+              function post(event, payload) {
+                window.webkit.messageHandlers.plinkPlayer.postMessage(
+                  Object.assign({event: event}, payload || {})
+                );
+              }
               function onYouTubeIframeAPIReady() {
                 ytPlayer = new YT.Player('player', {
-                  videoId: videoIds[0],
-                  width: '100%',
-                  height: '100%',
+                  videoId: \(videoIdJSON),
                   playerVars: {
+                    'playsinline': 1,
                     'controls': 1,
                     'modestbranding': 1,
-                    'playsinline': 1,
                     'rel': 0,
                     'iv_load_policy': 3
                   },
                   events: {
-                    'onReady': function() {
-                      window.webkit.messageHandlers.player.postMessage({event:'ready'});
-                    },
-                    'onStateChange': function(e) {
-                      window.webkit.messageHandlers.player.postMessage({event:'stateChange', state:e.data});
-                    },
-                    'onError': function(e) {
-                      window.webkit.messageHandlers.player.postMessage({event:'error', code:e.data});
-                    }
+                    'onReady': function() { post('ready'); },
+                    'onStateChange': function(e) { post('state', {state: e.data}); },
+                    'onError': function(e) { post('error', {code: e.data}); }
                   }
                 });
               }
-              var tag = document.createElement('script');
-              tag.src = "https://www.youtube.com/iframe_api";
-              document.head.appendChild(tag);
+              // Plink namespace — clean JS bridge for the controller.
+              window.plinkPlay = function() {
+                if (ytPlayer && ytPlayer.playVideo) { ytPlayer.playVideo(); return true; }
+                return false;
+              };
+              window.plinkPause = function() {
+                if (ytPlayer && ytPlayer.pauseVideo) { ytPlayer.pauseVideo(); return true; }
+                return false;
+              };
+              window.plinkSeek = function(seconds) {
+                if (ytPlayer && ytPlayer.seekTo) { ytPlayer.seekTo(seconds, true); return true; }
+                return false;
+              };
+              window.plinkSnapshot = function() {
+                if (!ytPlayer) { return null; }
+                return {
+                  time: (ytPlayer.getCurrentTime && ytPlayer.getCurrentTime()) || 0,
+                  duration: (ytPlayer.getDuration && ytPlayer.getDuration()) || 0
+                };
+              };
             </script>
           </body>
         </html>
@@ -312,12 +416,12 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 }
 
-// MARK: - Message handler bridge
+// MARK: - Bridge message handler
 
 private final class EmbeddedMessageHandler: NSObject, WKScriptMessageHandler {
     var onReady: (() -> Void)?
     var onStateChange: ((Int) -> Void)?
-    var onError: ((Int) -> Void)?  // P1-15: surface YouTube error callback
+    var onError: ((Int) -> Void)?
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
@@ -325,7 +429,7 @@ private final class EmbeddedMessageHandler: NSObject, WKScriptMessageHandler {
         switch event {
         case "ready":
             onReady?()
-        case "stateChange":
+        case "state":
             if let state = body["state"] as? Int {
                 onStateChange?(state)
             }

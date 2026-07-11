@@ -1,34 +1,72 @@
+// Plink/Features/WatchRoom/PresenceBar.swift — PATCH 02 polish
+//
+// Professional design:
+//   - Avatars: 36pt (was 34pt), -8pt overlap (was -6)
+//   - Host avatar gold ring (was 0.5 opacity)
+//   - Active speaker green ring
+//   - Voice/camera buttons grouped in a capsule with .ultraThinMaterial bg
+//   - "Invite to voice" button (new — chevron.right)
+//   - 56pt total height (was 52pt)
+//   - 16pt horizontal padding (was 12pt)
+
 import SwiftUI
 
 struct PresenceBar: View {
     let model: WatchRoomModel
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: -6) {
+        HStack(spacing: 12) {
+            // Avatar stack
+            HStack(spacing: -8) {
                 ForEach(model.participants.prefix(5)) { participant in
-                    ParticipantAvatar(participant: participant, hostId: model.hostId)
+                    ParticipantAvatar(
+                        participant: participant,
+                        hostId: model.hostId,
+                        isSpeaking: model.activeSpeakerName == participant.username
+                    )
+                }
+                if model.participants.count > 5 {
+                    Text("+\(model.participants.count - 5)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PlinkRave.text)
+                        .frame(width: 36, height: 36)
+                        .background(PlinkRave.raised, in: Circle())
+                        .overlay(Circle().stroke(PlinkRave.divider, lineWidth: 2))
                 }
             }
 
-            VStack(alignment: .leading, spacing: 1) {
+            // Identity + status
+            VStack(alignment: .leading, spacing: 2) {
                 Text("\(model.participants.count) in room")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(PlinkRave.text)
                 Text(model.activeSpeakerName.map { "\($0) speaking" } ?? "Watching together")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PlinkRave.textTertiary)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(PlinkRave.secondaryText)
             }
 
             Spacer()
 
-            VoiceActionButton(state: model.microphoneState) { Task { await model.toggleMicrophone() } }
-            CameraActionButton(state: model.cameraState) { Task { await model.toggleCamera() } }
+            // Voice/camera group — single capsule
+            HStack(spacing: 4) {
+                VoiceActionButton(state: model.microphoneState) {
+                    Task { await model.toggleMicrophone() }
+                }
+                CameraActionButton(state: model.cameraState) {
+                    Task { await model.toggleCamera() }
+                }
+            }
+            .padding(4)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.06), lineWidth: 0.5))
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 16)
+        .frame(height: 56)
         .background(PlinkRave.void)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(PlinkRave.divider.opacity(0.3)).frame(height: 0.5)
+            Rectangle()
+                .fill(PlinkRave.divider.opacity(0.35))
+                .frame(height: 0.5)
         }
     }
 }

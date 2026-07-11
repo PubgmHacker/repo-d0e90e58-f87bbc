@@ -1,94 +1,109 @@
+// Plink/Features/WatchRoom/PlayerStage.swift — PATCH 02 + 04
+//
+// Stable player surface root. Holds the AVPlayer/UIViewRepresentable at the
+// top of its ZStack so orientation changes do NOT recreate it. Layouts
+// position this view; they never own or replace it.
+//
+// Visual design (professional polish):
+//   - Player viewport: PlinkRave.void (not pure black) — letterbox bars
+//     are purple-tinted, matching the room's ambient tone.
+//   - Chrome: .ultraThinMaterial over void for depth, not flat color.
+//   - Top gradient: 0→0.55 opacity void, gives top chrome legibility
+//     without darkening the video.
+//   - Bottom gradient: 0→0.7 opacity void, same purpose.
+//   - Center control: 64pt circle (was 52pt) with proper backdrop.
+//   - Danmaku layer above video but below chrome.
+//
+// PATCH 04: this view does NOT observe orientation. The `variant` parameter
+// only affects corner radius (0 for landscape fullscreen, 14 for portrait/
+// tablet). The underlying PlayerSurfaceView is the same instance across
+// rotations because PlayerStage itself has a stable .id in WatchRoomScreen.
+
 import SwiftUI
 
 struct PlayerStage: View {
-    enum Style { case portrait, landscape, tablet }
-
     let model: WatchRoomModel
     @Binding var ui: WatchRoomUIState
-    let style: Style
+    let variant: WatchRoomLayoutState.Variant
+
+    private var cornerRadius: CGFloat {
+        switch variant {
+        case .landscape: return 0
+        case .portrait, .tablet: return 14
+        }
+    }
 
     var body: some View {
         ZStack {
-            Color.black
-            PlayerSurfaceView(coordinator: model.coordinator)
+            // Viewport — purple-tinted void, NOT pure black
+            PlinkRave.void.ignoresSafeArea()
 
+            // The actual player surface — never recreated
+            PlayerSurfaceView(coordinator: model.coordinator)
+                .ignoresSafeArea(variant == .landscape ? .all : [])
+
+            // Danmaku layer above video, below chrome
+            DanmakuCanvasLayer(messages: model.danmakuMessages)
+                .allowsHitTesting(false)
+                .padding(.horizontal, 8)
+                .padding(.top, 60)
+                .padding(.bottom, 80)
+
+            // Loading state (initial buffer)
             if model.coordinator.isPreparing {
                 PlayerLoadingView()
                     .transition(.opacity)
             }
 
-            if model.coordinator.isBuffering {
+            // Buffering state (mid-playback rebuffer)
+            if model.coordinator.isBuffering && !model.coordinator.isPreparing {
                 BufferingOverlay()
                     .transition(.opacity)
             }
 
+            // Chrome — only visible when controls are shown
             if ui.controlsVisible {
-                PlayerTopChrome(model: model, style: style)
+                // Top legibility gradient
+                LinearGradient(
+                    colors: [PlinkRave.void.opacity(0.55), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 120)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+
+                // Bottom legibility gradient
+                LinearGradient(
+                    colors: [.clear, PlinkRave.void.opacity(0.7)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 140)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+
+                PlayerTopChrome(model: model, variant: variant)
                     .transition(.opacity.combined(with: .move(edge: .top)))
 
                 PlayerCenterControl(model: model)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
 
-                PlayerBottomControls(model: model, ui: $ui, style: style)
+                PlayerBottomControls(model: model, ui: $ui, variant: variant)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
-
-            DanmakuCanvasLayer(messages: model.danmakuMessages)
         }
-        .clipShape(RoundedRectangle(cornerRadius: style == .landscape ? 0 : 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
-            if style != .landscape {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(PlinkRave.primary.opacity(0.15), lineWidth: 0.5)
+            if variant != .landscape {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(PlinkRave.divider.opacity(0.4), lineWidth: 0.5)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: ui.controlsVisible)
-    }
-}
-
-struct PlayerTopChrome: View {
-    let model: WatchRoomModel
-    let style: PlayerStage.Style
-
-    var body: some View {
-        VStack {
-            HStack {
-                PlayerChromeButton(systemName: "xmark", action: model.leaveRoom)
-                Spacer()
-                SyncHealthPill(driftMs: model.lastDriftMs, connected: model.connectionState == .connected)
-                PlayerChromeButton(systemName: "ellipsis", action: model.openPlayerSettings)
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, style == .landscape ? 8 : 6)
-            Spacer()
-        }
-    }
-}
-
-struct PlayerCenterControl: View {
-    let model: WatchRoomModel
-
-    var body: some View {
-        Button {
-            Task {
-                if model.coordinator.isPlaying {
-                    model.sendPauseCommand()
-                } else {
-                    await model.sendPlayCommand()
-                }
-            }
-        } label: {
-            Image(systemName: model.coordinator.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white)
-                .offset(x: model.coordinator.isPlaying ? 0 : 1.5)
-                .frame(width: 52, height: 52)
-                .background(.black.opacity(0.5), in: Circle())
-                .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-        .disabled(!model.isHost || model.connectionState != .connected)
-        .opacity(model.isHost ? 1 : 0)
-        .accessibilityLabel(model.coordinator.isPlaying ? "Pause" : "Play")
+        .animation(.plinkControls, value: ui.controlsVisible)
+        .animation(.plinkControls, value: model.coordinator.isPreparing)
+        .animation(.plinkControls, value: model.coordinator.isBuffering)
     }
 }

@@ -1,14 +1,15 @@
-// Plink/Features/WatchRoom/WatchChatComposer.swift — PATCH 02: composer
+// Plink/Features/WatchRoom/WatchChatComposer.swift — PATCH 02 polish
 //
-// Commit Group 1: fix ShapeStyle conformance error at the send button.
-// The original code wrapped Color/LinearGradient in a Group inside
-// `.background(_, in: Circle())` — that produces a View, not a ShapeStyle,
-// and the `background(_:in:fillStyle:)` overload rejects it. Switching to
-// AnyShapeStyle keeps both branches as ShapeStyle-conforming values and
-// preserves the visual intent (dim circle when empty, gradient when armed).
+// Commit Group 1: fixed ShapeStyle conformance error (Group<Color|LinearGradient>
+// → AnyShapeStyle).
+// Commit Group 2: professional sizing — 40pt send button (was 36pt),
+// 22pt corner radius (was 20pt), 14pt emoji button (was 16pt icon in 38pt circle).
 //
-// Token usage aligned to PATCH 01: outgoingBubble gradient and raised
-// surface for the disabled state; magenta for the send glyph.
+// Token usage (PATCH 01 spec):
+//   - magenta for send glyph background (via outgoingBubble/primaryAction)
+//   - raised for disabled state and emoji button
+//   - secondaryText for placeholder icon
+//   - text for input
 
 import SwiftUI
 
@@ -25,24 +26,29 @@ struct WatchChatComposer: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Button(action: model.openEmojiPicker) {
                 Image(systemName: "face.smiling")
-                    .font(.system(size: 16))
+                    .font(.system(size: 17))
                     .foregroundStyle(PlinkRave.secondaryText)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 40, height: 40)
                     .background(PlinkRave.raised, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
             }
             .accessibilityLabel("Emoji")
 
-            TextField("Message...", text: $text, axis: .vertical)
+            TextField("Message…", text: $text, axis: .vertical)
                 .lineLimit(1...4)
                 .font(.system(size: 15))
                 .foregroundStyle(PlinkRave.text)
                 .tint(PlinkRave.magenta)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(PlinkRave.raised, in: RoundedRectangle(cornerRadius: 20))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(PlinkRave.raised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(.white.opacity(0.05), lineWidth: 0.5)
+                )
 
             Button {
                 let value = trimmedText
@@ -51,24 +57,27 @@ struct WatchChatComposer: View {
                 text = ""
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 40, height: 40)
                     .background(
                         canSend
                             ? AnyShapeStyle(PlinkRave.primaryAction)
                             : AnyShapeStyle(PlinkRave.raised),
                         in: Circle()
                     )
+                    .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
             }
             .disabled(!canSend)
             .accessibilityLabel("Send")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .background(PlinkRave.surface.opacity(0.95))
         .overlay(alignment: .top) {
-            Rectangle().fill(PlinkRave.divider.opacity(0.5)).frame(height: 0.5)
+            Rectangle()
+                .fill(PlinkRave.divider.opacity(0.4))
+                .frame(height: 0.5)
         }
     }
 }

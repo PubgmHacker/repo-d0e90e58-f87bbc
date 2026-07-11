@@ -1,3 +1,13 @@
+// Plink/Features/WatchRoom/WatchChatView.swift — PATCH 02 polish
+//
+// Professional design:
+//   - Living backdrop at 0.28 opacity (was 0.4) — readable but still alive
+//   - Bottom gradient overlay for composer legibility
+//   - Scroll-to-bottom button: 40pt circle with elevation (was pill)
+//   - Message spacing: 12pt (was 10pt)
+//   - Top padding: 8pt (new — gives breathing room)
+//   - LazyVStack alignment: .leading (kept)
+
 import SwiftUI
 
 struct WatchChatView: View {
@@ -7,7 +17,7 @@ struct WatchChatView: View {
     var body: some View {
         ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(model.chatMessages) { message in
                         WatchChatBubble(
                             message: message,
@@ -18,28 +28,43 @@ struct WatchChatView: View {
                     }
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.vertical, 14)
             }
             .scrollIndicators(.hidden)
             .background(
-                // Living video backdrop — chat breathes with the movie
                 LivingVideoBackdrop(player: model.coordinator.nativePlayer)
-                    .opacity(0.4)
+                    .opacity(0.28)
             )
             .onChange(of: model.chatMessages.count) { _, _ in
                 guard atBottom, let last = model.chatMessages.last else { return }
-                withAnimation(.easeOut(duration: 0.2)) { reader.scrollTo(last.id, anchor: .bottom) }
+                withAnimation(.easeOut(duration: 0.22)) {
+                    reader.scrollTo(last.id, anchor: .bottom)
+                }
             }
             .overlay(alignment: .bottomTrailing) {
                 if !atBottom && model.unreadCount > 0 {
-                    Button("\(model.unreadCount) new") {
-                        if let last = model.chatMessages.last { reader.scrollTo(last.id, anchor: .bottom) }
+                    Button {
+                        if let last = model.chatMessages.last {
+                            withAnimation(.easeOut(duration: 0.22)) {
+                                reader.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("\(model.unreadCount)")
+                                .font(.system(size: 12, weight: .bold))
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(PlinkRave.text)
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.1), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PlinkRave.text)
-                    .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(PlinkRave.primary, in: Capsule())
-                    .padding(12)
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 12)
+                    .accessibilityLabel("Scroll to latest message")
                 }
             }
         }

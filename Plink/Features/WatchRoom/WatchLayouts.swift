@@ -1,4 +1,20 @@
+// Plink/Features/WatchRoom/WatchLayouts.swift — PATCH 02 + 04
+//
+// Layout variants for WatchRoomScreen. Each layout includes PlayerStage
+// with a stable .id so SwiftUI's diff preserves it across rotation.
+// The underlying AVPlayer/WKWebView is owned by PlaybackCoordinator /
+// EmbeddedPlaybackController and is NEVER recreated by orientation.
+//
+// Layout rules (PATCH 02 spec):
+//   - Portrait:    safe area, 16:9 full-width player, 56pt presence, chat, composer
+//   - Landscape:   player full canvas, optional trailing drawer (320-420pt)
+//   - iPad:        player leading 60%+, social rail 340-400pt
+//
+// Animation: .plinkLayout (0.42s smooth spring, damping 0.92).
+
 import SwiftUI
+
+// MARK: - Portrait
 
 struct PortraitWatchLayout: View {
     let model: WatchRoomModel
@@ -6,20 +22,21 @@ struct PortraitWatchLayout: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PlayerStage(model: model, ui: $ui, style: .portrait)
+            PlayerStage(model: model, ui: $ui, variant: .portrait)
+                .id("plink.player.stage")
                 .aspectRatio(16 / 9, contentMode: .fit)
 
             PresenceBar(model: model)
-                .frame(height: 52)
 
             WatchChatView(model: model)
                 .frame(maxHeight: .infinity)
 
             WatchChatComposer(model: model)
         }
-        .safeAreaPadding(.top, 0)
     }
 }
+
+// MARK: - Landscape
 
 struct LandscapeWatchLayout: View {
     let model: WatchRoomModel
@@ -27,30 +44,38 @@ struct LandscapeWatchLayout: View {
 
     var body: some View {
         ZStack(alignment: .trailing) {
-            PlayerStage(model: model, ui: $ui, style: .landscape)
+            PlayerStage(model: model, ui: $ui, variant: .landscape)
+                .id("plink.player.stage")
                 .ignoresSafeArea()
 
             if ui.chatDrawerVisible {
                 LandscapeChatDrawer(model: model, isVisible: $ui.chatDrawerVisible)
-                    .frame(minWidth: 300, idealWidth: 340, maxWidth: 420)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
-                Button {
-                    withAnimation(.easeOut(duration: 0.24)) {
-                        ui.chatDrawerVisible = true
+                VStack {
+                    Spacer()
+                    Button {
+                        withAnimation(.plinkDrawer) {
+                            ui.chatDrawerVisible = true
+                        }
+                    } label: {
+                        Image(systemName: "message.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(PlinkRave.text)
+                            .frame(width: 44, height: 44)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 0.5))
+                            .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
                     }
-                } label: {
-                    Image(systemName: "message.fill")
-                        .foregroundStyle(PlinkRave.text)
-                        .frame(width: 44, height: 44)
-                        .background(PlinkRave.surface, in: Circle())
+                    .accessibilityLabel("Open chat")
+                    .padding(.trailing, 12)
                 }
-                .padding(.trailing, 12)
-                .accessibilityLabel("Open chat")
             }
         }
     }
 }
+
+// MARK: - Tablet
 
 struct TabletWatchLayout: View {
     let model: WatchRoomModel
@@ -59,7 +84,8 @@ struct TabletWatchLayout: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                PlayerStage(model: model, ui: $ui, style: .tablet)
+                PlayerStage(model: model, ui: $ui, variant: .tablet)
+                    .id("plink.player.stage")
                     .aspectRatio(16 / 9, contentMode: .fit)
 
                 RoomIdentityBar(model: model)
@@ -69,16 +95,16 @@ struct TabletWatchLayout: View {
             .frame(maxWidth: .infinity)
 
             Rectangle()
-                .fill(PlinkRave.divider.opacity(0.55))
-                .frame(width: 1)
+                .fill(PlinkRave.divider.opacity(0.45))
+                .frame(width: 0.5)
 
             VStack(spacing: 0) {
                 WatchChatHeader(model: model)
                 WatchChatView(model: model)
                 WatchChatComposer(model: model)
             }
-            .frame(width: 380)
-            .background(PlinkRave.void.opacity(0.98))
+            .frame(width: 360)
+            .background(PlinkRave.void.opacity(0.95))
         }
     }
 }

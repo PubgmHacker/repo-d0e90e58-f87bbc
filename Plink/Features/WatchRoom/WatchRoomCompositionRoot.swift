@@ -50,14 +50,59 @@ public enum WatchRoomCompositionRoot {
         if let videoId = mediaItem.videoId, !videoId.isEmpty {
             return .youtube(videoId)
         }
+        // PATCH 22: extract YouTube video ID from streamURL when videoId is nil.
+        // YouTube URLs: youtu.be/ID, youtube.com/watch?v=ID, youtube.com/embed/ID
+        if let ytId = extractYouTubeVideoId(from: mediaItem.streamURL) {
+            return .youtube(ytId)
+        }
         // Direct stream URL → native AVPlayer
         let urlString = mediaItem.streamURL
         if let url = URL(string: urlString) {
             if urlString.contains(".m3u8") {
                 return .hls(url, headers: [:])
             }
-            return .mp4(url, headers: [:])
+            if urlString.contains(".mp4") || urlString.hasSuffix(".mov") {
+                return .mp4(url, headers: [:])
+            }
+            // Don't return .mp4 for non-video URLs (e.g. youtube.com pages).
         }
+        return nil
+    }
+
+    /// PATCH 22: extract 11-char YouTube video ID from various URL formats.
+    /// - https://youtu.be/VIDEO_ID
+    /// - https://www.youtube.com/watch?v=VIDEO_ID
+    /// - https://www.youtube.com/embed/VIDEO_ID
+    /// - https://youtube.com/shorts/VIDEO_ID
+    private static func extractYouTubeVideoId(from url: String) -> String? {
+        let lower = url.lowercased()
+        guard lower.contains("youtube.com") || lower.contains("youtu.be") else { return nil }
+
+        // youtu.be/VIDEO_ID
+        if lower.contains("youtu.be/") {
+            let parts = url.split(separator: "/")
+            if let last = parts.last {
+                let id = String(last).split(separator: "?").first ?? String(last)
+                if id.count == 11 { return String(id) }
+            }
+        }
+
+        // youtube.com/watch?v=VIDEO_ID
+        if let components = URLComponents(string: url) {
+            if let vParam = components.queryItems?.first(where: { $0.name == "v" })?.value {
+                if vParam.count == 11 { return vParam }
+            }
+        }
+
+        // youtube.com/embed/VIDEO_ID or youtube.com/shorts/VIDEO_ID
+        if lower.contains("/embed/") || lower.contains("/shorts/") {
+            let parts = url.split(separator: "/")
+            if let last = parts.last {
+                let id = String(last).split(separator: "?").first ?? String(last)
+                if id.count == 11 { return String(id) }
+            }
+        }
+
         return nil
     }
 

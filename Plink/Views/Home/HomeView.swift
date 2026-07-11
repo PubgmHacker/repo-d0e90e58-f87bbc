@@ -116,7 +116,14 @@ struct HomeView: View {
             // NavigationStack, where iOS edge-swipe could pop it. See commit
             // 1b8ccb7 for the full rationale.
             .fullScreenCover(item: $navigateToRoom) { room in
-                RoomView(room: room)
+                WatchRoomCompositionRoot.makeScreenForRoom(
+                    room: room,
+                    userId: UserDefaults.standard.string(forKey: "plink_user_id") ?? "",
+                    username: UserDefaults.standard.string(forKey: "plink_username") ?? "",
+                    apiBaseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")!,
+                    wsBaseURL: URL(string: "wss://plink-backend-production-ef31.up.railway.app/ws")!,
+                    authToken: KeychainHelper.read(for: "rave_auth_token") ?? ""
+                )
             }
             .sheet(isPresented: $showCreateRoom) {
                 RoomCreationView { room in

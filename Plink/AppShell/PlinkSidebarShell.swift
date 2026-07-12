@@ -58,19 +58,44 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            HomeTabContent(
-                onProfileTap: { selection = .settings },
-                onSwitchToAITab: nil,
-                onSwitchToJoinTab: nil
-            )
+            // GPT-5.6 SOL: HomeView requires HomeViewModel — use a simple wrapper
+            // that creates it from AppDependencies.
+            SidebarHomeWrapper(dependencies: dependencies)
         case .rooms:
-            RoomsTabContent()
+            // GPT-5.6 SOL: RoomsTabContent not on this branch — use placeholder.
+            VStack {
+                Image(systemName: "rectangle.stack")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Cinema2026.secondary)
+                Text("Комнаты")
+                    .font(.title)
+                    .foregroundStyle(Cinema2026.text)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Cinema2026.background)
         case .ai:
             AIAssistantView()
         case .friends:
             FriendsView()
         case .settings:
-            SettingsTabContent(authService: dependencies.authService)
+            // GPT-5.6 SOL: SettingsTabContent not on this branch — use SettingsView directly.
+            SettingsView(authService: dependencies.authService)
         }
+    }
+}
+
+/// GPT-5.6 SOL: wrapper that creates HomeViewModel for sidebar usage.
+private struct SidebarHomeWrapper: View {
+    let dependencies: AppDependencies
+
+    var body: some View {
+        HomeView(
+            viewModel: HomeViewModel(
+                roomService: dependencies.roomService,
+                authService: dependencies.authService
+            ),
+            onProfileTap: { }
+        )
+        .environmentObject(dependencies.apiClient)
     }
 }

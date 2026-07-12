@@ -1,13 +1,7 @@
-// Plink/Features/WatchRoom/WatchChatBubble.swift — PATCH 02 polish
+// Plink/Features/WatchRoom/WatchChatBubble.swift — GPT-5.6 V4 Rescue §9
 //
-// Professional design:
-//   - Avatar: 28pt (was 26pt) with proper initials
-//   - Bubble corner radius: 18pt (was 16pt) — modern
-//   - Sender name: 12pt semibold (was 11pt)
-//   - Message text: 15pt regular (kept)
-//   - Subtle shadow on bubble (new)
-//   - BubbleShape tail (kept) — gives conversational feel
-//   - Role colors: admin=gold, premium=hotPink, default=secondaryText
+// Uses ThemedChatBubbleStyle for explicit surfaces (not blur).
+// Verified sender identity from server event type, not display name.
 
 import SwiftUI
 
@@ -15,6 +9,22 @@ struct WatchChatBubble: View {
     let message: ChatMessageInfo
     let isOwn: Bool
     let onRetry: () -> Void
+    var onReport: ((ChatMessageInfo) -> Void)?
+    var onBlock: ((ChatMessageInfo) -> Void)?
+
+    // GPT-5.6 §9: bubble color from ThemedChatBubbleStyle
+    private var bubbleColor: Color {
+        if message.isAdmin {
+            return ThemedChatBubbleStyle.system
+        }
+        return isOwn ? ThemedChatBubbleStyle.outgoing : ThemedChatBubbleStyle.incoming
+    }
+
+    private var roleColor: Color {
+        if message.isAdmin { return Cinema2026.amber }
+        if message.isPremium { return Cinema2026.amber }
+        return Cinema2026.secondary
+    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -32,7 +42,7 @@ struct WatchChatBubble: View {
                         if message.isPremium {
                             Image(systemName: "star.fill")
                                 .font(.system(size: 9))
-                                .foregroundStyle(Cinema2026.danger)
+                                .foregroundStyle(Cinema2026.amber)
                         }
                         Text(message.senderName)
                             .font(.system(size: 12, weight: .semibold))
@@ -45,9 +55,7 @@ struct WatchChatBubble: View {
                     .foregroundStyle(isOwn ? .white : Cinema2026.text)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 9)
-                    .background(bubbleBackground)
-                    .clipShape(BubbleShape(isOwn: isOwn))
-                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                    .background(bubbleColor, in: BubbleShape(isOwn: isOwn))
 
                 if message.isPending {
                     Text("Sending…")
@@ -69,20 +77,16 @@ struct WatchChatBubble: View {
             if !isOwn { Spacer(minLength: 56) }
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
-    }
-
-    @ViewBuilder private var bubbleBackground: some View {
-        if isOwn {
-            Cinema2026.accent
-        } else {
-            Cinema2026.surface.opacity(0.92)
+        .contextMenu {
+            if !isOwn {
+                Button { onReport?(message) } label: {
+                    Label("Пожаловаться", systemImage: "flag")
+                }
+                Button(role: .destructive) { onBlock?(message) } label: {
+                    Label("Заблокировать", systemImage: "hand.raised")
+                }
+            }
         }
-    }
-
-    private var roleColor: Color {
-        if message.isAdmin { return Cinema2026.amber }
-        if message.isPremium { return Cinema2026.danger }
-        return Cinema2026.secondary
     }
 }
 

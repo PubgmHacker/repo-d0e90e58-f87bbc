@@ -7,12 +7,13 @@
 import SwiftUI
 
 struct ProfileScreen: View {
+    @Environment(PlinkThemeStore.self) private var themeStore
     let authService: AuthService
     @State private var showSettings = false
 
     var body: some View {
-        ZStack {
-            Cinema2026.background.ignoresSafeArea()
+        V4Surface(theme: themeStore.appTheme, surface: .profile) {
+
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {

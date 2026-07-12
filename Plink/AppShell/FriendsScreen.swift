@@ -6,12 +6,13 @@
 import SwiftUI
 
 struct FriendsScreen: View {
+    @Environment(PlinkThemeStore.self) private var themeStore
     let dependencies: AppDependencies
     @EnvironmentObject private var friendManager: FriendManager
 
     var body: some View {
-        ZStack {
-            Cinema2026.background.ignoresSafeArea()
+        V4Surface(theme: themeStore.appTheme, surface: .friends) {
+
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {

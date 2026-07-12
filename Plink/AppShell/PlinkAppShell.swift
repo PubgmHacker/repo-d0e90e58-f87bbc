@@ -1,12 +1,7 @@
-// Plink/AppShell/PlinkAppShell.swift — §4 Final Architecture + Brain Phase 4
+// Plink/AppShell/PlinkAppShell.swift — GPT-5.6 V4 Rescue §2
 //
-// One canonical create presentation via RoomCreationView (not CreateRoomView).
-// fullScreenCover for WatchRoom on room creation.
-//
-// Brain Phase 4: typed CreateRoomIntent replaces Bool createPresented.
-// - .chooseService → empty Create flow (persistent button tap)
-// - .selectedContent(draft) → RoomCreationView opens RoomSetupView immediately
-//   with the draft pre-filled (trending/hero video tap).
+// Injects PlinkThemeStore + LivingMotionPolicy at shell root.
+// Preserves dependencies, iPad split, room/full-screen presentation.
 
 import SwiftUI
 
@@ -15,6 +10,10 @@ struct PlinkAppShell: View {
     @State private var selection: AppSection = .home
     @State private var createIntent: CreateRoomIntent?
     @State private var createdRoom: Room?
+
+    // GPT-5.6 §2: single theme store + motion policy at shell root
+    @State private var themeStore = PlinkThemeStore()
+    @State private var motionPolicy = LivingMotionPolicy()
 
     let dependencies: AppDependencies
 
@@ -42,6 +41,8 @@ struct PlinkAppShell: View {
             }
             #endif
         }
+        .environment(themeStore)
+        .environment(motionPolicy)
         .sheet(item: $createIntent) { intent in
             RoomCreationView(
                 intent: intent,

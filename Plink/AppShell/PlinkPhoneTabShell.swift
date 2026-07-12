@@ -1,9 +1,8 @@
-// Plink/AppShell/PlinkPhoneTabShell.swift — GPT-5.6 Approved Patch §3
+// Plink/AppShell/PlinkPhoneTabShell.swift — GPT-5.6 V4 Rescue §3-4
 //
-// Single iPhone composition root.
-// 5 tabs: Home, Rooms, AI, Friends, Profile.
-// Create is a persistent action on Home/Rooms (not a sixth tab).
-// One shell, one tab model, one room-creation presentation owner.
+// Custom V4TabBar replaces standard .tabItem.
+// V4Surface wraps each tab with PlinkLivingBackground.
+// One create presentation owner, one WatchRoom presentation.
 
 import SwiftUI
 
@@ -11,6 +10,7 @@ struct PlinkPhoneTabShell: View {
     @Binding var selection: AppSection
     @Binding var createIntent: CreateRoomIntent?
     let dependencies: AppDependencies
+    @Environment(PlinkThemeStore.self) private var themeStore
 
     @State private var navigateToRoom: Room?
     @State private var homeViewModel: HomeViewModel?
@@ -18,53 +18,16 @@ struct PlinkPhoneTabShell: View {
     @State private var plinkPopular: [PlinkPopularItem] = []
 
     var body: some View {
-        TabView(selection: $selection) {
-            // Главная — living home with hero + rails
-            NavigationStack {
-                homeView
-                    .fullScreenCover(item: $navigateToRoom) { room in
-                        watchRoom(for: room)
-                    }
-            }
-            .tag(AppSection.home)
-            .tabItem { Label(AppSection.home.title, systemImage: AppSection.home.icon) }
+        ZStack(alignment: .bottom) {
+            tabContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Комнаты — discovery screen
-            NavigationStack {
-                DiscoverScreen(dependencies: dependencies, navigateToRoom: $navigateToRoom)
-                    .fullScreenCover(item: $navigateToRoom) { room in
-                        watchRoom(for: room)
-                    }
-            }
-            .tag(AppSection.rooms)
-            .tabItem { Label(AppSection.rooms.title, systemImage: AppSection.rooms.icon) }
-
-            // ИИ — AI companion tab
-            NavigationStack {
-                AIAssistantView()
-            }
-            .tag(AppSection.ai)
-            .tabItem { Label(AppSection.ai.title, systemImage: AppSection.ai.icon) }
-
-            // Друзья — friends screen
-            NavigationStack {
-                FriendsScreen(dependencies: dependencies)
-            }
-            .tag(AppSection.friends)
-            .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.icon) }
-
-            // Профиль — settings lives here
-            NavigationStack {
-                ProfileScreen(authService: dependencies.authService)
-            }
-            .tag(AppSection.profile)
-            .tabItem { Label(AppSection.profile.title, systemImage: AppSection.profile.icon) }
+            V4TabBar(selection: $selection)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
         }
-        .tint(Cinema2026.accent)
-        .toolbarBackground(Cinema2026.background.opacity(0.96), for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
-        .environmentObject(dependencies.apiClient)
-        // GPT-5.6 §1: Create is a persistent action on Home/Rooms (not a sixth tab).
+        .background(Cinema2026.void.ignoresSafeArea())
+        // GPT-5.6 §1: Create is persistent action on Home/Rooms
         .overlay(alignment: .bottom) {
             if selection == .home || selection == .rooms {
                 createButtonBar
@@ -72,8 +35,33 @@ struct PlinkPhoneTabShell: View {
         }
     }
 
-    // MARK: - Create button (persistent on Home/Rooms)
+    @ViewBuilder
+    private var tabContent: some View {
+        switch selection {
+        case .home:
+            V4Surface(theme: themeStore.appTheme, surface: .home) {
+                homeView
+            }
+        case .rooms:
+            V4Surface(theme: themeStore.appTheme, surface: .rooms) {
+                DiscoverScreen(dependencies: dependencies, navigateToRoom: $navigateToRoom)
+            }
+        case .ai:
+            V4Surface(theme: themeStore.appTheme, surface: .ai) {
+                AIAssistantView()
+            }
+        case .friends:
+            V4Surface(theme: themeStore.appTheme, surface: .friends) {
+                FriendsScreen(dependencies: dependencies)
+            }
+        case .profile:
+            V4Surface(theme: themeStore.appTheme, surface: .profile) {
+                ProfileScreen(authService: dependencies.authService)
+            }
+        }
+    }
 
+    // MARK: - Create button
     private var createButtonBar: some View {
         Button {
             createIntent = .chooseService
@@ -82,277 +70,122 @@ struct PlinkPhoneTabShell: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Cinema2026.background)
                 .frame(maxWidth: .infinity)
-                .frame(height: CompactPhoneMetrics.primaryButtonHeight)
+                .frame(height: 50)
                 .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
         }
-        .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+        .padding(.horizontal, 14)
         .padding(.bottom, 72)
-        .padding(.top, 8)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    // MARK: - Home (Netflix-style + GPT-5 Living Home)
-
-    /// GPT-5 §8: artwork URL from hero (first trending video) for living backdrop.
-    /// nil when no trending data → backdrop uses Cinema2026 fallback palette.
+    // MARK: - Home view (existing data + actions)
     private var heroArtworkURL: URL? {
         guard let hero = trendingVideos.first,
               let thumbString = hero.thumbnailURLString,
-              let url = URL(string: thumbString) else {
-            return nil
-        }
+              let url = URL(string: thumbString) else { return nil }
         return url
     }
 
     private var homeView: some View {
-        // GPT-5.6 SOL §8.8: Living background must not participate in layout.
-        // Background is overlay only (allowsHitTesting(false)).
-        // Content starts at local y=0, proper vertical rhythm with sectionGap.
-        PlinkLivingHome(artworkURL: heroArtworkURL) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    // Hero section
-                    heroSection
-                    sectionGap(24)
-
-                    // Live rooms (if any) — before trending
-                    liveRoomsSection
-                    sectionGap(32)
-
-                    // Trending — ALWAYS visible
-                    trendingSection
-                    sectionGap(32)
-
-                    // Popular in Plink — hide if empty
-                    plinkPopularSection
-                    sectionGap(32)
-
-                    // Recommended — items 7-12
-                    recommendedSection
-                    sectionGap(32)
-
-                    // AI CTA — moved BELOW content rails (GPT-5.6 SOL §8.8)
-                    contextualAISection
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 104)  // tab bar clearance
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                heroSection
+                sectionGap(24)
+                liveRoomsSection
+                sectionGap(32)
+                trendingSection
+                sectionGap(32)
+                plinkPopularSection
+                sectionGap(32)
+                recommendedSection
+                sectionGap(32)
+                contextualAISection
             }
-            .scrollIndicators(.hidden)
-            .navigationTitle("")
-            .task {
-                if homeViewModel == nil {
-                    homeViewModel = HomeViewModel(
-                        roomService: dependencies.roomService,
-                        authService: dependencies.authService
-                    )
-                    await homeViewModel?.loadRooms()
-                }
-                if trendingVideos.isEmpty {
-                    await loadTrending()
-                }
-                if plinkPopular.isEmpty {
-                    await loadPlinkPopular()
-                }
-            }
+            .padding(.top, 8)
+            .padding(.bottom, 104)
         }
-    }
-
-    // MARK: - Home sections (GPT-5.6 SOL §8.8 vertical rhythm)
-
-    private func sectionGap(_ height: CGFloat) -> some View {
-        Color.clear.frame(height: height)
-    }
-
-    @ViewBuilder
-    private var heroSection: some View {
-        if let hero = trendingVideos.first {
-            NetflixHeroBanner(video: hero) { draft in
-                createIntent = .selectedContent(draft)
-            }
-        } else {
-            LivingHomeStateOverlay(isLoading: true)
-                .frame(height: 220)
-        }
-    }
-
-    @ViewBuilder
-    private var liveRoomsSection: some View {
-        if let vm = homeViewModel, !vm.activeRooms.isEmpty {
-            CompactRoomRail(
-                title: "Сейчас смотрят",
-                rooms: vm.activeRooms,
-                style: .landscape,
-                open: { navigateToRoom = $0 }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var trendingSection: some View {
-        if !trendingVideos.isEmpty {
-            TrendingRail(
-                title: "Популярное на YouTube",
-                videos: trendingVideos,
-                onSelect: { video in
-                    createIntent = .selectedContent(
-                        SelectedContentDraft(
-                            id: video.videoId,
-                            service: .youtube,
-                            contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-                            title: video.title,
-                            thumbnailURL: video.thumbnailURLString
-                        )
-                    )
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var plinkPopularSection: some View {
-        if !plinkPopular.isEmpty {
-            PlinkPopularRail(
-                title: "Популярное в Plink",
-                items: plinkPopular,
-                onSelect: { item in
-                    guard item.directCreateRoomDraft else { return }
-                    createIntent = .selectedContent(
-                        SelectedContentDraft(
-                            id: item.id,
-                            service: .youtube,
-                            contentURL: item.contentURL,
-                            title: item.title,
-                            thumbnailURL: item.thumbnailURL
-                        )
-                    )
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var recommendedSection: some View {
-        if trendingVideos.count > 6 {
-            TrendingRail(
-                title: "Рекомендуем",
-                videos: Array(trendingVideos.prefix(12).suffix(6)),
-                onSelect: { video in
-                    createIntent = .selectedContent(
-                        SelectedContentDraft(
-                            id: video.videoId,
-                            service: .youtube,
-                            contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-                            title: video.title,
-                            thumbnailURL: video.thumbnailURLString
-                        )
-                    )
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var contextualAISection: some View {
-        // GPT-5.6 SOL §8.8: AI moved below content rails.
-        // AI is contextual, not a primary navigation element.
-        CompactAIEntryCard {
-            // AI becomes contextual — no tab to switch to.
-            // Could open a sheet with AI assistant in future.
-        }
-    }
-
-    // MARK: - Rooms
-
-    private var roomsView: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Комнаты")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(Cinema2026.text)
-                Spacer()
-            }
-            .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
-            .padding(.top, 14)
-
-            if let vm = homeViewModel, !vm.activeRooms.isEmpty {
-                List(vm.activeRooms) { room in
-                    Button {
-                        navigateToRoom = room
-                    } label: {
-                        CompactRoomListRow(room: room)
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparatorTint(Cinema2026.divider)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(Cinema2026.background)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "play.rectangle.on.rectangle")
-                        .font(.system(size: 40))
-                        .foregroundStyle(Cinema2026.secondary)
-                    Text("Нет активных комнат")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Cinema2026.text)
-                    Text("Создайте первую комнату — кнопка внизу")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Cinema2026.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .background(Cinema2026.background)
+        .scrollIndicators(.hidden)
+        .navigationTitle("")
         .task {
             if homeViewModel == nil {
                 homeViewModel = HomeViewModel(
                     roomService: dependencies.roomService,
                     authService: dependencies.authService
                 )
+                await homeViewModel?.loadRooms()
             }
-            await homeViewModel?.loadRooms()
+            if trendingVideos.isEmpty { await loadTrending() }
+            if plinkPopular.isEmpty { await loadPlinkPopular() }
+        }
+        .fullScreenCover(item: $navigateToRoom) { room in
+            watchRoom(for: room)
         }
     }
 
-    // MARK: - Load trending
+    private func sectionGap(_ h: CGFloat) -> some View { Color.clear.frame(height: h) }
+
+    @ViewBuilder private var heroSection: some View {
+        if let hero = trendingVideos.first {
+            NetflixHeroBanner(video: hero) { draft in createIntent = .selectedContent(draft) }
+        } else {
+            LivingHomeStateOverlay(isLoading: true).frame(height: 220)
+        }
+    }
+
+    @ViewBuilder private var liveRoomsSection: some View {
+        if let vm = homeViewModel, !vm.activeRooms.isEmpty {
+            CompactRoomRail(title: "Сейчас смотрят", rooms: vm.activeRooms, style: .landscape, open: { navigateToRoom = $0 })
+        }
+    }
+
+    @ViewBuilder private var trendingSection: some View {
+        if !trendingVideos.isEmpty {
+            TrendingRail(title: "Популярное на YouTube", videos: trendingVideos, onSelect: { video in
+                createIntent = .selectedContent(SelectedContentDraft(id: video.videoId, service: .youtube, contentURL: "https://www.youtube.com/watch?v=\(video.videoId)", title: video.title, thumbnailURL: video.thumbnailURLString))
+            })
+        }
+    }
+
+    @ViewBuilder private var plinkPopularSection: some View {
+        if !plinkPopular.isEmpty {
+            PlinkPopularRail(title: "Популярное в Plink", items: plinkPopular, onSelect: { item in
+                guard item.directCreateRoomDraft else { return }
+                createIntent = .selectedContent(SelectedContentDraft(id: item.id, service: .youtube, contentURL: item.contentURL, title: item.title, thumbnailURL: item.thumbnailURL))
+            })
+        }
+    }
+
+    @ViewBuilder private var recommendedSection: some View {
+        if trendingVideos.count > 6 {
+            TrendingRail(title: "Рекомендуем", videos: Array(trendingVideos.prefix(12).suffix(6)), onSelect: { video in
+                createIntent = .selectedContent(SelectedContentDraft(id: video.videoId, service: .youtube, contentURL: "https://www.youtube.com/watch?v=\(video.videoId)", title: video.title, thumbnailURL: video.thumbnailURLString))
+            })
+        }
+    }
+
+    @ViewBuilder private var contextualAISection: some View {
+        CompactAIEntryCard { }
+    }
 
     private func loadTrending() async {
-        let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app"
-        guard let url = URL(string: "\(apiBaseURL)/api/media/trending?regionCode=RU&maxResults=20") else { return }
+        let api = "https://plink-backend-production-ef31.up.railway.app"
+        guard let url = URL(string: "\(api)/api/media/trending?regionCode=RU&maxResults=20") else { return }
+        do { let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url)); trendingVideos = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data).results } catch {}
+    }
+
+    private func loadPlinkPopular() async {
+        let api = "https://plink-backend-production-ef31.up.railway.app"
+        guard let url = URL(string: "\(api)/api/discovery/popular?window=24h&limit=20") else { return }
         do {
-            let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
-            let resp = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
-            trendingVideos = resp.results
+            var req = URLRequest(url: url)
+            if let t = KeychainHelper.read(for: "rave_auth_token") { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let h = resp as? HTTPURLResponse, h.statusCode == 200 else { return }
+            plinkPopular = try JSONDecoder().decode(PlinkPopularResponse.self, from: data).results
         } catch {}
     }
 
-    /// Brain Revision 3 Step 6: load first-party Popular in Plink from
-    /// /api/discovery/popular. If endpoint fails or returns empty, the rail
-    /// stays hidden (plinkPopular remains []).
-    private func loadPlinkPopular() async {
-        let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app"
-        guard let url = URL(string: "\(apiBaseURL)/api/discovery/popular?window=24h&limit=20") else { return }
-        do {
-            var request = URLRequest(url: url)
-            // Brain Revision 3: /api/discovery/popular may require auth —
-            // attach Bearer token if available. If 401, rail stays hidden.
-            if let token = KeychainHelper.read(for: "rave_auth_token") {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
-            let resp = try JSONDecoder().decode(PlinkPopularResponse.self, from: data)
-            plinkPopular = resp.results
-        } catch {
-            // Silent failure — rail just stays hidden.
-        }
-    }
-
-    // MARK: - Watch Room
-
-    @ViewBuilder
-    private func watchRoom(for room: Room) -> some View {
+    @ViewBuilder private func watchRoom(for room: Room) -> some View {
         WatchRoomCompositionRoot.makeScreenForRoom(
             room: room,
             userId: UserDefaults.standard.string(forKey: "plink_user_id") ?? "",
@@ -364,237 +197,61 @@ struct PlinkPhoneTabShell: View {
     }
 }
 
-// MARK: - Netflix-style hero banner
-
-/// Brain Phase 4: no nested buttons. The entire banner is a single tappable
-/// surface. The closure returns the SelectedContentDraft for the tapped video
-/// so the caller can construct a `.selectedContent` intent.
-struct NetflixHeroBanner: View {
-    let video: YouTubeVideoSummary
-    let onTap: (SelectedContentDraft) -> Void
-
-    private var draft: SelectedContentDraft {
-        SelectedContentDraft(
-            id: video.videoId,
-            service: .youtube,
-            contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-            title: video.title,
-            thumbnailURL: video.thumbnailURLString
-        )
-    }
+// MARK: - V4TabBar (GPT-5.6 §3)
+private struct V4TabBar: View {
+    @Binding var selection: AppSection
 
     var body: some View {
-        // Single Button — no nested Buttons (Brain Phase 4 rule).
-        Button { onTap(draft) } label: {
-            ZStack(alignment: .bottomLeading) {
-                // Full-width backdrop
-                AsyncImage(url: URL(string: video.thumbnailURLString ?? "")) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(Cinema2026.surface)
-                }
-                .frame(height: 280)
-                .clipped()
-
-                // Gradient fade
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.3),
-                        .init(color: Cinema2026.background.opacity(0.6), location: 0.7),
-                        .init(color: Cinema2026.background, location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                // Content (no nested Buttons)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("● В ЭФИРЕ")
-                        .font(.system(size: 10, weight: .heavy))
-                        .tracking(1.5)
-                        .foregroundStyle(Cinema2026.danger)
-
-                    Text(video.title)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Cinema2026.text)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.5), radius: 4)
-
-                    Text(video.channelTitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Cinema2026.secondary)
-
-                    // Single CTA label (not a button) — entire banner is tappable.
-                    HStack(spacing: 8) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text("Смотреть вместе")
-                            .font(.system(size: 14, weight: .semibold))
+        HStack(spacing: 2) {
+            ForEach(AppSection.allCases) { section in
+                Button {
+                    selection = section
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: section.icon)
+                            .font(.system(size: 18, weight: .semibold))
+                        Text(section.title)
+                            .font(.caption2)
+                            .lineLimit(1)
                     }
-                    .foregroundStyle(Cinema2026.background)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(Cinema2026.text, in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.top, 4)
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 20)
-            }
-            .frame(height: 280)
-            .clipped()
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Compact room list row
-
-struct CompactRoomListRow: View {
-    let room: Room
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack(alignment: .topLeading) {
-                AsyncImage(url: URL(string: room.mediaItem?.thumbnailURL ?? "")) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(Cinema2026.surface)
-                }
-                .frame(width: 78, height: 78)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                if room.isActive {
-                    Text("LIVE")
-                        .font(.system(size: 8, weight: .black))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Cinema2026.danger, in: Capsule())
-                        .padding(5)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(room.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Cinema2026.text)
-                    .lineLimit(1)
-                Text(room.mediaItem?.title ?? "Без видео")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Cinema2026.secondary)
-                    .lineLimit(1)
-                Text("\(room.participantCount) участников")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Cinema2026.secondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Cinema2026.secondary)
-        }
-        .padding(.vertical, 6)
-    }
-}
-
-// MARK: - Plink Popular (first-party discovery)
-
-/// Brain Revision 3 Step 6: first-party popularity item from /api/discovery/popular.
-struct PlinkPopularItem: Decodable, Identifiable, Sendable, Hashable {
-    let contentURL: String
-    let title: String
-    let thumbnailURL: String?
-    let uniqueViewers: Int
-    let uniqueRooms: Int
-    let recentStarts: Int
-    let directCreateRoomDraft: Bool
-
-    /// Synthesize a stable id from contentURL.
-    var id: String { contentURL }
-}
-
-struct PlinkPopularResponse: Decodable, Sendable {
-    let results: [PlinkPopularItem]
-}
-
-/// Brain Revision 3 Step 6: rail for "Популярное в Plink" — first-party
-/// popularity from public room activity. Hidden when empty (do NOT fill
-/// with YouTube — keep the all-service label honest).
-struct PlinkPopularRail: View {
-    let title: String
-    let items: [PlinkPopularItem]
-    let onSelect: (PlinkPopularItem) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Cinema2026.amber)
-                Text(title)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Cinema2026.text)
-            }
-            .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 10) {
-                    ForEach(items) { item in
-                        Button {
-                            onSelect(item)
-                        } label: {
-                            PlinkPopularCard(item: item)
+                    .foregroundStyle(selection == section ? Cinema2026.accent : Cinema2026.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background {
+                        if selection == section {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Cinema2026.accent.opacity(0.10))
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!item.directCreateRoomDraft)
                     }
                 }
-                .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
-                .padding(.bottom, 4)
+                .buttonStyle(.plain)
+                .accessibilityLabel(section.title)
+                .accessibilityAddTraits(selection == section ? .isSelected : [])
             }
+        }
+        .padding(7)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
         }
     }
 }
 
-struct PlinkPopularCard: View {
-    let item: PlinkPopularItem
+// MARK: - V4Surface (GPT-5.6 §4)
+struct V4Surface<Content: View>: View {
+    let theme: PlinkLivingTheme
+    let surface: PlinkLivingBackground.Surface
+    @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .topLeading) {
-                AsyncImage(url: URL(string: item.thumbnailURL ?? "")) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(Cinema2026.surface)
-                }
-                .frame(width: CompactPhoneMetrics.landscapeCardWidth, height: CompactPhoneMetrics.landscapeCardHeight)
-                .clipShape(RoundedRectangle(cornerRadius: CompactPhoneMetrics.landscapeRadius))
+        ZStack {
+            PlinkLivingBackground(theme: theme, surface: surface)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
 
-                // Viewer count badge
-                HStack(spacing: 3) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 8, weight: .bold))
-                    Text("\(item.uniqueViewers)")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(.black.opacity(0.75), in: Capsule())
-                .foregroundStyle(.white)
-                .padding(6)
-            }
-
-            Text(item.title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Cinema2026.text)
-                .lineLimit(1)
-                .frame(width: CompactPhoneMetrics.landscapeCardWidth, alignment: .leading)
-
-            Text("\(item.uniqueRooms) комнат · \(item.recentStarts) новых")
-                .font(.system(size: 10))
-                .foregroundStyle(Cinema2026.secondary)
-                .lineLimit(1)
-                .frame(width: CompactPhoneMetrics.landscapeCardWidth, alignment: .leading)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 }

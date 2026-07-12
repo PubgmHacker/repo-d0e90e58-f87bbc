@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct DiscoverScreen: View {
+    @Environment(PlinkThemeStore.self) private var themeStore
     let dependencies: AppDependencies
     @Binding var navigateToRoom: Room?
 
@@ -14,9 +15,7 @@ struct DiscoverScreen: View {
     @State private var trendingVideos: [YouTubeVideoSummary] = []
 
     var body: some View {
-        ZStack {
-            Cinema2026.background.ignoresSafeArea()
-
+        V4Surface(theme: themeStore.appTheme, surface: .rooms) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     // Title
@@ -103,6 +102,7 @@ struct DiscoverScreen: View {
                 .padding(.bottom, 104)
             }
             .scrollIndicators(.hidden)
+        }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)

@@ -1,48 +1,26 @@
-// Plink/Features/WatchRoom/PlayerStage.swift — PATCH 02 + 04
+// Plink/Features/WatchRoom/PlayerStage.swift — GPT-5.6 V4 Rescue §7
 //
-// Stable player surface root. Holds the AVPlayer/UIViewRepresentable at the
-// top of its ZStack so orientation changes do NOT recreate it. Layouts
-// position this view; they never own or replace it.
-//
-// Visual design (professional polish):
-//   - Player viewport: Cinema2026.background (not pure black) — letterbox bars
-//     are purple-tinted, matching the room's ambient tone.
-//   - Chrome: .ultraThinMaterial over void for depth, not flat color.
-//   - Top gradient: 0→0.55 opacity void, gives top chrome legibility
-//     without darkening the video.
-//   - Bottom gradient: 0→0.7 opacity void, same purpose.
-//   - Center control: 64pt circle (was 52pt) with proper backdrop.
-//   - Danmaku layer above video but below chrome.
-//
-// PATCH 04: this view does NOT observe orientation. The `variant` parameter
-// only affects corner radius (0 for landscape fullscreen, 14 for portrait/
-// tablet). The underlying PlayerSurfaceView is the same instance across
-// rotations because PlayerStage itself has a stable .id in WatchRoomScreen.
+// Neutral player stage. NO decoration: no glow, no border, no glass,
+// no theme stroke, no theme shadow, no theme corner radius.
+// Background: plain black. Provider owns controls.
 
 import SwiftUI
 
 struct PlayerStage: View {
-    let model: WatchRoomModel
+    @Bindable var model: WatchRoomModel
     @Binding var ui: WatchRoomUIState
     let variant: WatchRoomLayoutState.Variant
 
-    private var cornerRadius: CGFloat {
-        switch variant {
-        case .landscape: return 0
-        case .portrait, .tablet: return 14
-        }
-    }
-
     var body: some View {
         ZStack {
-            // Viewport — purple-tinted void, NOT pure black
-            Cinema2026.background.ignoresSafeArea()
+            // GPT-5.6 §3: plain black background, nothing else
+            Color.black
 
-            // The actual player surface — never recreated
+            // Player surface — never decorated
             PlayerSurfaceView(coordinator: model.coordinator)
-                .ignoresSafeArea(variant == .landscape ? .all : [])
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Danmaku layer above video, below chrome
+            // Danmaku layer (above video, below chrome)
             DanmakuCanvasLayer(
                 placements: model.danmakuPlacements,
                 laneCount: model.danmakuLaneCount,
@@ -52,22 +30,20 @@ struct PlayerStage: View {
             .padding(.top, 60)
             .padding(.bottom, 80)
 
-            // Loading state (initial buffer)
+            // Functional overlays only (no decorative)
             if model.coordinator.isPreparing {
                 PlayerLoadingView()
                     .transition(.opacity)
             }
-
-            // Buffering state (mid-playback rebuffer)
             if model.coordinator.isBuffering && !model.coordinator.isPreparing {
                 BufferingOverlay()
                     .transition(.opacity)
             }
 
-            // Chrome — only top bar (YouTube owns player controls per Brain §3)
+            // Top chrome only (functional, not decorative)
             if ui.controlsVisible {
                 LinearGradient(
-                    colors: [Cinema2026.background.opacity(0.55), .clear],
+                    colors: [Color.black.opacity(0.55), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -80,15 +56,9 @@ struct PlayerStage: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .overlay {
-            if variant != .landscape {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Cinema2026.divider.opacity(0.4), lineWidth: 0.5)
-            }
-        }
-        .animation(.plinkControls, value: ui.controlsVisible)
-        .animation(.plinkControls, value: model.coordinator.isPreparing)
-        .animation(.plinkControls, value: model.coordinator.isBuffering)
+        .clipped()
+        .accessibilityElement(children: .contain)
+        // FORBIDDEN: PlinkLivingBackground, glassCard, neonGlow, theme stroke,
+        // theme shadow, theme corner radius. None of these appear here.
     }
 }

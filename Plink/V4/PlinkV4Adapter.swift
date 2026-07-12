@@ -62,8 +62,8 @@ final class ProductionV4Adapter: V4AppAdapter {
         homeState = .loading
         homeError = nil
 
-        async let roomsResult: Result<[Room], Error> = { try await roomService.fetchActiveRooms() }()
-        async let trendingResult: Result<[YouTubeVideoSummary], Error> = { try await loadTrending() }()
+        async let roomsResult: Result<[Room], Error> = Result { try await roomService.fetchActiveRooms() }
+        async let trendingResult: Result<[YouTubeVideoSummary], Error> = Result { try await loadTrending() }
         async let friendsResult: Result<[Friend], Error> = { await loadFriends() }()
 
         let (rooms, media, people) = await (roomsResult, trendingResult, friendsResult)
@@ -136,7 +136,7 @@ final class ProductionV4Adapter: V4AppAdapter {
 
     func validateDirectLink(_ value: String) async throws -> (token: String, title: String) {
         let result = try await mediaService.validate(url: value)
-        return (token: value, title: result.title)
+        return (token: value, title: result.message)
     }
 
     // MARK: - Room creation

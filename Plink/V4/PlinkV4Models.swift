@@ -150,6 +150,7 @@ public protocol V4AppAdapter: AnyObject {
     var services: [V4VideoService] { get }
     var serviceCategories: [V4ServiceCategory] { get }
 
+    func bootstrap() async
     func refreshHome() async
     func openRoom(id: String)
     func openDM(userID: String)

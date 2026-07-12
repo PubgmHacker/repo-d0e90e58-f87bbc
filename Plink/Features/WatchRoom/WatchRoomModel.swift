@@ -60,7 +60,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     var roomTheme: PlinkLivingTheme = PlinkThemeCatalog.resolve(nil)
     var aiAssistantEnabled = false
     var aiRecommendationsEnabled = false
-    var aiState: PlinkAIVisualState = .idle
+    var aiState: V4AIState = .idle
     var moderationLevel: RoomModerationLevel = .standard
 
     // MARK: - Config

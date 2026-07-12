@@ -2,7 +2,7 @@
 import SwiftUI
 
 struct RoomAIAssistantBanner: View {
-    let state: PlinkAIVisualState
+    let state: V4AIState
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "sparkles").font(.system(size: 14)).foregroundStyle(Cinema2026.accent)

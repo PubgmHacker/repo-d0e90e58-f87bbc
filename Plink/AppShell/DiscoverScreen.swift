@@ -103,7 +103,6 @@ struct DiscoverScreen: View {
             }
             .scrollIndicators(.hidden)
         }
-        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {

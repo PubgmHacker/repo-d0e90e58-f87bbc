@@ -1,5 +1,4 @@
-// Plink/AppShell/PlinkSidebarShell.swift — §4 Final Architecture
-
+// Plink/AppShell/PlinkSidebarShell.swift — GPT-5.6 V4 (fixed)
 import SwiftUI
 
 struct PlinkSidebarShell: View {
@@ -16,27 +15,17 @@ struct PlinkSidebarShell: View {
                         .foregroundStyle(Cinema2026.text)
                         .listRowBackground(Color.clear)
                 }
-
                 Section("Смотреть") {
-                    nav(.home)
-                    nav(.rooms)
-                    nav(.ai)
-                    nav(.friends)
+                    nav(.home); nav(.rooms); nav(.ai); nav(.friends)
                 }
-
                 Section {
-                    Button {
-                        createIntent = .chooseService
-                    } label: {
+                    Button { createIntent = .chooseService } label: {
                         Label("Создать комнату", systemImage: "plus.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Cinema2026.accent)
                 }
-
-                Section {
-                    nav(.profile)
-                }
+                Section { nav(.profile) }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
             .scrollContentBackground(.hidden)
@@ -58,16 +47,18 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            // GPT-5.6 V4: use DiscoverScreen for home on sidebar (HomeView deleted)
-            DiscoverScreen(dependencies: dependencies, navigateToRoom: .constant(nil))
+            VStack { Text("Главная").font(.largeTitle.bold()).foregroundStyle(Cinema2026.text) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Cinema2026.background)
         case .rooms:
-            DiscoverScreen(dependencies: dependencies, navigateToRoom: .constant(nil))
+            VStack { Text("Комнаты").font(.largeTitle.bold()).foregroundStyle(Cinema2026.text) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Cinema2026.background)
         case .ai:
             AIAssistantView()
         case .friends:
-            FriendsScreen(dependencies: dependencies)
+            VStack { Text("Друзья").font(.largeTitle.bold()).foregroundStyle(Cinema2026.text) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Cinema2026.background)
         case .profile:
-            ProfileScreen(authService: dependencies.authService)
+            SettingsView(authService: dependencies.authService)
         }
     }
 }

@@ -125,9 +125,9 @@ private struct FriendRequestRow: View {
             Circle()
                 .fill(Cinema2026.surface)
                 .frame(width: 44, height: 44)
-                .overlay(Text(request.username.prefix(1)).font(.system(size: 18, weight: .semibold)).foregroundStyle(Cinema2026.text))
+                .overlay(Text(request.fromUser.username.prefix(1)).font(.system(size: 18, weight: .semibold)).foregroundStyle(Cinema2026.text))
 
-            Text(request.username)
+            Text(request.fromUser.username)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Cinema2026.text)
 

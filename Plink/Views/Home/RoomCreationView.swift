@@ -4,10 +4,15 @@ import SwiftUI
 /// Шаг 1: ServiceSelectionView (премиальный выбор сервиса)
 /// Шаг 2: Настройки комнаты (название, приватность)
 /// Шаг 3: Приглашение друзей
+///
+/// Brain Phase 4: accepts an optional `intent` of type `CreateRoomIntent?`.
+/// - `.chooseService` (or nil) → start at service selection step.
+/// - `.selectedContent(draft)` → skip directly to RoomSetup with the draft pre-filled.
 struct RoomCreationView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var loc = LocalizationManager.shared
     var friendManager: FriendManager? = nil
+    var intent: CreateRoomIntent? = nil
     var onRoomCreated: (Room) -> Void
 
     @State private var currentStep: CreationStep = .service
@@ -88,6 +93,18 @@ struct RoomCreationView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            // Brain Phase 4: if intent is .selectedContent, pre-fill the
+            // RoomSetupConfig and skip directly to the setup step.
+            if roomSetupConfig == nil, case .selectedContent(let draft) = intent {
+                roomSetupConfig = RoomSetupConfig(
+                    service: draft.service,
+                    contentURL: draft.contentURL,
+                    contentTitle: draft.title,
+                    thumbnailURL: draft.thumbnailURL
+                )
+            }
+        }
         // 🔧 v62: REMOVED discardPrewarm from onDisappear.
         //
         // BUG: onDisappear fires when the user CREATES a room (RoomCreationView

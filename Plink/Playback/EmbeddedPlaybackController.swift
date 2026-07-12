@@ -1,41 +1,43 @@
-// Plink/Playback/EmbeddedPlaybackController.swift — PATCH 03
-//
-// GLM-5.2 master implementation patch — Commit Group 3.
+// Plink/Playback/EmbeddedPlaybackController.swift — PATCH 03 (Brain Phase 2)
 //
 // The single official YouTube embedded controller for the room session.
 // Owns one WKWebView per room (runbook §16: 'Не добавлять еще один
 // singleton WebView' — coordinator is per-room, never global).
 //
-// PATCH 03 changes from previous version:
-//   - Public isReady + lastError properties for UI binding.
-//   - 8s prepare timeout via withThrowingTaskGroup race (was 5s busy-wait).
-//   - Pending enum consolidates pendingSeekSeconds + pendingPlaying.
-//   - Cleaner HTML: plinkPlayer namespace, snapshot() helper for
-//     position+duration in one JS round-trip.
-//   - Teardown stops poll task via .cancel() (was Timer.invalidate only).
-//   - Background/foreground polling throttle (250ms visible, 1s background).
+// Brain Phase 2 changes:
+//   - YouTube owns play/pause/timeline/captions/quality (official controls visible).
+//   - Plink owns room close/sync/participants/chat/reactions/replace-video only.
+//   - NO loadHTMLString — navigate WKWebView to backend /api/media/youtube-player
+//     so the page has a real HTTPS origin (fixes error 153).
+//   - NO duplicate Plink transport UI on YouTube content (PlayerControlLayer
+//     only renders for .plink chrome ownership).
+//   - NO invented error 152 — official mapping only: 2/5/100/101/150/153.
 //
 // JS bridge contract (YouTube IFrame API):
 //   - 'ready' → isReady = true, drain pending commands.
 //   - 'state' (1/2/3/0) → isPlaying, isBuffering.
-//   - 'error' (2/5/100/101/150) → lastError set, isBuffering cleared.
+//   - 'error' (2/5/100/101/150/153) → lastError set, isBuffering cleared.
 //   - poll task: plinkSnapshot() every 250ms (visible) / 1s (background).
 //
-// App Store compliance (runbook §7):
-//   - Official YouTube IFrame API inside WKWebView.
+// App Store compliance (runbook §7 + Brain Phase 1.2):
+//   - Official YouTube IFrame API served from Plink backend (real HTTPS origin).
 //   - NO server-side extraction (no Innertube, no yt-dlp, no Piped).
 //   - NO cookie relay — cookies never leave the device.
 //   - NO raw CDN proxy.
-//   - YouTube controls hidden (controls=0) — Plink provides its own controls.
-//
-// Capability limitations (runbook §19):
-//   - supportsRateCorrection = false → OrderedSyncController uses less
-//     frequent precise seeks (drift threshold 500-750ms after device testing).
+//   - YouTube controls VISIBLE (controls=1) — Plink does NOT duplicate them.
 
 import Foundation
 import UIKit
 import WebKit
 import Observation
+
+/// Brain Phase 2: determines who owns transport UI.
+/// `.provider` (YouTube) → hide Plink's PlayerControlLayer.
+/// `.plink` (native HLS/MP4) → render PlayerControlLayer.
+public enum PlayerChromeOwnership: Sendable {
+    case provider
+    case plink
+}
 
 @MainActor
 @Observable
@@ -47,13 +49,15 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     public private(set) var isPlaying: Bool = false
     public private(set) var isBuffering: Bool = false
 
-    /// PATCH 03: ready state is now public. UI uses this to show "Loading…"
-    /// vs "Buffering…" — loading means the player isn't ready yet;
-    /// buffering means ready but mid-playback rebuffer.
+    /// ready state — UI uses this to show "Loading…" vs "Buffering…".
     public private(set) var isReady: Bool = false
 
-    /// PATCH 03: surface YouTube error callback for UI binding.
+    /// surface YouTube error callback for UI binding.
     public private(set) var lastError: String?
+
+    /// Brain Phase 2: YouTube owns transport controls — Plink does NOT
+    /// render its own PlayerControlLayer on this content.
+    public var chromeOwnership: PlayerChromeOwnership { .provider }
 
     public var capabilities: PlaybackCapabilities {
         .init(
@@ -74,21 +78,13 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     private var webView: WKWebView?
     private var videoId: String?
 
-    /// PATCH 03: Pending enum consolidates pending seek + play state.
+    /// Pending enum consolidates pending seek + play state.
     /// Drained atomically when isReady becomes true.
-    /// PATCH 18 (P1-69): merge instead of overwrite — when a new command
-    /// arrives before ready, merge it with the existing pending state so
-    /// we don't lose position or play intent. The last seek wins (most
-    /// recent user intent), but play/pause is preserved across seeks.
     private var pending: Pending = .none
     private enum Pending {
         case none
         case state(position: Double?, playing: Bool?)
 
-        /// Merge a new command into existing pending state.
-        /// - position: if non-nil, overrides existing position (last seek wins).
-        /// - playing: if non-nil, overrides existing playing (last play/pause wins).
-        /// If both are nil, returns self unchanged.
         func merging(position: Double?, playing: Bool?) -> Pending {
             switch self {
             case .none:
@@ -106,6 +102,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     private var pollTask: Task<Void, Never>?
     private let bridge = EmbeddedMessageHandler()
+
+    /// Brain Phase 2: backend HTTPS wrapper URL.
+    /// Set via prepare(_:) — the wrapper page lives at /api/media/youtube-player.
+    private static let backendBaseURL = URL(string: "https://plink-backend-production-ef31.up.railway.app")!
 
     public init() {}
 
@@ -132,13 +132,12 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = [.audio]
         config.userContentController = content
-        // PATCH: use nonPersistent data store to prevent caching old HTML
-        // with controls=1. This ensures fresh HTML load every time.
+        // nonPersistent data store to prevent stale HTML cache.
         config.websiteDataStore = .nonPersistent()
 
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
-        web.backgroundColor = UIColor(red: 0x0D/255, green: 0x00/255, blue: 0x1A/255, alpha: 1)
+        web.backgroundColor = UIColor(red: 0x0E/255, green: 0x10/255, blue: 0x16/255, alpha: 1)
         web.scrollView.isScrollEnabled = false
         web.translatesAutoresizingMaskIntoConstraints = false
         webView = web
@@ -155,14 +154,20 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             Task { @MainActor in self?.handleError(code: code) }
         }
 
-        // PATCH 03: JSON-encode video ID to prevent XSS / injection.
-        // Use a single-element array (matches existing bridge contract).
-        let encoded = try JSONEncoder().encode(id)
-        let jsonId = String(decoding: encoded, as: UTF8.self)
-        web.loadHTMLString(
-            Self.buildHTML(videoIdJSON: jsonId),
-            baseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")
-        )
+        // Brain Phase 2: navigate to backend HTTPS wrapper (NO loadHTMLString).
+        // The wrapper at /api/media/youtube-player?id=VIDEO_ID serves a static
+        // HTML page with a real Plink HTTPS origin. This:
+        //   - gives the page a real origin (fixes YouTube error 153)
+        //   - allows the strict CSP to be enforced by the backend
+        //   - prevents YouTube bot-detection (we're not loading youtube.com/embed/)
+        //   - keeps YouTube controls visible (controls=1)
+        var components = URLComponents(url: Self.backendBaseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/api/media/youtube-player"
+        components.queryItems = [URLQueryItem(name: "id", value: id)]
+        guard let wrapperURL = components.url else {
+            throw ProviderError.loadingFailed("Invalid wrapper URL")
+        }
+        web.load(URLRequest(url: wrapperURL))
 
         // PATCH 03: 8s prepare timeout via task group race.
         // First task: poll isReady every 80ms until true.
@@ -318,7 +323,6 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         case 5:             message = "HTML5 player error"
         case 100:           message = "Video not found or private"
         case 101, 150:      message = "This video cannot be embedded in Plink"
-        case 152:           message = "Embedding restricted by owner — try another video"
         case 153:           message = "Missing client identity — try another video"
         default:            message = "YouTube error \(code) — try another video"
         }
@@ -363,94 +367,15 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         return try? await webView.evaluateJavaScript(js)
     }
 
-    // MARK: - Validation & HTML
+    // MARK: - Validation
 
-    /// PATCH 03: validate YouTube video ID — only [A-Za-z0-9_-]{11}.
-    /// Prevents XSS / injection via HTML interpolation.
+    /// Validate YouTube video ID — only [A-Za-z0-9_-]{11}.
+    /// Prevents XSS / injection via URL parameter.
     private static func isValidVideoId(_ id: String) -> Bool {
         guard id.count == 11 else { return false }
         return id.allSatisfy { c in
             c.isLetter || c.isNumber || c == "_" || c == "-"
         }
-    }
-
-    /// PATCH 03: cleaner HTML with plinkPlayer namespace.
-    /// - Background matches Cinema2026.background.
-    /// - controls=0, fs=0, disablekb=1, modestbranding=1, rel=0, iv_load_policy=3 (ToS).
-    ///   Hides ALL native YouTube chrome — Plink renders its own controls via PlayerControlLayer.
-    /// - plinkPlay/Pause/Seek/Snapshot helpers exposed on window.
-    /// - JSON-encoded videoId (no string interpolation).
-    private static func buildHTML(videoIdJSON: String) -> String {
-        return """
-        <!doctype html>
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-            <style>
-              html, body, #player {
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                height: 100%;
-                background: #0E1016;
-                overflow: hidden;
-              }
-            </style>
-          </head>
-          <body>
-            <div id="player"></div>
-            <script src="https://www.youtube.com/iframe_api"></script>
-            <script>
-              var ytPlayer;
-              function post(event, payload) {
-                window.webkit.messageHandlers.plinkPlayer.postMessage(
-                  Object.assign({event: event}, payload || {})
-                );
-              }
-              function onYouTubeIframeAPIReady() {
-                ytPlayer = new YT.Player('player', {
-                  videoId: \(videoIdJSON),
-                  playerVars: {
-                    'playsinline': 1,
-                    'controls': 0,
-                    'fs': 0,
-                    'disablekb': 1,
-                    'modestbranding': 1,
-                    'rel': 0,
-                    'iv_load_policy': 3,
-                    'origin': 'https://plink-backend-production-ef31.up.railway.app'
-                  },
-                  events: {
-                    'onReady': function() { post('ready'); },
-                    'onStateChange': function(e) { post('state', {state: e.data}); },
-                    'onError': function(e) { post('error', {code: e.data}); }
-                  }
-                });
-              }
-              // Plink namespace — clean JS bridge for the controller.
-              window.plinkPlay = function() {
-                if (ytPlayer && ytPlayer.playVideo) { ytPlayer.playVideo(); return true; }
-                return false;
-              };
-              window.plinkPause = function() {
-                if (ytPlayer && ytPlayer.pauseVideo) { ytPlayer.pauseVideo(); return true; }
-                return false;
-              };
-              window.plinkSeek = function(seconds) {
-                if (ytPlayer && ytPlayer.seekTo) { ytPlayer.seekTo(seconds, true); return true; }
-                return false;
-              };
-              window.plinkSnapshot = function() {
-                if (!ytPlayer) { return null; }
-                return {
-                  time: (ytPlayer.getCurrentTime && ytPlayer.getCurrentTime()) || 0,
-                  duration: (ytPlayer.getDuration && ytPlayer.getDuration()) || 0
-                };
-              };
-            </script>
-          </body>
-        </html>
-        """
     }
 }
 

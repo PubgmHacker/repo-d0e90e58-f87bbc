@@ -1,14 +1,19 @@
-// Plink/AppShell/PlinkAppShell.swift — §4 Final Architecture
+// Plink/AppShell/PlinkAppShell.swift — §4 Final Architecture + Brain Phase 4
 //
 // One canonical create presentation via RoomCreationView (not CreateRoomView).
 // fullScreenCover for WatchRoom on room creation.
+//
+// Brain Phase 4: typed CreateRoomIntent replaces Bool createPresented.
+// - .chooseService → empty Create flow (persistent button tap)
+// - .selectedContent(draft) → RoomCreationView opens RoomSetupView immediately
+//   with the draft pre-filled (trending/hero video tap).
 
 import SwiftUI
 
 struct PlinkAppShell: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selection: AppSection = .home
-    @State private var createPresented = false
+    @State private var createIntent: CreateRoomIntent?
     @State private var createdRoom: Room?
 
     let dependencies: AppDependencies
@@ -18,29 +23,30 @@ struct PlinkAppShell: View {
             #if os(macOS)
             PlinkSidebarShell(
                 selection: $selection,
-                createPresented: $createPresented,
+                createIntent: $createIntent,
                 dependencies: dependencies
             )
             #else
             if horizontalSizeClass == .regular {
                 PlinkSidebarShell(
                     selection: $selection,
-                    createPresented: $createPresented,
+                    createIntent: $createIntent,
                     dependencies: dependencies
                 )
             } else {
                 PlinkPhoneTabShell(
                     selection: $selection,
-                    createPresented: $createPresented,
+                    createIntent: $createIntent,
                     dependencies: dependencies
                 )
             }
             #endif
         }
-        .sheet(isPresented: $createPresented) {
+        .sheet(item: $createIntent) { intent in
             RoomCreationView(
+                intent: intent,
                 onRoomCreated: { room in
-                    createPresented = false
+                    createIntent = nil
                     createdRoom = room
                 }
             )

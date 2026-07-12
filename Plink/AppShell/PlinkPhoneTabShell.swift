@@ -7,7 +7,7 @@ import SwiftUI
 
 struct PlinkPhoneTabShell: View {
     @Binding var selection: AppSection
-    @Binding var createPresented: Bool
+    @Binding var createIntent: CreateRoomIntent?
     let dependencies: AppDependencies
 
     @State private var navigateToRoom: Room?
@@ -67,7 +67,7 @@ struct PlinkPhoneTabShell: View {
 
     private var createButtonBar: some View {
         Button {
-            createPresented = true
+            createIntent = .chooseService
         } label: {
             Label("Создать комнату", systemImage: "plus")
                 .font(.system(size: 15, weight: .semibold))
@@ -89,9 +89,8 @@ struct PlinkPhoneTabShell: View {
             LazyVStack(spacing: CompactPhoneMetrics.sectionSpacing) {
                 // Netflix-style hero banner — always visible from trending
                 if let hero = trendingVideos.first {
-                    NetflixHeroBanner(video: hero) {
-                        // Tap on hero → create room with this video
-                        createPresented = true
+                    NetflixHeroBanner(video: hero) { draft in
+                        createIntent = .selectedContent(draft)
                     }
                 } else {
                     // Loading state
@@ -123,10 +122,18 @@ struct PlinkPhoneTabShell: View {
                 // Trending — ALWAYS visible (all services label)
                 if !trendingVideos.isEmpty {
                     TrendingRail(
-                        title: "Популярное",
+                        title: "Популярное на YouTube",
                         videos: trendingVideos,
-                        onSelect: { _ in
-                            createPresented = true
+                        onSelect: { video in
+                            createIntent = .selectedContent(
+                                SelectedContentDraft(
+                                    id: video.videoId,
+                                    service: .youtube,
+                                    contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+                                    title: video.title,
+                                    thumbnailURL: video.thumbnailURLString
+                                )
+                            )
                         }
                     )
                 }
@@ -136,8 +143,16 @@ struct PlinkPhoneTabShell: View {
                     TrendingRail(
                         title: "Рекомендуем",
                         videos: Array(trendingVideos.shuffled().prefix(10)),
-                        onSelect: { _ in
-                            createPresented = true
+                        onSelect: { video in
+                            createIntent = .selectedContent(
+                                SelectedContentDraft(
+                                    id: video.videoId,
+                                    service: .youtube,
+                                    contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+                                    title: video.title,
+                                    thumbnailURL: video.thumbnailURLString
+                                )
+                            )
                         }
                     )
                 }
@@ -244,12 +259,26 @@ struct PlinkPhoneTabShell: View {
 
 // MARK: - Netflix-style hero banner
 
+/// Brain Phase 4: no nested buttons. The entire banner is a single tappable
+/// surface. The closure returns the SelectedContentDraft for the tapped video
+/// so the caller can construct a `.selectedContent` intent.
 struct NetflixHeroBanner: View {
     let video: YouTubeVideoSummary
-    let onTap: () -> Void
+    let onTap: (SelectedContentDraft) -> Void
+
+    private var draft: SelectedContentDraft {
+        SelectedContentDraft(
+            id: video.videoId,
+            service: .youtube,
+            contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+            title: video.title,
+            thumbnailURL: video.thumbnailURLString
+        )
+    }
 
     var body: some View {
-        Button(action: onTap) {
+        // Single Button — no nested Buttons (Brain Phase 4 rule).
+        Button { onTap(draft) } label: {
             ZStack(alignment: .bottomLeading) {
                 // Full-width backdrop
                 AsyncImage(url: URL(string: video.thumbnailURLString ?? "")) { image in
@@ -271,7 +300,7 @@ struct NetflixHeroBanner: View {
                     endPoint: .bottom
                 )
 
-                // Content
+                // Content (no nested Buttons)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("● В ЭФИРЕ")
                         .font(.system(size: 10, weight: .heavy))
@@ -288,28 +317,17 @@ struct NetflixHeroBanner: View {
                         .font(.system(size: 13))
                         .foregroundStyle(Cinema2026.secondary)
 
-                    HStack(spacing: 12) {
-                        Button {
-                            onTap()
-                        } label: {
-                            Label("Смотреть вместе", systemImage: "play.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Cinema2026.background)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 10)
-                                .background(Cinema2026.text, in: RoundedRectangle(cornerRadius: 12))
-                        }
-
-                        Button {
-                            // Add to list — future
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Cinema2026.text)
-                                .frame(width: 40, height: 40)
-                                .background(Cinema2026.raised.opacity(0.7), in: Circle())
-                        }
+                    // Single CTA label (not a button) — entire banner is tappable.
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Смотреть вместе")
+                            .font(.system(size: 14, weight: .semibold))
                     }
+                    .foregroundStyle(Cinema2026.background)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Cinema2026.text, in: RoundedRectangle(cornerRadius: 12))
                     .padding(.top, 4)
                 }
                 .padding(.horizontal, 16)

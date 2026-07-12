@@ -4,7 +4,7 @@ import SwiftUI
 
 struct PlinkSidebarShell: View {
     @Binding var selection: AppSection
-    @Binding var createPresented: Bool
+    @Binding var createIntent: CreateRoomIntent?
     let dependencies: AppDependencies
 
     var body: some View {
@@ -26,7 +26,7 @@ struct PlinkSidebarShell: View {
 
                 Section {
                     Button {
-                        createPresented = true
+                        createIntent = .chooseService
                     } label: {
                         Label("Создать комнату", systemImage: "plus.circle.fill")
                     }

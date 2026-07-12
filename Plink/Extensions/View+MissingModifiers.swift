@@ -75,3 +75,34 @@ struct RaveTextFieldStyle: TextFieldStyle {
             )
     }
 }
+
+// MARK: - ConditionalGlow
+//
+// GPT-5.6 SOL: ConditionalGlow modifier — pulses glow only when isActive.
+// Used by RoomCreationView for "can proceed" feedback on Create button.
+
+struct ConditionalGlow: ViewModifier {
+    let isActive: Bool
+    let color: Color
+    let minRadius: CGFloat
+    let maxRadius: CGFloat
+    let minOpacity: Double
+    let maxOpacity: Double
+    let period: Double
+
+    @State private var pulse = false
+
+    func body(content: Content) -> some View {
+        content
+            .shadow(
+                color: isActive ? color.opacity(pulse ? maxOpacity : minOpacity) : .clear,
+                radius: isActive ? (pulse ? maxRadius : minRadius) : 0
+            )
+            .onAppear {
+                guard isActive else { return }
+                withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
+    }
+}

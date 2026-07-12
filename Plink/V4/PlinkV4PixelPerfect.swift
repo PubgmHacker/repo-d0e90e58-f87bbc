@@ -484,7 +484,7 @@ struct PlinkApprovedV4Root: View {
             }
             .transition(.offset(y:8).combined(with:.opacity))
             .animation(.timingCurve(0.16,1,0.3,1,duration:0.32),value:tab)
-            PlinkLiquidTabBar(selection:$tab)
+            PlinkLiquidTabBar(selection:$tab, theme:theme)
             if appearance { V4AppearanceView(theme:$theme,presented:$appearance).zIndex(25).transition(.opacity) }
         }.preferredColorScheme(.dark).tint(V4.accent)
         .task {
@@ -512,7 +512,9 @@ struct PlinkApprovedV4Root: View {
 
 struct PlinkLiquidTabBar: View {
     @Binding var selection: Int
+    var theme: V4Theme = .electric
     @Namespace private var selectionNS
+    private var themePrimary: Color { let (_, c1, _, _) = theme.colors; return c1 }
 
     private let items: [(String, String)] = [
         ("house.fill", "Главная"),
@@ -526,7 +528,7 @@ struct PlinkLiquidTabBar: View {
         content
             .padding(6)
             .background(.ultraThinMaterial)
-            .background(V4.navBG.opacity(0.72))
+            
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -553,12 +555,12 @@ struct PlinkLiquidTabBar: View {
                             .font(.system(size: 9.5, weight: .semibold))
                             .lineLimit(1)
                     }
-                    .foregroundStyle(selection == index ? V4.accent : V4.muted)
+                    .foregroundStyle(selection == index ? themePrimary : V4.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background {
                         if selection == index {
                             Capsule(style: .continuous)
-                                .fill(V4.accent.opacity(0.11))
+                                .fill(themePrimary.opacity(0.15))
                                 .matchedGeometryEffect(id: "selected-tab", in: selectionNS)
                         }
                     }
@@ -583,11 +585,11 @@ struct NotificationInboxButton: View {
             Image(systemName: unreadCount > 0 ? "bell.fill" : "bell")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(V4.ink)
-                .frame(width: 46, height: 40)
+                .frame(width: 43, height: 43)
                 .background(V4.roundBG)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(Circle())
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    Circle()
                         .stroke(V4.line, lineWidth: 1)
                 )
                 .overlay(alignment: .topTrailing) {
@@ -725,23 +727,33 @@ struct V4AIViewLive: View {
     @State private var input = ""
 
     var body: some View {
-        ZStack(alignment:.bottom) {
-            VStack(spacing:0) {
-                HStack {
-                    V4MorphOrb(theme:theme,size:41,glow:24)
-                    VStack(alignment:.leading,spacing:2) {
-                        Text("Plink AI").font(.system(size:16,weight:.bold))
-                        Text("Кинокомпаньон").font(.system(size:11.04)).foregroundStyle(V4.muted)
-                    }
-                    Spacer(); V4RoundButton(symbol:"•••")
-                }.frame(height:61).padding(.horizontal,17)
-                ZStack(alignment:.bottom) {
-                    V4MorphOrb(theme:theme)
-                    VStack(spacing:3) {
-                        Text("Что смотрим сегодня?").font(.system(size:16,weight:.bold))
-                        Text(store.state).font(.system(size:11.52)).foregroundStyle(V4.muted)
-                    }.padding(.bottom,13)
-                }.frame(height:270)
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                V4MorphOrb(theme:theme,size:41,glow:24)
+                VStack(alignment:.leading,spacing:2) {
+                    Text("Plink AI").font(.system(size:16,weight:.bold))
+                    Text("Кинокомпаньон").font(.system(size:11.04)).foregroundStyle(V4.muted)
+                }
+                Spacer()
+                V4RoundButton(symbol:"•••")
+            }
+            .frame(height:61)
+            .padding(.horizontal,17)
+
+            // Morph orb zone
+            ZStack(alignment:.bottom) {
+                V4MorphOrb(theme:theme)
+                VStack(spacing:3) {
+                    Text("Что смотрим сегодня?").font(.system(size:16,weight:.bold))
+                    Text(store.state).font(.system(size:11.52)).foregroundStyle(V4.muted)
+                }.padding(.bottom,13)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height:270)
+
+            // Chat messages
+            ScrollViewReader { proxy in
                 ScrollView(showsIndicators:false) {
                     VStack(alignment:.leading,spacing:8) {
                         ForEach(store.messages) { msg in
@@ -749,33 +761,98 @@ struct V4AIViewLive: View {
                                 VStack(alignment:.leading,spacing:3) {
                                     Text("PLINK AI").font(.system(size:13.28,weight:.bold))
                                     Text(msg.text).font(.system(size:13.28)).lineSpacing(5.31)
-                                }.padding(.vertical,11).padding(.horizontal,13).background(V4.botBG)
+                                }
+                                .padding(.vertical,11).padding(.horizontal,13)
+                                .background(V4.botBG)
                                 .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                .id(msg.id)
                             } else {
-                                Text(msg.text).font(.system(size:13.28)).padding(.vertical,11).padding(.horizontal,13)
-                                    .background(V4.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-                                    .frame(maxWidth: 280, alignment: .trailing)
+                                HStack {
+                                    Spacer()
+                                    Text(msg.text)
+                                        .font(.system(size:13.28))
+                                        .padding(.vertical,11).padding(.horizontal,13)
+                                        .background(V4.accent.opacity(0.15))
+                                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                        .id(msg.id)
+                                }
                             }
                         }
+                        // Chips
                         HStack(spacing:7) {
-                            chip("Очередь","Собери очередь"); chip("У друзей","Что смотрят друзья?"); chip("Комната","Создай комнату")
+                            chip("Очередь","Собери очередь")
+                            chip("У друзей","Что смотрят друзья?")
+                            chip("Комната","Создай комнату")
                         }
-                    }.padding(.horizontal,16).padding(.top,8).padding(.bottom,92)
-                }.background(LinearGradient(colors:[.clear,Color.oklch(0.06,0.01,190,alpha:0.76)],startPoint:UnitPoint(x:0.5,y:0.16),endPoint:.bottom))
-            }.foregroundStyle(V4.ink)
+                    }
+                    .padding(.horizontal,16)
+                    .padding(.top,8)
+                    .padding(.bottom,100)
+                }
+                .onChange(of: store.messages.count) { _, _ in
+                    if let lastID = store.messages.last?.id {
+                        withAnimation { proxy.scrollTo(lastID, anchor: .bottom) }
+                    }
+                }
+            }
+
+            // Composer — full width, no side gaps
             HStack(spacing:6) {
-                Button("🎙") { }.frame(width:42,height:42).background(V4.raised).clipShape(RoundedRectangle(cornerRadius:14))
-                TextField("Спроси про фильмы и комнаты",text:$input).foregroundStyle(V4.ink)
-                Button("➤") {
-                    Task { await store.send(input); input = "" }
-                }.frame(width:42,height:42).background(V4.accent).foregroundStyle(V4.accentInk).clipShape(RoundedRectangle(cornerRadius:14))
-            }.padding(8).frame(minHeight:62).background(V4.composerBG).clipShape(RoundedRectangle(cornerRadius:22))
-             .overlay(RoundedRectangle(cornerRadius:22).stroke(V4.line)).padding(.horizontal,13).padding(.bottom,10)
+                Button {
+                    // mic toggle
+                } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(V4.ink)
+                }
+                .frame(width:42,height:42)
+                .background(V4.raised)
+                .clipShape(RoundedRectangle(cornerRadius:14))
+
+                TextField("Спроси про фильмы и комнаты", text:$input)
+                    .foregroundStyle(V4.ink)
+                    .font(.system(size: 14))
+
+                Button {
+                    let text = input
+                    input = ""
+                    Task { await store.send(text) }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(V4.accentInk)
+                }
+                .frame(width:42,height:42)
+                .background(V4.accent)
+                .clipShape(RoundedRectangle(cornerRadius:14))
+                .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(8)
+            .frame(minHeight:62)
+            .background(V4.composerBG)
+            .clipShape(RoundedRectangle(cornerRadius:22))
+            .overlay(RoundedRectangle(cornerRadius:22).stroke(V4.line))
+            .padding(.horizontal,13)
+            .padding(.bottom,90) // above tab bar
         }
+        .foregroundStyle(V4.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity) // full screen
     }
+
     private func chip(_ label:String,_ prompt:String)->some View {
-        Button(label){ input=prompt }.font(.system(size:11.52)).foregroundStyle(V4.ink).padding(.horizontal,11).frame(height:36)
-            .background(V4.surface).clipShape(RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).stroke(V4.line))
+        Button {
+            input = prompt
+        } label: {
+            Text(label)
+                .font(.system(size:11.52))
+                .foregroundStyle(V4.ink)
+                .padding(.horizontal,11)
+                .frame(height:36)
+        }
+        .background(V4.surface)
+        .clipShape(RoundedRectangle(cornerRadius:12))
+        .overlay(RoundedRectangle(cornerRadius:12).stroke(V4.line))
+        .buttonStyle(.plain)
     }
 }
 

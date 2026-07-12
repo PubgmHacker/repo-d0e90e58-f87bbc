@@ -134,7 +134,17 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // MARK: - Lifecycle
 
+    /// Brain Phase 6: connect() is idempotent.
+    /// Calling it again while already connected (or while connecting) is a no-op.
+    /// This prevents accidental session recreation if SwiftUI re-fires .task
+    /// during layout switches or background/foreground transitions.
     public func connect() async {
+        // Idempotent guard — already connected or in-flight.
+        if connectionState == .connecting || connectionState == .connected {
+            return
+        }
+        connectionState = .connecting
+
         // P0-31: subscribe to stateChanges stream
         startStateChangesSubscription()
 
@@ -164,9 +174,18 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
         // PATCH 14: start polling danmaku engine for snapshot.
         startDanmakuPolling()
+
+        connectionState = .connected
     }
 
+    /// Brain Phase 6: disconnect() is idempotent.
+    /// Calling it again when already idle is a no-op. This prevents
+    /// double-teardown if onDisappear fires after leaveRoom (e.g. when
+    /// fullScreenCover dismiss propagates).
     public func disconnect() {
+        // Idempotent guard — already torn down.
+        if connectionState == .idle { return }
+
         stateChangesTask?.cancel()
         stateChangesTask = nil
         statePumpTask?.cancel()

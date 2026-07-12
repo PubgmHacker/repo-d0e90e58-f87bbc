@@ -91,9 +91,13 @@ struct WatchRoomScreen: View {
         }
         .task { await model.connect() }
         .onDisappear {
-            // PATCH: do NOT disconnect here — onDisappear fires on rotation
-            // when SwiftUI rebuilds the view. Disconnect only on explicit
-            // leaveRoom (X button) or when fullScreenCover is dismissed.
+            // Brain Phase 6: do NOT disconnect here — onDisappear fires on
+            // rotation when SwiftUI rebuilds the view tree. The model's
+            // connect()/disconnect() are now idempotent, so rotation is safe.
+            // Disconnect only on explicit leaveRoom (X button) — see
+            // onChange(connectionState == .idle) below which dismisses
+            // the fullScreenCover, and WatchRoomModel.disconnect() is
+            // called by leaveRoom() only.
             controlsHideTask?.cancel()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 OrientationManager.shared.unlockOrientation()

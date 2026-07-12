@@ -83,120 +83,131 @@ struct PlinkPhoneTabShell: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    // MARK: - Home (Netflix-style)
+    // MARK: - Home (Netflix-style + GPT-5 Living Home)
+
+    /// GPT-5 §8: artwork URL from hero (first trending video) for living backdrop.
+    /// nil when no trending data → backdrop uses Cinema2026 fallback palette.
+    private var heroArtworkURL: URL? {
+        guard let hero = trendingVideos.first,
+              let thumbString = hero.thumbnailURLString,
+              let url = URL(string: thumbString) else {
+            return nil
+        }
+        return url
+    }
 
     private var homeView: some View {
-        ScrollView {
-            LazyVStack(spacing: CompactPhoneMetrics.sectionSpacing) {
-                // Netflix-style hero banner — always visible from trending
-                if let hero = trendingVideos.first {
-                    NetflixHeroBanner(video: hero) { draft in
-                        createIntent = .selectedContent(draft)
+        // GPT-5 §8: wrap Home content in PlinkLivingHome for artwork-driven
+        // living backdrop. artworkURL comes from the hero (first trending video).
+        // Backdrop uses existing PaletteLoader + LivingBackdropPalette (no duplication).
+        PlinkLivingHome(artworkURL: heroArtworkURL) {
+            ScrollView {
+                LazyVStack(spacing: CompactPhoneMetrics.sectionSpacing) {
+                    // Netflix-style hero banner — always visible from trending
+                    if let hero = trendingVideos.first {
+                        NetflixHeroBanner(video: hero) { draft in
+                            createIntent = .selectedContent(draft)
+                        }
+                    } else {
+                        // GPT-5 §8.6: loading state — stable skeleton over fallback backdrop.
+                        LivingHomeStateOverlay(isLoading: true)
+                            .frame(height: 220)
                     }
-                } else {
-                    // Loading state
-                    Rectangle()
-                        .fill(Cinema2026.surface)
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 0))
-                        .overlay {
-                            ProgressView().tint(Cinema2026.accent)
-                        }
-                }
 
-                // AI CTA
-                CompactAIEntryCard {
-                    selection = .ai
-                }
-                .padding(.top, 8)
+                    // AI CTA
+                    CompactAIEntryCard {
+                        selection = .ai
+                    }
+                    .padding(.top, 8)
 
-                // Live rooms (if any)
-                if let vm = homeViewModel, !vm.activeRooms.isEmpty {
-                    CompactRoomRail(
-                        title: "Сейчас смотрят",
-                        rooms: vm.activeRooms,
-                        style: .landscape,
-                        open: { navigateToRoom = $0 }
-                    )
-                }
+                    // Live rooms (if any)
+                    if let vm = homeViewModel, !vm.activeRooms.isEmpty {
+                        CompactRoomRail(
+                            title: "Сейчас смотрят",
+                            rooms: vm.activeRooms,
+                            style: .landscape,
+                            open: { navigateToRoom = $0 }
+                        )
+                    }
 
-                // Trending — ALWAYS visible (YouTube only, honest label)
-                if !trendingVideos.isEmpty {
-                    TrendingRail(
-                        title: "Популярное на YouTube",
-                        videos: trendingVideos,
-                        onSelect: { video in
-                            createIntent = .selectedContent(
-                                SelectedContentDraft(
-                                    id: video.videoId,
-                                    service: .youtube,
-                                    contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-                                    title: video.title,
-                                    thumbnailURL: video.thumbnailURLString
+                    // Trending — ALWAYS visible (YouTube only, honest label)
+                    if !trendingVideos.isEmpty {
+                        TrendingRail(
+                            title: "Популярное на YouTube",
+                            videos: trendingVideos,
+                            onSelect: { video in
+                                createIntent = .selectedContent(
+                                    SelectedContentDraft(
+                                        id: video.videoId,
+                                        service: .youtube,
+                                        contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+                                        title: video.title,
+                                        thumbnailURL: video.thumbnailURLString
+                                    )
                                 )
-                            )
-                        }
-                    )
-                }
+                            }
+                        )
+                    }
 
-                // Brain Revision 3 Step 6: "Популярное в Plink" rail.
-                // First-party popularity from /api/discovery/popular.
-                // Hide the rail entirely if endpoint returns empty (do NOT fill with YouTube).
-                if !plinkPopular.isEmpty {
-                    PlinkPopularRail(
-                        title: "Популярное в Plink",
-                        items: plinkPopular,
-                        onSelect: { item in
-                            // Only allow tap if directCreateRoomDraft is true (YouTube content).
-                            guard item.directCreateRoomDraft else { return }
-                            createIntent = .selectedContent(
-                                SelectedContentDraft(
-                                    id: item.id,
-                                    service: .youtube,
-                                    contentURL: item.contentURL,
-                                    title: item.title,
-                                    thumbnailURL: item.thumbnailURL
+                    // Brain Revision 3 Step 6: "Популярное в Plink" rail.
+                    // First-party popularity from /api/discovery/popular.
+                    // Hide the rail entirely if endpoint returns empty (do NOT fill with YouTube).
+                    if !plinkPopular.isEmpty {
+                        PlinkPopularRail(
+                            title: "Популярное в Plink",
+                            items: plinkPopular,
+                            onSelect: { item in
+                                // Only allow tap if directCreateRoomDraft is true (YouTube content).
+                                guard item.directCreateRoomDraft else { return }
+                                createIntent = .selectedContent(
+                                    SelectedContentDraft(
+                                        id: item.id,
+                                        service: .youtube,
+                                        contentURL: item.contentURL,
+                                        title: item.title,
+                                        thumbnailURL: item.thumbnailURL
+                                    )
                                 )
-                            )
-                        }
-                    )
-                }
+                            }
+                        )
+                    }
 
-                // Brain Revision 3 Step 6: removed shuffled() — was causing unstable UI.
-                // Deterministic order from backend ranking (already sorted by uniqueViewers desc).
-                // Show "Рекомендуем" only when we have 7+ trending items (top 6 in primary rail,
-                // items 7-12 in secondary rail — deterministic, not random).
-                if trendingVideos.count > 6 {
-                    TrendingRail(
-                        title: "Рекомендуем",
-                        videos: Array(trendingVideos.prefix(12).suffix(6)),
-                        onSelect: { video in
-                            createIntent = .selectedContent(
-                                SelectedContentDraft(
-                                    id: video.videoId,
-                                    service: .youtube,
-                                    contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-                                    title: video.title,
-                                    thumbnailURL: video.thumbnailURLString
+                    // Brain Revision 3 Step 6: removed shuffled() — was causing unstable UI.
+                    // Deterministic order from backend ranking (already sorted by uniqueViewers desc).
+                    // Show "Рекомендуем" only when we have 7+ trending items (top 6 in primary rail,
+                    // items 7-12 in secondary rail — deterministic, not random).
+                    if trendingVideos.count > 6 {
+                        TrendingRail(
+                            title: "Рекомендуем",
+                            videos: Array(trendingVideos.prefix(12).suffix(6)),
+                            onSelect: { video in
+                                createIntent = .selectedContent(
+                                    SelectedContentDraft(
+                                        id: video.videoId,
+                                        service: .youtube,
+                                        contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+                                        title: video.title,
+                                        thumbnailURL: video.thumbnailURLString
+                                    )
                                 )
-                            )
-                        }
-                    )
+                            }
+                        )
+                    }
                 }
+                .padding(.bottom, 140)  // leave room for the persistent create button
             }
-            .padding(.bottom, 140)  // leave room for the persistent create button
-        }
-        .scrollIndicators(.hidden)
-        .background(Cinema2026.background)
-        .navigationTitle("")
-        .task {
-            if homeViewModel == nil {
-                homeViewModel = HomeViewModel(
-                    roomService: dependencies.roomService,
-                    authService: dependencies.authService
-                )
-                await homeViewModel?.loadRooms()
-            }
+            .scrollIndicators(.hidden)
+            // GPT-5: background is now provided by PlinkLivingHome's LivingHomeCanvas.
+            // Do NOT add .background(Cinema2026.background) here — it would cover the backdrop.
+            .navigationTitle("")
+            .task {
+                if homeViewModel == nil {
+                    homeViewModel = HomeViewModel(
+                        roomService: dependencies.roomService,
+                        authService: dependencies.authService
+                    )
+                    await homeViewModel?.loadRooms()
+                }
             if trendingVideos.isEmpty {
                 await loadTrending()
             }

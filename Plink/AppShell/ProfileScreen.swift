@@ -10,6 +10,7 @@ struct ProfileScreen: View {
     @Environment(PlinkThemeStore.self) private var themeStore
     let authService: AuthService
     @State private var showSettings = false
+    @State private var showThemeSwitcher = false
 
     var body: some View {
         V4Surface(theme: themeStore.appTheme, surface: .profile) {
@@ -51,6 +52,8 @@ struct ProfileScreen: View {
                     // Quick actions
                     VStack(spacing: 0) {
                         ProfileRow(icon: "gearshape.fill", title: "Настройки", action: { showSettings = true })
+                        ProfileDivider()
+                        ProfileRow(icon: "circle.lefthalf.filled", title: "Оформление", value: themeStore.appTheme.name, action: { showThemeSwitcher = true })
                         ProfileDivider()
                         ProfileRow(icon: "crown.fill", title: "Plink+ подписка", tint: Cinema2026.amber, action: {})
                         ProfileDivider()
@@ -125,6 +128,9 @@ struct ProfileScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showSettings) {
             SettingsView(authService: authService)
+        }
+        .sheet(isPresented: $showThemeSwitcher) {
+            ThemeSwitcherSheet()
         }
     }
 }

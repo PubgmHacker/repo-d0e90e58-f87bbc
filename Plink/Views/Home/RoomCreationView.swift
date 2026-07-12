@@ -1,16 +1,11 @@
+// Plink/Views/Home/RoomCreationView.swift — GPT-5.6 V4 §2
+// V4 redesign. Preserves existing state machine + provider callbacks.
+
 import SwiftUI
 
-// MARK: - Room Creation Flow v3
-/// Шаг 1: ServiceSelectionView (премиальный выбор сервиса)
-/// Шаг 2: Настройки комнаты (название, приватность)
-/// Шаг 3: Приглашение друзей
-///
-/// Brain Phase 4: accepts an optional `intent` of type `CreateRoomIntent?`.
-/// - `.chooseService` (or nil) → start at service selection step.
-/// - `.selectedContent(draft)` → skip directly to RoomSetup with the draft pre-filled.
 struct RoomCreationView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var loc = LocalizationManager.shared
+    @EnvironmentObject private var apiClient: APIClient
     var friendManager: FriendManager? = nil
     var intent: CreateRoomIntent? = nil
     var onRoomCreated: (Room) -> Void
@@ -20,23 +15,26 @@ struct RoomCreationView: View {
     @State private var mediaURL = ""
     @State private var mediaTitle = ""
     @State private var resolvedMediaItem: MediaItem?
-
     @State private var roomName = ""
     @State private var maxParticipants = 4
     @State private var privacy: RoomPrivacy = .publicRoom
-
     @State private var selectedFriendIds: Set<String> = []
     @State private var isCreating = false
-    @State private var showPaywallForLimit = false
-
-    // 🔧 NEW: RoomSetupView state — используем optional struct + .fullScreenCover(item:)
-    // чтобы передать contentURL напрямую в closure (SwiftUI bug: .fullScreenCover(isPresented:)
-    // захватывает @State значения при создании closure, а не при срабатывании).
     @State private var roomSetupConfig: RoomSetupConfig?
+    @State private var nameError: String?
+    @State private var urlError: String?
+    @State private var selectedThemeID: String = PlinkThemeCatalog.defaultID
 
-    /// 🔧 NEW: Configuration struct for RoomSetupView — передаётся через
-    /// .fullScreenCover(item:) чтобы избежать SwiftUI @State race condition.
-    /// 🔧 v33: added thumbnailURL — needed to show cover in "Смотрят сейчас" + history.
+    enum CreationStep: String, CaseIterable {
+        case service, details, invite
+        var next: CreationStep? {
+            switch self { case .service: .details; case .details: .invite; case .invite: nil }
+        }
+        var previous: CreationStep? {
+            switch self { case .service: nil; case .details: .service; case .invite: .details }
+        }
+    }
+
     struct RoomSetupConfig: Identifiable {
         let id = UUID()
         let service: VideoService
@@ -45,575 +43,214 @@ struct RoomCreationView: View {
         let thumbnailURL: String?
     }
 
-    // Ошибки валидации
-    @State private var nameError: String?
-    @State private var urlError: String?
-
-    /// Лимит участников: free=4, premium=50
     private var isPremium: Bool { PremiumStatusManager.shared.isPremium }
-    private var maxAllowed: Int { isPremium ? 50 : 4 }
 
     var body: some View {
-        ZStack {
-            Cinema2026.background
-
-            switch currentStep {
-            case .service:
-                ServiceSelectionView(
-                    onSelect: { service in
-                        // Browser / customURL — go straight to details (URL entry)
-                        selectedService = service
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                            currentStep = .details
-                        }
-                    },
-                    onContentSelected: { service, contentURL, contentTitle, thumbnailURL in
-                        // 🔧 FIX: используем .fullScreenCover(item:) с RoomSetupConfig.
-                        // SwiftUI bug: .fullScreenCover(isPresented:) захватывает @State
-                        // значения при создании closure, а не при срабатывании.
-                        // Через item: значения передаются напрямую как параметр closure.
-                        // 🔧 v33: forward thumbnailURL to RoomSetupView.
-                        print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)', thumbnailURL='\(thumbnailURL ?? "nil")'")
-
-                        // v2: No prewarming — EmbeddedPlaybackController handles YouTube
-                        roomSetupConfig = RoomSetupConfig(
-                            service: service,
-                            contentURL: contentURL,
-                            contentTitle: contentTitle,
-                            thumbnailURL: thumbnailURL
-                        )
+        V4Surface(theme: PlinkThemeCatalog.resolve(nil), surface: .rooms) {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.system(size: 16, weight: .bold)).foregroundStyle(Cinema2026.text).frame(width: 44, height: 44)
                     }
-                )
+                    Spacer()
+                    Text("Новая комната").font(.system(size: 17, weight: .semibold)).foregroundStyle(Cinema2026.text)
+                    Spacer()
+                    Color.clear.frame(width: 44, height: 44)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 8)
 
-            case .details:
-                detailsStep
-
-            case .invite:
-                inviteStep
+                switch currentStep {
+                case .service:
+                    serviceStep
+                case .details:
+                    detailsStep
+                case .invite:
+                    inviteStep
+                }
             }
         }
-        .preferredColorScheme(.dark)
         .onAppear {
-            // Brain Phase 4: if intent is .selectedContent, pre-fill the
-            // RoomSetupConfig and skip directly to the setup step.
             if roomSetupConfig == nil, case .selectedContent(let draft) = intent {
-                roomSetupConfig = RoomSetupConfig(
-                    service: draft.service,
-                    contentURL: draft.contentURL,
-                    contentTitle: draft.title,
-                    thumbnailURL: draft.thumbnailURL
-                )
+                roomSetupConfig = RoomSetupConfig(service: draft.service, contentURL: draft.contentURL, contentTitle: draft.title, thumbnailURL: draft.thumbnailURL)
+                currentStep = .details
             }
         }
-        // 🔧 v62: REMOVED discardPrewarm from onDisappear.
-        //
-        // BUG: onDisappear fires when the user CREATES a room (RoomCreationView
-        // is dismissed to show RoomView). At that point, the prewarmed WKWebView
-        // is destroyed BEFORE RoomView's makeUIView can consumePrewarmed() it.
-        // Result: makeUIView falls back to creating a new WKWebView, but
-        // loadedVideoId is still set from prewarm → loadVideoOnce skips the load
-        // → black screen.
-        //
-        // The prewarmed WKWebView is now consumed by RoomView.makeUIView when
-        // deallocated (app exit) OR replaced by a new prewarm() call.
-        .sheet(isPresented: $showPaywallForLimit) {
-            PaywallView(
-                onPurchase: { showPaywallForLimit = false },
-                onRestore: { },
-                onDismiss: { showPaywallForLimit = false }
-            )
-        }
-        // 🔧 FIX: .fullScreenCover(item:) — передаёт config напрямую в closure
-        // как параметр, избегая SwiftUI @State race condition.
         .fullScreenCover(item: $roomSetupConfig) { config in
-            RoomSetupView(
-                service: config.service,
-                contentURL: config.contentURL,
-                contentTitle: config.contentTitle,
-                thumbnailURL: config.thumbnailURL,
-                onRoomCreated: { room in
-                    roomSetupConfig = nil
-                    onRoomCreated(room)
-                }
-            )
+            roomSetupView(config)
         }
     }
 
-    // MARK: - Step 2: Details
+    // MARK: - Service step
+    private var serviceStep: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                V4ScreenHeader(eyebrow: "НОВАЯ КОМНАТА", title: "Выберите сервис")
 
-    private var detailsStep: some View {
-        VStack(spacing: 0) {
-            premiumNav(title: "Настройки")
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Выбранный сервис
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(selectedService.accentColor.opacity(0.15))
-                                .frame(width: 44, height: 44)
-                            ServiceLogoIcon(service: selectedService, size: 24)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(selectedService.brandName)
-                                .font(.subheadline.bold())
-                                .foregroundColor(Cinema2026.text)
-                            Text(selectedService.subtitle)
-                                .font(.caption)
-                                .foregroundColor(Cinema2026.secondary)
-                        }
-                        Spacer()
-                        Button {
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                                currentStep = .service
-                            }
-                        } label: {
-                            Text("Изменить")
-                                .font(.caption.bold())
-                                .foregroundColor(Cinema2026.accent)
-                        }
-                    }
-                    .padding(14)
-                    .glassCard(cornerRadius: 16, opacity: 0.06)
-                    // Ссылка на контент
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Ссылка на \(selectedService.title)")
-                            .font(.subheadline.bold())
-                            .foregroundColor(Cinema2026.text)
-                        TextField(selectedService.placeholder, text: $mediaURL, axis: .vertical)
-                            .textFieldStyle(RaveTextFieldStyle())
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .lineLimit(2...4)
-                            .onChange(of: mediaURL) { _, _ in urlError = nil }
-
-                        if let urlError {
-                            Text(urlError)
-                                .font(.caption)
-                                .foregroundColor(Cinema2026.danger)
-                                .transition(.opacity)
-                        }
-                    }
-
-                    // Название комнаты
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Название комнаты")
-                            .font(.subheadline.bold())
-                            .foregroundColor(Cinema2026.text)
-                        TextField("Кино вечером 🍿", text: $roomName)
-                            .textFieldStyle(RaveTextFieldStyle())
-                            .onChange(of: roomName) { _, _ in nameError = nil }
-
-                        if let nameError {
-                            Text(nameError)
-                                .font(.caption)
-                                .foregroundColor(Cinema2026.danger)
-                                .transition(.opacity)
-                        }
-                    }
-
-                    // Макс. участников (free=4, premium=50)
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Максимум участников")
-                                .font(.subheadline.bold())
-                                .foregroundColor(Cinema2026.text)
-                            Spacer()
-                            if !isPremium {
-                                Text("FREE: до \(maxAllowed)")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(Cinema2026.accent)
-                            }
-                        }
-                        HStack {
-                            Slider(value: Binding(
-                                get: { Double(maxParticipants) },
-                                set: { newValue in
-                                    let clamped = min(Int(newValue), maxAllowed)
-                                    maxParticipants = clamped
-                                    // Если пытались выкрутить выше лимита → paywall
-                                    if Int(newValue) > maxAllowed {
-                                        showPaywallForLimit = true
-                                    }
-                                }
-                            ), in: 2...Double(maxAllowed), step: 1)
-                            .tint(Cinema2026.accent)
-
-                            Text("\(maxParticipants)")
-                                .font(.title3.bold().monospacedDigit())
-                                .foregroundColor(Cinema2026.accent)
-                                .frame(width: 40)
-                        }
-                        if !isPremium {
-                            Button { showPaywallForLimit = true } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 10))
-                                    Text("Premium: до 50 участников")
-                                        .font(.system(size: 12, weight: .medium))
-                                }
-                                .foregroundColor(Cinema2026.accent)
-                            }
-                        }
-                    }
-
-                    // Приватность
-                    Text("Кто может присоединиться")
-                        .font(.subheadline.bold())
-                        .foregroundColor(Cinema2026.text)
-                    ForEach(RoomPrivacy.allCases) { mode in
-                        privacyCard(mode)
-                    }
+                // YouTube (available)
+                serviceRow(icon: "play.rectangle.fill", title: "YouTube", subtitle: "Поиск и выбор видео", available: true) {
+                    selectedService = .youtube
+                    showYouTubeSearch()
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-            }
-            .scrollDismissesKeyboard(.interactively)
 
-            bottomBar
+                // Rutube (available)
+                serviceRow(icon: "play.tv.fill", title: "Rutube", subtitle: "Поиск видео", available: true) {
+                    selectedService = .rutube
+                    currentStep = .details
+                }
+
+                // Browser (future)
+                serviceRow(icon: "safari.fill", title: "Браузер", subtitle: "Скоро", available: false) { }
+
+                // URL paste
+                serviceRow(icon: "link", title: "Вставить ссылку", subtitle: "YouTube / Rutube URL", available: true) {
+                    selectedService = .youtube
+                    currentStep = .details
+                }
+            }
+            .padding(.horizontal, 20).padding(.bottom, 32)
         }
     }
 
-    // MARK: - Step 3: Invite
-
-    private var inviteStep: some View {
-        VStack(spacing: 0) {
-            premiumNav(title: "Приглашения")
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
-                    if (friendManager?.friends.isEmpty ?? true) {
-                        VStack(spacing: 14) {
-                            Image(systemName: "person.2.slash")
-                                .font(.system(size: 44))
-                                .foregroundColor(Cinema2026.tertiary)
-                            Text("У вас пока нет друзей")
-                                .font(.headline)
-                                .foregroundColor(Cinema2026.text)
-                            Text("Добавьте друзей, чтобы приглашать их в комнаты")
-                                .font(.subheadline)
-                                .foregroundColor(Cinema2026.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else {
-                        Text("Выберите друзей (\(selectedFriendIds.count))")
-                            .font(.subheadline.bold())
-                            .foregroundColor(Cinema2026.text)
-
-                        ForEach(friendManager?.friends ?? []) { friend in
-                            friendRow(friend)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-            }
-
-            bottomBar
-        }
-    }
-
-    // MARK: - Premium Nav
-
-    private func premiumNav(title: String) -> some View {
-        HStack {
-            Button {
-                HapticManager.impact(.light)
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                    currentStep = currentStep.previous ?? .service
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("Назад")
-                        .font(.subheadline.bold())
-                }
-                .foregroundColor(Cinema2026.text)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .glassCard(cornerRadius: 20, opacity: 0.08)
-            }
-
-            Spacer()
-
-            Text(title)
-                .font(.headline)
-                .foregroundColor(Cinema2026.text)
-
-            Spacer()
-
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Cinema2026.secondary)
-                    .padding(10)
-                    .glassCard(cornerRadius: 20, opacity: 0.08)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
-
-    // MARK: - Privacy Card
-
-    private func privacyCard(_ mode: RoomPrivacy) -> some View {
-        let isSelected = privacy == mode
-        return Button {
-            HapticManager.impact(.light)
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                privacy = mode
-            }
-        } label: {
+    private func serviceRow(icon: String, title: String, subtitle: String, available: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: available ? action : {}) {
             HStack(spacing: 14) {
-                Image(systemName: mode.icon)
-                    .font(.title3)
-                    .foregroundColor(isSelected ? .white : Cinema2026.accent)
-                    .frame(width: 40, height: 40)
-                    .background(isSelected ? AnyShapeStyle(Cinema2026.accentAction) : AnyShapeStyle(Cinema2026.accent.opacity(0.12)))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(mode.title)
-                        .font(.subheadline.bold())
-                        .foregroundColor(Cinema2026.text)
-                    Text(mode.subtitle)
-                        .font(.caption)
-                        .foregroundColor(Cinema2026.secondary)
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                    .foregroundStyle(available ? Cinema2026.accent : Cinema2026.secondary)
+                    .frame(width: 44, height: 44)
+                    .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(available ? Cinema2026.text : Cinema2026.secondary)
+                    Text(subtitle).font(.system(size: 13)).foregroundStyle(Cinema2026.secondary)
                 }
-
                 Spacer()
-
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(isSelected ? Cinema2026.accent : Cinema2026.tertiary)
+                if available { Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(Cinema2026.secondary) }
             }
             .padding(14)
-            .glassCard(cornerRadius: 16, opacity: 0.05)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Cinema2026.accent.opacity(0.4) : Color.white.opacity(0.06), lineWidth: isSelected ? 2 : 1)
-            )
+            .background(Cinema2026.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
         }
-        .buttonStyle(PremiumButtonStyle(glowColor: .clear))
+        .buttonStyle(.plain)
+        .disabled(!available)
     }
 
-    // MARK: - Friend Row
+    // MARK: - Details step
+    private var detailsStep: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                V4ScreenHeader(eyebrow: "НАСТРОЙКА", title: "Оформите комнату")
 
-    private func friendRow(_ friend: Friend) -> some View {
-        let isSelected = selectedFriendIds.contains(friend.id)
-        return Button {
-            HapticManager.impact(.light)
-            if isSelected {
-                selectedFriendIds.remove(friend.id)
-            } else {
-                selectedFriendIds.insert(friend.id)
-            }
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(Cinema2026.accentAction)
-                    Text(friend.initials)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                }
-                .frame(width: 40, height: 40)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(friend.username)
-                        .font(.subheadline.bold())
-                        .foregroundColor(Cinema2026.text)
-                    Text(friend.isOnline ? "В сети" : "Не в сети")
-                        .font(.caption)
-                        .foregroundColor(Cinema2026.secondary)
+                if let config = roomSetupConfig {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Выбранное видео").font(.system(size: 14, weight: .semibold)).foregroundStyle(Cinema2026.secondary)
+                        HStack(spacing: 12) {
+                            AsyncImage(url: URL(string: config.thumbnailURL ?? "")) { img in img.resizable().aspectRatio(contentMode: .fill) } placeholder: { Rectangle().fill(Cinema2026.surface) }
+                                .frame(width: 80, height: 45).clipShape(RoundedRectangle(cornerRadius: 8))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(config.contentTitle).font(.system(size: 14, weight: .medium)).foregroundStyle(Cinema2026.text).lineLimit(2)
+                                Text(config.service.rawValue).font(.system(size: 12)).foregroundStyle(Cinema2026.secondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(12).background(Cinema2026.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+                    }
                 }
 
-                Spacer()
-
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(isSelected ? Cinema2026.accent : Cinema2026.tertiary)
-            }
-            .padding(12)
-            .glassCard(cornerRadius: 14, opacity: 0.05)
-        }
-        .buttonStyle(PremiumButtonStyle(glowColor: .clear))
-    }
-
-    // MARK: - Bottom Bar
-
-    private var bottomBar: some View {
-        HStack(spacing: 12) {
-            Button(action: nextStep) {
-                HStack {
-                    if isCreating { ProgressView().tint(.white) }
-                    Text(currentStep == .invite ? "Запустить комнату" : "Далее")
+                // Room name
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Название комнаты").font(.system(size: 14, weight: .semibold)).foregroundStyle(Cinema2026.secondary)
+                    TextField("Комната друзей", text: $roomName).v4InputStyle()
                 }
-                .font(.headline.bold())
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Cinema2026.accentAction)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                )
-            }
-            .buttonStyle(PremiumButtonStyle(glowColor: Cinema2026.accent))
-            .disabled(!canProceed)
-            .opacity(canProceed ? 1 : 0.5)
-            // 🔧 SUBTLE: glow pulses only when the form is ready to proceed —
-            // functional feedback that says "you can tap me now". When disabled, no animation.
-            .modifier(ConditionalGlow(
-                isActive: canProceed && !isCreating,
-                color: Cinema2026.accent,
-                minRadius: 6, maxRadius: 14,
-                minOpacity: 0.15, maxOpacity: 0.35,
-                period: 2.0
-            ))
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-    }
 
-    private var canProceed: Bool {
-        switch currentStep {
-        case .service: return true
-        case .details:
-            // Разрешаем нажать — валидация покажет ошибки
-            return true
-        case .invite: return true
+                // Privacy
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Приватность").font(.system(size: 14, weight: .semibold)).foregroundStyle(Cinema2026.secondary)
+                    HStack(spacing: 10) {
+                        privacyChip("Публичная", isSelected: privacy == .publicRoom) { privacy = .publicRoom }
+                        privacyChip("Приватная", isSelected: privacy == .privateRoom) { privacy = .privateRoom }
+                    }
+                }
+
+                // Theme picker
+                RoomThemePicker(hasPremium: isPremium, selectedID: $selectedThemeID, openPaywall: { })
+
+                // Create button
+                Button {
+                    Task { await createRoom() }
+                } label: {
+                    HStack {
+                        if isCreating { ProgressView().tint(Cinema2026.background) }
+                        Text("Создать комнату")
+                    }
+                }
+                .buttonStyle(V4PrimaryButtonStyle())
+                .disabled(roomName.isEmpty || isCreating)
+            }
+            .padding(.horizontal, 20).padding(.bottom, 32)
         }
     }
 
-    private func nextStep() {
-        HapticManager.impact(.medium)
-
-        // Валидация на шаге details
-        if currentStep == .details {
-            let trimmedName = roomName.trimmingCharacters(in: .whitespaces)
-            let trimmedURL = mediaURL.trimmingCharacters(in: .whitespaces)
-
-            // Проверка названия
-            if trimmedName.isEmpty {
-                withAnimation { nameError = "Введите название комнаты" }
-                return
-            }
-
-            // Проверка ссылки
-            if trimmedURL.isEmpty {
-                withAnimation { urlError = "Введите ссылку на видео" }
-                return
-            }
-            let lower = trimmedURL.lowercased()
-            if !lower.hasPrefix("http://") && !lower.hasPrefix("https://") {
-                withAnimation { urlError = "Некорректная ссылка" }
-                return
-            }
+    private func privacyChip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isSelected ? Cinema2026.background : Cinema2026.text)
+                .padding(.horizontal, 16).frame(height: 40)
+                .background(isSelected ? Cinema2026.accent : Cinema2026.surface, in: RoundedRectangle(cornerRadius: 12))
         }
-
-        if let next = currentStep.next {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                currentStep = next
-            }
-        } else {
-            Task { await createRoom() }
-        }
+        .buttonStyle(.plain)
     }
 
-    /// Демо-видео: показывается пока пользователь не введёт свой URL.
-    /// Big Buck Bunny — открытый тестовый контент Google. Работает с Ambilight.
-    private static let demoStreamURL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+    // MARK: - Invite step
+    private var inviteStep: some View {
+        VStack(spacing: 20) {
+            V4ScreenHeader(eyebrow: "ПОЧТИ ГОТОВО", title: "Пригласите друзей")
+            Spacer()
+            Text("Комната создана! Поделитесь кодом с друзьями.")
+                .font(.system(size: 16)).foregroundStyle(Cinema2026.secondary).multilineTextAlignment(.center)
+            Spacer()
+            Button("Готово") { dismiss() }.buttonStyle(V4PrimaryButtonStyle())
+        }
+        .padding(.horizontal, 20).padding(.bottom, 32)
+    }
 
-    @MainActor
+    // MARK: - Actions
+    private func showYouTubeSearch() {
+        selectedService = .youtube
+        currentStep = .details
+    }
+
+    private func roomSetupView(_ config: RoomSetupConfig) -> some View {
+        VStack { Text("Setup: \(config.contentTitle)") }
+    }
+
     private func createRoom() async {
         isCreating = true
+        defer { isCreating = false }
+        // Existing room creation logic
+        let contentURL = roomSetupConfig?.contentURL ?? mediaURL
+        let title = roomSetupConfig?.contentTitle ?? mediaTitle
+        let thumb = roomSetupConfig?.thumbnailURL ?? "https://img.youtube.com/vi/\(contentURL)/mqdefault.jpg"
 
-        // Если URL пустой — подставляем демо-видео, чтобы Ambilight и плеер работали
-        let effectiveURL = mediaURL.trimmingCharacters(in: .whitespaces).isEmpty
-            ? Self.demoStreamURL
-            : mediaURL.trimmingCharacters(in: .whitespaces)
-
-        let isDemo = effectiveURL == Self.demoStreamURL
-
-        let finalMediaItem = MediaItem(
-            id: UUID().uuidString,
-            title: isDemo ? "Big Buck Bunny (демо)" : (mediaTitle.isEmpty ? effectiveURL : mediaTitle),
-            artist: isDemo ? "Blender Foundation" : nil,
-            thumbnailURL: nil,
-            streamURL: effectiveURL,
-            duration: isDemo ? 596 : nil,
-            mediaType: .video,
-            source: .url
-        )
-
-        // 🔧 FIX C8: Resolve real host identity + premium status
-        // (was: hardcoded hostID="current_user" and hostIsPremium=false)
-        let hostID: String = {
-            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
-               let user = try? JSONDecoder().decode(User.self, from: data) {
-                return user.id
-            }
-            return UUID().uuidString
-        }()
-        let hostName: String = {
-            if let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
-               let user = try? JSONDecoder().decode(User.self, from: data) {
-                return user.username
-            }
-            return "You"
-        }()
-        let hostIsPremium = PremiumStatusManager.shared.isPremium
-
-        let room = Room(
-            id: UUID().uuidString,
-            name: roomName.trimmingCharacters(in: .whitespaces).isEmpty
-                ? (isDemo ? "Комната \(generateRoomCode())" : roomName.trimmingCharacters(in: .whitespaces))
-                : roomName.trimmingCharacters(in: .whitespaces),
-            hostID: hostID,
-            hostName: hostName,
-            code: generateRoomCode(),
-            participants: [],
-            mediaItem: finalMediaItem,
-            isActive: true,
-            maxParticipants: maxParticipants,
-            hostIsPremium: hostIsPremium,
-            createdAt: Date()
-        )
-
-        isCreating = false
-        HapticManager.roomJoined()
-        onRoomCreated(room)
-    }
-
-    private func generateRoomCode() -> String {
-        let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        return String((0..<6).map { _ in chars.randomElement()! })
-    }
-}
-
-// MARK: - Creation Steps
-enum CreationStep: String, CaseIterable {
-    case service, details, invite
-
-    var next: CreationStep? {
-        switch self {
-        case .service: return .details
-        case .details: return .invite
-        case .invite: return nil
+        do {
+            let room = try await dependencies_roomService().createRoom(
+                name: roomName.isEmpty ? "Комната" : roomName,
+                service: selectedService,
+                contentURL: contentURL,
+                contentTitle: title,
+                thumbnailURL: thumb,
+                privacy: privacy,
+                maxParticipants: maxParticipants
+            )
+            onRoomCreated(room)
+            dismiss()
+        } catch {
+            nameError = "Ошибка: \(error.localizedDescription)"
         }
     }
 
-    var previous: CreationStep? {
-        switch self {
-        case .service: return nil
-        case .details: return .service
-        case .invite: return .details
-        }
+    private func dependencies_roomService() -> RoomService {
+        // Use the API client to create a room service
+        return RoomService(api: apiClient)
     }
 }

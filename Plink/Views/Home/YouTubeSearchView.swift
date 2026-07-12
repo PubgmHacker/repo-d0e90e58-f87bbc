@@ -60,9 +60,24 @@ struct YouTubeVideoSummary: Decodable, Identifiable, Sendable {
     var resolvedLiveBroadcastContent: String { liveBroadcastContent ?? "none" }
     var resolvedEmbeddable: Bool? { embeddable }
 
-    /// Brain Phase 3: a row is disabled (unclickable) when the backend
-    /// explicitly reports embeddable=false. nil means unknown — allow tap.
-    var isEmbeddable: Bool { embeddable ?? true }
+    // Brain Revision 3: row states based on embeddable field.
+    //   - true → selectable (green checkmark when selected)
+    //   - false → disabled, "Нельзя встроить" label, lock icon, 50% opacity
+    //   - nil → selectable but with "Проверим при запуске" hint (amber dot)
+    var embeddableState: EmbeddableState {
+        if let embeddable {
+            return embeddable ? .embeddable : .notEmbeddable
+        }
+        return .unknown
+    }
+
+    enum EmbeddableState {
+        case embeddable      // embeddable == true  → selectable, no badge
+        case notEmbeddable   // embeddable == false → disabled, "Нельзя встроить"
+        case unknown         // embeddable == nil   → selectable, "Проверим при запуске"
+    }
+
+    var isEmbeddable: Bool { embeddable != false }
 
     var isLive: Bool { resolvedLiveBroadcastContent == "live" }
 
@@ -450,11 +465,19 @@ struct YouTubeResultRow: View {
                     .foregroundStyle(Cinema2026.secondary)
                     .lineLimit(1)
 
-                // Brain Phase 3: show "Нельзя встроить" when embeddable == false.
-                if isDisabled {
+                // Brain Revision 3: row state badges.
+                switch item.embeddableState {
+                case .notEmbeddable:
                     Text("Нельзя встроить")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Cinema2026.amber)
+                case .unknown:
+                    Text("Проверим при запуске")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Cinema2026.secondary)
+                case .embeddable:
+                    // No badge — fully embeddable, no special hint.
+                    EmptyView()
                 }
             }
 
@@ -465,6 +488,11 @@ struct YouTubeResultRow: View {
                     .foregroundStyle(Cinema2026.accent)
             } else if isDisabled {
                 Image(systemName: "lock.fill")
+                    .foregroundStyle(Cinema2026.secondary)
+                    .font(.system(size: 14))
+            } else if item.embeddableState == .unknown {
+                // Subtle question mark for unknown embeddability.
+                Image(systemName: "questionmark.circle")
                     .foregroundStyle(Cinema2026.secondary)
                     .font(.system(size: 14))
             }

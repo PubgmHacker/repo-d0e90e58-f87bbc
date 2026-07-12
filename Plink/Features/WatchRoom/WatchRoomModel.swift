@@ -134,13 +134,22 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // MARK: - Lifecycle
 
-    /// Brain Phase 6: connect() is idempotent.
-    /// Calling it again while already connected (or while connecting) is a no-op.
-    /// This prevents accidental session recreation if SwiftUI re-fires .task
-    /// during layout switches or background/foreground transitions.
+    /// Brain Revision 3 Step 5: connect() is idempotent AND does NOT set .connected.
+    ///
+    /// State machine:
+    ///   idle -> connecting (set here) -> joining/synchronizing (set by realtime callbacks)
+    ///        -> connected (set ONLY by realtime session-ready/snapshot handshake)
+    ///
+    /// connect() sets .connecting and starts the realtime client. The realtime
+    /// client's session-ready callback (handleRealtimeSessionReady) promotes
+    /// to .connected. This prevents falsely advertising "connected" before the
+    /// server has confirmed the session.
     public func connect() async {
         // Idempotent guard — already connected or in-flight.
-        if connectionState == .connecting || connectionState == .connected {
+        if connectionState == .connecting
+            || connectionState == .connected
+            || connectionState == .joining
+            || connectionState == .synchronizing {
             return
         }
         connectionState = .connecting
@@ -170,12 +179,33 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 return
             }
         }
+
+        // Brain Revision 3: set .joining before realtime connect.
+        // Realtime session-ready callback will promote to .connected.
+        connectionState = .joining
         realtimeClient.connect(roomId: _roomId)
 
         // PATCH 14: start polling danmaku engine for snapshot.
         startDanmakuPolling()
 
+        // NOTE: do NOT set .connected here.
+        // handleRealtimeSessionReady() (called by RealtimeClient on session-ready
+        // or snapshot handshake) is the only place that promotes to .connected.
+    }
+
+    /// Brain Revision 3 Step 5: called by RealtimeClient when session-ready /
+    /// snapshot handshake completes. This is the ONLY place .connected is set.
+    func handleRealtimeSessionReady() {
+        guard connectionState == .connecting || connectionState == .joining || connectionState == .synchronizing else {
+            return
+        }
         connectionState = .connected
+    }
+
+    /// Brain Revision 3 Step 5: called by RealtimeClient during sync handshake.
+    func handleRealtimeSynchronizing() {
+        guard connectionState == .connecting || connectionState == .joining else { return }
+        connectionState = .synchronizing
     }
 
     /// Brain Phase 6: disconnect() is idempotent.
@@ -485,6 +515,25 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // P0-30: roomId protocol conformance — protocol requires String?
     // but our roomId is non-optional String. Return wrapped optional.
     public var roomId: String? { _roomId }
+
+    /// Brain Revision 3 Step 5: stable id for PlayerStage identity.
+    public var roomID: String? { _roomId }
+
+    /// Brain Revision 3 Step 8: thumbnail URL for artwork-driven palette.
+    /// For YouTube content, returns the standard thumbnail URL.
+    /// For other sources, returns nil (uses Cinema2026 default palette).
+    public var mediaThumbnailURL: String? {
+        guard let source = mediaSource else { return nil }
+        switch source {
+        case .youtube(let videoId):
+            return "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg"
+        case .rutube(let videoId):
+            // Rutube thumbnails are at rutube.ru/thumbs/<id>/
+            return "https://pic.rutube.ru/video/\(videoId)/"
+        case .hls, .mp4, .external:
+            return nil
+        }
+    }
 
     public var lastEpoch: Int64 { syncController.lastEpoch }
     public var lastSeq: Int64 { syncController.lastSeq }

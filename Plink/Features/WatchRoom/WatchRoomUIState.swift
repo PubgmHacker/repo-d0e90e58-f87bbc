@@ -29,6 +29,10 @@ struct WatchRoomUIState: Equatable {
     var roomTitle: String = ""
     var hostDisplayName: String = ""
     var presence: [PresencePill] = []
+
+    // Brain Revision 3 Step 5: variant drives which chrome surrounds the
+    // single PlayerStage. Computed in WatchRoomScreen from size classes.
+    var variant: WatchRoomLayoutState.Variant = .portrait
 }
 
 // MARK: - Toast

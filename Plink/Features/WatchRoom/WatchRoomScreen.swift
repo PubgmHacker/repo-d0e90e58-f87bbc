@@ -1,22 +1,18 @@
-// Plink/Features/WatchRoom/WatchRoomScreen.swift — PATCH 02 + 04
+// Plink/Features/WatchRoom/WatchRoomScreen.swift — Brain Revision 3 Step 5
 //
-// Commit Group 2: full PATCH 02 view hierarchy split + PATCH 04 stable
-// rotation.
+// Single structural PlayerStage via WatchRoomRootLayout.
 //
-// Layout variant is derived purely from size classes — no
-// OrientationCoordinator forcing, no .onAppear orientation lock. System
-// rotation drives layout; the user's fullscreen action is a separate
-// presentation, not a forced interface rotation.
+// Brain: "Identity is scoped by structural path. Runtime evidence is required,
+// and the safer architecture is one player surface outside the portrait/landscape switch."
 //
-// Player identity stability (PATCH 04):
-//   - PlaybackCoordinator owns the AVPlayer; EmbeddedPlaybackController
-//     owns the WKWebView. SwiftUI may rebuild PlayerStage's view tree on
-//     layout switch, but the underlying player is NEVER recreated.
-//   - PlayerStage uses .id("plink.player.stage") so SwiftUI's diff treats
-//     it as the same view across layout switches where possible.
-//   - prepare() is only called once by the coordinator, never by the view.
+// WatchRoomRootLayout places PlayerStage at the ZStack root with .id(model.roomID).
+// Portrait/Landscape/Tablet chrome overlays it; the player is never recreated.
 //
-// Animation: .plinkLayout (0.42s smooth spring, damping 0.92).
+// Connection state machine (Brain Revision 3 Step 5):
+//   idle -> connecting -> joining -> synchronizing -> connected
+// Only realtime callbacks move between these states. connect() no longer
+// sets .connected unconditionally — it sets .connecting and waits for
+// realtime session-ready/snapshot handshake to promote to .connected.
 
 import SwiftUI
 
@@ -26,7 +22,7 @@ struct WatchRoomScreen: View {
     @Environment(\.horizontalSizeClass) private var widthClass
     @Environment(\.verticalSizeClass) private var heightClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dismiss) private var dismiss  // PATCH 26: dismiss fullScreenCover on leave
+    @Environment(\.dismiss) private var dismiss
 
     @State private var ui = WatchRoomUIState()
     @State private var controlsHideTask: Task<Void, Never>?
@@ -39,21 +35,12 @@ struct WatchRoomScreen: View {
 
     var body: some View {
         ZStack {
-            // PATCH 14: ambient state now comes from model (driven by
-            // AmbientVideoSampler). ui.ambient is no longer used.
             Cinema2026.background.ignoresSafeArea()
 
-            switch layoutVariant {
-            case .portrait:
-                PortraitWatchLayout(model: model, ui: $ui)
-                    .transition(.opacity)
-            case .landscape:
-                LandscapeWatchLayout(model: model, ui: $ui)
-                    .transition(.opacity)
-            case .tablet:
-                TabletWatchLayout(model: model, ui: $ui)
-                    .transition(.opacity)
-            }
+            // Brain Revision 3: single structural PlayerStage outside the switch.
+            // ui.variant is updated via .onChange below; the player's .id stays
+            // stable across layout switches.
+            WatchRoomRootLayout(model: model, ui: $ui)
 
             WatchReactionLayer(events: model.reactions, reduceMotion: reduceMotion)
                 .allowsHitTesting(false)
@@ -77,8 +64,11 @@ struct WatchRoomScreen: View {
         }
         .background(Cinema2026.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .animation(.plinkLayout, value: layoutVariant)
         .onChange(of: layoutVariant) { _, newVariant in
+            // Brain Revision 3: update ui.variant (drives chrome switch).
+            // PlayerStage is in WatchRoomRootLayout and is NOT recreated.
+            ui.variant = newVariant
+
             // PATCH 14: update danmaku lane count on rotation.
             // Portrait = 5 lanes, landscape = 7 lanes, tablet = 5 lanes.
             let laneCount: Int
@@ -89,11 +79,15 @@ struct WatchRoomScreen: View {
             }
             model.updateDanmakuLaneCount(laneCount)
         }
+        .onAppear {
+            // Initialize ui.variant on first appearance.
+            ui.variant = layoutVariant
+        }
         .task { await model.connect() }
         .onDisappear {
-            // Brain Phase 6: do NOT disconnect here — onDisappear fires on
+            // Brain Revision 3: do NOT disconnect here — onDisappear fires on
             // rotation when SwiftUI rebuilds the view tree. The model's
-            // connect()/disconnect() are now idempotent, so rotation is safe.
+            // connect()/disconnect() are idempotent, so rotation is safe.
             // Disconnect only on explicit leaveRoom (X button) — see
             // onChange(connectionState == .idle) below which dismisses
             // the fullScreenCover, and WatchRoomModel.disconnect() is

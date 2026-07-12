@@ -13,6 +13,7 @@ struct PlinkPhoneTabShell: View {
     @State private var navigateToRoom: Room?
     @State private var homeViewModel: HomeViewModel?
     @State private var trendingVideos: [YouTubeVideoSummary] = []
+    @State private var plinkPopular: [PlinkPopularItem] = []
 
     var body: some View {
         TabView(selection: $selection) {
@@ -119,7 +120,7 @@ struct PlinkPhoneTabShell: View {
                     )
                 }
 
-                // Trending — ALWAYS visible (all services label)
+                // Trending — ALWAYS visible (YouTube only, honest label)
                 if !trendingVideos.isEmpty {
                     TrendingRail(
                         title: "Популярное на YouTube",
@@ -138,11 +139,37 @@ struct PlinkPhoneTabShell: View {
                     )
                 }
 
-                // Secondary trending (different items)
+                // Brain Revision 3 Step 6: "Популярное в Plink" rail.
+                // First-party popularity from /api/discovery/popular.
+                // Hide the rail entirely if endpoint returns empty (do NOT fill with YouTube).
+                if !plinkPopular.isEmpty {
+                    PlinkPopularRail(
+                        title: "Популярное в Plink",
+                        items: plinkPopular,
+                        onSelect: { item in
+                            // Only allow tap if directCreateRoomDraft is true (YouTube content).
+                            guard item.directCreateRoomDraft else { return }
+                            createIntent = .selectedContent(
+                                SelectedContentDraft(
+                                    id: item.id,
+                                    service: .youtube,
+                                    contentURL: item.contentURL,
+                                    title: item.title,
+                                    thumbnailURL: item.thumbnailURL
+                                )
+                            )
+                        }
+                    )
+                }
+
+                // Brain Revision 3 Step 6: removed shuffled() — was causing unstable UI.
+                // Deterministic order from backend ranking (already sorted by uniqueViewers desc).
+                // Show "Рекомендуем" only when we have 7+ trending items (top 6 in primary rail,
+                // items 7-12 in secondary rail — deterministic, not random).
                 if trendingVideos.count > 6 {
                     TrendingRail(
                         title: "Рекомендуем",
-                        videos: Array(trendingVideos.shuffled().prefix(10)),
+                        videos: Array(trendingVideos.prefix(12).suffix(6)),
                         onSelect: { video in
                             createIntent = .selectedContent(
                                 SelectedContentDraft(
@@ -172,6 +199,9 @@ struct PlinkPhoneTabShell: View {
             }
             if trendingVideos.isEmpty {
                 await loadTrending()
+            }
+            if plinkPopular.isEmpty {
+                await loadPlinkPopular()
             }
         }
     }
@@ -240,6 +270,28 @@ struct PlinkPhoneTabShell: View {
             let resp = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
             trendingVideos = resp.results
         } catch {}
+    }
+
+    /// Brain Revision 3 Step 6: load first-party Popular in Plink from
+    /// /api/discovery/popular. If endpoint fails or returns empty, the rail
+    /// stays hidden (plinkPopular remains []).
+    private func loadPlinkPopular() async {
+        let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app"
+        guard let url = URL(string: "\(apiBaseURL)/api/discovery/popular?window=24h&limit=20") else { return }
+        do {
+            var request = URLRequest(url: url)
+            // Brain Revision 3: /api/discovery/popular may require auth —
+            // attach Bearer token if available. If 401, rail stays hidden.
+            if let token = KeychainHelper.read(for: "rave_auth_token") {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            let resp = try JSONDecoder().decode(PlinkPopularResponse.self, from: data)
+            plinkPopular = resp.results
+        } catch {
+            // Silent failure — rail just stays hidden.
+        }
     }
 
     // MARK: - Watch Room
@@ -387,5 +439,107 @@ struct CompactRoomListRow: View {
                 .foregroundStyle(Cinema2026.secondary)
         }
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - Plink Popular (first-party discovery)
+
+/// Brain Revision 3 Step 6: first-party popularity item from /api/discovery/popular.
+struct PlinkPopularItem: Decodable, Identifiable, Sendable, Hashable {
+    let contentURL: String
+    let title: String
+    let thumbnailURL: String?
+    let uniqueViewers: Int
+    let uniqueRooms: Int
+    let recentStarts: Int
+    let directCreateRoomDraft: Bool
+
+    /// Synthesize a stable id from contentURL.
+    var id: String { contentURL }
+}
+
+struct PlinkPopularResponse: Decodable, Sendable {
+    let results: [PlinkPopularItem]
+}
+
+/// Brain Revision 3 Step 6: rail for "Популярное в Plink" — first-party
+/// popularity from public room activity. Hidden when empty (do NOT fill
+/// with YouTube — keep the all-service label honest).
+struct PlinkPopularRail: View {
+    let title: String
+    let items: [PlinkPopularItem]
+    let onSelect: (PlinkPopularItem) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Cinema2026.amber)
+                Text(title)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Cinema2026.text)
+            }
+            .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 10) {
+                    ForEach(items) { item in
+                        Button {
+                            onSelect(item)
+                        } label: {
+                            PlinkPopularCard(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!item.directCreateRoomDraft)
+                    }
+                }
+                .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+                .padding(.bottom, 4)
+            }
+        }
+    }
+}
+
+struct PlinkPopularCard: View {
+    let item: PlinkPopularItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .topLeading) {
+                AsyncImage(url: URL(string: item.thumbnailURL ?? "")) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Rectangle().fill(Cinema2026.surface)
+                }
+                .frame(width: CompactPhoneMetrics.landscapeCardWidth, height: CompactPhoneMetrics.landscapeCardHeight)
+                .clipShape(RoundedRectangle(cornerRadius: CompactPhoneMetrics.landscapeRadius))
+
+                // Viewer count badge
+                HStack(spacing: 3) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 8, weight: .bold))
+                    Text("\(item.uniqueViewers)")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(.black.opacity(0.75), in: Capsule())
+                .foregroundStyle(.white)
+                .padding(6)
+            }
+
+            Text(item.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Cinema2026.text)
+                .lineLimit(1)
+                .frame(width: CompactPhoneMetrics.landscapeCardWidth, alignment: .leading)
+
+            Text("\(item.uniqueRooms) комнат · \(item.recentStarts) новых")
+                .font(.system(size: 10))
+                .foregroundStyle(Cinema2026.secondary)
+                .lineLimit(1)
+                .frame(width: CompactPhoneMetrics.landscapeCardWidth, alignment: .leading)
+        }
     }
 }

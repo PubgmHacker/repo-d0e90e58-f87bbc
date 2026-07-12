@@ -12,7 +12,7 @@
 //   - Tap on free emoji → onPick(emoji)
 //   - Tap on premium emoji + hasPremium → onPick(emoji)
 //   - Tap on premium emoji + !hasPremium → onPremiumUpsell()
-//   - Background: PlinkRave.surface.opacity(0.95) with .ultraThinMaterial
+//   - Background: Cinema2026.surface.opacity(0.95) with .ultraThinMaterial
 //     overlay for depth
 //   - Corner radius: 18pt
 //   - Max height: 280pt (keeps popover compact on portrait)
@@ -45,7 +45,7 @@ struct ReactionPickerView: View {
             HStack {
                 Text("Reactions")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(PlinkRave.text)
+                    .foregroundStyle(Cinema2026.text)
                 Spacer()
                 if !hasPremium {
                     Button(action: onPremiumUpsell) {
@@ -55,10 +55,10 @@ struct ReactionPickerView: View {
                             Text("Plink+")
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        .foregroundStyle(PlinkRave.gold)
+                        .foregroundStyle(Cinema2026.amber)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(PlinkRave.gold.opacity(0.12), in: Capsule())
+                        .background(Cinema2026.amber.opacity(0.12), in: Capsule())
                     }
                     .accessibilityLabel("Unlock Plink+ reactions")
                 }
@@ -78,10 +78,10 @@ struct ReactionPickerView: View {
             }
         }
         .frame(maxHeight: 280)
-        .background(PlinkRave.surface.opacity(0.95))
+        .background(Cinema2026.surface.opacity(0.95))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(PlinkRave.divider.opacity(0.4), lineWidth: 0.5)
+                .stroke(Cinema2026.divider.opacity(0.4), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
@@ -108,9 +108,9 @@ struct ReactionPickerView: View {
                 if isPremium {
                     Image(systemName: "star.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(PlinkRave.gold)
+                        .foregroundStyle(Cinema2026.amber)
                         .padding(3)
-                        .background(PlinkRave.void, in: Circle())
+                        .background(Cinema2026.background, in: Circle())
                         .offset(x: 2, y: 2)
                 }
             }
@@ -138,6 +138,6 @@ struct ReactionPickerView: View {
         onPremiumUpsell: {}
     )
     .padding()
-    .background(PlinkRave.void)
+    .background(Cinema2026.background)
 }
 #endif

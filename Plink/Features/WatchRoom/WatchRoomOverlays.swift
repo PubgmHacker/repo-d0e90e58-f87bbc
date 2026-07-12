@@ -29,7 +29,7 @@ struct RoomToastView: View {
                 .foregroundStyle(colorForKind)
             Text(toast.text)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(PlinkRave.text)
+                .foregroundStyle(Cinema2026.text)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -41,10 +41,10 @@ struct RoomToastView: View {
 
     private var colorForKind: Color {
         switch toast.kind {
-        case .info: return PlinkRave.cyan
-        case .success: return PlinkRave.success
-        case .warning: return PlinkRave.warning
-        case .error: return PlinkRave.danger
+        case .info: return Cinema2026.secondary
+        case .success: return Cinema2026.accent
+        case .warning: return Cinema2026.amber
+        case .error: return Cinema2026.danger
         }
     }
 
@@ -69,7 +69,7 @@ struct WatchChatSheet: View {
             WatchChatView(model: model)
             WatchChatComposer(model: model)
         }
-        .background(PlinkRave.void)
+        .background(Cinema2026.background)
     }
 }
 
@@ -91,7 +91,7 @@ struct LandscapeChatDrawer: View {
         .background(.ultraThinMaterial)
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(PlinkRave.divider.opacity(0.5))
+                .fill(Cinema2026.divider.opacity(0.5))
                 .frame(width: 0.5)
         }
         .shadow(color: .black.opacity(0.5), radius: 16, x: -4, y: 0)
@@ -107,7 +107,7 @@ struct WatchChatHeader: View {
         HStack(spacing: 8) {
             Text("Chat")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(PlinkRave.text)
+                .foregroundStyle(Cinema2026.text)
 
             Spacer()
 
@@ -117,28 +117,28 @@ struct WatchChatHeader: View {
                 Text("\(model.participants.count)")
                     .font(.system(size: 12, weight: .semibold))
             }
-            .foregroundStyle(PlinkRave.secondaryText)
+            .foregroundStyle(Cinema2026.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(PlinkRave.raised.opacity(0.6), in: Capsule())
+            .background(Cinema2026.raised.opacity(0.6), in: Capsule())
 
             if closable {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(PlinkRave.secondaryText)
+                        .foregroundStyle(Cinema2026.secondary)
                         .frame(width: 28, height: 28)
-                        .background(PlinkRave.raised, in: Circle())
+                        .background(Cinema2026.raised, in: Circle())
                 }
                 .accessibilityLabel("Close chat")
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(PlinkRave.surface.opacity(0.6))
+        .background(Cinema2026.surface.opacity(0.6))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(PlinkRave.divider.opacity(0.35))
+                .fill(Cinema2026.divider.opacity(0.35))
                 .frame(height: 0.5)
         }
     }
@@ -165,15 +165,15 @@ struct ChatAvatar: View {
     }
 
     private var avatarBackground: Color {
-        if message.isAdmin { return PlinkRave.gold.opacity(0.18) }
-        if message.isPremium { return PlinkRave.hotPink.opacity(0.18) }
-        return PlinkRave.raised
+        if message.isAdmin { return Cinema2026.amber.opacity(0.18) }
+        if message.isPremium { return Cinema2026.danger.opacity(0.18) }
+        return Cinema2026.raised
     }
 
     private var avatarForeground: Color {
-        if message.isAdmin { return PlinkRave.gold }
-        if message.isPremium { return PlinkRave.hotPink }
-        return PlinkRave.text
+        if message.isAdmin { return Cinema2026.amber }
+        if message.isPremium { return Cinema2026.danger }
+        return Cinema2026.text
     }
 }
 
@@ -186,12 +186,12 @@ struct ParticipantAvatar: View {
 
     var body: some View {
         Circle()
-            .fill(PlinkRave.raised)
+            .fill(Cinema2026.raised)
             .frame(width: 36, height: 36)
             .overlay(
                 Text(String(participant.username.prefix(1)).uppercased())
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PlinkRave.text)
+                    .foregroundStyle(Cinema2026.text)
             )
             .overlay(
                 Circle()
@@ -201,8 +201,8 @@ struct ParticipantAvatar: View {
                 if isHost {
                     Image(systemName: "crown.fill")
                         .font(.system(size: 8))
-                        .foregroundStyle(PlinkRave.gold)
-                        .background(PlinkRave.void, in: Circle())
+                        .foregroundStyle(Cinema2026.amber)
+                        .background(Cinema2026.background, in: Circle())
                         .frame(width: 14, height: 14)
                         .offset(x: 1, y: 1)
                 }
@@ -210,9 +210,9 @@ struct ParticipantAvatar: View {
     }
 
     private var ringColor: Color {
-        if isSpeaking { return PlinkRave.success }
-        if isHost { return PlinkRave.gold.opacity(0.6) }
-        return PlinkRave.success.opacity(0.18)
+        if isSpeaking { return Cinema2026.accent }
+        if isHost { return Cinema2026.amber.opacity(0.6) }
+        return Cinema2026.accent.opacity(0.18)
     }
 }
 
@@ -295,10 +295,10 @@ private struct DanmakuItemView: View {
 
             Text(placement.text)
                 .font(.system(size: placement.isPremium ? 17 : 14, weight: .medium))
-                .foregroundStyle(placement.isAdmin ? PlinkRave.gold : placement.color)
+                .foregroundStyle(placement.isAdmin ? Cinema2026.amber : placement.color)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
-                .background(PlinkRave.void.opacity(0.55), in: Capsule())
+                .background(Cinema2026.background.opacity(0.55), in: Capsule())
                 .overlay(Capsule().stroke(.white.opacity(0.05), lineWidth: 0.5))
                 .offset(x: x)
         }
@@ -337,15 +337,15 @@ struct VoiceActionButton: View {
     }
     private var iconColor: Color {
         switch state {
-        case .off: return PlinkRave.danger
-        case .on: return PlinkRave.text
-        case .talking: return PlinkRave.success
-        case .pushToTalk: return PlinkRave.warning
+        case .off: return Cinema2026.danger
+        case .on: return Cinema2026.text
+        case .talking: return Cinema2026.accent
+        case .pushToTalk: return Cinema2026.amber
         }
     }
     private var bgColor: Color {
         switch state {
-        case .talking: return PlinkRave.success.opacity(0.16)
+        case .talking: return Cinema2026.accent.opacity(0.16)
         default: return .clear
         }
     }
@@ -367,7 +367,7 @@ struct CameraActionButton: View {
         Button(action: action) {
             Image(systemName: iconName)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(state == .on ? PlinkRave.success : PlinkRave.secondaryText)
+                .foregroundStyle(state == .on ? Cinema2026.accent : Cinema2026.secondary)
                 .frame(width: 38, height: 38)
                 .background(.clear, in: Circle())
         }
@@ -392,15 +392,15 @@ struct RutubeFallbackToast: View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(PlinkRave.warning)
+                .foregroundStyle(Cinema2026.amber)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Sync unavailable")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PlinkRave.text)
+                    .foregroundStyle(Cinema2026.text)
                 Text("Open in Rutube to watch")
                     .font(.system(size: 11))
-                    .foregroundStyle(PlinkRave.secondaryText)
+                    .foregroundStyle(Cinema2026.secondary)
             }
 
             Spacer()
@@ -411,7 +411,7 @@ struct RutubeFallbackToast: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(PlinkRave.primaryAction, in: Capsule())
+                    .background(Cinema2026.accentAction, in: Capsule())
             }
             .accessibilityLabel("Open in Rutube")
         }
@@ -420,7 +420,7 @@ struct RutubeFallbackToast: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(PlinkRave.warning.opacity(0.3), lineWidth: 0.5)
+                .stroke(Cinema2026.amber.opacity(0.3), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
         .padding(.horizontal, 16)

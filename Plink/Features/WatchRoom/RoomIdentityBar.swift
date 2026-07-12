@@ -19,13 +19,13 @@ struct RoomIdentityBar: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.roomId ?? "Plink Room")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(PlinkRave.text)
+                    .foregroundStyle(Cinema2026.text)
                     .lineLimit(1)
 
                 if let host = model.participants.first(where: { $0.userId == model.hostId }) {
                     Text("Hosted by \(host.username)")
                         .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(PlinkRave.secondaryText)
+                        .foregroundStyle(Cinema2026.secondary)
                         .lineLimit(1)
                 }
             }
@@ -35,18 +35,18 @@ struct RoomIdentityBar: View {
             if model.isHost {
                 Text("HOST")
                     .font(.system(size: 10, weight: .heavy))
-                    .foregroundStyle(PlinkRave.gold)
+                    .foregroundStyle(Cinema2026.amber)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(PlinkRave.gold.opacity(0.14), in: Capsule())
-                    .overlay(Capsule().stroke(PlinkRave.gold.opacity(0.3), lineWidth: 0.5))
+                    .background(Cinema2026.amber.opacity(0.14), in: Capsule())
+                    .overlay(Capsule().stroke(Cinema2026.amber.opacity(0.3), lineWidth: 0.5))
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(PlinkRave.divider.opacity(0.35))
+                .fill(Cinema2026.divider.opacity(0.35))
                 .frame(height: 0.5)
         }
     }

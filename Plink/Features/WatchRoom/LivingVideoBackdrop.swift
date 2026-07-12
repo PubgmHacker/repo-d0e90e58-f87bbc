@@ -18,7 +18,7 @@ struct LivingVideoBackdrop: View {
     let player: AVPlayer?
     let fallbackColors: [Color]
 
-    init(player: AVPlayer?, fallbackColors: [Color] = [PlinkRave.primary, PlinkRave.surface]) {
+    init(player: AVPlayer?, fallbackColors: [Color] = [Cinema2026.accent, Cinema2026.surface]) {
         self.player = player
         self.fallbackColors = fallbackColors
     }
@@ -81,7 +81,7 @@ final class LivingVideoFrameUIView: UIView {
     }
 
     private func setupView() {
-        backgroundColor = PlinkRave.void.uiColor
+        backgroundColor = Cinema2026.background.uiColor
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
         addSubview(imageView)

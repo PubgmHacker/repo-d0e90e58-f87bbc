@@ -27,12 +27,12 @@ struct WatchChatBubble: View {
                         if message.isAdmin {
                             Image(systemName: "shield.fill")
                                 .font(.system(size: 9))
-                                .foregroundStyle(PlinkRave.gold)
+                                .foregroundStyle(Cinema2026.amber)
                         }
                         if message.isPremium {
                             Image(systemName: "star.fill")
                                 .font(.system(size: 9))
-                                .foregroundStyle(PlinkRave.hotPink)
+                                .foregroundStyle(Cinema2026.danger)
                         }
                         Text(message.senderName)
                             .font(.system(size: 12, weight: .semibold))
@@ -42,7 +42,7 @@ struct WatchChatBubble: View {
 
                 Text(message.text)
                     .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(isOwn ? .white : PlinkRave.text)
+                    .foregroundStyle(isOwn ? .white : Cinema2026.text)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 9)
                     .background(bubbleBackground)
@@ -52,7 +52,7 @@ struct WatchChatBubble: View {
                 if message.isPending {
                     Text("Sending…")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(PlinkRave.secondaryText)
+                        .foregroundStyle(Cinema2026.secondary)
                 } else if message.isFailed {
                     Button(action: onRetry) {
                         HStack(spacing: 3) {
@@ -60,7 +60,7 @@ struct WatchChatBubble: View {
                             Text("Retry")
                         }
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(PlinkRave.danger)
+                        .foregroundStyle(Cinema2026.danger)
                     }
                 }
             }
@@ -73,16 +73,16 @@ struct WatchChatBubble: View {
 
     @ViewBuilder private var bubbleBackground: some View {
         if isOwn {
-            PlinkRave.outgoingBubble
+            Cinema2026.accent
         } else {
-            PlinkRave.surface.opacity(0.92)
+            Cinema2026.surface.opacity(0.92)
         }
     }
 
     private var roleColor: Color {
-        if message.isAdmin { return PlinkRave.gold }
-        if message.isPremium { return PlinkRave.hotPink }
-        return PlinkRave.secondaryText
+        if message.isAdmin { return Cinema2026.amber }
+        if message.isPremium { return Cinema2026.danger }
+        return Cinema2026.secondary
     }
 }
 

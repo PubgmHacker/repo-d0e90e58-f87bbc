@@ -42,9 +42,9 @@ struct WatchChatComposer: View {
                 } label: {
                     Image(systemName: showEmojiPanel ? "keyboard" : "face.smiling")
                         .font(.system(size: 17))
-                        .foregroundStyle(PlinkRave.secondaryText)
+                        .foregroundStyle(Cinema2026.secondary)
                         .frame(width: 40, height: 40)
-                        .background(PlinkRave.raised, in: Circle())
+                        .background(Cinema2026.raised, in: Circle())
                         .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
                 }
                 .accessibilityLabel("Emoji")
@@ -53,15 +53,15 @@ struct WatchChatComposer: View {
                     TextField("Message…", text: $state.text, axis: .vertical)
                         .lineLimit(1...4)
                         .font(.system(size: 15))
-                        .foregroundStyle(PlinkRave.text)
-                        .tint(PlinkRave.magenta)
+                        .foregroundStyle(Cinema2026.text)
+                        .tint(Cinema2026.accent)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(PlinkRave.raised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .background(Cinema2026.raised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 22, style: .continuous)
                                 .stroke(
-                                    state.isOverLength ? PlinkRave.danger : .white.opacity(0.05),
+                                    state.isOverLength ? Cinema2026.danger : .white.opacity(0.05),
                                     lineWidth: state.isOverLength ? 1 : 0.5
                                 )
                         )
@@ -73,7 +73,7 @@ struct WatchChatComposer: View {
                             Text("\(state.trimmedText.count)/\(ChatComposerState.maxLength) — too long")
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundStyle(PlinkRave.danger)
+                        .foregroundStyle(Cinema2026.danger)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 4)
                     }
@@ -91,8 +91,8 @@ struct WatchChatComposer: View {
                         .frame(width: 40, height: 40)
                         .background(
                             canSend
-                                ? AnyShapeStyle(PlinkRave.primaryAction)
-                                : AnyShapeStyle(PlinkRave.raised),
+                                ? AnyShapeStyle(Cinema2026.accentAction)
+                                : AnyShapeStyle(Cinema2026.raised),
                             in: Circle()
                         )
                         .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
@@ -102,10 +102,10 @@ struct WatchChatComposer: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(PlinkRave.surface.opacity(0.95))
+            .background(Cinema2026.surface.opacity(0.95))
             .overlay(alignment: .top) {
                 Rectangle()
-                    .fill(PlinkRave.divider.opacity(0.4))
+                    .fill(Cinema2026.divider.opacity(0.4))
                     .frame(height: 0.5)
             }
             .onReceive(NotificationCenter.default.publisher(for: .plinkInsertAtCursor)) { note in
@@ -160,7 +160,7 @@ struct EmojiInlinePanel: View {
                                 if !hasPremium {
                                     Image(systemName: "lock.fill")
                                         .font(.system(size: 10))
-                                        .foregroundStyle(PlinkRave.gold)
+                                        .foregroundStyle(Cinema2026.amber)
                                         .offset(x: 14, y: -14)
                                 }
                             }
@@ -170,9 +170,9 @@ struct EmojiInlinePanel: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
         }
-        .background(PlinkRave.surface.opacity(0.98))
+        .background(Cinema2026.surface.opacity(0.98))
         .overlay(alignment: .top) {
-            Rectangle().fill(PlinkRave.divider.opacity(0.4)).frame(height: 0.5)
+            Rectangle().fill(Cinema2026.divider.opacity(0.4)).frame(height: 0.5)
         }
     }
 }

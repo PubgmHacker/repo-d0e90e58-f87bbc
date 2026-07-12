@@ -38,7 +38,7 @@ struct PlayerBottomControls: View {
             HStack(spacing: 12) {
                 Text("\(format(model.coordinator.position)) / \(format(model.coordinator.duration))")
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .foregroundStyle(PlinkRave.text)
+                    .foregroundStyle(Cinema2026.text)
 
                 QualityBadge(label: model.qualityLabel)
 
@@ -89,7 +89,7 @@ private struct QualityBadge: View {
     var body: some View {
         Text(label)
             .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(PlinkRave.text)
+            .foregroundStyle(Cinema2026.text)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(.ultraThinMaterial, in: Capsule())

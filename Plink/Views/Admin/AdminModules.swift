@@ -217,24 +217,24 @@ struct AdminModulePlaceholder: View {
         VStack(spacing: 16) {
             Image(systemName: module.icon)
                 .font(.system(size: 48))
-                .foregroundStyle(PlinkRave.secondaryText)
+                .foregroundStyle(Cinema2026.secondary)
 
             Text(module.title)
                 .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(PlinkRave.text)
+                .foregroundStyle(Cinema2026.text)
 
             Text(description)
                 .font(.system(size: 14))
-                .foregroundStyle(PlinkRave.secondaryText)
+                .foregroundStyle(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
 
             Text("Not yet implemented")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(PlinkRave.warning)
+                .foregroundStyle(Cinema2026.amber)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(PlinkRave.warning.opacity(0.12), in: Capsule())
+                .background(Cinema2026.amber.opacity(0.12), in: Capsule())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

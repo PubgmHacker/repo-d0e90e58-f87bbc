@@ -45,7 +45,7 @@ struct PlinkSeekBar: View {
 
                 // Played portion
                 Capsule()
-                    .fill(PlinkRave.magenta)
+                    .fill(Cinema2026.accent)
                     .frame(width: width * played, height: trackHeight)
 
                 // Thumb
@@ -53,7 +53,7 @@ struct PlinkSeekBar: View {
                     .fill(.white)
                     .frame(width: thumbSize, height: thumbSize)
                     .shadow(
-                        color: PlinkRave.magenta.opacity(isScrubbing ? 0.6 : 0),
+                        color: Cinema2026.accent.opacity(isScrubbing ? 0.6 : 0),
                         radius: isScrubbing ? 8 : 0
                     )
                     .offset(x: max(0, min(width - thumbSize, width * played - thumbSize / 2)))

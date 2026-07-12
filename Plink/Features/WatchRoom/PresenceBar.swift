@@ -28,10 +28,10 @@ struct PresenceBar: View {
                 if model.participants.count > 5 {
                     Text("+\(model.participants.count - 5)")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(PlinkRave.text)
+                        .foregroundStyle(Cinema2026.text)
                         .frame(width: 36, height: 36)
-                        .background(PlinkRave.raised, in: Circle())
-                        .overlay(Circle().stroke(PlinkRave.divider, lineWidth: 2))
+                        .background(Cinema2026.raised, in: Circle())
+                        .overlay(Circle().stroke(Cinema2026.divider, lineWidth: 2))
                 }
             }
 
@@ -39,10 +39,10 @@ struct PresenceBar: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(model.participants.count) in room")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PlinkRave.text)
+                    .foregroundStyle(Cinema2026.text)
                 Text(model.activeSpeakerName.map { "\($0) speaking" } ?? "Watching together")
                     .font(.system(size: 11, weight: .regular))
-                    .foregroundStyle(PlinkRave.secondaryText)
+                    .foregroundStyle(Cinema2026.secondary)
             }
 
             Spacer()
@@ -62,10 +62,10 @@ struct PresenceBar: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 56)
-        .background(PlinkRave.void)
+        .background(Cinema2026.background)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(PlinkRave.divider.opacity(0.35))
+                .fill(Cinema2026.divider.opacity(0.35))
                 .frame(height: 0.5)
         }
     }

@@ -61,7 +61,7 @@ struct LandscapeWatchLayout: View {
                     } label: {
                         Image(systemName: "message.fill")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(PlinkRave.text)
+                            .foregroundStyle(Cinema2026.text)
                             .frame(width: 44, height: 44)
                             .background(.ultraThinMaterial, in: Circle())
                             .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 0.5))
@@ -95,7 +95,7 @@ struct TabletWatchLayout: View {
             .frame(maxWidth: .infinity)
 
             Rectangle()
-                .fill(PlinkRave.divider.opacity(0.45))
+                .fill(Cinema2026.divider.opacity(0.45))
                 .frame(width: 0.5)
 
             VStack(spacing: 0) {
@@ -104,7 +104,7 @@ struct TabletWatchLayout: View {
                 WatchChatComposer(model: model)
             }
             .frame(width: 360)
-            .background(PlinkRave.void.opacity(0.95))
+            .background(Cinema2026.background.opacity(0.95))
         }
     }
 }

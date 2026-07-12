@@ -374,7 +374,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     /// PATCH 03: cleaner HTML with plinkPlayer namespace.
-    /// - Background matches PlinkRave.void (0x0D001A).
+    /// - Background matches Cinema2026.background (0x0D001A).
     /// - controls=1, modestbranding=1, rel=0, iv_load_policy=3 (ToS).
     /// - plinkPlay/Pause/Seek/Snapshot helpers exposed on window.
     /// - JSON-encoded videoId (no string interpolation).

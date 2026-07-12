@@ -75,7 +75,7 @@ struct WatchRoomScreen: View {
                 .zIndex(101)
             }
         }
-        .background(PlinkRave.void.ignoresSafeArea())
+        .background(Cinema2026.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .animation(.plinkLayout, value: layoutVariant)
         .onChange(of: layoutVariant) { _, newVariant in
@@ -116,7 +116,7 @@ struct WatchRoomScreen: View {
             WatchChatSheet(model: model)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(PlinkRave.void)
+                .presentationBackground(Cinema2026.background)
         }
     }
 

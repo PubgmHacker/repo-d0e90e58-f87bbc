@@ -5,7 +5,7 @@
 // position this view; they never own or replace it.
 //
 // Visual design (professional polish):
-//   - Player viewport: PlinkRave.void (not pure black) — letterbox bars
+//   - Player viewport: Cinema2026.background (not pure black) — letterbox bars
 //     are purple-tinted, matching the room's ambient tone.
 //   - Chrome: .ultraThinMaterial over void for depth, not flat color.
 //   - Top gradient: 0→0.55 opacity void, gives top chrome legibility
@@ -36,7 +36,7 @@ struct PlayerStage: View {
     var body: some View {
         ZStack {
             // Viewport — purple-tinted void, NOT pure black
-            PlinkRave.void.ignoresSafeArea()
+            Cinema2026.background.ignoresSafeArea()
 
             // The actual player surface — never recreated
             PlayerSurfaceView(coordinator: model.coordinator)
@@ -68,7 +68,7 @@ struct PlayerStage: View {
             if ui.controlsVisible {
                 // Top legibility gradient
                 LinearGradient(
-                    colors: [PlinkRave.void.opacity(0.55), .clear],
+                    colors: [Cinema2026.background.opacity(0.55), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -79,7 +79,7 @@ struct PlayerStage: View {
 
                 // Bottom legibility gradient
                 LinearGradient(
-                    colors: [.clear, PlinkRave.void.opacity(0.7)],
+                    colors: [.clear, Cinema2026.background.opacity(0.7)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -102,7 +102,7 @@ struct PlayerStage: View {
         .overlay {
             if variant != .landscape {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(PlinkRave.divider.opacity(0.4), lineWidth: 0.5)
+                    .stroke(Cinema2026.divider.opacity(0.4), lineWidth: 0.5)
             }
         }
         .animation(.plinkControls, value: ui.controlsVisible)

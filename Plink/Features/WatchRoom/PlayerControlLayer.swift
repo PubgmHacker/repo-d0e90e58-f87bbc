@@ -97,7 +97,7 @@ struct PlayerChromeButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(PlinkRave.text)
+                .foregroundStyle(Cinema2026.text)
                 .frame(width: 36, height: 36)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 0.5))
@@ -114,7 +114,7 @@ struct PlayerSmallButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(PlinkRave.text)
+                .foregroundStyle(Cinema2026.text)
                 .frame(width: 32, height: 32)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().stroke(.white.opacity(0.06), lineWidth: 0.5))
@@ -129,11 +129,11 @@ struct PlayerLoadingView: View {
     var body: some View {
         VStack(spacing: 12) {
             ProgressView()
-                .tint(PlinkRave.magenta)
+                .tint(Cinema2026.accent)
                 .scaleEffect(1.15)
             Text("Loading…")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(PlinkRave.secondaryText)
+                .foregroundStyle(Cinema2026.secondary)
         }
         .padding(20)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -158,11 +158,11 @@ struct SyncHealthPill: View {
     let connected: Bool
 
     private var color: Color {
-        guard connected else { return PlinkRave.danger }
-        if driftMs < 80 { return PlinkRave.success }
-        if driftMs < 250 { return PlinkRave.cyan }
-        if driftMs < 750 { return PlinkRave.warning }
-        return PlinkRave.danger
+        guard connected else { return Cinema2026.danger }
+        if driftMs < 80 { return Cinema2026.accent }
+        if driftMs < 250 { return Cinema2026.secondary }
+        if driftMs < 750 { return Cinema2026.amber }
+        return Cinema2026.danger
     }
 
     private var label: String {
@@ -181,7 +181,7 @@ struct SyncHealthPill: View {
                 .shadow(color: color.opacity(0.6), radius: 3)
             Text(label)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(PlinkRave.text)
+                .foregroundStyle(Cinema2026.text)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

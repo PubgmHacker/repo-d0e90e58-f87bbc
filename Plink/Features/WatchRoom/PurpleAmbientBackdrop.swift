@@ -21,7 +21,7 @@ struct PurpleAmbientBackdrop: View {
 
     var body: some View {
         ZStack {
-            PlinkRave.void
+            Cinema2026.background
 
             // Magenta haze, top-leading
             RadialGradient(
@@ -45,7 +45,7 @@ struct PurpleAmbientBackdrop: View {
 
             // Bottom vignette so player chrome doesn't vanish into the void
             LinearGradient(
-                colors: [.clear, PlinkRave.void.opacity(0.85)],
+                colors: [.clear, Cinema2026.background.opacity(0.85)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -65,13 +65,13 @@ struct AmbientState: Equatable, Sendable {
     var intensity: Double = 0.55
 
     /// Sampled palette (Commit 7). Until then, defaults to brand magenta/cyan.
-    var primaryColor: Color = PlinkRave.magenta
-    var secondaryColor: Color = PlinkRave.cyan
+    var primaryColor: Color = Cinema2026.accent
+    var secondaryColor: Color = Cinema2026.secondary
 }
 
 #if DEBUG
 #Preview {
     PurpleAmbientBackdrop(state: AmbientState())
-        .background(PlinkRave.void)
+        .background(Cinema2026.background)
 }
 #endif

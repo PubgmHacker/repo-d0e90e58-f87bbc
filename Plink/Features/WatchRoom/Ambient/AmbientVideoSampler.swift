@@ -21,7 +21,7 @@
 //   - AmbientVideoSampler is an actor — sample() calls don't block main.
 //   - PurpleAmbientBackdrop observes the published palette via @State.
 //   - The sampler is owned by WatchRoomModel (one per room session).
-//   - Falls back to PlinkRave.magenta/cyan when no video, no entitlement,
+//   - Falls back to Cinema2026.accent/cyan when no video, no entitlement,
 //     or any disable condition is met.
 //
 // Why actor isolation:
@@ -53,9 +53,9 @@ struct AmbientPalette: Equatable, Sendable {
     let accent: UIColor       // optional third color (may equal primary)
 
     static let defaultPalette = AmbientPalette(
-        primary: UIColor(red: 1.0, green: 0.0, blue: 1.0, alpha: 1.0),    // PlinkRave.magenta
-        secondary: UIColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0),  // PlinkRave.cyan
-        accent: UIColor(red: 1.0, green: 0.08, blue: 0.58, alpha: 1.0)    // PlinkRave.hotPink
+        primary: UIColor(red: 1.0, green: 0.0, blue: 1.0, alpha: 1.0),    // Cinema2026.accent
+        secondary: UIColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0),  // Cinema2026.secondary
+        accent: UIColor(red: 1.0, green: 0.08, blue: 0.58, alpha: 1.0)    // Cinema2026.danger
     )
 }
 

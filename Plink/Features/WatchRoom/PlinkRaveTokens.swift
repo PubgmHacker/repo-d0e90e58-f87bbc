@@ -9,7 +9,7 @@
 // ("Do not globally break legacy screens in the same commit").
 //
 // Acceptance (per PATCH 01 spec):
-//   - No pure black player chrome (use PlinkRave.void, never Color.black).
+//   - No pure black player chrome (use Cinema2026.background, never Color.black).
 //   - Accent occupies less than 10% of pixels in baseline screenshot.
 //   - Body text contrast passes 4.5:1 against the surface it sits on.
 //

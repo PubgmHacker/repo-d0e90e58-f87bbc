@@ -56,7 +56,7 @@ struct WatchChatView: View {
                             Image(systemName: "arrow.down")
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        .foregroundStyle(PlinkRave.text)
+                        .foregroundStyle(Cinema2026.text)
                         .frame(width: 40, height: 40)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().stroke(.white.opacity(0.1), lineWidth: 0.5))

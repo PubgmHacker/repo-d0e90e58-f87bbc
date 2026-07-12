@@ -343,3 +343,38 @@ extension Text {
             .shadow(color: Cinema2026.amber.opacity(0.4), radius: 4)
     }
 }
+
+// MARK: - PosterImage (used by CompactRoomRail)
+struct PosterImage: View {
+    let url: String?
+
+    var body: some View {
+        AsyncImage(url: URL(string: url ?? "")) { image in
+            image.resizable().aspectRatio(contentMode: .fill)
+        } placeholder: {
+            Rectangle().fill(Cinema2026.surface)
+        }
+    }
+}
+
+// MARK: - RingModifier + adminStroke (used by AvatarView)
+struct RingModifier: ViewModifier {
+    var color: Color = Cinema2026.accent
+    var lineWidth: CGFloat = 2
+
+    func body(content: Content) -> some View {
+        content.overlay(
+            Circle().stroke(color, lineWidth: lineWidth)
+        )
+    }
+}
+
+extension View {
+    func ringModifier(color: Color = Cinema2026.accent, lineWidth: CGFloat = 2) -> some View {
+        modifier(RingModifier(color: color, lineWidth: lineWidth))
+    }
+
+    func adminStroke() -> some View {
+        self.overlay(Circle().stroke(Cinema2026.amber, lineWidth: 2))
+    }
+}

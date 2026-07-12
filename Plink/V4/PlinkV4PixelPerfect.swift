@@ -327,7 +327,7 @@ struct V4AIView: View {
                             Text("Соберу очередь, создам комнату, позову друзей после подтверждения.")
                                 .font(.system(size:13.28)).lineSpacing(5.31)
                         }.padding(.vertical,11).padding(.horizontal,13).background(V4.botBG)
-                         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous)
+                         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                         HStack(spacing:7) {
                             chip("Очередь","Собери очередь"); chip("У друзей","Что смотрят друзья?"); chip("Комната","Создай комнату")
                         }

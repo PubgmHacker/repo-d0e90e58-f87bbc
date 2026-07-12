@@ -367,3 +367,11 @@ extension View {
         self.overlay(Circle().stroke(Cinema2026.accent, lineWidth: lineWidth))
     }
 }
+
+// MARK: - shimmerGradientText (used by SettingsSlidePanel)
+extension Text {
+    func shimmerGradientText() -> some View {
+        self.foregroundStyle(Cinema2026.accent)
+            .shadow(color: Cinema2026.accent.opacity(0.5), radius: 6)
+    }
+}

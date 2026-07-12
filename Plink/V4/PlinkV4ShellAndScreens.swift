@@ -41,7 +41,7 @@ public struct PlinkV4Root: View {
     }
 }
 
-private extension String: @retroactive Identifiable { public var id: String { self } }
+extension String: @retroactive Identifiable { public var id: String { self } }
 
 public struct V4TabBar: View {
     @Binding var selection: V4Tab

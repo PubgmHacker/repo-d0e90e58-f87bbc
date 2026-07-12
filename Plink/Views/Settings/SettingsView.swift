@@ -1,50 +1,41 @@
-// Plink/Views/Settings/SettingsView.swift — GPT-5.6 V4 §1
-// V4 redesign: V4SecondaryScreen + SettingsSection/Row.
-// No SettingsBackground, no bioluminescent, no old glass.
-
+// Plink/Views/Settings/SettingsView.swift — simplified, no V4 deps
 import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(PlinkThemeStore.self) private var themeStore
     let authService: AuthService
 
     var body: some View {
-        V4SecondaryScreen(surface: .profile, title: "Настройки", dismiss: dismiss.callAsFunction) {
+        NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     // Account
-                    SettingsSection(title: "Аккаунт") {
-                        SettingsRow(icon: "person.crop.circle", title: "Личные данные") { }
-                        SettingsRow(icon: "lock.shield", title: "Приватность") { }
-                        SettingsRow(icon: "person.crop.circle.badge.xmark", title: "Заблокированные") { }
+                    settingsGroup("Аккаунт") {
+                        settingsRow("person.crop.circle", "Личные данные")
+                        settingsRow("lock.shield", "Приватность")
+                        settingsRow("person.crop.circle.badge.xmark", "Заблокированные")
                     }
-
                     // App
-                    SettingsSection(title: "Приложение") {
-                        SettingsRow(icon: "circle.lefthalf.filled", title: "Оформление", value: themeStore.appTheme.name) { dismiss() }
-                        SettingsRow(icon: "bell", title: "Уведомления") { }
-                        SettingsRow(icon: "play.rectangle", title: "Воспроизведение") { }
-                        SettingsRow(icon: "globe", title: "Язык", value: "Русский") { }
+                    settingsGroup("Приложение") {
+                        settingsRow("circle.lefthalf.filled", "Оформление")
+                        settingsRow("bell", "Уведомления")
+                        settingsRow("play.rectangle", "Воспроизведение")
+                        settingsRow("globe", "Язык")
                     }
-
-                    // Plink+
-                    SettingsSection(title: "Подписка") {
-                        SettingsRow(icon: "crown.fill", title: "Plink+ статус", value: PremiumStatusManager.shared.isPremium ? "Активна" : "Нет") { }
+                    // Subscription
+                    settingsGroup("Подписка") {
+                        settingsRow("crown.fill", "Plink+ статус")
                     }
-
                     // Support
-                    SettingsSection(title: "Поддержка") {
-                        SettingsRow(icon: "questionmark.circle", title: "Помощь") { }
-                        SettingsRow(icon: "doc.text", title: "Условия использования") { }
-                        SettingsRow(icon: "shield", title: "Политика конфиденциальности") { }
+                    settingsGroup("Поддержка") {
+                        settingsRow("questionmark.circle", "Помощь")
+                        settingsRow("doc.text", "Условия использования")
+                        settingsRow("shield", "Политика конфиденциальности")
                     }
-
-                    // Danger zone
-                    SettingsSection(title: "Аккаунт") {
-                        SettingsRow(icon: "trash", title: "Удалить аккаунт", role: .destructive) { }
+                    // Danger
+                    settingsGroup("Аккаунт") {
+                        settingsRow("trash", "Удалить аккаунт", isDestructive: true)
                     }
-
                     Text("Plink v1.0")
                         .font(.system(size: 12))
                         .foregroundStyle(Cinema2026.secondary)
@@ -54,6 +45,38 @@ struct SettingsView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
             }
+            .navigationTitle("Настройки")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Готово") { dismiss() } } }
         }
+    }
+
+    private func settingsGroup(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Cinema2026.secondary).padding(.horizontal, 4)
+            VStack(spacing: 0) { content() }
+                .background(Cinema2026.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private func settingsRow(_ icon: String, _ title: String, isDestructive: Bool = false) -> some View {
+        Button {} label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(isDestructive ? Cinema2026.danger : Cinema2026.accent)
+                    .frame(width: 28)
+                Text(title)
+                    .font(.system(size: 16))
+                    .foregroundStyle(isDestructive ? Cinema2026.danger : Cinema2026.text)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Cinema2026.secondary)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 50)
+        }
+        .buttonStyle(.plain)
     }
 }

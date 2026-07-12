@@ -1,7 +1,8 @@
-// Plink/AppShell/PlinkAppShell.swift — GPT-5.6 V4 Rescue §2
+// Plink/AppShell/PlinkAppShell.swift — GPT-5.6 V4 Full Replacement
 //
-// Injects PlinkThemeStore + LivingMotionPolicy at shell root.
-// Preserves dependencies, iPad split, room/full-screen presentation.
+// Compact iPhone renders PlinkV4Root with ProductionV4Adapter.
+// iPad keeps existing sidebar shell.
+// Preserves AuthLaunchGate, deep-link handling, room/watch presentation.
 
 import SwiftUI
 
@@ -10,10 +11,6 @@ struct PlinkAppShell: View {
     @State private var selection: AppSection = .home
     @State private var createIntent: CreateRoomIntent?
     @State private var createdRoom: Room?
-
-    // GPT-5.6 §2: single theme store + motion policy at shell root
-    @State private var themeStore = PlinkThemeStore()
-    @State private var motionPolicy = LivingMotionPolicy()
 
     let dependencies: AppDependencies
 
@@ -33,16 +30,11 @@ struct PlinkAppShell: View {
                     dependencies: dependencies
                 )
             } else {
-                PlinkPhoneTabShell(
-                    selection: $selection,
-                    createIntent: $createIntent,
-                    dependencies: dependencies
-                )
+                // GPT-5.6 V4: iPhone uses PlinkV4Root with adapter
+                PlinkV4Root(adapter: makeAdapter())
             }
             #endif
         }
-        .environment(themeStore)
-        .environment(motionPolicy)
         .sheet(item: $createIntent) { intent in
             RoomCreationView(
                 intent: intent,
@@ -63,5 +55,17 @@ struct PlinkAppShell: View {
                 authToken: KeychainHelper.read(for: "rave_auth_token") ?? ""
             )
         }
+    }
+
+    // GPT-5.6 V4: create adapter from existing dependencies
+    @MainActor
+    private func makeAdapter() -> ProductionV4Adapter {
+        ProductionV4Adapter(
+            roomService: dependencies.roomService,
+            mediaService: dependencies.mediaService,
+            friendManager: dependencies.friendManager,
+            authService: dependencies.authService,
+            aiService: PlinkAIService.shared
+        )
     }
 }

@@ -30,6 +30,16 @@ extension View {
             )
             .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
     }
+
+    /// Soft neon glow shadow (formerly in Color+Theme.swift).
+    func neonGlow(color: Color = Cinema2026.accent, radius: CGFloat = 14, y: CGFloat = 4) -> some View {
+        self.shadow(color: color.opacity(0.45), radius: radius, x: 0, y: y)
+    }
+
+    /// Chat text shadow for readability over video (formerly in Color+Theme.swift).
+    func chatTextShadow() -> some View {
+        self.shadow(color: .black.opacity(0.9), radius: 2.5, x: 0, y: 1)
+    }
 }
 
 // MARK: - PremiumButtonStyle
@@ -64,3 +74,17 @@ struct PremiumButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
+
+// MARK: - Color hex initializer
+//
+// Formerly in Color+Theme.swift. Used by AvatarView and others.
+
+extension Color {
+    init(hex: UInt32, alpha: Double = 1.0) {
+        let r = Double((hex >> 16) & 0xFF) / 255.0
+        let g = Double((hex >> 8) & 0xFF) / 255.0
+        let b = Double(hex & 0xFF) / 255.0
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
+    }
+}
+

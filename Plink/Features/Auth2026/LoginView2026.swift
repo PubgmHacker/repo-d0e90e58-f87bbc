@@ -1,6 +1,12 @@
 // Plink/Features/Auth2026/LoginView2026.swift — §8 Final Unified
 //
 // Cinematic login with poster mosaic. Uses existing AuthService.
+//
+// Brain Phase 7: Apple Sign-In button is HIDDEN until backend /api/auth/apple
+// endpoint is implemented and device-green. Sign in with Apple is required
+// for App Store parity once any third-party login is offered, so we hide
+// rather than show a dead "coming soon" button. Google Sign-In is also
+// hidden until backend token verification + iOS SDK exist.
 
 import SwiftUI
 import AuthenticationServices
@@ -30,18 +36,10 @@ struct LoginView2026: View {
                 }
                 .padding(.bottom, 6)
 
-                // Apple Sign-In (TODO: requires backend /api/auth/apple endpoint)
-                SignInWithAppleButton(.continue) { request in
-                    request.requestedScopes = [.fullName, .email]
-                } onCompletion: { result in
-                    handleAppleSignIn(result)
-                }
-                .signInWithAppleButtonStyle(.white)
-                .frame(height: CompactPhoneMetrics.primaryButtonHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                AuthDivider(text: "или")
-                    .padding(.vertical, 4)
+                // Brain Phase 7: Apple Sign-In HIDDEN until backend ready.
+                // SignInWithAppleButton(.continue) { ... }
+                //   .signInWithAppleButtonStyle(.white)
+                //   ... — re-enable once /api/auth/apple exists.
 
                 if showEmailForm {
                     CompactAuthField(title: "Email", text: $email, contentType: .emailAddress)
@@ -99,17 +97,5 @@ struct LoginView2026: View {
             errorMessage = "Ошибка входа. Проверьте email и пароль."
         }
         isLoading = false
-    }
-
-    /// Apple Sign-In handler.
-    /// TODO: backend `/api/auth/apple` endpoint required to exchange identity token
-    /// for a Plink JWT. Until then, show a friendly message.
-    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .success:
-            errorMessage = "Вход через Apple скоро будет доступен. Используйте email."
-        case .failure(let error):
-            errorMessage = "Не удалось войти через Apple: \(error.localizedDescription)"
-        }
     }
 }

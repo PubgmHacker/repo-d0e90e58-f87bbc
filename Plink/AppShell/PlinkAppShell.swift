@@ -1,8 +1,7 @@
-// Plink/AppShell/PlinkAppShell.swift — GPT-5.6 V4 Full Replacement
+// Plink/AppShell/PlinkAppShell.swift — GPT-5.6 V4 Pixel Perfect
 //
-// Compact iPhone renders PlinkV4Root with ProductionV4Adapter.
-// iPad keeps existing sidebar shell.
-// Preserves AuthLaunchGate, deep-link handling, room/watch presentation.
+// iPhone: PlinkApprovedV4Root (pixel-perfect V4 from spec)
+// iPad: PlinkSidebarShell (existing)
 
 import SwiftUI
 
@@ -30,8 +29,8 @@ struct PlinkAppShell: View {
                     dependencies: dependencies
                 )
             } else {
-                // GPT-5.6 V4: iPhone uses PlinkV4Root with adapter
-                PlinkV4Root(adapter: makeAdapter())
+                // GPT-5.6 V4 Pixel Perfect: single root
+                PlinkApprovedV4Root()
             }
             #endif
         }
@@ -55,18 +54,5 @@ struct PlinkAppShell: View {
                 authToken: KeychainHelper.read(for: "rave_auth_token") ?? ""
             )
         }
-    }
-
-    // GPT-5.6 V4: create adapter from existing dependencies
-    @MainActor
-    private func makeAdapter() -> ProductionV4Adapter {
-        ProductionV4Adapter(
-            roomService: dependencies.roomService,
-            mediaService: dependencies.mediaService,
-            friendManager: dependencies.friendManager ?? FriendManager(api: dependencies.apiClient),
-            authService: dependencies.authService,
-            aiService: PlinkAIService.shared,
-            apiClient: dependencies.apiClient
-        )
     }
 }

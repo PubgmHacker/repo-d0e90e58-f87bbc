@@ -173,10 +173,10 @@ struct SettingsSlidePanel: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                 }
-                .if(isPremium) { view in
+                .ifTransform(isPremium) { view in
                     view.premiumStroke(lineWidth: 2)
                 }
-                .if(!isPremium) { view in
+                .ifTransform(!isPremium) { view in
                     view.overlay(
                         Circle()
                             .stroke(Color.white.opacity(0.1), lineWidth: 0.5)

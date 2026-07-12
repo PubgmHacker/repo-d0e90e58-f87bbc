@@ -185,7 +185,7 @@ struct LiveBadge: View {
 }
 
 extension View {
-    @ViewBuilder func `if`<T: View>(_ condition: Bool, transform: (Self) -> T) -> some View {
+    @ViewBuilder func ifTransform<T: View>(_ condition: Bool, transform: (Self) -> T) -> some View {
         if condition { transform(self) } else { self }
     }
     func dismissKeyboardOnTap() -> some View {

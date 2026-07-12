@@ -61,6 +61,37 @@ extension View {
             period: actualPeriod
         ))
     }
+
+    /// Premium glass surface modifier — frosted glass with optional neon ring + glow.
+    /// Used by RoomCardView for room cards.
+    /// - Parameters:
+    ///   - cornerRadius: Corner radius in points.
+    ///   - opacity: Background white opacity.
+    ///   - ringColor: Linear gradient for the border ring (active rooms glow).
+    ///   - glow: Whether to add a glow shadow (active rooms).
+    @ViewBuilder
+    func premiumGlass(
+        cornerRadius: CGFloat = 16,
+        opacity: Double = 0.06,
+        ringColor: LinearGradient = Cinema2026.timeline,
+        glow: Bool = false
+    ) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.white.opacity(opacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(ringColor, lineWidth: glow ? 1.5 : 0.5)
+            )
+            .shadow(
+                color: glow ? Cinema2026.accent.opacity(0.2) : Color.black.opacity(0.15),
+                radius: glow ? 12 : 6,
+                x: 0,
+                y: glow ? 4 : 2
+            )
+    }
 }
 
 /// Modifier that animates a pulsing glow shadow.

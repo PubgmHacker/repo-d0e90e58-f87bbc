@@ -462,24 +462,49 @@ struct PlinkApprovedV4Root: View {
     @State private var theme:V4Theme = .electric
     @State private var appearance=false
     @State private var room=false
+
+    // P0: Real backend stores
+    @State private var roomsStore: V4RoomsStore?
+    @State private var searchStore = V4SearchStore()
+    @State private var friendsStore: V4FriendsStore?
+    @State private var aiStore = V4AIStore()
+    @State private var profileStore: V4ProfileStore?
+
     var body: some View {
         ZStack(alignment:.bottom){
             V4LivingBackground(theme:theme)
             Group {
                 switch tab {
-                case 0: V4HomeView(theme:theme){room=true}
-                case 1: V4RoomsView(theme:theme){room=true}
-                case 2: V4AIView(theme:theme)
-                case 3: V4FriendsView(theme:theme)
-                default: V4ProfileView(theme:theme,showAppearance:$appearance)
+                case 0: V4HomeViewLive(theme:theme, searchStore:searchStore, roomsStore:roomsStore, openRoom:{room=true})
+                case 1: V4RoomsViewLive(theme:theme, roomsStore:roomsStore, openRoom:{room=true})
+                case 2: V4AIViewLive(theme:theme, store:aiStore)
+                case 3: V4FriendsViewLive(theme:theme, store:friendsStore)
+                default: V4ProfileViewLive(theme:theme, store:profileStore, showAppearance:$appearance)
                 }
             }
             .transition(.offset(y:8).combined(with:.opacity))
             .animation(.timingCurve(0.16,1,0.3,1,duration:0.32),value:tab)
             PlinkLiquidTabBar(selection:$tab)
             if appearance { V4AppearanceView(theme:$theme,presented:$appearance).zIndex(25).transition(.opacity) }
-            // room == true must present existing WatchRoom as full-screenCover.
         }.preferredColorScheme(.dark).tint(V4.accent)
+        .task {
+            await bootstrap()
+        }
+    }
+
+    private func bootstrap() async {
+        let api = APIClient(baseURL: "https://plink-backend-production-ef31.up.railway.app/api")
+        let rs = RoomService(api: api)
+        let fm = FriendManager(api: api)
+        let as_ = AuthService(api: api)
+        roomsStore = V4RoomsStore(roomService: rs)
+        friendsStore = V4FriendsStore(friendManager: fm)
+        profileStore = V4ProfileStore(authService: as_)
+
+        await roomsStore?.load()
+        await searchStore.loadTrending()
+        await friendsStore?.load()
+        await profileStore?.load()
     }
 }
 
@@ -581,5 +606,266 @@ struct NotificationInboxButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Уведомления")
         .accessibilityValue(unreadCount == 0 ? "Нет новых" : "Новых: \(unreadCount)")
+    }
+}
+
+// MARK: - Live Screen Variants (P0: Real backend data)
+
+struct V4HomeViewLive: View {
+    let theme: V4Theme
+    @Bindable var searchStore: V4SearchStore
+    var roomsStore: V4RoomsStore?
+    let openRoom: () -> Void
+    @State private var query = ""
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                HStack { V4Avatar(letter: "П", theme: theme); Spacer(); NotificationInboxButton(unreadCount: 0, action: {}) }
+                    .padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
+                V4Heading(eyebrow: "СУББОТНИЙ ВЕЧЕР", title: "С кем смотрим?")
+                    .frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,19).padding(.bottom,18)
+                HStack(spacing:9) {
+                    Image(systemName:"magnifyingglass")
+                    TextField("Видео, сервис или комната", text:$query).foregroundStyle(V4.ink)
+                        .onChange(of: query) { _, new in searchStore.search(new) }
+                }.font(.system(size:13)).foregroundStyle(V4.muted).padding(.horizontal,13).frame(height:48)
+                 .background(V4.searchBG).clipShape(RoundedRectangle(cornerRadius:16)).overlay(RoundedRectangle(cornerRadius:16).stroke(V4.line))
+                 .padding(.horizontal,19).padding(.bottom,18)
+
+                // Hero: first trending video
+                if let hero = searchStore.trending.first {
+                    V4Hero(title: hero.title, meta: "YouTube · \(hero.subtitle)", button: "▶ Смотреть вместе", height: 300, theme: theme, action: openRoom)
+                        .padding(.horizontal,13).padding(.bottom,28)
+                } else {
+                    RoundedRectangle(cornerRadius: 29).fill(V4.cardBG).frame(height: 300).padding(.horizontal,13).padding(.bottom,28)
+                        .overlay { ProgressView().tint(V4.accent) }
+                }
+
+                // Live rooms rail
+                if let rs = roomsStore, !rs.rooms.isEmpty {
+                    HStack { Text("Сейчас вместе").font(.system(size:18.24,weight:.bold)); Spacer(); Text("Все").font(.system(size:12.16)).foregroundStyle(V4.accent) }
+                        .padding(.horizontal,19).padding(.bottom,12)
+                    ScrollView(.horizontal,showsIndicators:false) { HStack(spacing:11) {
+                        ForEach(rs.rooms.prefix(6)) { room in
+                            V4MediaCard(title: room.name, meta: "\(room.participantCount) участников\(room.isActive ? " · LIVE" : "")")
+                        }
+                    }.padding(.horizontal,19) }
+                }
+
+                // Trending rail
+                if !searchStore.trending.isEmpty {
+                    HStack { Text("Популярное на YouTube").font(.system(size:18.24,weight:.bold)); Spacer() }
+                        .padding(.horizontal,19).padding(.top,28).padding(.bottom,12)
+                    ScrollView(.horizontal,showsIndicators:false) { HStack(spacing:11) {
+                        ForEach(searchStore.trending.prefix(8)) { item in
+                            V4MediaCard(title: item.title, meta: "\(item.subtitle)\(item.duration.map { " · \($0)" } ?? "")")
+                        }
+                    }.padding(.horizontal,19) }
+                }
+            }.padding(.bottom,92)
+        }.foregroundStyle(V4.ink)
+    }
+}
+
+struct V4RoomsViewLive: View {
+    let theme: V4Theme
+    var roomsStore: V4RoomsStore?
+    let openRoom: () -> Void
+
+    var body: some View {
+        ScrollView(showsIndicators:false) {
+            VStack(spacing:0) {
+                HStack(alignment:.top) {
+                    V4Heading(eyebrow:"ОБЗОР",title:"Комнаты")
+                    Spacer(); V4RoundButton(symbol:"⌕")
+                }.padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
+
+                if let rs = roomsStore {
+                    switch rs.state {
+                    case .loading:
+                        RoundedRectangle(cornerRadius: 29).fill(V4.cardBG).frame(height: 235).padding(.horizontal,13).padding(.bottom,28)
+                            .overlay { ProgressView().tint(V4.accent) }
+                    case .loaded:
+                        if let hero = rs.heroRoom {
+                            V4Hero(title: hero.name, meta: "\(hero.participantCount) зрителей · открытая комната", button:"Войти",height:235,theme:theme,action:openRoom)
+                                .padding(.horizontal,13).padding(.bottom,28)
+                        }
+                        ScrollView(.horizontal,showsIndicators:false) { HStack(spacing:11) {
+                            ForEach(rs.railRooms) { room in
+                                V4MediaCard(title: room.name, meta: "\(room.participantCount) участников")
+                            }
+                        }.padding(.horizontal,19) }
+                    case .empty:
+                        VStack(spacing:12) {
+                            Image(systemName:"sparkles").font(.largeTitle).foregroundStyle(V4.accent)
+                            Text("Нет активных комнат").font(.headline)
+                            Text("Попросите ИИ подобрать или создать комнату").font(.subheadline).foregroundStyle(V4.muted)
+                        }.padding(.top,60)
+                    case .failed(let error):
+                        VStack(spacing:12) {
+                            Image(systemName:"exclamationmark.triangle").font(.largeTitle).foregroundStyle(V4.amber)
+                            Text(error).font(.subheadline).foregroundStyle(V4.muted)
+                            Button("Повторить") { Task { await roomsStore?.load() } }.foregroundStyle(V4.accent)
+                        }.padding(.top,60)
+                    case .idle:
+                        Color.clear.frame(height:100)
+                    }
+                } else {
+                    ProgressView().tint(V4.accent).padding(.top,60)
+                }
+            }.padding(.bottom,92)
+        }.foregroundStyle(V4.ink)
+    }
+}
+
+struct V4AIViewLive: View {
+    let theme: V4Theme
+    @Bindable var store: V4AIStore
+    @State private var input = ""
+
+    var body: some View {
+        ZStack(alignment:.bottom) {
+            VStack(spacing:0) {
+                HStack {
+                    V4MorphOrb(theme:theme,size:41,glow:24)
+                    VStack(alignment:.leading,spacing:2) {
+                        Text("Plink AI").font(.system(size:16,weight:.bold))
+                        Text("Кинокомпаньон").font(.system(size:11.04)).foregroundStyle(V4.muted)
+                    }
+                    Spacer(); V4RoundButton(symbol:"•••")
+                }.frame(height:61).padding(.horizontal,17)
+                ZStack(alignment:.bottom) {
+                    V4MorphOrb(theme:theme)
+                    VStack(spacing:3) {
+                        Text("Что смотрим сегодня?").font(.system(size:16,weight:.bold))
+                        Text(store.state).font(.system(size:11.52)).foregroundStyle(V4.muted)
+                    }.padding(.bottom,13)
+                }.frame(height:270)
+                ScrollView(showsIndicators:false) {
+                    VStack(alignment:.leading,spacing:8) {
+                        ForEach(store.messages) { msg in
+                            if msg.isBot {
+                                VStack(alignment:.leading,spacing:3) {
+                                    Text("PLINK AI").font(.system(size:13.28,weight:.bold))
+                                    Text(msg.text).font(.system(size:13.28)).lineSpacing(5.31)
+                                }.padding(.vertical,11).padding(.horizontal,13).background(V4.botBG)
+                                .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                            } else {
+                                Text(msg.text).font(.system(size:13.28)).padding(.vertical,11).padding(.horizontal,13)
+                                    .background(V4.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                    .frame(maxWidth: 280, alignment: .trailing)
+                            }
+                        }
+                        HStack(spacing:7) {
+                            chip("Очередь","Собери очередь"); chip("У друзей","Что смотрят друзья?"); chip("Комната","Создай комнату")
+                        }
+                    }.padding(.horizontal,16).padding(.top,8).padding(.bottom,92)
+                }.background(LinearGradient(colors:[.clear,Color.oklch(0.06,0.01,190,alpha:0.76)],startPoint:UnitPoint(x:0.5,y:0.16),endPoint:.bottom))
+            }.foregroundStyle(V4.ink)
+            HStack(spacing:6) {
+                Button("🎙") { }.frame(width:42,height:42).background(V4.raised).clipShape(RoundedRectangle(cornerRadius:14))
+                TextField("Спроси про фильмы и комнаты",text:$input).foregroundStyle(V4.ink)
+                Button("➤") {
+                    Task { await store.send(input); input = "" }
+                }.frame(width:42,height:42).background(V4.accent).foregroundStyle(V4.accentInk).clipShape(RoundedRectangle(cornerRadius:14))
+            }.padding(8).frame(minHeight:62).background(V4.composerBG).clipShape(RoundedRectangle(cornerRadius:22))
+             .overlay(RoundedRectangle(cornerRadius:22).stroke(V4.line)).padding(.horizontal,13).padding(.bottom,10)
+        }
+    }
+    private func chip(_ label:String,_ prompt:String)->some View {
+        Button(label){ input=prompt }.font(.system(size:11.52)).foregroundStyle(V4.ink).padding(.horizontal,11).frame(height:36)
+            .background(V4.surface).clipShape(RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).stroke(V4.line))
+    }
+}
+
+struct V4FriendsViewLive: View {
+    let theme: V4Theme
+    var store: V4FriendsStore?
+
+    var body: some View {
+        ScrollView(showsIndicators:false) {
+            VStack(spacing:0) {
+                HStack(alignment:.top) { V4Heading(eyebrow:"ВМЕСТЕ ЛУЧШЕ",title:"Друзья"); Spacer(); V4RoundButton(symbol:"＋") }
+                    .padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
+
+                if let s = store {
+                    switch s.state {
+                    case .loading:
+                        ProgressView().tint(V4.accent).padding(.top,60)
+                    case .loaded:
+                        VStack(spacing:0) {
+                            ForEach(s.friends) { friend in
+                                HStack(spacing:11) {
+                                    V4Avatar(letter:String(friend.username.prefix(1)),theme:theme,size:39)
+                                    VStack(alignment:.leading,spacing:2) {
+                                        Text(friend.username).font(.system(size:13.6,weight:.bold))
+                                        Text(friend.isOnline ? "В сети" : "Не в сети").font(.system(size:11.52)).foregroundStyle(V4.muted)
+                                    }
+                                    Spacer()
+                                    Button("Позвать"){}.font(.system(size:11.52)).foregroundStyle(V4.ink).padding(.horizontal,10).frame(height:35)
+                                        .background(V4.surface).clipShape(RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(V4.line))
+                                }.frame(minHeight:61).overlay(alignment:.bottom){ Rectangle().fill(V4.line).frame(height:1) }
+                            }
+                        }.padding(.horizontal,19)
+                    case .empty:
+                        VStack(spacing:12) {
+                            Image(systemName:"person.2").font(.largeTitle).foregroundStyle(V4.accent)
+                            Text("Друзей пока нет").font(.headline)
+                            Text("Пригласите друзей, чтобы смотреть вместе").font(.subheadline).foregroundStyle(V4.muted)
+                        }.padding(.top,60)
+                    case .failed(let error):
+                        Text(error).font(.subheadline).foregroundStyle(V4.muted).padding(.top,60)
+                    case .idle:
+                        Color.clear.frame(height:100)
+                    }
+                } else {
+                    ProgressView().tint(V4.accent).padding(.top,60)
+                }
+
+                HStack { Text("Недавно вместе").font(.system(size:18.24,weight:.bold)); Spacer() }
+                    .padding(.horizontal,19).padding(.top,26).padding(.bottom,12)
+                ScrollView(.horizontal,showsIndicators:false) { HStack(spacing:11) {
+                    V4MediaCard(title:"Ночной рейс",meta:"вчера")
+                    V4MediaCard(title:"Первый контакт",meta:"на неделе")
+                }.padding(.horizontal,19) }
+            }.padding(.bottom,92)
+        }.foregroundStyle(V4.ink)
+    }
+}
+
+struct V4ProfileViewLive: View {
+    let theme: V4Theme
+    var store: V4ProfileStore?
+    @Binding var showAppearance: Bool
+
+    var body: some View {
+        ScrollView(showsIndicators:false) {
+            VStack(spacing:0) {
+                HStack { V4Avatar(letter: String((store?.displayName.prefix(1) ?? "П")), theme: theme); Spacer(); V4RoundButton(symbol:"✎") }
+                    .padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
+                V4Heading(eyebrow:"ПРОФИЛЬ",title: store?.displayName ?? "Загрузка…", subtitle: store?.isPremium == true ? "Plink+ активен" : nil)
+                    .frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,19).padding(.bottom,18)
+                groupTitle("Аккаунт")
+                group([("person","Личные данные"), ("diamond","Приватность и безопасность")])
+                groupTitle("Приложение")
+                VStack(spacing:0) {
+                    setting("circle.lefthalf.filled","Оформление", theme.name + " ›"){showAppearance=true}
+                    setting("bell","Уведомления","›"){}
+                    setting("play.fill","Воспроизведение","›"){}
+                    setting("questionmark","Помощь","›"){}
+                }.groupStyle()
+                groupTitle("Безопасность")
+                VStack(spacing:0) {
+                    setting("nosign","Заблокированные","›"){}
+                    setting("xmark","Удалить аккаунт","›",danger:true){}
+                }.groupStyle()
+            }.padding(.bottom,92)
+        }.foregroundStyle(V4.ink)
+    }
+    private func groupTitle(_ s:String)->some View { Text(s.uppercased()).font(.system(size:10.56,weight:.heavy)).tracking(1.1616).foregroundStyle(V4.muted).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,19).padding(.vertical,9) }
+    private func group(_ rows:[(String,String)])->some View { VStack(spacing:0){ ForEach(Array(rows.enumerated()),id:\.offset){_,r in setting(r.0,r.1,"›"){} } }.groupStyle() }
+    private func setting(_ icon:String,_ title:String,_ trailing:String,danger:Bool=false,action:@escaping()->Void)->some View {
+        Button(action:action){ HStack(spacing:11){ Image(systemName:icon).frame(width:30); Text(title).font(.system(size:13.6,weight:.bold)); Spacer(); Text(trailing).font(.system(size:11.52)).foregroundStyle(V4.muted) }.foregroundStyle(danger ? V4.danger : V4.ink).frame(minHeight:54).overlay(alignment:.bottom){Rectangle().fill(V4.line).frame(height:1)} }
     }
 }

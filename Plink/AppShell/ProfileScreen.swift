@@ -140,6 +140,7 @@ struct ProfileScreen: View {
 private struct ProfileRow: View {
     let icon: String
     let title: String
+    var value: String? = nil
     var tint: Color = Cinema2026.accent
     let action: () -> Void
 
@@ -154,6 +155,11 @@ private struct ProfileRow: View {
                     .font(.system(size: 16))
                     .foregroundStyle(Cinema2026.text)
                 Spacer()
+                if let value {
+                    Text(value)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Cinema2026.secondary)
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Cinema2026.secondary)

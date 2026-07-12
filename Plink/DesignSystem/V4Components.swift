@@ -375,3 +375,12 @@ extension View {
             .shadow(color: colors.first?.opacity(0.4) ?? .clear, radius: 4)
     }
 }
+
+// MARK: - dismissKeyboardOnTap (used by ProfileView)
+extension View {
+    func dismissKeyboardOnTap() -> some View {
+        self.onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+    }
+}

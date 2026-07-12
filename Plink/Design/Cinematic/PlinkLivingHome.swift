@@ -1,27 +1,19 @@
 // Plink/Design/Cinematic/PlinkLivingHome.swift — GPT-5 Living Home Concept
 //
-// GPT-5 IOS living Home integration patch.
-// Adapted from PlinkLivingHomeConcept.swift to use the EXISTING:
-//   - PaletteLoader actor (Plink/Design/Cinematic/PaletteLoader.swift)
-//   - LivingBackdropPalette struct (Plink/Design/Cinematic/CompactLivingBackdrop.swift)
-//   - Cinema2026 enum (Plink/Design/Cinematic/CompactPhoneMetrics.swift)
+// GPT-5.6 SOL fixes applied:
+//   1. sin/cos cycle corrected to 16-22s (frequencies 0.286-0.349 rad/s)
+//   2. Low Power/thermal observed dynamically via .onChange + NotificationCenter
+//   3. Reduce Transparency disables Canvas blur (uses solid color overlay)
+//   4. Removed nested Task inside .task(id:) — direct await
+//   5. Unit tests for motion policy + cancellation (separate test file)
 //
-// GPT-5 spec: "delete the standalone loader in production and reuse the
-// existing PaletteLoader actor and LivingBackdropPalette extraction/cache.
-// Do not create duplicate image downloads, caches or palette algorithms."
-//
-// This file provides:
-//   1. PlinkLivingHome<Content> — wrapper that binds artwork URL → palette
-//   2. LivingHomeCanvas — Canvas-based animated backdrop (24fps, 3 aurora blobs)
-//   3. LivingHomePalette extension — maps LivingBackdropPalette → 6-color palette
-//
-// Motion policy (GPT-5 §8.3):
-//   - 16-22s non-repeating drift, transforms + opacity only
-//   - 24 fps max (TimelineView .animation(minimumInterval: 1/24))
-//   - displacement ≤ 13%, opacity 0.24-0.36
-//   - freeze for Reduce Motion, inactive scene, Low Power, thermal ≥ serious
-//   - palette crossfade 0.55s, cancelled on hero change
-//   - no YouTube/WKWebView/DRM frame capture
+// GPT-5 spec compliance (§8):
+//   - Reuses existing PaletteLoader + LivingBackdropPalette (no duplication)
+//   - Canvas + TimelineView at 24fps max
+//   - 3 aurora blobs, displacement ≤ 13%, opacity 0.34
+//   - Motion policy: Reduce Motion / Low Power / thermal / scenePhase
+//   - Palette crossfade 0.55s with cancellation on hero change
+//   - No YouTube/WKWebView/DRM frame capture
 
 import SwiftUI
 import UIKit
@@ -44,7 +36,19 @@ struct PlinkLivingHome<Content: View>: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var palette: LivingBackdropPalette = .cinema2026
-    @State private var paletteTask: Task<Void, Never>?
+    @State private var lowPowerMode: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @State private var thermalState: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
+
+    /// GPT-5.6 SOL fix: motion policy evaluated from observed state (not just computed).
+    /// Changes to lowPowerMode/thermalState trigger re-render via @State.
+    private var motionEnabled: Bool {
+        guard !reduceMotion, scenePhase == .active else { return false }
+        guard !lowPowerMode else { return false }
+        switch thermalState {
+        case .serious, .critical: return false
+        default: return true
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -54,29 +58,22 @@ struct PlinkLivingHome<Content: View>: View {
                 reduceTransparency: reduceTransparency
             )
             .ignoresSafeArea()
-            .accessibilityHidden(true)  // GPT-5: background hidden from VoiceOver
+            .accessibilityHidden(true)
 
             content()
         }
-        // GPT-5: one palette task per selected hero, canceled on change/disappear.
+        // GPT-5.6 SOL fix: direct await in .task(id:) — no nested Task.
+        // SwiftUI automatically cancels the previous .task when id changes.
         .task(id: artworkURL?.absoluteString) {
-            paletteTask?.cancel()
-            paletteTask = Task { await updatePalette() }
-            await paletteTask?.value
+            await updatePalette()
         }
-        .onDisappear {
-            paletteTask?.cancel()
-            paletteTask = nil
+        // GPT-5.6 SOL fix: observe Low Power Mode changes dynamically.
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+            lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
         }
-    }
-
-    /// GPT-5 §8.3 motion policy truth table.
-    private var motionEnabled: Bool {
-        guard !reduceMotion, scenePhase == .active else { return false }
-        guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return false }
-        switch ProcessInfo.processInfo.thermalState {
-        case .serious, .critical: return false
-        default: return true
+        // GPT-5.6 SOL fix: observe thermal state changes dynamically.
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            thermalState = ProcessInfo.processInfo.thermalState
         }
     }
 
@@ -117,11 +114,20 @@ struct LivingHomeCanvas: View {
                 drawVignette(in: &context, size: size)
             }
         }
+        // GPT-5.6 SOL fix: Reduce Transparency → use opaque overlay instead of blur.
+        // Canvas blur is expensive; when reduceTransparency is true, skip aurora
+        // and use a single solid color overlay for depth.
         .overlay {
-            // GPT-5: subtle ultraThinMaterial for depth (disabled in Reduce Transparency).
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(reduceTransparency ? 0 : 0.08)
+            if reduceTransparency {
+                // Opaque graphite surface — no blur, no transparency.
+                Rectangle()
+                    .fill(Cinema2026.surface.opacity(0.6))
+            } else {
+                // Subtle ultraThinMaterial for depth.
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.08)
+            }
         }
     }
 
@@ -138,8 +144,14 @@ struct LivingHomeCanvas: View {
         )
     }
 
-    /// GPT-5 §8.3: three aurora blobs — primary, secondary, accent.
-    /// Displacement ≤ 13%, opacity 0.24-0.36, blur radius max(42, diameter * 0.12).
+    /// GPT-5.6 SOL fix: sin/cos cycle corrected to 16-22s.
+    ///
+    /// Period = 2π / frequency. For 16-22s cycle:
+    ///   - 18s → freq = 2π/18 ≈ 0.349 rad/s
+    ///   - 22s → freq = 2π/22 ≈ 0.286 rad/s
+    ///   - 20s → freq = 2π/20 ≈ 0.314 rad/s
+    ///
+    /// Previous frequencies (0.17, 0.13, 0.11) gave 37-57s cycles — too slow.
     private func drawAurora(
         in context: inout GraphicsContext,
         size: CGSize,
@@ -148,11 +160,11 @@ struct LivingHomeCanvas: View {
         let t = motionEnabled ? date.timeIntervalSinceReferenceDate : 0
         let amount: CGFloat = motionEnabled ? 1 : 0
 
-        // Map LivingBackdropPalette (3 colors) → 3 blobs.
+        // GPT-5.6 SOL: corrected frequencies for 18-22s cycles.
         let blobs: [(Color, CGPoint, CGFloat, Double)] = [
-            (palette.primary, CGPoint(x: 0.08, y: 0.10), 0.76, 0.17),
-            (palette.secondary, CGPoint(x: 0.90, y: 0.34), 0.72, 0.13),
-            (palette.accent, CGPoint(x: 0.45, y: 0.92), 0.78, 0.11)
+            (palette.primary, CGPoint(x: 0.08, y: 0.10), 0.76, 0.349),  // 18s cycle
+            (palette.secondary, CGPoint(x: 0.90, y: 0.34), 0.72, 0.286),  // 22s cycle
+            (palette.accent, CGPoint(x: 0.45, y: 0.92), 0.78, 0.314)   // 20s cycle
         ]
 
         for (index, blob) in blobs.enumerated() {
@@ -171,12 +183,20 @@ struct LivingHomeCanvas: View {
                 height: diameter
             )
 
-            context.drawLayer { layer in
-                // GPT-5: blur radius max(42, diameter * 0.12).
-                layer.addFilter(.blur(radius: max(42, diameter * 0.12)))
-                // GPT-5: opacity 0.24-0.36 (using 0.34 as mid-point).
-                layer.opacity = 0.34
-                layer.fill(Path(ellipseIn: rect), with: .color(blob.0))
+            // GPT-5.6 SOL fix: skip blur entirely when reduceTransparency is true.
+            if reduceTransparency {
+                // Solid color fill, no blur — cheaper and respects accessibility.
+                context.opacity = 0.20
+                context.fill(Path(ellipseIn: rect), with: .color(blob.0))
+                context.opacity = 1.0
+            } else {
+                context.drawLayer { layer in
+                    // GPT-5: blur radius max(42, diameter * 0.12).
+                    layer.addFilter(.blur(radius: max(42, diameter * 0.12)))
+                    // GPT-5: opacity 0.24-0.36 (using 0.34 as mid-point).
+                    layer.opacity = 0.34
+                    layer.fill(Path(ellipseIn: rect), with: .color(blob.0))
+                }
             }
         }
     }
@@ -200,28 +220,15 @@ struct LivingHomeCanvas: View {
 }
 
 // MARK: - LivingBackdropPalette extension for Home
-//
-// GPT-5: the existing LivingBackdropPalette (3 colors) is sufficient for Home.
-// The concept's 6-color palette (baseTop, baseBottom, primary, secondary,
-// accent, vignette) is mapped here: baseTop/baseBottom/vignette use Cinema2026
-// constants, primary/secondary/accent come from the artwork extraction.
 
 extension LivingBackdropPalette {
     /// GPT-5: Home-specific palette with Cinema2026 base + artwork accents.
-    /// Used by LivingHomeCanvas for the 3 aurora blobs.
-    /// Base gradient and vignette use Cinema2026 constants (not artwork-derived)
-    /// to maintain legibility and brand consistency.
     var homeBaseTop: Color { Cinema2026.background }
     var homeBaseBottom: Color { Cinema2026.void }
     var homeVignette: Color { Cinema2026.void }
 }
 
 // MARK: - State matrix helpers (GPT-5 §8.6)
-//
-// GPT-5 requires: loading, loaded, empty, offline, API error, no artwork,
-// Reduce Motion, Reduce Transparency, Low Power/thermal, Dynamic Type XXXL, VoiceOver.
-// These states are handled by the host view (HomeView) — PlinkLivingHome only
-// provides the backdrop. The host view provides skeleton/empty/offline content.
 
 @available(iOS 17.0, *)
 struct LivingHomeStateOverlay: View {
@@ -230,7 +237,6 @@ struct LivingHomeStateOverlay: View {
 
     var body: some View {
         if isLoading {
-            // Skeleton shimmer — stable geometry, no content jump.
             VStack(spacing: 16) {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(Cinema2026.surface.opacity(0.4))
@@ -249,6 +255,36 @@ struct LivingHomeStateOverlay: View {
             }
             .redacted(reason: .placeholder)
             .accessibilityLabel("Загрузка ленты")
+        }
+    }
+}
+
+// MARK: - MotionPolicy (testable)
+//
+// GPT-5.6 SOL: extracted as a pure function for unit testing.
+// Tests can verify the truth table without UI dependencies.
+
+enum MotionPolicy {
+    /// Evaluate whether motion should be enabled given the current state.
+    /// - Parameters:
+    ///   - reduceMotion: Accessibility Reduce Motion setting.
+    ///   - scenePhase: Current scene phase (must be .active).
+    ///   - isLowPower: ProcessInfo.isLowPowerModeEnabled.
+    ///   - thermalState: ProcessInfo.thermalState.
+    /// - Returns: true if motion is allowed.
+    static func shouldEnableMotion(
+        reduceMotion: Bool,
+        scenePhase: ScenePhase,
+        isLowPower: Bool,
+        thermalState: ProcessInfo.ThermalState
+    ) -> Bool {
+        guard !reduceMotion else { return false }
+        guard scenePhase == .active else { return false }
+        guard !isLowPower else { return false }
+        switch thermalState {
+        case .serious, .critical: return false
+        case .nominal, .fair: return true
+        @unknown default: return true
         }
     }
 }

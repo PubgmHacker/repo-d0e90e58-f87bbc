@@ -357,24 +357,13 @@ struct PosterImage: View {
     }
 }
 
-// MARK: - RingModifier + adminStroke (used by AvatarView)
-struct RingModifier: ViewModifier {
-    var color: Color = Cinema2026.accent
-    var lineWidth: CGFloat = 2
-
-    func body(content: Content) -> some View {
-        content.overlay(
-            Circle().stroke(color, lineWidth: lineWidth)
-        )
-    }
-}
-
+// MARK: - adminStroke + premiumStroke (used by AvatarView's RingModifier)
 extension View {
-    func ringModifier(color: Color = Cinema2026.accent, lineWidth: CGFloat = 2) -> some View {
-        modifier(RingModifier(color: color, lineWidth: lineWidth))
+    func adminStroke(lineWidth: CGFloat = 2) -> some View {
+        self.overlay(Circle().stroke(Cinema2026.amber, lineWidth: lineWidth))
     }
 
-    func adminStroke() -> some View {
-        self.overlay(Circle().stroke(Cinema2026.amber, lineWidth: 2))
+    func premiumStroke(lineWidth: CGFloat = 2) -> some View {
+        self.overlay(Circle().stroke(Cinema2026.accent, lineWidth: lineWidth))
     }
 }

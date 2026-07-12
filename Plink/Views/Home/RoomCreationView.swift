@@ -227,21 +227,32 @@ struct RoomCreationView: View {
     private func createRoom() async {
         isCreating = true
         defer { isCreating = false }
-        // Existing room creation logic
         let contentURL = roomSetupConfig?.contentURL ?? mediaURL
         let title = roomSetupConfig?.contentTitle ?? mediaTitle
         let thumb = roomSetupConfig?.thumbnailURL ?? "https://img.youtube.com/vi/\(contentURL)/mqdefault.jpg"
 
+        let mediaItem = MediaItem(
+            id: contentURL,
+            title: title,
+            artist: nil,
+            thumbnailURL: thumb,
+            streamURL: contentURL,
+            duration: nil,
+            mediaType: .video,
+            source: .youtube
+        )
+
+        let request = CreateRoomRequest(
+            name: roomName.isEmpty ? "Комната" : roomName,
+            maxParticipants: maxParticipants,
+            mediaItem: mediaItem,
+            privacy: privacy,
+            password: nil,
+            hostName: nil
+        )
+
         do {
-            let room = try await dependencies_roomService().createRoom(
-                name: roomName.isEmpty ? "Комната" : roomName,
-                service: selectedService,
-                contentURL: contentURL,
-                contentTitle: title,
-                thumbnailURL: thumb,
-                privacy: privacy,
-                maxParticipants: maxParticipants
-            )
+            let room = try await dependencies_roomService().createRoom(request)
             onRoomCreated(room)
             dismiss()
         } catch {

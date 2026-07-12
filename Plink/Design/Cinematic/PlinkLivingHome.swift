@@ -51,19 +51,26 @@ struct PlinkLivingHome<Content: View>: View {
     }
 
     var body: some View {
+        // GPT-5.6 SOL §8.8: Living background must NOT participate in layout.
+        // It is a full-size overlay with allowsHitTesting(false).
+        // Content starts at local y = 0, receives bottom clearance via safeAreaInset/padding.
         ZStack {
             LivingHomeCanvas(
                 palette: palette,
                 motionEnabled: motionEnabled,
                 reduceTransparency: reduceTransparency
             )
+            .containerRelativeFrame([.horizontal, .vertical])
             .ignoresSafeArea()
+            .allowsHitTesting(false)
             .accessibilityHidden(true)
 
             content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         // GPT-5.6 SOL fix: direct await in .task(id:) — no nested Task.
-        // SwiftUI automatically cancels the previous .task when id changes.
         .task(id: artworkURL?.absoluteString) {
             await updatePalette()
         }

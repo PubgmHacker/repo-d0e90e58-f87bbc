@@ -1,35 +1,37 @@
-// Plink/AppShell/AppSection.swift — §4 Final Architecture
+// Plink/AppShell/AppSection.swift — GPT-5.6 SOL Recovery §8.8
 //
-// Exactly 5 tabs: Главная, Комнаты, ИИ, Друзья, Настройки
+// Single canonical tab model: home, discover, create, friends, profile.
+// AI becomes contextual (not a tab). Settings lives under Profile.
+// Rooms becomes Discover (broader scope).
 
 import Foundation
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case home
-    case rooms
-    case ai
+    case discover
+    case create
     case friends
-    case settings
+    case profile
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: "Главная"
-        case .rooms: "Комнаты"
-        case .ai: "ИИ"
+        case .discover: "Обзор"
+        case .create: "Создать"
         case .friends: "Друзья"
-        case .settings: "Настройки"
+        case .profile: "Профиль"
         }
     }
 
     var symbol: String {
         switch self {
-        case .home: "house"
-        case .rooms: "rectangle.stack.badge.play"
-        case .ai: "sparkles"
-        case .friends: "person.2"
-        case .settings: "gearshape"
+        case .home: "house.fill"
+        case .discover: "safari.fill"
+        case .create: "plus"
+        case .friends: "person.2.fill"
+        case .profile: "person.crop.circle"
         }
     }
 }

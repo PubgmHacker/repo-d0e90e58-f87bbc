@@ -19,8 +19,7 @@ struct PlinkSidebarShell: View {
 
                 Section("Смотреть") {
                     nav(.home)
-                    nav(.rooms)
-                    nav(.ai)
+                    nav(.discover)
                     nav(.friends)
                 }
 
@@ -35,7 +34,7 @@ struct PlinkSidebarShell: View {
                 }
 
                 Section {
-                    nav(.settings)
+                    nav(.profile)
                 }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
@@ -58,28 +57,15 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            // GPT-5.6 SOL: HomeView requires HomeViewModel — use a simple wrapper
-            // that creates it from AppDependencies.
             SidebarHomeWrapper(dependencies: dependencies)
-        case .rooms:
-            // GPT-5.6 SOL: RoomsTabContent not on this branch — use placeholder.
-            VStack {
-                Image(systemName: "rectangle.stack")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Cinema2026.secondary)
-                Text("Комнаты")
-                    .font(.title)
-                    .foregroundStyle(Cinema2026.text)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Cinema2026.background)
-        case .ai:
-            AIAssistantView()
+        case .discover:
+            DiscoverScreen(dependencies: dependencies, navigateToRoom: .constant(nil))
+        case .create:
+            EmptyView()
         case .friends:
-            FriendsView()
-        case .settings:
-            // GPT-5.6 SOL: SettingsTabContent not on this branch — use SettingsView directly.
-            SettingsView(authService: dependencies.authService)
+            FriendsScreen(dependencies: dependencies)
+        case .profile:
+            ProfileScreen(authService: dependencies.authService)
         }
     }
 }

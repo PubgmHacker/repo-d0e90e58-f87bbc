@@ -1,7 +1,8 @@
-// Plink/AppShell/PlinkPhoneTabShell.swift — Netflix-style home
+// Plink/AppShell/PlinkPhoneTabShell.swift — GPT-5.6 SOL Recovery §8.8
 //
-// 5 tabs. Home = hero banner (always) + live rooms + trending (always).
-// One Create button only (bottom bar).
+// Single iPhone composition root. 5 tabs: Home, Discover, Create, Friends, Profile.
+// Create is a presentation trigger (opens RoomCreationView), not a separate view.
+// One shell, one tab model — no duplicate MainTabView.
 
 import SwiftUI
 
@@ -14,10 +15,11 @@ struct PlinkPhoneTabShell: View {
     @State private var homeViewModel: HomeViewModel?
     @State private var trendingVideos: [YouTubeVideoSummary] = []
     @State private var plinkPopular: [PlinkPopularItem] = []
+    @State private var previousSelection: AppSection = .home
 
     var body: some View {
         TabView(selection: $selection) {
-            // Главная
+            // Главная — living home with hero + rails
             NavigationStack {
                 homeView
                     .fullScreenCover(item: $navigateToRoom) { room in
@@ -27,44 +29,52 @@ struct PlinkPhoneTabShell: View {
             .tag(AppSection.home)
             .tabItem { Label(AppSection.home.title, systemImage: AppSection.home.symbol) }
 
-            // Комнаты
+            // Обзор — discovery screen
             NavigationStack {
-                roomsView
+                DiscoverScreen(dependencies: dependencies, navigateToRoom: $navigateToRoom)
                     .fullScreenCover(item: $navigateToRoom) { room in
                         watchRoom(for: room)
                     }
             }
-            .tag(AppSection.rooms)
-            .tabItem { Label(AppSection.rooms.title, systemImage: AppSection.rooms.symbol) }
+            .tag(AppSection.discover)
+            .tabItem { Label(AppSection.discover.title, systemImage: AppSection.discover.symbol) }
 
-            // ИИ
-            AIAssistantView()
-                .tag(AppSection.ai)
-                .tabItem { Label(AppSection.ai.title, systemImage: AppSection.ai.symbol) }
+            // Создать — presentation trigger only (no view content)
+            Color.clear
+                .tag(AppSection.create)
+                .tabItem { Label(AppSection.create.title, systemImage: AppSection.create.symbol) }
 
-            // Друзья
-            FriendsView()
-                .tag(AppSection.friends)
-                .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.symbol) }
+            // Друзья — redesigned friends screen
+            NavigationStack {
+                FriendsScreen(dependencies: dependencies)
+            }
+            .tag(AppSection.friends)
+            .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.symbol) }
 
-            // Настройки
-            SettingsView(authService: dependencies.authService)
-                .tag(AppSection.settings)
-                .tabItem { Label(AppSection.settings.title, systemImage: AppSection.settings.symbol) }
+            // Профиль — settings lives here
+            NavigationStack {
+                ProfileScreen(authService: dependencies.authService)
+            }
+            .tag(AppSection.profile)
+            .tabItem { Label(AppSection.profile.title, systemImage: AppSection.profile.symbol) }
         }
         .tint(Cinema2026.accent)
         .toolbarBackground(Cinema2026.background.opacity(0.96), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .environmentObject(dependencies.apiClient)
-        // ONE persistent Create button — visible only on home + rooms tabs
-        .overlay(alignment: .bottom) {
-            if selection == .home || selection == .rooms {
-                createButtonBar
+        // GPT-5.6 SOL: Create tab is a trigger — when selected, present RoomCreationView
+        // then restore previous selection.
+        .onChange(of: selection) { _, newSelection in
+            if newSelection == .create {
+                selection = previousSelection
+                createIntent = .chooseService
+            } else {
+                previousSelection = newSelection
             }
         }
     }
 
-    // MARK: - Create button (shared)
+    // MARK: - Create button (removed — Create tab handles presentation)
 
     private var createButtonBar: some View {
         Button {
@@ -97,108 +107,39 @@ struct PlinkPhoneTabShell: View {
     }
 
     private var homeView: some View {
-        // GPT-5 §8: wrap Home content in PlinkLivingHome for artwork-driven
-        // living backdrop. artworkURL comes from the hero (first trending video).
-        // Backdrop uses existing PaletteLoader + LivingBackdropPalette (no duplication).
+        // GPT-5.6 SOL §8.8: Living background must not participate in layout.
+        // Background is overlay only (allowsHitTesting(false)).
+        // Content starts at local y=0, proper vertical rhythm with sectionGap.
         PlinkLivingHome(artworkURL: heroArtworkURL) {
             ScrollView {
-                LazyVStack(spacing: CompactPhoneMetrics.sectionSpacing) {
-                    // Netflix-style hero banner — always visible from trending
-                    if let hero = trendingVideos.first {
-                        NetflixHeroBanner(video: hero) { draft in
-                            createIntent = .selectedContent(draft)
-                        }
-                    } else {
-                        // GPT-5 §8.6: loading state — stable skeleton over fallback backdrop.
-                        LivingHomeStateOverlay(isLoading: true)
-                            .frame(height: 220)
-                    }
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    // Hero section
+                    heroSection
+                    sectionGap(24)
 
-                    // AI CTA
-                    CompactAIEntryCard {
-                        selection = .ai
-                    }
-                    .padding(.top, 8)
+                    // Live rooms (if any) — before trending
+                    liveRoomsSection
+                    sectionGap(32)
 
-                    // Live rooms (if any)
-                    if let vm = homeViewModel, !vm.activeRooms.isEmpty {
-                        CompactRoomRail(
-                            title: "Сейчас смотрят",
-                            rooms: vm.activeRooms,
-                            style: .landscape,
-                            open: { navigateToRoom = $0 }
-                        )
-                    }
+                    // Trending — ALWAYS visible
+                    trendingSection
+                    sectionGap(32)
 
-                    // Trending — ALWAYS visible (YouTube only, honest label)
-                    if !trendingVideos.isEmpty {
-                        TrendingRail(
-                            title: "Популярное на YouTube",
-                            videos: trendingVideos,
-                            onSelect: { video in
-                                createIntent = .selectedContent(
-                                    SelectedContentDraft(
-                                        id: video.videoId,
-                                        service: .youtube,
-                                        contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-                                        title: video.title,
-                                        thumbnailURL: video.thumbnailURLString
-                                    )
-                                )
-                            }
-                        )
-                    }
+                    // Popular in Plink — hide if empty
+                    plinkPopularSection
+                    sectionGap(32)
 
-                    // Brain Revision 3 Step 6: "Популярное в Plink" rail.
-                    // First-party popularity from /api/discovery/popular.
-                    // Hide the rail entirely if endpoint returns empty (do NOT fill with YouTube).
-                    if !plinkPopular.isEmpty {
-                        PlinkPopularRail(
-                            title: "Популярное в Plink",
-                            items: plinkPopular,
-                            onSelect: { item in
-                                // Only allow tap if directCreateRoomDraft is true (YouTube content).
-                                guard item.directCreateRoomDraft else { return }
-                                createIntent = .selectedContent(
-                                    SelectedContentDraft(
-                                        id: item.id,
-                                        service: .youtube,
-                                        contentURL: item.contentURL,
-                                        title: item.title,
-                                        thumbnailURL: item.thumbnailURL
-                                    )
-                                )
-                            }
-                        )
-                    }
+                    // Recommended — items 7-12
+                    recommendedSection
+                    sectionGap(32)
 
-                    // Brain Revision 3 Step 6: removed shuffled() — was causing unstable UI.
-                    // Deterministic order from backend ranking (already sorted by uniqueViewers desc).
-                    // Show "Рекомендуем" only when we have 7+ trending items (top 6 in primary rail,
-                    // items 7-12 in secondary rail — deterministic, not random).
-                    if trendingVideos.count > 6 {
-                        TrendingRail(
-                            title: "Рекомендуем",
-                            videos: Array(trendingVideos.prefix(12).suffix(6)),
-                            onSelect: { video in
-                                createIntent = .selectedContent(
-                                    SelectedContentDraft(
-                                        id: video.videoId,
-                                        service: .youtube,
-                                        contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
-                                        title: video.title,
-                                        thumbnailURL: video.thumbnailURLString
-                                    )
-                                )
-                            }
-                        )
-                    }
+                    // AI CTA — moved BELOW content rails (GPT-5.6 SOL §8.8)
+                    contextualAISection
                 }
-                .padding(.bottom, 140)  // leave room for the persistent create button
+                .padding(.top, 8)
+                .padding(.bottom, 104)  // tab bar clearance
             }
             .scrollIndicators(.hidden)
-            // GPT-5: background is now provided by PlinkLivingHome's LivingHomeCanvas.
-            // Do NOT add .background(Cinema2026.background) here — it would cover the backdrop.
             .navigationTitle("")
             .task {
                 if homeViewModel == nil {
@@ -215,6 +156,110 @@ struct PlinkPhoneTabShell: View {
                     await loadPlinkPopular()
                 }
             }
+        }
+    }
+
+    // MARK: - Home sections (GPT-5.6 SOL §8.8 vertical rhythm)
+
+    private func sectionGap(_ height: CGFloat) -> some View {
+        Color.clear.frame(height: height)
+    }
+
+    @ViewBuilder
+    private var heroSection: some View {
+        if let hero = trendingVideos.first {
+            NetflixHeroBanner(video: hero) { draft in
+                createIntent = .selectedContent(draft)
+            }
+        } else {
+            LivingHomeStateOverlay(isLoading: true)
+                .frame(height: 220)
+        }
+    }
+
+    @ViewBuilder
+    private var liveRoomsSection: some View {
+        if let vm = homeViewModel, !vm.activeRooms.isEmpty {
+            CompactRoomRail(
+                title: "Сейчас смотрят",
+                rooms: vm.activeRooms,
+                style: .landscape,
+                open: { navigateToRoom = $0 }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var trendingSection: some View {
+        if !trendingVideos.isEmpty {
+            TrendingRail(
+                title: "Популярное на YouTube",
+                videos: trendingVideos,
+                onSelect: { video in
+                    createIntent = .selectedContent(
+                        SelectedContentDraft(
+                            id: video.videoId,
+                            service: .youtube,
+                            contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+                            title: video.title,
+                            thumbnailURL: video.thumbnailURLString
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var plinkPopularSection: some View {
+        if !plinkPopular.isEmpty {
+            PlinkPopularRail(
+                title: "Популярное в Plink",
+                items: plinkPopular,
+                onSelect: { item in
+                    guard item.directCreateRoomDraft else { return }
+                    createIntent = .selectedContent(
+                        SelectedContentDraft(
+                            id: item.id,
+                            service: .youtube,
+                            contentURL: item.contentURL,
+                            title: item.title,
+                            thumbnailURL: item.thumbnailURL
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var recommendedSection: some View {
+        if trendingVideos.count > 6 {
+            TrendingRail(
+                title: "Рекомендуем",
+                videos: Array(trendingVideos.prefix(12).suffix(6)),
+                onSelect: { video in
+                    createIntent = .selectedContent(
+                        SelectedContentDraft(
+                            id: video.videoId,
+                            service: .youtube,
+                            contentURL: "https://www.youtube.com/watch?v=\(video.videoId)",
+                            title: video.title,
+                            thumbnailURL: video.thumbnailURLString
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var contextualAISection: some View {
+        // GPT-5.6 SOL §8.8: AI moved below content rails.
+        // AI is contextual, not a primary navigation element.
+        CompactAIEntryCard {
+            // AI becomes contextual — no tab to switch to.
+            // Could open a sheet with AI assistant in future.
         }
     }
 

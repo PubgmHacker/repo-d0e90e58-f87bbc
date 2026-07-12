@@ -147,7 +147,7 @@ struct V4Hero: View {
         ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: [c1, Color.oklch(0.10,0.02,190)], startPoint: .topLeading, endPoint: .bottomTrailing)
             RadialGradient(colors: [c2, .clear], center: UnitPoint(x: 0.72, y: 0.22), startRadius: 0, endRadius: height * 0.42)
-            LinearGradient(colors: [.clear, Color.oklch(0.06,0.01,190,alpha:.95)], startPoint: UnitPoint(x:.5,y:.28), endPoint: .bottom)
+            LinearGradient(colors: [.clear, Color.oklch(0.06,0.01,190,alpha:0.95)], startPoint: UnitPoint(x:0.5,y:0.28), endPoint: .bottom)
             VStack(alignment: .leading, spacing: 10) {
                 Text(title).font(.system(size: 26.4, weight: .bold)).foregroundStyle(V4.ink)
                 Text(meta).font(.system(size: 13.12)).foregroundStyle(V4.muted)
@@ -178,12 +178,12 @@ struct V4LivingBackground: View {
             ZStack {
                 c0
                 blob(c1, g, x: -0.35, y: -0.15, dx: 0.44, dy: 0.30, scale: 1.14, rotation: 7, duration: 14)
-                blob(c2, g, x:  0.45, y:  0.28, dx: -.39, dy: -.21, scale: 0.92, rotation: -6, duration: 16)
-                blob(c3, g, x:  0.12, y:  0.70, dx: 0.10, dy: -.30, scale: 1.12, rotation: 0, duration: 13)
+                blob(c2, g, x:  0.45, y:  0.28, dx: -0.39, dy: -0.21, scale: 0.92, rotation: -6, duration: 16)
+                blob(c3, g, x:  0.12, y:  0.70, dx: 0.10, dy: -0.30, scale: 1.12, rotation: 0, duration: 13)
                 LinearGradient(stops: [
                     .init(color: .clear, location: 0.10),
-                    .init(color: Color.oklch(0.06,0.01,190,alpha:.10), location: 0.36),
-                    .init(color: Color.oklch(0.06,0.01,190,alpha:.86), location: 1)
+                    .init(color: Color.oklch(0.06,0.01,190,alpha:0.10), location: 0.36),
+                    .init(color: Color.oklch(0.06,0.01,190,alpha:0.86), location: 1)
                 ], startPoint: .top, endPoint: .bottom)
             }
             .frame(width: g.size.width * 1.3, height: g.size.height * 1.3)
@@ -202,7 +202,7 @@ struct V4LivingBackground: View {
             .position(x: g.size.width * (x + 0.45), y: g.size.height * (y + 0.45))
             .offset(x: phase ? g.size.width * dx : 0, y: phase ? g.size.height * dy : 0)
             .scaleEffect(phase ? scale : 1).rotationEffect(.degrees(phase ? rotation : 0))
-            .animation(reduceMotion ? nil : .timingCurve(.16, 1, 0.3, 1, duration: duration).repeatForever(autoreverses: true), value: phase)
+            .animation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: duration).repeatForever(autoreverses: true), value: phase)
     }
 }
 
@@ -282,16 +282,16 @@ struct V4MorphOrb: View {
                 let k = CGFloat(morph)
                 var p = Path()
                 p.move(to: CGPoint(x:r.midX,y:r.minY))
-                p.addCurve(to:CGPoint(x:r.maxX,y:r.midY),control1:CGPoint(x:r.maxX*(.70+.12*k),y:r.minY),control2:CGPoint(x:r.maxX,y:r.maxY*(.24+.10*k)))
-                p.addCurve(to:CGPoint(x:r.midX,y:r.maxY),control1:CGPoint(x:r.maxX,y:r.maxY*(.76-.12*k)),control2:CGPoint(x:r.maxX*(.72-.10*k),y:r.maxY))
-                p.addCurve(to:CGPoint(x:r.minX,y:r.midY),control1:CGPoint(x:r.maxX*(.30-.08*k),y:r.maxY),control2:CGPoint(x:r.minX,y:r.maxY*(.78+.08*k)))
-                p.addCurve(to:CGPoint(x:r.midX,y:r.minY),control1:CGPoint(x:r.minX,y:r.maxY*(.28-.08*k)),control2:CGPoint(x:r.maxX*(.28+.10*k),y:r.minY))
+                p.addCurve(to:CGPoint(x:r.maxX,y:r.midY),control1:CGPoint(x:r.maxX*(0.70+0.12*k),y:r.minY),control2:CGPoint(x:r.maxX,y:r.maxY*(0.24+0.10*k)))
+                p.addCurve(to:CGPoint(x:r.midX,y:r.maxY),control1:CGPoint(x:r.maxX,y:r.maxY*(0.76-0.12*k)),control2:CGPoint(x:r.maxX*(0.72-0.10*k),y:r.maxY))
+                p.addCurve(to:CGPoint(x:r.minX,y:r.midY),control1:CGPoint(x:r.maxX*(0.30-0.08*k),y:r.maxY),control2:CGPoint(x:r.minX,y:r.maxY*(0.78+0.08*k)))
+                p.addCurve(to:CGPoint(x:r.midX,y:r.minY),control1:CGPoint(x:r.minX,y:r.maxY*(0.28-0.08*k)),control2:CGPoint(x:r.maxX*(0.28+0.10*k),y:r.minY))
                 p.closeSubpath()
                 context.fill(p, with:.radialGradient(Gradient(stops:[
-                    .init(color:Color.white.opacity(0.6),location:0), .init(color:c3,location:.25),
-                    .init(color:c2,location:.53), .init(color:c1,location:.70), .init(color:c0,location:.77)
-                ]),center:CGPoint(x:canvas.width*.34,y:canvas.height*.24),startRadius:0,endRadius:canvas.width*.72))
-                var inner = p.applying(CGAffineTransform(translationX:canvas.width*.18,y:canvas.height*.18).scaledBy(x:.64,y:.64).rotated(by:.pi/7.2))
+                    .init(color:Color.white.opacity(0.6),location:0), .init(color:c3,location:0.25),
+                    .init(color:c2,location:0.53), .init(color:c1,location:0.70), .init(color:c0,location:0.77)
+                ]),center:CGPoint(x:canvas.width*0.34,y:canvas.height*0.24),startRadius:0,endRadius:canvas.width*0.72))
+                var inner = p.applying(CGAffineTransform(translationX:canvas.width*0.18,y:canvas.height*0.18).scaledBy(x:0.64,y:0.64).rotated(by:.pi/7.2))
                 context.stroke(inner,with:.color(.white.opacity(0.47)),lineWidth:1)
             }.rotationEffect(.degrees(rotation))
         }.frame(width:size,height:size).shadow(color:c2,radius:glow)
@@ -327,12 +327,12 @@ struct V4AIView: View {
                             Text("Соберу очередь, создам комнату, позову друзей после подтверждения.")
                                 .font(.system(size:13.28)).lineSpacing(5.31)
                         }.padding(.vertical,11).padding(.horizontal,13).background(V4.botBG)
-                         .clipShape(.rect(topLeadingRadius:6,bottomLeadingRadius:17,bottomTrailingRadius:17,topTrailingRadius:17))
+                         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous)
                         HStack(spacing:7) {
                             chip("Очередь","Собери очередь"); chip("У друзей","Что смотрят друзья?"); chip("Комната","Создай комнату")
                         }
                     }.padding(.horizontal,16).padding(.top,8).padding(.bottom,92)
-                }.background(LinearGradient(colors:[.clear,Color.oklch(0.06,0.01,190,alpha:.76)],startPoint:UnitPoint(x:.5,y:.16),endPoint:.bottom))
+                }.background(LinearGradient(colors:[.clear,Color.oklch(0.06,0.01,190,alpha:0.76)],startPoint:UnitPoint(x:0.5,y:0.16),endPoint:.bottom))
             }.foregroundStyle(V4.ink)
             HStack(spacing:6) {
                 Button("🎙") { state="Слушаю…" }.frame(width:42,height:42).background(V4.raised).clipShape(RoundedRectangle(cornerRadius:14))
@@ -438,7 +438,7 @@ struct V4AppearanceView: View {
             }}.foregroundStyle(V4.ink)
         }
     }
-    private func themeCard(_ item:V4Theme)->some View { let(c0,c1,c2,_)=item.colors; return Button{theme=item}{ ZStack(alignment:.bottomLeading){ c0; RadialGradient(colors:[c1,.clear],center:UnitPoint(x:.25,y:.22),startRadius:0,endRadius:75); RadialGradient(colors:[c2,.clear],center:UnitPoint(x:.78,y:.75),startRadius:0,endRadius:80); Text(item.name).font(.system(size:10.72,weight:.heavy)).padding(9) }.frame(width:112,height:150).clipShape(RoundedRectangle(cornerRadius:20)).overlay(RoundedRectangle(cornerRadius:20).stroke(theme == item ? V4.ink : V4.line,lineWidth:theme == item ? 2:1)) } }
+    private func themeCard(_ item:V4Theme)->some View { let(c0,c1,c2,_)=item.colors; return Button(action:{theme=item}){ ZStack(alignment:.bottomLeading){ c0; RadialGradient(colors:[c1,.clear],center:UnitPoint(x:0.25,y:0.22),startRadius:0,endRadius:75); RadialGradient(colors:[c2,.clear],center:UnitPoint(x:0.78,y:0.75),startRadius:0,endRadius:80); Text(item.name).font(.system(size:10.72,weight:.heavy)).padding(9) }.frame(width:112,height:150).clipShape(RoundedRectangle(cornerRadius:20)).overlay(RoundedRectangle(cornerRadius:20).stroke(theme == item ? V4.ink : V4.line,lineWidth:theme == item ? 2:1)) } }
     private func toggleRow(_ title:String,_ detail:String,_ on:Bool)->some View { HStack { VStack(alignment:.leading){Text(title).font(.system(size:13.6,weight:.bold));Text(detail).font(.system(size:11.2)).foregroundStyle(V4.muted)};Spacer(); if on { Capsule().fill(V4.accent).frame(width:48,height:29).overlay(Circle().fill(V4.ink).frame(width:23,height:23).offset(x:9.5)) } else { Text("›") } }.frame(minHeight:58).overlay(alignment:.bottom){Rectangle().fill(V4.line).frame(height:1)} }
 }
 
@@ -449,7 +449,7 @@ struct V4TabBar: View {
     @Binding var selection: Int
     let items=[("house","Главная"),("circle.circle","Комнаты"),("sparkles","ИИ"),("person","Друзья"),("person.crop.circle","Профиль")]
     var body: some View {
-        HStack(spacing:0){ ForEach(items.indices,id:\.self){ i in Button{selection=i}{VStack(spacing:2){Image(systemName:items[i].0).font(.system(size:17.28));Text(items[i].1).font(.system(size:9.44))}.frame(maxWidth:.infinity,maxHeight:.infinity).foregroundStyle(selection==i ? V4.accent:V4.muted).background(selection==i ? V4.accent.opacity(0.08):.clear).clipShape(RoundedRectangle(cornerRadius:15))} } }
+        HStack(spacing:0){ ForEach(items.indices,id:\.self){ i in Button(action:{selection=i}){VStack(spacing:2){Image(systemName:items[i].0).font(.system(size:17.28));Text(items[i].1).font(.system(size:9.44))}.frame(maxWidth:.infinity,maxHeight:.infinity).foregroundStyle(selection==i ? V4.accent:V4.muted).background(selection==i ? V4.accent.opacity(0.08):.clear).clipShape(RoundedRectangle(cornerRadius:15))} } }
         .padding(6).frame(height:69).background(.ultraThinMaterial).background(V4.navBG).clipShape(RoundedRectangle(cornerRadius:23)).overlay(RoundedRectangle(cornerRadius:23).stroke(V4.line)).padding(.horizontal,13).padding(.bottom,10)
     }
 }
@@ -475,7 +475,7 @@ struct PlinkApprovedV4Root: View {
                 }
             }
             .transition(.offset(y:8).combined(with:.opacity))
-            .animation(.timingCurve(.16,1,0.3,1,duration:.32),value:tab)
+            .animation(.timingCurve(0.16,1,0.3,1,duration:0.32),value:tab)
             if tab != 2 { V4TabBar(selection:$tab) }
             if appearance { V4AppearanceView(theme:$theme,presented:$appearance).zIndex(25).transition(.opacity) }
             // room == true must present existing WatchRoom as full-screenCover.

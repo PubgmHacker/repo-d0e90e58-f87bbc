@@ -384,3 +384,29 @@ extension View {
         }
     }
 }
+
+// MARK: - CinematicPrimaryButtonStyle (used by PlinkPlusPaywall)
+struct CinematicPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(
+                LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.8)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - CinemaRadius (used by PlinkPlusPaywall)
+enum CinemaRadius {
+    static let small: CGFloat = 8
+    static let medium: CGFloat = 14
+    static let large: CGFloat = 20
+    static let extraLarge: CGFloat = 28
+}

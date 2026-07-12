@@ -7,11 +7,11 @@ import SwiftUI
 struct CinematicBackground: View {
     var body: some View {
         ZStack {
-            CinemaColor.background
+            Cinema2026.background
 
             // Subtle top glow — barely visible, creates depth
             RadialGradient(
-                colors: [CinemaColor.plink.opacity(0.04), .clear],
+                colors: [Cinema2026.accent.opacity(0.04), .clear],
                 center: .top,
                 startRadius: 0,
                 endRadius: 400
@@ -19,7 +19,7 @@ struct CinematicBackground: View {
 
             // Bottom warmth
             RadialGradient(
-                colors: [CinemaColor.surface.opacity(0.3), .clear],
+                colors: [Cinema2026.surface.opacity(0.3), .clear],
                 center: .bottom,
                 startRadius: 0,
                 endRadius: 500

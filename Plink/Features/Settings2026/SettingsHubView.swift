@@ -60,7 +60,7 @@ struct SettingsHubView: View {
                     SettingsSidebar(model: model)
                         .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
                         .scrollContentBackground(.hidden)
-                        .background(CinemaColor.background)
+                        .background(Cinema2026.background)
                 } detail: {
                     SettingsDetailView(route: .account, model: model)
                 }
@@ -71,7 +71,7 @@ struct SettingsHubView: View {
             }
         }
         .task { await model.load() }
-        .background(CinemaColor.background)
+        .background(Cinema2026.background)
     }
 }
 
@@ -103,7 +103,7 @@ struct SettingsSidebar: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(CinemaColor.background)
+        .background(Cinema2026.background)
     }
 }
 
@@ -150,7 +150,7 @@ struct SettingsPhoneList: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(CinemaColor.background)
+        .background(Cinema2026.background)
         .navigationTitle("Настройки")
     }
 }
@@ -168,21 +168,21 @@ struct SettingsNavigationRow: View {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
                     .font(.system(size: 14))
-                    .foregroundStyle(CinemaColor.plink)
+                    .foregroundStyle(Cinema2026.accent)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .foregroundStyle(CinemaColor.text)
+                        .foregroundStyle(Cinema2026.text)
                     if let subtitle {
                         Text(subtitle)
                             .font(.caption)
-                            .foregroundStyle(CinemaColor.secondary)
+                            .foregroundStyle(Cinema2026.secondary)
                     }
                 }
             }
         }
         .listRowBackground(Color.clear)
-        .listRowSeparatorTint(CinemaColor.divider)
+        .listRowSeparatorTint(Cinema2026.divider)
     }
 }
 
@@ -192,22 +192,22 @@ struct ProfileSettingsHeader: View {
     var body: some View {
         HStack(spacing: 14) {
             Circle()
-                .fill(CinemaColor.raised)
+                .fill(Cinema2026.raised)
                 .frame(width: 56, height: 56)
                 .overlay(
                     Image(systemName: "person.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(CinemaColor.secondary)
+                        .foregroundStyle(Cinema2026.secondary)
                 )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Профиль")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CinemaColor.text)
+                    .foregroundStyle(Cinema2026.text)
                 if model.isPremium {
                     Text("Plink+")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(CinemaColor.plink)
+                        .foregroundStyle(Cinema2026.accent)
                 }
             }
             Spacer()
@@ -222,13 +222,13 @@ struct PlinkPlusRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "star.fill")
-                .foregroundStyle(CinemaColor.plink)
+                .foregroundStyle(Cinema2026.accent)
             Text(model.isPremium ? "Plink+ активен" : "Получить Plink+")
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
             Spacer()
             if !model.isPremium {
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(CinemaColor.tertiary)
+                    .foregroundStyle(Cinema2026.tertiary)
             }
         }
         .listRowBackground(Color.clear)

@@ -20,12 +20,12 @@ struct ShimmerView: View {
     var body: some View {
         GeometryReader { geo in
             Rectangle()
-                .fill(CinemaColor.surface)
+                .fill(Cinema2026.surface)
                 .overlay(
                     LinearGradient(
                         colors: [
                             .clear,
-                            CinemaColor.raised.opacity(0.4),
+                            Cinema2026.raised.opacity(0.4),
                             .clear,
                         ],
                         startPoint: .leading,

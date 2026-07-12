@@ -15,7 +15,7 @@ struct PlinkPlusPaywall: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            CinemaColor.background.ignoresSafeArea()
+            Cinema2026.background.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 20) {
@@ -28,7 +28,7 @@ struct PlinkPlusPaywall: View {
                             .multilineTextAlignment(.center)
                         Text("Темы, реакции и больше друзей. Базовая синхронизация остаётся одинаково быстрой для всех.")
                             .font(.subheadline)
-                            .foregroundStyle(CinemaColor.secondary)
+                            .foregroundStyle(Cinema2026.secondary)
                             .multilineTextAlignment(.center)
                     }
                     .padding(.horizontal, 24)
@@ -48,14 +48,14 @@ struct PlinkPlusPaywall: View {
                         Task { await StoreManager.shared.restorePurchases() }
                     }
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(CinemaColor.secondary)
+                    .foregroundStyle(Cinema2026.secondary)
 
                     HStack(spacing: 14) {
                         Link("Условия", destination: URL(string: "https://plink.app/terms")!)
                         Link("Конфиденциальность", destination: URL(string: "https://plink.app/privacy")!)
                     }
                     .font(.caption)
-                    .foregroundStyle(CinemaColor.secondary)
+                    .foregroundStyle(Cinema2026.secondary)
                 }
                 .padding(.bottom, 30)
             }
@@ -63,7 +63,7 @@ struct PlinkPlusPaywall: View {
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
                     .frame(width: 44, height: 44)
-                    .background(CinemaColor.surface, in: Circle())
+                    .background(Cinema2026.surface, in: Circle())
             }
             .padding(14)
             .accessibilityLabel("Закрыть")
@@ -107,13 +107,13 @@ struct PaywallArtwork: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [CinemaColor.plink.opacity(0.2), CinemaColor.background],
+                colors: [Cinema2026.accent.opacity(0.2), Cinema2026.background],
                 startPoint: .top,
                 endPoint: .bottom
             )
             Image(systemName: symbol)
                 .font(.system(size: 60))
-                .foregroundStyle(CinemaColor.plink)
+                .foregroundStyle(Cinema2026.accent)
         }
     }
 
@@ -136,10 +136,10 @@ struct PaywallBenefits: View {
             ForEach(benefits, id: \.self) { benefit in
                 HStack(spacing: 10) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(CinemaColor.plink)
+                        .foregroundStyle(Cinema2026.accent)
                     Text(benefit)
                         .font(.subheadline)
-                        .foregroundStyle(CinemaColor.text)
+                        .foregroundStyle(Cinema2026.text)
                 }
             }
         }
@@ -170,28 +170,28 @@ struct PlanPicker: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(product.displayName)
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(CinemaColor.text)
+                                .foregroundStyle(Cinema2026.text)
                             Text(product.description)
                                 .font(.caption)
-                                .foregroundStyle(CinemaColor.secondary)
+                                .foregroundStyle(Cinema2026.secondary)
                                 .lineLimit(1)
                         }
                         Spacer()
                         Text(product.displayPrice)
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(CinemaColor.text)
+                            .foregroundStyle(Cinema2026.text)
 
                         Image(systemName: selectedID == product.id ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selectedID == product.id ? CinemaColor.plink : CinemaColor.tertiary)
+                            .foregroundStyle(selectedID == product.id ? Cinema2026.accent : Cinema2026.tertiary)
                     }
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: CinemaRadius.control)
-                            .fill(selectedID == product.id ? CinemaColor.plink.opacity(0.08) : CinemaColor.surface)
+                            .fill(selectedID == product.id ? Cinema2026.accent.opacity(0.08) : Cinema2026.surface)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: CinemaRadius.control)
-                            .stroke(selectedID == product.id ? CinemaColor.plink.opacity(0.4) : .clear, lineWidth: 1)
+                            .stroke(selectedID == product.id ? Cinema2026.accent.opacity(0.4) : .clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)

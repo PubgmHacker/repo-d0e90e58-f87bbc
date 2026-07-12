@@ -12,7 +12,7 @@ struct PlinkOnboardingFlow: View {
 
     var body: some View {
         ZStack {
-            CinemaColor.background.ignoresSafeArea()
+            Cinema2026.background.ignoresSafeArea()
 
             TabView(selection: $step) {
                 OnboardingValuePage().tag(Step.value)
@@ -50,13 +50,13 @@ struct OnboardingValuePage: View {
             Spacer()
             Image(systemName: "play.rectangle.on.rectangle.fill")
                 .font(.system(size: 72))
-                .foregroundStyle(CinemaColor.plink)
+                .foregroundStyle(Cinema2026.accent)
             Text("Смотрите вместе")
                 .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
             Text("Синхронизированное видео, общий чат и реакции. Как кинотеатр, но с друзьями.")
                 .font(.system(size: 16))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Spacer()
@@ -71,13 +71,13 @@ struct OnboardingRoomPage: View {
             Spacer()
             Image(systemName: "person.3.fill")
                 .font(.system(size: 72))
-                .foregroundStyle(CinemaColor.plink)
+                .foregroundStyle(Cinema2026.accent)
             Text("Создайте комнату")
                 .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
             Text("Выберите видео, пригласите друзей и наслаждайтесь вместе. Плей, пауза и перемотка синхронизированы.")
                 .font(.system(size: 16))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Spacer()
@@ -94,13 +94,13 @@ struct OnboardingStartPage: View {
             Spacer()
             Image(systemName: "sparkles")
                 .font(.system(size: 72))
-                .foregroundStyle(CinemaColor.plink)
+                .foregroundStyle(Cinema2026.accent)
             Text("Готовы?")
                 .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
             Text("Начните смотреть вместе прямо сейчас.")
                 .font(.system(size: 16))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Spacer()
@@ -122,7 +122,7 @@ struct OnboardingProgress: View {
         HStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { index in
                 Capsule()
-                    .fill(index <= current ? CinemaColor.plink : CinemaColor.raised)
+                    .fill(index <= current ? Cinema2026.accent : Cinema2026.raised)
                     .frame(width: index == current ? 24 : 8, height: 8)
                     .animation(CinemaMotion.standard, value: current)
             }

@@ -7,7 +7,7 @@
 // the room has its own purple-neon aesthetic that's separate from the
 // app's cinematic dark palette.
 //
-// Rule: Violet (CinemaColor.plink) only on CTA, selected state, progress,
+// Rule: Violet (Cinema2026.accent) only on CTA, selected state, progress,
 // focus. Artwork provides the rest of the color.
 
 import SwiftUI
@@ -54,8 +54,8 @@ public enum CinemaRadius {
 public extension View {
     func cinematicScreen() -> some View {
         self
-            .foregroundStyle(CinemaColor.text)
-            .background(CinemaColor.background.ignoresSafeArea())
+            .foregroundStyle(Cinema2026.text)
+            .background(Cinema2026.background.ignoresSafeArea())
             .preferredColorScheme(.dark)
     }
 }
@@ -66,11 +66,11 @@ struct CinematicPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(CinemaColor.void)
+            .foregroundStyle(Cinema2026.background)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
             .background(
-                CinemaColor.primaryAction,
+                Cinema2026.accentAction,
                 in: RoundedRectangle(cornerRadius: CinemaRadius.control, style: .continuous)
             )
             .opacity(configuration.isPressed ? 0.85 : 1.0)
@@ -88,20 +88,20 @@ struct PosterImage: View {
             AsyncImage(url: imageURL) { phase in
                 switch phase {
                 case .empty:
-                    Rectangle().fill(CinemaColor.surface)
+                    Rectangle().fill(Cinema2026.surface)
                 case .success(let image):
                     image.resizable().aspectRatio(contentMode: .fill)
                 case .failure:
-                    Rectangle().fill(CinemaColor.surface)
+                    Rectangle().fill(Cinema2026.surface)
                 @unknown default:
-                    Rectangle().fill(CinemaColor.surface)
+                    Rectangle().fill(Cinema2026.surface)
                 }
             }
         } else {
-            Rectangle().fill(CinemaColor.surface)
+            Rectangle().fill(Cinema2026.surface)
                 .overlay(
                     Image(systemName: "film")
-                        .foregroundStyle(CinemaColor.tertiary)
+                        .foregroundStyle(Cinema2026.tertiary)
                 )
         }
     }
@@ -114,22 +114,22 @@ struct ParticipantAvatarStack: View {
         HStack(spacing: -6) {
             ForEach(participants.prefix(4)) { participant in
                 Circle()
-                    .fill(CinemaColor.raised)
+                    .fill(Cinema2026.raised)
                     .frame(width: 22, height: 22)
                     .overlay(
                         Text(String(participant.username.prefix(1)).uppercased())
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(CinemaColor.secondary)
+                            .foregroundStyle(Cinema2026.secondary)
                     )
-                    .overlay(Circle().stroke(CinemaColor.background, lineWidth: 2))
+                    .overlay(Circle().stroke(Cinema2026.background, lineWidth: 2))
             }
             if participants.count > 4 {
                 Text("+\(participants.count - 4)")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(CinemaColor.secondary)
+                    .foregroundStyle(Cinema2026.secondary)
                     .frame(width: 22, height: 22)
-                    .background(CinemaColor.raised, in: Circle())
-                    .overlay(Circle().stroke(CinemaColor.background, lineWidth: 2))
+                    .background(Cinema2026.raised, in: Circle())
+                    .overlay(Circle().stroke(Cinema2026.background, lineWidth: 2))
             }
         }
     }

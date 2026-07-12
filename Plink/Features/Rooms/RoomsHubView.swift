@@ -28,7 +28,7 @@ struct RoomsHubView: View {
                     ForEach(filtered) { room in
                         RoomListRow(room: room)
                             .listRowBackground(Color.clear)
-                            .listRowSeparatorTint(CinemaColor.divider)
+                            .listRowSeparatorTint(Cinema2026.divider)
                     }
                 }
                 .listStyle(.plain)
@@ -36,7 +36,7 @@ struct RoomsHubView: View {
             }
         }
         .searchable(text: $search, prompt: "Найти комнату")
-        .background(CinemaColor.background)
+        .background(Cinema2026.background)
         .task { await model.load() }
     }
 
@@ -127,7 +127,7 @@ struct RoomListRow: View {
                         .font(.system(size: 8, weight: .bold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
-                        .background(CinemaColor.danger, in: Capsule())
+                        .background(Cinema2026.danger, in: Capsule())
                         .padding(6)
                 }
             }
@@ -135,12 +135,12 @@ struct RoomListRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(room.name)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(CinemaColor.text)
+                    .foregroundStyle(Cinema2026.text)
                     .lineLimit(1)
 
                 Text(room.mediaItem?.title ?? "Без видео")
                     .font(.caption)
-                    .foregroundStyle(CinemaColor.secondary)
+                    .foregroundStyle(Cinema2026.secondary)
                     .lineLimit(1)
 
                 ParticipantAvatarStack(participants: room.participants)
@@ -149,7 +149,7 @@ struct RoomListRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(CinemaColor.tertiary)
+                .foregroundStyle(Cinema2026.tertiary)
         }
         .padding(.vertical, 7)
     }
@@ -164,15 +164,15 @@ struct RoomEmptyState: View {
         VStack(spacing: 16) {
             Image(systemName: "play.rectangle.on.rectangle")
                 .font(.system(size: 48))
-                .foregroundStyle(CinemaColor.tertiary)
+                .foregroundStyle(Cinema2026.tertiary)
 
             Text(emptyTitle)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
 
             Text(emptySubtitle)
                 .font(.system(size: 14))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

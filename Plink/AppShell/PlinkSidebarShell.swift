@@ -13,7 +13,7 @@ struct PlinkSidebarShell: View {
                 Section {
                     Label("Plink", systemImage: "play.fill")
                         .font(.headline)
-                        .foregroundStyle(CinemaColor.text)
+                        .foregroundStyle(Cinema2026.text)
                         .listRowBackground(Color.clear)
                 }
 
@@ -31,7 +31,7 @@ struct PlinkSidebarShell: View {
                         Label("Создать комнату", systemImage: "plus.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(CinemaColor.plink)
+                    .tint(Cinema2026.accent)
                 }
 
                 Section {
@@ -40,7 +40,7 @@ struct PlinkSidebarShell: View {
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
             .scrollContentBackground(.hidden)
-            .background(CinemaColor.background)
+            .background(Cinema2026.background)
         } detail: {
             detail(for: selection)
         }

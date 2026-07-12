@@ -43,7 +43,7 @@ struct DiscoveryHomeView: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.hidden)
-        .background(CinemaColor.background)
+        .background(Cinema2026.background)
         .task { await model.load() }
         .navigationTitle(widthClass == .regular ? "Смотреть" : "")
     }
@@ -57,10 +57,10 @@ struct HomeHeader: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Plink")
                     .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(CinemaColor.text)
+                    .foregroundStyle(Cinema2026.text)
                 Text("Смотрите вместе")
                     .font(.system(size: 14))
-                    .foregroundStyle(CinemaColor.secondary)
+                    .foregroundStyle(Cinema2026.secondary)
             }
             Spacer()
         }
@@ -96,7 +96,7 @@ struct FeaturedHero: View {
                 .aspectRatio(16 / 10, contentMode: .fill)
                 .overlay {
                     LinearGradient(
-                        colors: [.clear, CinemaColor.background.opacity(0.16), CinemaColor.background],
+                        colors: [.clear, Cinema2026.background.opacity(0.16), Cinema2026.background],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -106,7 +106,7 @@ struct FeaturedHero: View {
                 Text(item.eyebrow.uppercased())
                     .font(.caption2.weight(.semibold))
                     .tracking(1.1)
-                    .foregroundStyle(CinemaColor.plink)
+                    .foregroundStyle(Cinema2026.accent)
 
                 Text(item.title)
                     .font(.system(size: 34, weight: .semibold))
@@ -115,22 +115,22 @@ struct FeaturedHero: View {
 
                 Text(item.metadata)
                     .font(.caption)
-                    .foregroundStyle(CinemaColor.secondary)
+                    .foregroundStyle(Cinema2026.secondary)
 
                 HStack(spacing: 10) {
                     Button(action: onWatch) {
                         Label("Смотреть вместе", systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(CinemaColor.text)
-                    .foregroundStyle(CinemaColor.void)
+                    .tint(Cinema2026.text)
+                    .foregroundStyle(Cinema2026.background)
 
                     Button(action: onAdd) {
                         Image(systemName: "plus")
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.bordered)
-                    .tint(CinemaColor.text)
+                    .tint(Cinema2026.text)
                 }
 
                 if !item.interestedFriends.isEmpty {
@@ -153,7 +153,7 @@ struct ContinueTogetherRail: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Продолжить вместе")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
                 .padding(.horizontal, 18)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -165,7 +165,7 @@ struct ContinueTogetherRail: View {
                                 .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.poster))
                             Text(item.title)
                                 .font(.caption.weight(.medium))
-                                .foregroundStyle(CinemaColor.text)
+                                .foregroundStyle(Cinema2026.text)
                                 .lineLimit(1)
                                 .frame(width: 140, alignment: .leading)
                         }
@@ -187,9 +187,9 @@ struct LiveRoomsRail: View {
             HStack {
                 Text("Сейчас в эфире")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(CinemaColor.text)
+                    .foregroundStyle(Cinema2026.text)
                 Circle()
-                    .fill(CinemaColor.live)
+                    .fill(Cinema2026.live)
                     .frame(width: 8, height: 8)
                 Spacer()
             }
@@ -221,19 +221,19 @@ struct LiveRoomCard: View {
                     .font(.system(size: 8, weight: .bold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(CinemaColor.danger, in: Capsule())
+                    .background(Cinema2026.danger, in: Capsule())
                     .padding(6)
             }
 
             Text(room.name)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
                 .lineLimit(1)
                 .frame(width: 160, alignment: .leading)
 
             Text("\(room.participantCount) смотрят")
                 .font(.system(size: 10))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
         }
     }
 }
@@ -248,7 +248,7 @@ struct EditorialCollections: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(collection.title)
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(CinemaColor.text)
+                    .foregroundStyle(Cinema2026.text)
                     .padding(.horizontal, 18)
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -276,7 +276,7 @@ struct PosterCard: View {
 
             Text(item.title)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
                 .lineLimit(1)
                 .frame(width: 140, alignment: .leading)
         }
@@ -306,15 +306,15 @@ struct DiscoveryEmptyState: View {
         VStack(spacing: 16) {
             Image(systemName: "play.rectangle.on.rectangle.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(CinemaColor.tertiary)
+                .foregroundStyle(Cinema2026.tertiary)
 
             Text("Пока нет активных комнат")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
 
             Text("Создайте комнату и пригласите друзей")
                 .font(.system(size: 14))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 60)
@@ -329,20 +329,20 @@ struct DiscoveryErrorState: View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(CinemaColor.warning)
+                .foregroundStyle(Cinema2026.warning)
 
             Text("Не удалось загрузить")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(CinemaColor.text)
+                .foregroundStyle(Cinema2026.text)
 
             Text(message)
                 .font(.system(size: 12))
-                .foregroundStyle(CinemaColor.secondary)
+                .foregroundStyle(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
 
             Button("Повторить", action: onRetry)
                 .buttonStyle(.bordered)
-                .tint(CinemaColor.plink)
+                .tint(Cinema2026.accent)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 60)

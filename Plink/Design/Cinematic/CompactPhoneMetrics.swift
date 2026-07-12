@@ -38,4 +38,26 @@ enum Cinema2026 {
     static let accent = Color(red: 0.355, green: 0.690, blue: 0.610)
     static let amber = Color(red: 0.845, green: 0.655, blue: 0.315)
     static let danger = Color(red: 0.820, green: 0.295, blue: 0.270)
+
+    // Aliases for back-compat with old PlinkRave refs
+    static let accentAction = LinearGradient(
+        colors: [accent, Color(red: 0.285, green: 0.550, blue: 0.488)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let outgoingBubble = accentAction
+    static let timeline = LinearGradient(
+        colors: [accent, secondary],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+    static let ambientGlow = LinearGradient(
+        colors: [accent.opacity(0.06), .clear],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+    static let live = accent
+    static let warning = amber
+    static let tertiary = divider
+    static let void = background
 }

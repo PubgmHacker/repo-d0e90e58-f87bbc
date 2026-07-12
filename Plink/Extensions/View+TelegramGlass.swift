@@ -28,32 +28,59 @@ extension View {
     }
 
     /// Pulsing glow effect for accent elements.
-    /// Animates shadow opacity in a 2-second cycle.
+    /// Animates shadow opacity + radius in a repeating cycle.
     /// - Parameters:
     ///   - color: Glow color (default Cinema2026.accent).
-    ///   - radius: Glow radius in points (default 12).
-    ///   - duration: Animation duration in seconds (default 2.0).
+    ///   - minRadius: Minimum glow radius (default 8).
+    ///   - maxRadius: Maximum glow radius (default 16).
+    ///   - minOpacity: Minimum opacity (default 0.2).
+    ///   - maxOpacity: Maximum opacity (default 0.5).
+    ///   - period: Animation duration in seconds (default 2.0).
+    ///   - radius: Legacy single radius parameter (used when minRadius/maxRadius not specified).
+    ///   - duration: Legacy single duration parameter (used when period not specified).
     @ViewBuilder
-    func glowPulse(color: Color = Cinema2026.accent, radius: CGFloat = 12, duration: Double = 2.0) -> some View {
-        modifier(GlowPulseModifier(color: color, radius: radius, duration: duration))
+    func glowPulse(
+        color: Color = Cinema2026.accent,
+        minRadius: CGFloat = 8,
+        maxRadius: CGFloat = 16,
+        minOpacity: Double = 0.2,
+        maxOpacity: Double = 0.5,
+        period: Double = 2.0,
+        radius: CGFloat? = nil,
+        duration: Double? = nil
+    ) -> some View {
+        let actualMinRadius = radius ?? minRadius
+        let actualMaxRadius = radius ?? maxRadius
+        let actualPeriod = duration ?? period
+        modifier(GlowPulseModifier(
+            color: color,
+            minRadius: actualMinRadius,
+            maxRadius: actualMaxRadius,
+            minOpacity: minOpacity,
+            maxOpacity: maxOpacity,
+            period: actualPeriod
+        ))
     }
 }
 
 /// Modifier that animates a pulsing glow shadow.
 private struct GlowPulseModifier: ViewModifier {
     let color: Color
-    let radius: CGFloat
-    let duration: Double
+    let minRadius: CGFloat
+    let maxRadius: CGFloat
+    let minOpacity: Double
+    let maxOpacity: Double
+    let period: Double
     @State private var pulse = false
 
     func body(content: Content) -> some View {
         content
             .shadow(
-                color: color.opacity(pulse ? 0.6 : 0.2),
-                radius: pulse ? radius : radius * 0.5
+                color: color.opacity(pulse ? maxOpacity : minOpacity),
+                radius: pulse ? maxRadius : minRadius
             )
             .onAppear {
-                withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: true)) {
+                withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
                     pulse = true
                 }
             }

@@ -73,7 +73,7 @@ public enum V4ThemeCatalog {
     public static func resolve(_ id: String?) -> V4Theme { all.first { $0.id == id } ?? electricBlue }
 }
 
-public enum V4Surface: Sendable { case home, rooms, ai, friends, profile, roomChat }
+public enum V4SurfaceKind: Sendable { case home, rooms, ai, friends, profile, roomChat }
 
 @MainActor
 @Observable
@@ -112,7 +112,7 @@ public enum V4Tokens {
 
 public struct V4LivingBackground: View {
     public let theme: V4Theme
-    public let surface: V4Surface
+    public let surface: V4SurfaceKind
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.scenePhase) private var scenePhase
@@ -176,7 +176,7 @@ public struct V4LivingBackground: View {
 
 public struct V4SurfaceView<Content: View>: View {
     let theme: V4Theme
-    let surface: V4Surface
+    let surface: V4SurfaceKind
     @ViewBuilder let content: Content
 
     public var body: some View {

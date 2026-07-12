@@ -63,7 +63,7 @@ struct PlinkAppShell: View {
         ProductionV4Adapter(
             roomService: dependencies.roomService,
             mediaService: dependencies.mediaService,
-            friendManager: dependencies.friendManager,
+            friendManager: dependencies.friendManager ?? FriendManager(api: dependencies.apiClient),
             authService: dependencies.authService,
             aiService: PlinkAIService.shared
         )

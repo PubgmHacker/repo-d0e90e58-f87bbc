@@ -19,6 +19,7 @@ public struct PlinkV4Root: View {
         }
         .environment(themeStore)
         .preferredColorScheme(.dark)
+        .task { await adapter.bootstrap() }
         .sheet(isPresented: $showCreate) {
             V4RoomCreationFlow(adapter: adapter, themeStore: themeStore) { roomID in
                 showCreate = false

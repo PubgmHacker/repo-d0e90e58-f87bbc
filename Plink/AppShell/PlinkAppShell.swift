@@ -65,7 +65,8 @@ struct PlinkAppShell: View {
             mediaService: dependencies.mediaService,
             friendManager: dependencies.friendManager ?? FriendManager(api: dependencies.apiClient),
             authService: dependencies.authService,
-            aiService: PlinkAIService.shared
+            aiService: PlinkAIService.shared,
+            apiClient: dependencies.apiClient
         )
     }
 }

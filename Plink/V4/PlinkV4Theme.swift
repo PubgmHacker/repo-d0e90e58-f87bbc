@@ -153,9 +153,9 @@ public struct V4LivingBackground: View {
         let animated = !reduceMotion && scenePhase == .active && ProcessInfo.processInfo.isLowPowerModeEnabled == false
         let t = animated ? date.timeIntervalSinceReferenceDate : 0
         let specs: [(Color, Double, Double, Double)] = [
-            (theme.primary.color, 0.16, 0.12, 0.00),
-            (theme.secondary.color, 0.14, 0.10, 2.10),
-            (theme.tertiary.color, 0.18, 0.08, 4.20)
+            (theme.primary.color, 0.13, 0.11, 0.00),
+            (theme.secondary.color, 0.11, 0.10, 2.10),
+            (theme.tertiary.color, 0.16, 0.08, 4.20)
         ]
         for (index, spec) in specs.enumerated() {
             if surface == .roomChat && index == 2 { continue }
@@ -166,8 +166,12 @@ public struct V4LivingBackground: View {
             )
             let ellipse = CGRect(x: center.x - diameter/2, y: center.y - diameter/2, width: diameter, height: diameter)
             context.drawLayer { layer in
-                layer.opacity = (0.48 - Double(index) * 0.05) * intensity
-                layer.addFilter(.blur(radius: max(48, diameter * 0.12)))
+                let opacityBySurface: Double = switch surface {
+        case .home: 0.66; case .rooms: 0.60; case .ai: 0.64
+        case .friends: 0.54; case .profile: 0.46; case .roomChat: 0.42
+        }
+        layer.opacity = (opacityBySurface - Double(index) * 0.04) * intensity
+                layer.addFilter(.blur(radius: max(38, diameter * 0.09)))
                 layer.fill(Path(ellipseIn: ellipse), with: .color(spec.0))
             }
         }

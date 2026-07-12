@@ -65,11 +65,11 @@ public struct V4AIMeshView: View {
                         point == 0 ? path.move(to: CGPoint(x:x,y:y)) : path.addLine(to: CGPoint(x:x,y:y))
                     }
                     path.closeSubpath()
-                    context.stroke(path, with: .linearGradient(Gradient(colors: [theme.secondary.color.opacity(0.85), theme.tertiary.color.opacity(0.78), theme.primary.color.opacity(0.72)]), startPoint: .zero, endPoint: CGPoint(x:size.width,y:size.height)), lineWidth: 0.65)
+                    context.stroke(path, with: .linearGradient(Gradient(colors: [theme.secondary.color.opacity(0.98), theme.tertiary.color.opacity(0.92), theme.primary.color.opacity(0.86)]), startPoint: .zero, endPoint: CGPoint(x:size.width,y:size.height)), lineWidth: state == .thinking ? 1.15 : 0.90)
                 }
             }
         }
-        .shadow(color: theme.tertiary.color.opacity(0.45), radius: state == .thinking ? 28 : 18)
+        .shadow(color: theme.tertiary.color.opacity(0.55), radius: state == .thinking ? 38 : 24)
         .accessibilityHidden(true)
         .overlay(alignment: .bottom) { Text(accessibleState).font(.caption).foregroundStyle(V4Tokens.secondaryText).accessibilityHidden(false) }
     }

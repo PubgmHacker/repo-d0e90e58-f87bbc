@@ -58,7 +58,8 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            SidebarHomeWrapper(dependencies: dependencies)
+            // GPT-5.6 V4: use DiscoverScreen for home on sidebar (HomeView deleted)
+            DiscoverScreen(dependencies: dependencies, navigateToRoom: .constant(nil))
         case .rooms:
             DiscoverScreen(dependencies: dependencies, navigateToRoom: .constant(nil))
         case .ai:
@@ -68,21 +69,5 @@ struct PlinkSidebarShell: View {
         case .profile:
             ProfileScreen(authService: dependencies.authService)
         }
-    }
-}
-
-/// GPT-5.6 SOL: wrapper that creates HomeViewModel for sidebar usage.
-private struct SidebarHomeWrapper: View {
-    let dependencies: AppDependencies
-
-    var body: some View {
-        HomeView(
-            viewModel: HomeViewModel(
-                roomService: dependencies.roomService,
-                authService: dependencies.authService
-            ),
-            onProfileTap: { }
-        )
-        .environmentObject(dependencies.apiClient)
     }
 }

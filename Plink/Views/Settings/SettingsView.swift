@@ -44,7 +44,7 @@ struct SettingsView: View {
             ZStack {
                 // 🔧 SETTINGS: grayscale gradient (black top → grey center → black bottom)
                 // + horizontal shimmer band. No orbs — minimalist B&W per user request.
-                SettingsBackground(energy: 0.7)
+                Cinema2026.background
                     .ignoresSafeArea()
 
                 ScrollView {

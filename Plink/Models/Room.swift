@@ -137,7 +137,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     // MARK: - Mock Rooms
     // 🔧 FIX L2: mockRooms removed from production. Was misleading — if the server
     // returned empty/401, users saw fake "active" rooms with fake participant counts.
-    // Now the UI must handle the empty state explicitly (HomeView shows a friendly
+    // Now the UI must handle the empty state explicitly (the UI shows a friendly
     // empty state instead of fake content).
     #if DEBUG
     /// Mock rooms for SwiftUI previews and unit tests only.

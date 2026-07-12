@@ -88,3 +88,31 @@ extension Color {
     }
 }
 
+
+// MARK: - LivingHomeStateOverlay (moved from deleted PlinkLivingHome.swift)
+@available(iOS 17.0, *)
+struct LivingHomeStateOverlay: View {
+    let isLoading: Bool
+    var body: some View {
+        if isLoading {
+            VStack(spacing: 16) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Cinema2026.surface.opacity(0.4))
+                    .frame(height: 280)
+                    .padding(.horizontal, 14)
+                ForEach(0..<2, id: \.self) { _ in
+                    HStack {
+                        ForEach(0..<3, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Cinema2026.surface.opacity(0.3))
+                                .frame(width: 140, height: 80)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                }
+            }
+            .redacted(reason: .placeholder)
+            .accessibilityLabel("Загрузка ленты")
+        }
+    }
+}

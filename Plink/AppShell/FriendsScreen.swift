@@ -134,14 +134,14 @@ private struct FriendRequestRow: View {
             Spacer()
 
             Button("✓") {
-                Task { try? await friendManager.acceptRequest(request.id) }
+                Task { await friendManager.acceptRequest(request) }
             }
             .frame(width: 36, height: 36)
             .background(Cinema2026.accent, in: Circle())
             .foregroundStyle(.white)
 
             Button("✗") {
-                Task { try? await friendManager.declineRequest(request.id) }
+                Task { await friendManager.declineRequest(request) }
             }
             .frame(width: 36, height: 36)
             .background(Cinema2026.surface, in: Circle())

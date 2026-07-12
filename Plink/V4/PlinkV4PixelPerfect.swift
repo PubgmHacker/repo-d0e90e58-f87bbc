@@ -476,9 +476,110 @@ struct PlinkApprovedV4Root: View {
             }
             .transition(.offset(y:8).combined(with:.opacity))
             .animation(.timingCurve(0.16,1,0.3,1,duration:0.32),value:tab)
-            if tab != 2 { V4TabBar(selection:$tab) }
+            PlinkLiquidTabBar(selection:$tab)
             if appearance { V4AppearanceView(theme:$theme,presented:$appearance).zIndex(25).transition(.opacity) }
             // room == true must present existing WatchRoom as full-screenCover.
         }.preferredColorScheme(.dark).tint(V4.accent)
+    }
+}
+
+// MARK: - Liquid Glass Tab Bar (GPT-5.6 Post-V4)
+
+struct PlinkLiquidTabBar: View {
+    @Binding var selection: Int
+    @Namespace private var selectionNS
+
+    private let items: [(String, String)] = [
+        ("house.fill", "Главная"),
+        ("circle.grid.2x2.fill", "Комнаты"),
+        ("sparkles", "ИИ"),
+        ("person.2.fill", "Друзья"),
+        ("person.crop.circle.fill", "Профиль")
+    ]
+
+    var body: some View {
+        content
+            .padding(6)
+            .background(.ultraThinMaterial)
+            .background(V4.navBG.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(V4.line, lineWidth: 0.75)
+            )
+            .frame(height: 72)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            .accessibilityElement(children: .contain)
+    }
+
+    private var content: some View {
+        HStack(spacing: 2) {
+            ForEach(items.indices, id: \.self) { index in
+                Button {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26)) {
+                        selection = index
+                    }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: items[index].0)
+                            .font(.system(size: 18, weight: .semibold))
+                        Text(items[index].1)
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(selection == index ? V4.accent : V4.muted)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background {
+                        if selection == index {
+                            Capsule(style: .continuous)
+                                .fill(V4.accent.opacity(0.11))
+                                .matchedGeometryEffect(id: "selected-tab", in: selectionNS)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(items[index].1)
+                .accessibilityAddTraits(selection == index ? .isSelected : [])
+            }
+        }
+    }
+}
+
+// MARK: - Notification Bell (GPT-5.6 Post-V4)
+
+struct NotificationInboxButton: View {
+    let unreadCount: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: unreadCount > 0 ? "bell.fill" : "bell")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(V4.ink)
+                .frame(width: 46, height: 40)
+                .background(V4.roundBG)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(V4.line, lineWidth: 1)
+                )
+                .overlay(alignment: .topTrailing) {
+                    if unreadCount > 0 {
+                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(V4.accentInk)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 17, minHeight: 17)
+                            .background(V4.accent)
+                            .clipShape(Capsule())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Уведомления")
+        .accessibilityValue(unreadCount == 0 ? "Нет новых" : "Новых: \(unreadCount)")
     }
 }

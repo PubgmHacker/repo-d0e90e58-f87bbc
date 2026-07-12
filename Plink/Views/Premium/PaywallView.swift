@@ -61,7 +61,7 @@ struct PaywallView: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [ColorCinema2026.accent.opacity(glowPulse ? 0.35 : 0.1), .clear],
+                            colors: [Cinema2026.accent.opacity(glowPulse ? 0.35 : 0.1), .clear],
                             center: .center,
                             startRadius: 20,
                             endRadius: 90
@@ -85,7 +85,7 @@ struct PaywallView: View {
                     )
                     .frame(width: 88, height: 88)
                     .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
-                    .shadow(color: ColorCinema2026.accent.opacity(0.5), radius: 24)
+                    .shadow(color: Cinema2026.accent.opacity(0.5), radius: 24)
 
                 Image(systemName: "crown.fill")
                     .font(.system(size: 40, weight: .bold))
@@ -145,7 +145,7 @@ struct PaywallView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(ColorCinema2026.accent)
+                        .background(Cinema2026.accent)
                         .clipShape(Capsule())
                 } else {
                     Text(" ")
@@ -170,9 +170,9 @@ struct PaywallView: View {
             .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? ColorCinema2026.accent.opacity(0.6) : Color.white.opacity(0.06), lineWidth: isSelected ? 1.5 : 0.5)
+                    .stroke(isSelected ? Cinema2026.accent.opacity(0.6) : Color.white.opacity(0.06), lineWidth: isSelected ? 1.5 : 0.5)
             )
-            .shadow(color: isSelected ? ColorCinema2026.accent.opacity(0.25) : .clear, radius: 14, y: 4)
+            .shadow(color: isSelected ? Cinema2026.accent.opacity(0.25) : .clear, radius: 14, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -196,7 +196,7 @@ struct PaywallView: View {
                 .padding(.vertical, 18)
                 .background(Cinema2026.accent)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: ColorCinema2026.accent.opacity(0.4), radius: 16, y: 8)
+                .shadow(color: Cinema2026.accent.opacity(0.4), radius: 16, y: 8)
             }
             .buttonStyle(AuthPrimaryButtonStyle())
             .padding(.horizontal, 24)

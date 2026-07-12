@@ -283,3 +283,8 @@ struct EmojiPickerGrid: View {
         }.padding(12).background(Cinema2026.surface.opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
     }
 }
+
+// MARK: - V4AIState (used by WatchRoomModel + RoomAIAssistantBanner)
+enum V4AIState: String, Sendable {
+    case idle, listening, thinking, speaking, moderating, offline, failed
+}

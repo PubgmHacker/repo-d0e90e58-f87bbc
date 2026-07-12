@@ -62,9 +62,9 @@ final class ProductionV4Adapter: V4AppAdapter {
         homeState = .loading
         homeError = nil
 
-        async let roomsResult: Result<[Room], Error> = Result { try await roomService.fetchActiveRooms() }
-        async let trendingResult: Result<[YouTubeVideoSummary], Error> = Result { try await loadTrending() }
-        async let friendsResult: Result<[Friend], Error> = { await loadFriends() }()
+        async let roomsResult = loadRoomsAsync()
+        async let trendingResult = loadTrendingAsync()
+        async let friendsResult = loadFriendsAsync()
 
         let (rooms, media, people) = await (roomsResult, trendingResult, friendsResult)
 
@@ -88,17 +88,27 @@ final class ProductionV4Adapter: V4AppAdapter {
 
     // MARK: - Real data loaders
 
+    private func loadRoomsAsync() async -> Result<[Room], Error> {
+        do { return .success(try await roomService.fetchActiveRooms()) }
+        catch { return .failure(error) }
+    }
+
+    private func loadTrendingAsync() async -> Result<[YouTubeVideoSummary], Error> {
+        do { return .success(try await loadTrending()) }
+        catch { return .failure(error) }
+    }
+
+    private func loadFriendsAsync() async -> Result<[Friend], Error> {
+        await friendManager.loadAll()
+        return .success(friendManager.friends)
+    }
+
     private func loadTrending() async throws -> [YouTubeVideoSummary] {
         let apiBase = "https://plink-backend-production-ef31.up.railway.app"
         guard let url = URL(string: "\(apiBase)/api/media/trending?regionCode=RU&maxResults=20") else { return [] }
         let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
         let resp = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
         return resp.results
-    }
-
-    private func loadFriends() async -> Result<[Friend], Error> {
-        await friendManager.loadAll()
-        return .success(friendManager.friends)
     }
 
     // MARK: - Routing

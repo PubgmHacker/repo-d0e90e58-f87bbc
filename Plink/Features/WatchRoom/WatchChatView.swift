@@ -32,7 +32,7 @@ struct WatchChatView: View {
             }
             .scrollIndicators(.hidden)
             .background(
-                LivingVideoBackdrop(player: model.coordinator.nativePlayer)
+                Cinema2026.background.ignoresSafeArea()
                     .opacity(0.28)
             )
             .onChange(of: model.chatMessages.count) { _, _ in

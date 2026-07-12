@@ -21,7 +21,7 @@ struct DMChatView: View {
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground()
+            Cinema2026.background
 
             VStack(spacing: 0) {
                 // ── Лента сообщений ───────────────────────────────────

@@ -41,7 +41,7 @@ struct WatchRoomScreen: View {
         ZStack {
             // PATCH 14: ambient state now comes from model (driven by
             // AmbientVideoSampler). ui.ambient is no longer used.
-            PurpleAmbientBackdrop(state: model.ambientState)
+            Cinema2026.background.ignoresSafeArea()
 
             switch layoutVariant {
             case .portrait:

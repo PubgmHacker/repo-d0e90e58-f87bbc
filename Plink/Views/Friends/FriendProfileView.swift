@@ -18,7 +18,7 @@ struct FriendProfileView: View {
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground()
+            Cinema2026.background
 
             ScrollView {
                 VStack(spacing: 24) {

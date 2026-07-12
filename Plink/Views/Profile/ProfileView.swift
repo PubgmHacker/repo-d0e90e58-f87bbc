@@ -632,7 +632,7 @@ struct EditProfileSheet: View {
             ZStack {
                 // 🔧 EDIT PROFILE: тёмный минималистичный фон — не яркий ocean.
                 // deep dark blue → black, спокойный, без ярких орбов.
-                BioluminescentBackground(energy: 0.35, dimming: 0, palette: .abyss)
+                Cinema2026.background
                     .ignoresSafeArea()
 
                 ScrollView {

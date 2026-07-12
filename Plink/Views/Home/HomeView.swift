@@ -55,7 +55,7 @@ struct HomeView: View {
         NavigationStack {
             ZStack {
                 // Чёрный фон + blur-пятна
-                AnimatedGradientBackground()
+                Cinema2026.background
 
                 // Контент
                 ScrollView(showsIndicators: false) {

@@ -342,7 +342,7 @@ struct PremiumManagementView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground(orbColors: [Color.ravePrimary, Color.raveWarning, Color.bioCyan])
+                Cinema2026.background
 
                 ScrollView {
                     VStack(spacing: 24) {

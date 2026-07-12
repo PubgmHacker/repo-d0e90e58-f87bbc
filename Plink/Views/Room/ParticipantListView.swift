@@ -15,7 +15,7 @@ struct ParticipantListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BioluminescentBackground(energy: 0.35, dimming: 0)
+                Cinema2026.background
                     .ignoresSafeArea()
 
                 ScrollView(showsIndicators: false) {

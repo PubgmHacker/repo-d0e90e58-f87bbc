@@ -39,7 +39,7 @@ struct AdminPanelView: View {
     var body: some View {
         ZStack {
             // 🔧 MINIMALIST ADMIN: тёмно-красный живой фон (админ-палитра)
-            BioluminescentBackground(energy: 0.5, dimming: 0, palette: .crimson)
+            Cinema2026.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {

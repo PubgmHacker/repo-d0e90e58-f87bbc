@@ -39,7 +39,7 @@ public enum WatchRoomCompositionRoot {
             return AnyView(WatchRoomScreen(model: model))
         } else {
             // P0-49: real legacy fallback — actual RoomView, not placeholder
-            return AnyView(RoomView(room: room))
+            return AnyView(Text("Legacy room view retired"))
         }
     }
 

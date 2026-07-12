@@ -14,7 +14,7 @@ struct FriendsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                Cinema2026.background
 
                 VStack(spacing: 0) {
                     // Табы: Друзья / Входящие / Поиск

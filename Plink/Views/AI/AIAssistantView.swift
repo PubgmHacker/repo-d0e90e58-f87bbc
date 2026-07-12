@@ -33,7 +33,7 @@ struct AIAssistantView: View {
             ZStack {
                 // 🔧 AI: собственная amber-палитра (отличается от Home/Rooms)
                 // Тёплые янтарные/золотые орбы — премиум-чувство
-                BioluminescentBackground(energy: 0.75, dimming: 0, palette: .amber)
+                Cinema2026.background
                     .ignoresSafeArea()
 
                 // Лёгкое затемнение для читаемости сообщений
@@ -536,7 +536,7 @@ struct AIHistorySheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BioluminescentBackground(energy: 0.4, dimming: 0, palette: .amber)
+                Cinema2026.background
                     .ignoresSafeArea()
 
                 if sessions.isEmpty {

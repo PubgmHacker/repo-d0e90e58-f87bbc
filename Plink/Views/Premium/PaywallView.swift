@@ -22,8 +22,9 @@ struct PaywallView: View {
     var body: some View {
         ZStack {
             // Чёрный фон + сине-голубые blur-пятна
-            AnimatedGradientBackground(
-                orbColors: [Color(hex: 0x3D8DE0), Color.bioCyan, Color(hex: 0x113CCF)]
+            Cinema2026.background
+            // TODO: replace with CompactLivingBackdrop
+                
             )
 
             ScrollView {

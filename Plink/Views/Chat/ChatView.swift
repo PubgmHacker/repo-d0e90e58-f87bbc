@@ -23,7 +23,7 @@ struct ChatView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AnimatedGradientBackground()
+                Cinema2026.background
 
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in

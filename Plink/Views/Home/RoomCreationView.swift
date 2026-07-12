@@ -50,7 +50,7 @@ struct RoomCreationView: View {
 
     var body: some View {
         ZStack {
-            AnimatedGradientBackground()
+            Cinema2026.background
 
             switch currentStep {
             case .service:

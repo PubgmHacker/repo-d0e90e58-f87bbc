@@ -55,7 +55,7 @@ struct ParticipantVideoView: UIViewRepresentable {
         let view = VideoView()
         view.mirrorMode = isMirrored ? .mirror : .off
         view.contentMode = .scaleAspectFill
-        view.backgroundColor = UIColor(PlinkRave.raised)
+        view.backgroundColor = UIColor(Cinema2026.raised)
         return view
     }
 
@@ -100,12 +100,12 @@ struct ParticipantAvatarWithVideo: View {
             } else {
                 // Letter avatar fallback
                 Circle()
-                    .fill(PlinkRave.raised)
+                    .fill(Cinema2026.raised)
                     .frame(width: 36, height: 36)
                     .overlay(
                         Text(String(participant.identity.prefix(1)).uppercased())
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(PlinkRave.text)
+                            .foregroundStyle(Cinema2026.text)
                     )
                     .overlay(
                         Circle()
@@ -119,8 +119,8 @@ struct ParticipantAvatarWithVideo: View {
             if isHost {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 8))
-                    .foregroundStyle(PlinkRave.gold)
-                    .background(PlinkRave.void, in: Circle())
+                    .foregroundStyle(Cinema2026.amber)
+                    .background(Cinema2026.background, in: Circle())
                     .frame(width: 14, height: 14)
                     .offset(x: 1, y: 1)
             }
@@ -129,9 +129,9 @@ struct ParticipantAvatarWithVideo: View {
     }
 
     private var ringColor: Color {
-        if isSpeaking { return PlinkRave.success }
-        if isHost { return PlinkRave.gold.opacity(0.6) }
-        return PlinkRave.success.opacity(0.18)
+        if isSpeaking { return Cinema2026.accent }
+        if isHost { return Cinema2026.amber.opacity(0.6) }
+        return Cinema2026.accent.opacity(0.18)
     }
 }
 

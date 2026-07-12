@@ -15,7 +15,7 @@ struct PrivacySettingsView: View {
 
     var body: some View {
         ZStack {
-            BioluminescentBackground(energy: 0.4, dimming: 0)
+            Cinema2026.background
                 .ignoresSafeArea()
 
             ScrollView {

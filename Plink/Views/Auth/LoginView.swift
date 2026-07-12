@@ -41,7 +41,7 @@ struct LoginView: View {
         ZStack {
             // 🔧 FIX N7: Use BioluminescentBackground (was: opaque Color.raveBackground
             // + two static blurred circles). Now consistent with the rest of the app.
-            BioluminescentBackground(energy: 0.5, dimming: 0)
+            Cinema2026.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {

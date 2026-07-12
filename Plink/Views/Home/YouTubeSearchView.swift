@@ -6,31 +6,73 @@
 import SwiftUI
 
 // MARK: - Data models (match backend response format)
+//
+// Brain Phase 3: backend now returns embeddable, privacyStatus,
+// liveBroadcastContent, durationSeconds. iOS uses embeddable to disable
+// rows where the video cannot be embedded in Plink.
 
 struct YouTubeVideoSummary: Decodable, Identifiable, Sendable {
     let id: String
     let title: String
     let channel: String
     let thumbnailURL: String?
+    // Brain Phase 3: backend may send `durationSeconds` (new) or `duration` (legacy).
+    // Decode either; prefer durationSeconds when present.
+    let durationSeconds: Int?
     let duration: Int?
     let url: String?
+    let embeddable: Bool?
+    let privacyStatus: String?
+    let liveBroadcastContent: String?
 
+    // Back-compat: when backend omits these, default to safe values.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // `id` may be missing if backend returns videoId only — fall back to videoId.
+        self.id = try c.decodeIfPresent(String.self, forKey: .id)
+            ?? c.decodeIfPresent(String.self, forKey: .videoId)
+            ?? ""
+        self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        // `channel` may be missing — fall back to channelTitle.
+        self.channel = try c.decodeIfPresent(String.self, forKey: .channel)
+            ?? c.decodeIfPresent(String.self, forKey: .channelTitle)
+            ?? ""
+        self.thumbnailURL = try c.decodeIfPresent(String.self, forKey: .thumbnailURL)
+        self.durationSeconds = try c.decodeIfPresent(Int.self, forKey: .durationSeconds)
+        self.duration = try c.decodeIfPresent(Int.self, forKey: .duration)
+        self.url = try c.decodeIfPresent(String.self, forKey: .url)
+        self.embeddable = try c.decodeIfPresent(Bool.self, forKey: .embeddable)
+        self.privacyStatus = try c.decodeIfPresent(String.self, forKey: .privacyStatus)
+        self.liveBroadcastContent = try c.decodeIfPresent(String.self, forKey: .liveBroadcastContent)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, videoId, title, channel, channelTitle
+        case thumbnailURL, duration, durationSeconds
+        case url, embeddable, privacyStatus, liveBroadcastContent
+    }
+
+    // Convenience accessors
     var videoId: String { id }
     var channelTitle: String { channel }
-    var durationSeconds: Int? { duration }
+    var resolvedDurationSeconds: Int? { durationSeconds ?? duration }
     var thumbnailURLString: String? { thumbnailURL }
-    var liveBroadcastContent: String { "none" }
-    var embeddable: Bool? { nil }
+    var resolvedLiveBroadcastContent: String { liveBroadcastContent ?? "none" }
+    var resolvedEmbeddable: Bool? { embeddable }
+
+    /// Brain Phase 3: a row is disabled (unclickable) when the backend
+    /// explicitly reports embeddable=false. nil means unknown — allow tap.
+    var isEmbeddable: Bool { embeddable ?? true }
+
+    var isLive: Bool { resolvedLiveBroadcastContent == "live" }
 
     var durationText: String? {
-        guard let seconds = duration, seconds > 0 else { return nil }
+        guard let seconds = resolvedDurationSeconds, seconds > 0 else { return nil }
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
         let s = seconds % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
-
-    var isLive: Bool { false }
 }
 
 struct YouTubeSearchResponse: Decodable, Sendable {
@@ -118,14 +160,21 @@ final class YouTubePickerModel {
     func selectFromURL() {
         let videoId = extractVideoId(from: urlText) ?? urlText
         guard videoId.count == 11 else { return }
-        selected = YouTubeVideoSummary(
-            id: videoId,
-            title: "YouTube: \(videoId)",
-            channel: "",
-            thumbnailURL: "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg",
-            duration: nil,
-            url: nil
-        )
+        // Brain Phase 3: when user pastes a URL, embeddability is unknown — assume embeddable.
+        // Backend will return error 101/150 if embedding is disabled, and the user will see
+        // the friendly error UI in the player.
+        let dict: [String: Any] = [
+            "id": videoId,
+            "title": "YouTube: \(videoId)",
+            "channel": "",
+            "thumbnailURL": "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg",
+            "embeddable": true,
+        ]
+        // Build a Data representation so we can use the Decodable init.
+        if let data = try? JSONSerialization.data(withJSONObject: dict),
+           let summary = try? JSONDecoder().decode(YouTubeVideoSummary.self, from: data) {
+            selected = summary
+        }
     }
 
     private func extractVideoId(from url: String) -> String? {
@@ -193,12 +242,18 @@ struct YouTubeSearchView: View {
 
     private var resultsList: some View {
         List(model.items) { item in
-            Button {
-                model.selected = item
-            } label: {
-                YouTubeResultRow(item: item, isSelected: model.selected?.id == item.id)
+            // Brain Phase 3: rows where embeddable == false are disabled (unclickable).
+            if item.isEmbeddable {
+                Button {
+                    model.selected = item
+                } label: {
+                    YouTubeResultRow(item: item, isSelected: model.selected?.id == item.id)
+                }
+                .buttonStyle(.plain)
+            } else {
+                YouTubeResultRow(item: item, isSelected: false, isDisabled: true)
+                    .allowsHitTesting(false)
             }
-            .buttonStyle(.plain)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -349,6 +404,7 @@ struct YouTubeSearchView: View {
 struct YouTubeResultRow: View {
     let item: YouTubeVideoSummary
     let isSelected: Bool
+    var isDisabled: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -360,8 +416,9 @@ struct YouTubeResultRow: View {
                 }
                 .frame(width: 120, height: 68)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .opacity(isDisabled ? 0.5 : 1.0)
 
-                if let duration = item.durationText {
+                if let duration = item.durationText, !isDisabled {
                     Text(duration)
                         .font(.system(size: 10, weight: .semibold))
                         .padding(.horizontal, 4)
@@ -369,18 +426,36 @@ struct YouTubeResultRow: View {
                         .background(.black.opacity(0.8), in: Capsule())
                         .padding(4)
                 }
+
+                // Brain Phase 3: show LIVE badge when content is live.
+                if item.isLive, !isDisabled {
+                    Text("LIVE")
+                        .font(.system(size: 9, weight: .black))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Cinema2026.danger, in: Capsule())
+                        .foregroundStyle(.white)
+                        .padding(4)
+                }
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Cinema2026.text)
+                    .foregroundStyle(isDisabled ? Cinema2026.secondary : Cinema2026.text)
                     .lineLimit(2)
 
                 Text(item.channelTitle)
                     .font(.system(size: 12))
                     .foregroundStyle(Cinema2026.secondary)
                     .lineLimit(1)
+
+                // Brain Phase 3: show "Нельзя встроить" when embeddable == false.
+                if isDisabled {
+                    Text("Нельзя встроить")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Cinema2026.amber)
+                }
             }
 
             Spacer()
@@ -388,6 +463,10 @@ struct YouTubeResultRow: View {
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Cinema2026.accent)
+            } else if isDisabled {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(Cinema2026.secondary)
+                    .font(.system(size: 14))
             }
         }
         .padding(.vertical, 6)

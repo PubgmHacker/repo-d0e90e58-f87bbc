@@ -273,20 +273,20 @@ struct PlinkApp: App {
 struct SplashView: View {
     var body: some View {
         ZStack {
-            Color.bioObsidian.ignoresSafeArea()
+            Cinema2026.background.ignoresSafeArea()
 
             VStack(spacing: 18) {
                 ZStack {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.bioCyan.opacity(0.9), Color.bioEmerald.opacity(0.7)],
+                                colors: [Cinema2026.accent.opacity(0.9), Cinema2026.accent.opacity(0.7)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 100, height: 100)
-                        .shadow(color: Color.bioCyan.opacity(0.4), radius: 24)
+                        .shadow(color: Cinema2026.accent.opacity(0.4), radius: 24)
 
                     Image(systemName: "play.rectangle.on.rectangle")
                         .font(.system(size: 42, weight: .bold))
@@ -299,7 +299,7 @@ struct SplashView: View {
 
                 Text(LocalizationManager.shared.string(.appTagline))
                     .font(.subheadline)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
         }
     }

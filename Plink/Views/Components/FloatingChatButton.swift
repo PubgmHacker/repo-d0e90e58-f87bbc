@@ -25,7 +25,7 @@ struct FloatingChatButton: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.white)
                         .frame(width: 20, height: 20)
-                        .background(Color.raveAccent)
+                        .background(Cinema2026.accent)
                         .clipShape(Circle())
                         .offset(x: 16, y: -16)
                 }
@@ -108,7 +108,7 @@ struct FloatingChatOverlay: View {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
                             .foregroundColor(chatText.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? .gray : .ravePrimary)
+                                ? .gray : Cinema2026.accent)
                     }
                     .disabled(chatText.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -132,7 +132,7 @@ private struct FloatingChatBubble: View {
         HStack(alignment: .top, spacing: 8) {
             Text(message.senderName)
                 .font(.caption.bold())
-                .foregroundColor(.raveAccent)
+                .foregroundColor(Cinema2026.accent)
 
             Text(message.text)
                 .font(.caption)

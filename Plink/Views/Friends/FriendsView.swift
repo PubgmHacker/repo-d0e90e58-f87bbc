@@ -42,14 +42,14 @@ struct FriendsView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.ravePrimary)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showShareSheet = true } label: {
                         Image(systemName: "person.crop.circle.badge.plus")
                     }
-                    .foregroundColor(.raveAccent)
+                    .foregroundColor(Cinema2026.accent)
                 }
             }
             .preferredColorScheme(.dark)
@@ -87,14 +87,14 @@ struct FriendsView: View {
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.raveAccent)
+                                .background(Cinema2026.accent)
                                 .clipShape(Capsule())
                         }
                     }
-                    .foregroundColor(selectedTab == tab ? .white : .raveTextSecondary)
+                    .foregroundColor(selectedTab == tab ? .white : Cinema2026.secondary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(selectedTab == tab ? AnyShapeStyle(Color.ravePrimary) : AnyShapeStyle(Color.raveCard))
+                    .background(selectedTab == tab ? AnyShapeStyle(Cinema2026.accent) : AnyShapeStyle(Cinema2026.surface))
                     .clipShape(Capsule())
                 }
             }
@@ -171,16 +171,16 @@ struct FriendsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                 TextField(loc.string(.friendsSearchPlaceholder), text: $searchText)
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .onChange(of: searchText) { _, newValue in
                         Task { await friendManager.searchUsers(query: newValue) }
                     }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color.raveCard)
+            .background(Cinema2026.surface)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 20)
             .padding(.top, 8)
@@ -216,7 +216,7 @@ struct FriendsView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.caption.bold())
-            .foregroundColor(.raveTextSecondary)
+            .foregroundColor(Cinema2026.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
     }
@@ -226,13 +226,13 @@ struct FriendsView: View {
             Spacer().frame(height: 40)
             Image(systemName: icon)
                 .font(.system(size: 44))
-                .foregroundColor(.raveTextTertiary)
+                .foregroundColor(Cinema2026.tertiary)
             Text(title)
                 .font(.headline)
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
             Text(subtitle)
                 .font(.subheadline)
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -279,31 +279,31 @@ private struct FriendRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(friend.username)
                     .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 HStack(spacing: 4) {
                     Circle()
-                        .fill(friend.isOnline ? Color.raveGreen : Color.raveTextTertiary)
+                        .fill(friend.isOnline ? Cinema2026.accent : Cinema2026.tertiary)
                         .frame(width: 6, height: 6)
                         // 🔧 SUBTLE: only the ONLINE dot breathes (offline stays static) —
                         // makes presence feel alive without animating every row at once.
                         .modifier(ConditionalBreathing(isActive: friend.isOnline, maxScale: 1.3, period: 1.8))
                     Text(friend.isOnline ? loc.string(.friendsOnline) : loc.string(.friendsOffline))
                         .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
             }
             Spacer()
             Button(role: .destructive, action: onRemove) {
                 Image(systemName: "person.fill.xmark")
                     .font(.subheadline)
-                    .foregroundColor(.raveDanger)
+                    .foregroundColor(Cinema2026.danger)
                     .frame(width: 34, height: 34)
-                    .background(Color.raveCard)
+                    .background(Cinema2026.surface)
                     .clipShape(Circle())
             }
         }
         .padding(12)
-        .background(Color.raveCard)
+        .background(Cinema2026.surface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -328,7 +328,7 @@ private struct FriendRow: View {
         Text(friend.initials)
             .font(.headline)
             .foregroundColor(.white)
-            .background(Color.ravePrimary)
+            .background(Cinema2026.accent)
             .clipShape(Circle())
     }
 }
@@ -346,16 +346,16 @@ private struct IncomingRequestRow: View {
                 .font(.headline)
                 .foregroundColor(.white)
                 .frame(width: 44, height: 44)
-                .background(Color.ravePrimary)
+                .background(Cinema2026.accent)
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(request.fromUser.username)
                     .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Text(loc.string(.friendsWantsToAdd))
                     .font(.caption)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             Spacer()
@@ -363,17 +363,17 @@ private struct IncomingRequestRow: View {
             Button(action: onAccept) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.raveGreen)
+                    .foregroundColor(Cinema2026.accent)
             }
 
             Button(action: onDecline) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.raveDanger)
+                    .foregroundColor(Cinema2026.danger)
             }
         }
         .padding(12)
-        .background(Color.raveCard)
+        .background(Cinema2026.surface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -389,25 +389,25 @@ private struct OutgoingRequestRow: View {
                 .font(.headline)
                 .foregroundColor(.white)
                 .frame(width: 44, height: 44)
-                .background(Color.raveSurface)
+                .background(Cinema2026.raised)
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(request.toUser.username)
                     .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Text("\(loc.string(.friendsWaiting)) · \(request.formattedDate)")
                     .font(.caption)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             Spacer()
 
-            PulsingDot(color: .raveWarning)
+            PulsingDot(color: Cinema2026.accent)
                 .frame(width: 8, height: 8)
         }
         .padding(12)
-        .background(Color.raveCard)
+        .background(Cinema2026.surface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -426,22 +426,22 @@ private struct UserSearchRow: View {
                 .font(.headline)
                 .foregroundColor(.white)
                 .frame(width: 44, height: 44)
-                .background(Color.ravePrimary)
+                .background(Cinema2026.accent)
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(user.username)
                         .font(.subheadline.bold())
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     // 🔧 NEW: Show short ID next to username in search results
                     Text("#\(String(user.id.suffix(8)))")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                 }
                 Text(user.isOnline ? loc.string(.friendsOnline) : loc.string(.friendsOffline))
                     .font(.caption)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             Spacer()
@@ -449,24 +449,24 @@ private struct UserSearchRow: View {
             if isAlreadyFriend {
                 Text(loc.string(.friendsAlreadyFriends))
                     .font(.caption.bold())
-                    .foregroundColor(.raveGreen)
+                    .foregroundColor(Cinema2026.accent)
             } else if hasPendingRequest {
                 Text(loc.string(.friendsSent))
                     .font(.caption)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             } else {
                 Button(action: onSendRequest) {
                     Image(systemName: "person.badge.plus")
                         .font(.subheadline)
                         .foregroundColor(.white)
                         .frame(width: 34, height: 34)
-                        .background(Color.ravePrimary)
+                        .background(Cinema2026.accent)
                         .clipShape(Circle())
                 }
             }
         }
         .padding(12)
-        .background(Color.raveCard)
+        .background(Cinema2026.surface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }

@@ -79,7 +79,7 @@ struct FriendProfileView: View {
                     title: h.mediaTitle,
                     subtitle: "\(h.mediaType ?? "video")",
                     icon: typeIcon,
-                    gradient: (.ravePrimary, .raveSecondary),
+                    gradient: (Cinema2026.accent, Cinema2026.accent),
                     timeAgo: h.watchedAt?.formatted(.relative(presentation: .named)) ?? ""
                 )
             }
@@ -96,11 +96,11 @@ struct FriendProfileView: View {
         hoursWatched = 47
         friendsCount = 12
         history = [
-            FriendHistoryItem(title: "Дюна: Часть вторая", subtitle: "movie", icon: "film", gradient: (.ravePrimary, .raveAccent), timeAgo: "2 часа назад"),
-            FriendHistoryItem(title: "Lo-Fi Beats to Relax", subtitle: "music", icon: "music.note", gradient: (.raveCyan, .ravePrimary), timeAgo: "5 часов назад"),
-            FriendHistoryItem(title: "The Witcher S3", subtitle: "series", icon: "tv", gradient: (.raveAccent, .raveWarning), timeAgo: "вчера"),
-            FriendHistoryItem(title: "Cyberpunk 2077 стрим", subtitle: "livestream", icon: "dot.radiowaves", gradient: (.raveGreen, .raveCyan), timeAgo: "2 дня назад"),
-            FriendHistoryItem(title: "Best Stand Up 2024", subtitle: "video", icon: "video", gradient: (.raveWarning, .raveAccent), timeAgo: "3 дня назад"),
+            FriendHistoryItem(title: "Дюна: Часть вторая", subtitle: "movie", icon: "film", gradient: (Cinema2026.accent, Cinema2026.accent), timeAgo: "2 часа назад"),
+            FriendHistoryItem(title: "Lo-Fi Beats to Relax", subtitle: "music", icon: "music.note", gradient: (Cinema2026.accent, Cinema2026.accent), timeAgo: "5 часов назад"),
+            FriendHistoryItem(title: "The Witcher S3", subtitle: "series", icon: "tv", gradient: (Cinema2026.accent, Cinema2026.accent), timeAgo: "вчера"),
+            FriendHistoryItem(title: "Cyberpunk 2077 стрим", subtitle: "livestream", icon: "dot.radiowaves", gradient: (Cinema2026.accent, Cinema2026.accent), timeAgo: "2 дня назад"),
+            FriendHistoryItem(title: "Best Stand Up 2024", subtitle: "video", icon: "video", gradient: (Cinema2026.accent, Cinema2026.accent), timeAgo: "3 дня назад"),
         ]
         isLoadingStats = false
     }
@@ -124,14 +124,14 @@ struct FriendProfileView: View {
                     }
                     .frame(width: 110, height: 110)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.raveGradient, lineWidth: 3))
-                    .neonGlow(color: .ravePrimary, radius: 20, y: 8)
+                    .overlay(Circle().stroke(Cinema2026.accentAction, lineWidth: 3))
+                    .neonGlow(color: Cinema2026.accent, radius: 20, y: 8)
                 } else {
                     avatarFallback
                         .frame(width: 110, height: 110)
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.raveGradient, lineWidth: 3))
-                        .neonGlow(color: .ravePrimary, radius: 20, y: 8)
+                        .overlay(Circle().stroke(Cinema2026.accentAction, lineWidth: 3))
+                        .neonGlow(color: Cinema2026.accent, radius: 20, y: 8)
                 }
             }
 
@@ -142,11 +142,11 @@ struct FriendProfileView: View {
 
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(friend.isOnline ? Color.raveGreen : Color.raveTextTertiary)
+                        .fill(friend.isOnline ? Cinema2026.accent : Cinema2026.tertiary)
                         .frame(width: 8, height: 8)
                     Text(friend.isOnline ? "В сети" : "Не в сети")
                         .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
             }
         }
@@ -155,7 +155,7 @@ struct FriendProfileView: View {
     private var avatarFallback: some View {
         ZStack {
             Circle().fill(
-                LinearGradient(colors: [.ravePrimary, .raveAccent],
+                LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             )
             Text(friend.initials)
@@ -169,7 +169,7 @@ struct FriendProfileView: View {
     private var statsRow: some View {
         Group {
             if isLoadingStats {
-                ProgressView().tint(.ravePrimary)
+                ProgressView().tint(Cinema2026.accent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
             } else {
@@ -190,10 +190,10 @@ struct FriendProfileView: View {
         VStack(spacing: 6) {
             Text(value)
                 .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
             Text(label)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -212,9 +212,9 @@ struct FriendProfileView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color.raveGradient)
+                .background(Cinema2026.accentAction)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-                .shadow(color: .ravePrimary.opacity(0.3), radius: 10, y: 4)
+                .shadow(color: Cinema2026.accent.opacity(0.3), radius: 10, y: 4)
             }
 
             // Добавить в комнату
@@ -225,7 +225,7 @@ struct FriendProfileView: View {
                     Text("В комнату")
                         .font(.caption2.bold())
                 }
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
                 .frame(width: 90)
                 .padding(.vertical, 12)
                 .glassCard(cornerRadius: 14)
@@ -240,11 +240,11 @@ struct FriendProfileView: View {
             HStack {
                 Text("Что смотрел(а)")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Spacer()
                 Text("\(history.count)")
                     .font(.system(size: 13, weight: .bold).monospacedDigit())
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .glassCard(cornerRadius: 10, opacity: 0.05)
@@ -254,10 +254,10 @@ struct FriendProfileView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "film")
                         .font(.system(size: 32))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                     Text("Истории пока нет")
                         .font(.subheadline)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
@@ -291,18 +291,18 @@ struct FriendProfileView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(1)
                 Text(item.subtitle)
                     .font(.caption2)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             Spacer()
 
             Text(item.timeAgo)
                 .font(.caption2)
-                .foregroundColor(.raveTextTertiary)
+                .foregroundColor(Cinema2026.tertiary)
         }
         .padding(12)
         .glassCard(cornerRadius: 14)

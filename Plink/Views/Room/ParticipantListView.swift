@@ -55,10 +55,10 @@ struct ParticipantListView: View {
                                     VStack(spacing: 8) {
                                         Image(systemName: "person.2.slash")
                                             .font(.system(size: 28))
-                                            .foregroundColor(.raveTextTertiary)
+                                            .foregroundColor(Cinema2026.tertiary)
                                         Text("Нет участников")
                                             .font(.system(size: 14))
-                                            .foregroundColor(.raveTextTertiary)
+                                            .foregroundColor(Cinema2026.tertiary)
                                     }
                                     .padding(.vertical, 24)
                                     Spacer()
@@ -81,7 +81,7 @@ struct ParticipantListView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
             }
@@ -100,20 +100,20 @@ struct ParticipantListView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.bioCyan.opacity(0.2), Color.bioEmerald.opacity(0.15)],
+                                colors: [Cinema2026.accent.opacity(0.2), Cinema2026.accent.opacity(0.15)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 52, height: 52)
                     Image(systemName: "rectangle.stack.fill.badge.play")
                         .font(.system(size: 20))
-                        .foregroundColor(.bioCyan)
+                        .foregroundColor(Cinema2026.accent)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(room.name)
                         .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                         .lineLimit(1)
 
                     HStack(spacing: 8) {
@@ -121,10 +121,10 @@ struct ParticipantListView: View {
                         HStack(spacing: 4) {
                             Text("Код:")
                                 .font(.system(size: 11))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                             Text(room.code)
                                 .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                .foregroundColor(.bioCyan)
+                                .foregroundColor(Cinema2026.accent)
                         }
 
                         // Copy button
@@ -134,7 +134,7 @@ struct ParticipantListView: View {
                         } label: {
                             Image(systemName: "doc.on.doc")
                                 .font(.system(size: 10))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                         }
                     }
                 }
@@ -145,10 +145,10 @@ struct ParticipantListView: View {
                 VStack(spacing: 2) {
                     Text("\(room.participantCount)")
                         .font(.system(size: 18, weight: .heavy, design: .rounded).monospacedDigit())
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text("/ \(room.maxParticipants)")
                         .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                 }
                 .frame(width: 44, height: 44)
                 .background(Color.white.opacity(0.06))
@@ -171,9 +171,9 @@ struct ParticipantListView: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                 }
-                .foregroundColor(.bioCyan)
+                .foregroundColor(Cinema2026.accent)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
             }
@@ -199,8 +199,8 @@ struct ParticipantListView: View {
                     .fill(
                         LinearGradient(
                             colors: isHost
-                                ? [Color.bioEmerald.opacity(0.6), Color.bioCyan.opacity(0.4)]
-                                : [Color.bioCyan.opacity(0.3), Color.bioTeal.opacity(0.2)],
+                                ? [Cinema2026.accent.opacity(0.6), Cinema2026.accent.opacity(0.4)]
+                                : [Cinema2026.accent.opacity(0.3), Cinema2026.accent.opacity(0.2)],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )
@@ -213,16 +213,16 @@ struct ParticipantListView: View {
 
                 // Online dot
                 Circle()
-                    .fill(user.isOnline ? Color.bioEmerald : Color.raveTextTertiary.opacity(0.3))
+                    .fill(user.isOnline ? Cinema2026.accent : Cinema2026.tertiary.opacity(0.3))
                     .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(Color.raveBackground, lineWidth: 2))
+                    .overlay(Circle().stroke(Cinema2026.background, lineWidth: 2))
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(user.username)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
 
                     if isHost {
                         Text("ХОСТ")
@@ -230,20 +230,20 @@ struct ParticipantListView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color.bioEmerald.opacity(0.3))
+                            .background(Cinema2026.accent.opacity(0.3))
                             .clipShape(Capsule())
-                            .overlay(Capsule().stroke(Color.bioEmerald.opacity(0.5), lineWidth: 0.5))
+                            .overlay(Capsule().stroke(Cinema2026.accent.opacity(0.5), lineWidth: 0.5))
                     }
 
                     // 🔧 User ID (small, monospaced)
                     Text("#\(String(user.id.suffix(8)))")
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                 }
 
                 Text(user.isOnline ? "В сети" : "Не в сети")
                     .font(.system(size: 11))
-                    .foregroundColor(user.isOnline ? .bioEmerald : .raveTextTertiary)
+                    .foregroundColor(user.isOnline ? Cinema2026.accent : Cinema2026.tertiary)
             }
 
             Spacer()

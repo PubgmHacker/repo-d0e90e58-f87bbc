@@ -60,7 +60,7 @@ struct ChatView: View {
                     }
 
                     Divider()
-                        .background(Color.raveSurface)
+                        .background(Cinema2026.raised)
 
                     HStack(spacing: 10) {
                         TextField(loc.string(.chatPlaceholder), text: $chatText)
@@ -71,7 +71,7 @@ struct ChatView: View {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.title2)
                                 .foregroundColor(chatText.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? .raveSurface : .ravePrimary)
+                                    ? Cinema2026.raised : Cinema2026.accent)
                         }
                         .disabled(chatText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
@@ -136,21 +136,21 @@ private struct ChatBubble: View {
                 if !isOwnMessage {
                     Text(message.senderName)
                         .font(.caption2.bold())
-                        .foregroundColor(.raveSecondary)
+                        .foregroundColor(Cinema2026.accent)
                         .padding(.leading, 4)
                 }
 
                 Text(message.text)
                     .font(.subheadline)
-                    .foregroundColor(isOwnMessage ? .white : .raveTextPrimary)
+                    .foregroundColor(isOwnMessage ? .white : Cinema2026.text)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(isOwnMessage ? Color.ravePrimary : Color.raveCard)
+                    .background(isOwnMessage ? Cinema2026.accent : Cinema2026.surface)
                     .clipShape(ChatBubbleShape(isOwn: isOwnMessage))
 
                 Text(message.timeString)
                     .font(.caption2)
-                    .foregroundColor(.raveTextSecondary.opacity(0.6))
+                    .foregroundColor(Cinema2026.secondary.opacity(0.6))
                     .padding(.trailing, 4)
             }
         }

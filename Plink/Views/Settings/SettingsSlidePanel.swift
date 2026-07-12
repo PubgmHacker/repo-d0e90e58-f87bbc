@@ -40,7 +40,7 @@ struct SettingsSlidePanel: View {
             .frame(maxHeight: 520)
             .background(
                 ZStack {
-                    Color.raveBackground.opacity(0.95)
+                    Cinema2026.background.opacity(0.95)
                     Rectangle().fill(.ultraThinMaterial)
                 }
             )
@@ -50,14 +50,14 @@ struct SettingsSlidePanel: View {
                 RoundedRectangle(cornerRadius: 28)
                     .stroke(
                         LinearGradient(
-                            colors: [Color.bioCyan.opacity(0.4), .clear],
+                            colors: [Cinema2026.accent.opacity(0.4), .clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0.5, y: 0.15)
                         ),
                         lineWidth: 0.5
                     )
             )
-            .shadow(color: Color.bioCyan.opacity(0.15), radius: 20, y: -2)
+            .shadow(color: Cinema2026.accent.opacity(0.15), radius: 20, y: -2)
             .shadow(color: .black.opacity(0.6), radius: 30, y: -4)
         }
         .ignoresSafeArea(.keyboard)
@@ -105,22 +105,22 @@ struct SettingsSlidePanel: View {
 
             // ── Меню ──
             VStack(spacing: 0) {
-                compactRow(icon: "person.crop.circle.fill", title: "Аккаунт", color: .ravePrimary) {
+                compactRow(icon: "person.crop.circle.fill", title: "Аккаунт", color: Cinema2026.accent) {
                     showFullProfile = true
                 }
-                compactRow(icon: "lock.shield.fill", title: "Конфиденциальность", color: .raveGreen) {
+                compactRow(icon: "lock.shield.fill", title: "Конфиденциальность", color: Cinema2026.accent) {
                     showPrivacy = true
                 }
-                compactRow(icon: "bell.badge.fill", title: "Уведомления", color: .raveWarning) {
+                compactRow(icon: "bell.badge.fill", title: "Уведомления", color: Cinema2026.accent) {
                     showNotifications = true
                 }
-                compactRow(icon: "sparkles", title: "Premium Подписка", color: .raveAccent) {
+                compactRow(icon: "sparkles", title: "Premium Подписка", color: Cinema2026.accent) {
                     showPremium = true
                 }
 
                 // Админ-панель (только для ADMIN)
                 if profileVM?.user?.isAdmin == true {
-                    compactRow(icon: "shield.lefthalf.filled", title: "Админ-панель", color: .raveWarning) {
+                    compactRow(icon: "shield.lefthalf.filled", title: "Админ-панель", color: Cinema2026.accent) {
                         showAdminPanel = true
                     }
                 }
@@ -146,7 +146,7 @@ struct SettingsSlidePanel: View {
                         .font(.system(size: 15, weight: .semibold))
                     Spacer()
                 }
-                .foregroundColor(.raveDanger)
+                .foregroundColor(Cinema2026.danger)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 14)
             }
@@ -167,7 +167,7 @@ struct SettingsSlidePanel: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.premiumGradient)
+                        .fill(Cinema2026.accentAction)
                         .frame(width: 44, height: 44)
                     Text((profileVM?.displayName ?? "?").prefix(2).uppercased())
                         .font(.system(size: 16, weight: .bold))
@@ -192,12 +192,12 @@ struct SettingsSlidePanel: View {
                     )
                     Text("@\((profileVM?.username ?? "guest").lowercased())")
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 8)
@@ -220,13 +220,13 @@ struct SettingsSlidePanel: View {
 
                 Text(title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
@@ -241,14 +241,14 @@ struct SettingsSlidePanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Разработчик")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .padding(.horizontal, 18)
 
             HStack(spacing: 0) {
-                devLink(icon: "paperplane.fill", color: .ravePrimary, url: "https://t.me/raveclone")
-                devLink(icon: "play.rectangle.fill", color: .raveDanger, url: "https://youtube.com/@raveclone")
-                devLink(icon: "music.note.tv", color: .raveTextPrimary, url: "https://tiktok.com/@raveclone")
-                devLink(icon: "globe", color: .raveCyan, url: "https://raveclone.com")
+                devLink(icon: "paperplane.fill", color: Cinema2026.accent, url: "https://t.me/raveclone")
+                devLink(icon: "play.rectangle.fill", color: Cinema2026.danger, url: "https://youtube.com/@raveclone")
+                devLink(icon: "music.note.tv", color: Cinema2026.text, url: "https://tiktok.com/@raveclone")
+                devLink(icon: "globe", color: Cinema2026.accent, url: "https://raveclone.com")
             }
             .padding(.horizontal, 10)
         }
@@ -281,11 +281,11 @@ struct PremiumAnimatedStroke: ShapeStyle {
     func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
         AngularGradient(
             colors: [
-                Color.bioCyan,
-                Color.bioObsidian,
-                Color.bioEmerald,
-                Color.bioObsidian,
-                Color.bioCyan,
+                Cinema2026.accent,
+                Cinema2026.background,
+                Cinema2026.accent,
+                Cinema2026.background,
+                Cinema2026.accent,
             ],
             center: .center
         )
@@ -321,15 +321,15 @@ struct PremiumUsernameText: View {
         } else {
             Text(text)
                 .font(font)
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
         }
     }
 
     private let premiumColors: [Color] = [
-        Color.bioCyan,
-        Color.bioEmerald,
-        Color.bioTeal,
-        Color.bioCyan,
+        Cinema2026.accent,
+        Cinema2026.accent,
+        Cinema2026.accent,
+        Cinema2026.accent,
     ]
 }
 
@@ -351,30 +351,30 @@ struct PremiumManagementView: View {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 48))
                                 .foregroundStyle(
-                                    LinearGradient(colors: [Color.bioCyan, Color.ravePrimary, Color.raveWarning],
+                                    LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent, Cinema2026.accent],
                                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                                 )
 
                             if isPremium {
                                 Text("Плинк+ активна")
                                     .font(.title2.bold())
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                                 if let expiry = PremiumStatusManager.shared.subscriptionExpiry {
                                     Text("Действует до \(expiry, format: .dateTime.month().day().year())")
                                         .font(.subheadline)
-                                        .foregroundColor(.raveTextSecondary)
+                                        .foregroundColor(Cinema2026.secondary)
                                 } else {
                                     Text("Активна")
                                         .font(.subheadline)
-                                        .foregroundColor(.raveTextSecondary)
+                                        .foregroundColor(Cinema2026.secondary)
                                 }
                             } else {
                                 Text("Плинк+ не активна")
                                     .font(.title2.bold())
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                                 Text("Оформите подписку для расширенных возможностей")
                                     .font(.subheadline)
-                                    .foregroundColor(.raveTextSecondary)
+                                    .foregroundColor(Cinema2026.secondary)
                                     .multilineTextAlignment(.center)
                             }
                         }
@@ -396,7 +396,7 @@ struct PremiumManagementView: View {
                                     Spacer()
                                 }
                                 .font(.subheadline.bold())
-                                .foregroundColor(.ravePrimary)
+                                .foregroundColor(Cinema2026.accent)
                                 .padding(16)
                                 .glassCard(cornerRadius: 16, opacity: 0.06)
                             }
@@ -415,7 +415,7 @@ struct PremiumManagementView: View {
                                     Spacer()
                                 }
                                 .font(.subheadline)
-                                .foregroundColor(.raveDanger)
+                                .foregroundColor(Cinema2026.danger)
                                 .padding(16)
                                 .glassCard(cornerRadius: 16, opacity: 0.04)
                             }
@@ -432,7 +432,7 @@ struct PremiumManagementView: View {
                                 }
                                 .foregroundColor(.white)
                                 .padding(.vertical, 16)
-                                .background(Color.premiumGradient)
+                                .background(Cinema2026.accentAction)
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
                             }
                             .buttonStyle(.plain)
@@ -451,7 +451,7 @@ struct PremiumManagementView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.ravePrimary)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
             }

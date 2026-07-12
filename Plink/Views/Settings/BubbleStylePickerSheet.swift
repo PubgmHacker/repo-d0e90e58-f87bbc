@@ -62,7 +62,7 @@ struct BubbleStylePickerSheet: View {
                         // Footer note
                         Text("Стиль применяется к вашим сообщениям в комнатах совместного просмотра. Сервер проверяет права — даже если приложение модифицировано, Unauthorized стили будут сброшены к «Стандартный».")
                             .font(.system(size: 11))
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                             .padding(.top, 12)
@@ -75,7 +75,7 @@ struct BubbleStylePickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Готово") { dismiss() }
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 }
             }
             .toolbarBackground(Color.clear, for: .navigationBar)
@@ -96,7 +96,7 @@ struct BubbleStylePickerSheet: View {
                     .foregroundColor(.white)
                 Text("Ваши сообщения всегда используют VIP-стиль автоматически. Выбор ниже — только для предпросмотра.")
                     .font(.system(size: 11))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
             Spacer()
         }
@@ -138,11 +138,11 @@ struct BubbleStylePickerSheet: View {
                     HStack(spacing: 6) {
                         Text(style.displayName)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(canSelect ? .raveTextPrimary : .raveTextSecondary)
+                            .foregroundColor(canSelect ? Cinema2026.text : Cinema2026.secondary)
                         if !canSelect && style != .adminBubble {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 10))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                         }
                         if style == .adminBubble {
                             Image(systemName: "crown.fill")
@@ -152,7 +152,7 @@ struct BubbleStylePickerSheet: View {
                     }
                     Text(style.subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .lineLimit(1)
                 }
 
@@ -161,11 +161,11 @@ struct BubbleStylePickerSheet: View {
                 if isSelected && canSelect {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 20))
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 } else if !canSelect && style != .adminBubble {
                     Image(systemName: "sparkles")
                         .font(.system(size: 14))
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 }
             }
             .padding(.horizontal, 14)
@@ -176,7 +176,7 @@ struct BubbleStylePickerSheet: View {
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(
                         isSelected && canSelect
-                            ? Color.bioAmber.opacity(0.6)
+                            ? Cinema2026.amber.opacity(0.6)
                             : Color.white.opacity(0.06),
                         lineWidth: isSelected && canSelect ? 1.5 : 0.5
                     )
@@ -198,7 +198,7 @@ struct BubbleStylePickerSheet: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .background(Color.raveCard)
+                .background(Cinema2026.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case .cuteDuck:
             ZStack {

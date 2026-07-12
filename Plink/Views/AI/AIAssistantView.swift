@@ -94,7 +94,7 @@ struct AIAssistantView: View {
                     } label: {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     }
                 }
                 // 🔧 v5: right — new chat (clears current, starts fresh session)
@@ -115,7 +115,7 @@ struct AIAssistantView: View {
                     } label: {
                         Image(systemName: "plus.bubble")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.bioAmber)
+                            .foregroundColor(Cinema2026.amber)
                     }
                     .disabled(messages.isEmpty)
                     .opacity(messages.isEmpty ? 0.4 : 1)
@@ -157,7 +157,7 @@ struct AIAssistantView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.bioAmber, Color.bioCoral],
+                                colors: [Cinema2026.amber, Cinema2026.danger],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
@@ -166,16 +166,16 @@ struct AIAssistantView: View {
                         .font(.system(size: 38, weight: .bold))
                         .foregroundColor(.white)
                 }
-                .shadow(color: Color.bioAmber.opacity(0.5), radius: 18, y: 6)
-                .glowPulse(color: Color.bioAmber, minRadius: 14, maxRadius: 26, minOpacity: 0.2, maxOpacity: 0.6, period: 2.4)
+                .shadow(color: Cinema2026.amber.opacity(0.5), radius: 18, y: 6)
+                .glowPulse(color: Cinema2026.amber, minRadius: 14, maxRadius: 26, minOpacity: 0.2, maxOpacity: 0.6, period: 2.4)
 
                 VStack(spacing: 8) {
                     Text("Что посмотреть?")
                         .font(.system(size: 26, weight: .heavy, design: .rounded))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text("Спроси ИИ — подберёт фильм, сериал или видео для совместного просмотра")
                         .font(.subheadline)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 24)
@@ -183,7 +183,7 @@ struct AIAssistantView: View {
             .padding(.vertical, 28)
             .padding(.horizontal, 16)
             // 🔧 TELEGRAM-STYLE: прозрачное стекло + металлическая обводка
-            .telegramGlass(cornerRadius: 24, borderColor: Color.bioAmber.opacity(0.3))
+            .telegramGlass(cornerRadius: 24, borderColor: Cinema2026.amber.opacity(0.3))
             .padding(.horizontal, 20)
         }
     }
@@ -201,11 +201,11 @@ struct AIAssistantView: View {
                     } label: {
                         Text(prompt)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             // 🔧 TELEGRAM-STYLE glass chips
-                            .telegramGlass(cornerRadius: 18, borderColor: Color.bioAmber.opacity(0.25))
+                            .telegramGlass(cornerRadius: 18, borderColor: Cinema2026.amber.opacity(0.25))
                     }
                     .buttonStyle(.plain)
                 }
@@ -229,12 +229,12 @@ struct AIAssistantView: View {
         HStack(spacing: 10) {
             TextField("Спросите что угодно...", text: $inputText, axis: .vertical)
                 .font(.system(size: 16))
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
                 .lineLimit(1...4)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 // 🔧 TELEGRAM-STYLE glass input
-                .telegramGlass(cornerRadius: 22, borderColor: Color.bioAmber.opacity(0.2))
+                .telegramGlass(cornerRadius: 22, borderColor: Cinema2026.amber.opacity(0.2))
                 .focused($isInputFocused)
                 .onChange(of: inputText) { _, newValue in
                     if newValue.count > charLimit {
@@ -251,7 +251,7 @@ struct AIAssistantView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.bioAmber, Color.bioCoral],
+                                colors: [Cinema2026.amber, Cinema2026.danger],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -261,7 +261,7 @@ struct AIAssistantView: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
                 }
-                .shadow(color: Color.bioAmber.opacity(0.45), radius: 10, y: 4)
+                .shadow(color: Cinema2026.amber.opacity(0.45), radius: 10, y: 4)
             }
             .buttonStyle(.plain)
             .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
@@ -274,8 +274,8 @@ struct AIAssistantView: View {
             VStack(spacing: 0) {
                 LinearGradient(
                     colors: [
-                        Color.bioAmber.opacity(0.4),
-                        Color.bioCoral.opacity(0.2),
+                        Cinema2026.amber.opacity(0.4),
+                        Cinema2026.danger.opacity(0.2),
                         .clear
                     ],
                     startPoint: .leading,
@@ -543,13 +543,13 @@ struct AIHistorySheet: View {
                     VStack(spacing: 12) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 36))
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                         Text("История диалогов пуста")
                             .font(.subheadline)
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                         Text("Начните чат — он сохранится здесь целиком")
                             .font(.caption)
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                     }
                 } else {
                     ScrollView(showsIndicators: false) {
@@ -563,23 +563,23 @@ struct AIHistorySheet: View {
                                         // 🔧 Glass circle icon
                                         ZStack {
                                             Circle()
-                                                .fill(Color.bioAmber.opacity(0.15))
+                                                .fill(Cinema2026.amber.opacity(0.15))
                                                 .frame(width: 36, height: 36)
                                             Image(systemName: "sparkles")
                                                 .font(.system(size: 14))
-                                                .foregroundColor(.bioAmber)
+                                                .foregroundColor(Cinema2026.amber)
                                         }
 
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(session.title)
                                                 .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(.raveTextPrimary)
+                                                .foregroundColor(Cinema2026.text)
                                                 .lineLimit(2)
                                                 .multilineTextAlignment(.leading)
                                             if !session.preview.isEmpty {
                                                 Text(session.preview)
                                                     .font(.system(size: 12))
-                                                    .foregroundColor(.raveTextSecondary)
+                                                    .foregroundColor(Cinema2026.secondary)
                                                     .lineLimit(1)
                                                     .multilineTextAlignment(.leading)
                                             }
@@ -587,14 +587,14 @@ struct AIHistorySheet: View {
                                                 if !session.date.isEmpty {
                                                     Text(formatDate(session.date))
                                                         .font(.system(size: 11))
-                                                        .foregroundColor(.raveTextTertiary)
+                                                        .foregroundColor(Cinema2026.tertiary)
                                                 }
                                                 Text("·")
                                                     .font(.system(size: 11))
-                                                    .foregroundColor(.raveTextTertiary)
+                                                    .foregroundColor(Cinema2026.tertiary)
                                                 Text("\(session.messageCount) сообщ.")
                                                     .font(.system(size: 11))
-                                                    .foregroundColor(.raveTextTertiary)
+                                                    .foregroundColor(Cinema2026.tertiary)
                                             }
                                         }
 
@@ -602,7 +602,7 @@ struct AIHistorySheet: View {
 
                                         Image(systemName: "arrow.clockwise")
                                             .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.raveTextTertiary)
+                                            .foregroundColor(Cinema2026.tertiary)
                                     }
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 12)
@@ -614,7 +614,7 @@ struct AIHistorySheet: View {
                                             .stroke(
                                                 LinearGradient(
                                                     colors: [
-                                                        Color.bioAmber.opacity(0.2),
+                                                        Cinema2026.amber.opacity(0.2),
                                                         Color.white.opacity(0.04)
                                                     ],
                                                     startPoint: .topLeading,
@@ -648,7 +648,7 @@ struct AIHistorySheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Готово") { dismiss() }
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 }
                 if !sessions.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
@@ -660,7 +660,7 @@ struct AIHistorySheet: View {
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 14))
-                                .foregroundColor(.raveDanger)
+                                .foregroundColor(Cinema2026.danger)
                         }
                     }
                 }
@@ -745,21 +745,21 @@ struct AIMessageBubble: View {
                         if isStreaming {
                             Text("печатает…")
                                 .font(.system(size: 10))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                         }
                     }
-                    .foregroundColor(.ravePrimary)
+                    .foregroundColor(Cinema2026.accent)
                 }
 
                 HStack(alignment: .bottom, spacing: isStreaming ? 2 : 0) {
                     Text(message.text.isEmpty && isStreaming ? " " : message.text)
                         .font(.system(size: 15))
-                        .foregroundColor(message.role == .user ? .white : .raveTextPrimary)
+                        .foregroundColor(message.role == .user ? .white : Cinema2026.text)
 
                     // 🔧 Streaming cursor — pulsing block at the end of text
                     if isStreaming && !message.text.isEmpty {
                         Rectangle()
-                            .fill(Color.bioAmber)  // 🔧 DIVERSITY: amber cursor (was cyan)
+                            .fill(Cinema2026.amber)  // 🔧 DIVERSITY: amber cursor (was cyan)
                             .frame(width: 2, height: 16)
                             .opacity(cursorVisible ? 1 : 0)
                             .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: cursorVisible)
@@ -791,7 +791,7 @@ private struct AIBubbleBackground: ViewModifier {
             content
                 .background(
                     LinearGradient(
-                        colors: [Color.bioAmber, Color.bioCoral],
+                        colors: [Cinema2026.amber, Cinema2026.danger],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -801,10 +801,10 @@ private struct AIBubbleBackground: ViewModifier {
                     RoundedRectangle(cornerRadius: 18)
                         .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
                 )
-                .shadow(color: Color.bioAmber.opacity(0.3), radius: 6, y: 2)
+                .shadow(color: Cinema2026.amber.opacity(0.3), radius: 6, y: 2)
         case .ai:
             content
-                .telegramGlass(cornerRadius: 18, borderColor: Color.bioAmber.opacity(0.25))
+                .telegramGlass(cornerRadius: 18, borderColor: Cinema2026.amber.opacity(0.25))
         }
     }
 }

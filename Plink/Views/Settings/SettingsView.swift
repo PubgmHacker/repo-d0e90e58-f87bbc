@@ -60,7 +60,7 @@ struct SettingsView: View {
                                 icon: "person.crop.circle.fill",
                                 title: "Профиль",
                                 subtitle: profileVM?.displayName,
-                                color: .bioCyan
+                                color: Cinema2026.accent
                             ) {
                                 showFullProfile = true
                             }
@@ -68,7 +68,7 @@ struct SettingsView: View {
                                 icon: "sparkles",
                                 title: "Оформить Плинк+",
                                 subtitle: premiumSubtitle,
-                                color: .bioAmber
+                                color: Cinema2026.amber
                             ) {
                                 showPremium = true
                             }
@@ -85,7 +85,7 @@ struct SettingsView: View {
                                     icon: "lock.shield.fill",
                                     title: "Конфиденциальность",
                                     subtitle: nil,
-                                    color: .bioCoral,
+                                    color: Cinema2026.danger,
                                     showChevron: true
                                 )
                             }
@@ -98,7 +98,7 @@ struct SettingsView: View {
                                     icon: "bell.badge.fill",
                                     title: "Уведомления",
                                     subtitle: nil,
-                                    color: .bioAmber,
+                                    color: Cinema2026.amber,
                                     showChevron: true
                                 )
                             }
@@ -111,7 +111,7 @@ struct SettingsView: View {
                                     icon: "globe",
                                     title: "Язык приложения",
                                     subtitle: LocalizationManager.shared.currentLanguageName,
-                                    color: .bioRose,
+                                    color: Cinema2026.amber,
                                     showChevron: true
                                 )
                             }
@@ -129,7 +129,7 @@ struct SettingsView: View {
                                     icon: "bubble.left.and.bubble.right.fill",
                                     title: "Стили пузырей",
                                     subtitle: isPremium ? BubbleStylePreference.get().displayName : "Плинк+",
-                                    color: .bioAmber,
+                                    color: Cinema2026.amber,
                                     showChevron: true
                                 )
                             }
@@ -142,7 +142,7 @@ struct SettingsView: View {
                                 settingsRow(
                                     icon: "shield.lefthalf.filled",
                                     title: "Админ-панель",
-                                    color: .raveDanger
+                                    color: Cinema2026.danger
                                 ) {
                                     showAdminPanel = true
                                 }
@@ -155,14 +155,14 @@ struct SettingsView: View {
                                 settingsRowLink(
                                     icon: "paperplane.fill",
                                     title: "Telegram",
-                                    color: .bioCyan
+                                    color: Cinema2026.accent
                                 )
                             }
                             Link(destination: URL(string: "https://plink.app")!) {
                                 settingsRowLink(
                                     icon: "globe",
                                     title: "Сайт",
-                                    color: .bioTeal
+                                    color: Cinema2026.accent
                                 )
                             }
                         }
@@ -188,7 +188,7 @@ struct SettingsView: View {
                                     .font(.system(size: 14, weight: .medium))
                                 Spacer()
                             }
-                            .foregroundColor(.raveDanger.opacity(0.7))
+                            .foregroundColor(Cinema2026.danger.opacity(0.7))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                         }
@@ -199,10 +199,10 @@ struct SettingsView: View {
                         VStack(spacing: 4) {
                             Text("Плинк")
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                             Text("Версия 1.0 (1)")
                                 .font(.system(size: 11))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                         }
                         .padding(.top, 8)
                         .padding(.bottom, 32)
@@ -388,14 +388,14 @@ struct SettingsView: View {
                     .font(.system(size: 16, weight: .semibold))
                 Spacer()
             }
-            .foregroundColor(.raveDanger)
+            .foregroundColor(Cinema2026.danger)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.raveDanger.opacity(0.2), lineWidth: 0.5)
+                    .stroke(Cinema2026.danger.opacity(0.2), lineWidth: 0.5)
             )
         }
         .buttonStyle(.plain)
@@ -436,12 +436,12 @@ struct SettingsView: View {
                                 Text("Плинк+")
                                     .font(.system(size: 9, weight: .heavy, design: .rounded))
                             }
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(Color.bioCyan.opacity(0.12))
+                            .background(Cinema2026.accent.opacity(0.12))
                             .clipShape(Capsule())
-                            .overlay(Capsule().stroke(Color.bioCyan.opacity(0.4), lineWidth: 0.5))
+                            .overlay(Capsule().stroke(Cinema2026.accent.opacity(0.4), lineWidth: 0.5))
                         }
                     }
                     // 🔧 FIX: removed email — shown in profile page already.
@@ -450,24 +450,24 @@ struct SettingsView: View {
                         HStack(spacing: 6) {
                             Text("@\(user.username)")
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                             Text("·")
                                 .font(.system(size: 13))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                             HStack(spacing: 2) {
                                 Text("ID:")
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.raveTextTertiary)
+                                    .foregroundColor(Cinema2026.tertiary)
                                 Text(user.shortId)
                                     .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.raveTextTertiary)
+                                    .foregroundColor(Cinema2026.tertiary)
                                 Button {
                                     UIPasteboard.general.string = user.fullId
                                     HapticManager.impact(.light)
                                 } label: {
                                     Image(systemName: "doc.on.doc")
                                         .font(.system(size: 10))
-                                        .foregroundColor(.raveTextTertiary)
+                                        .foregroundColor(Cinema2026.tertiary)
                                 }
                             }
                         }
@@ -478,7 +478,7 @@ struct SettingsView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -499,7 +499,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .tracking(0.5)
                 .padding(.horizontal, 16)
 
@@ -558,21 +558,21 @@ struct SettingsView: View {
 
             Text(title)
                 .font(.system(size: 16))
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
 
             Spacer()
 
             if let subtitle {
                 Text(subtitle)
                     .font(.system(size: 14))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
                     .lineLimit(1)
             }
 
             if showChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
         }
         .padding(.horizontal, 14)

@@ -58,7 +58,7 @@ struct ServiceSelectionView: View {
                             title: "Видеосервисы",
                             subtitle: "YouTube · VK · Rutube · Netflix · Disney+",
                             icon: "play.rectangle.fill",
-                            iconColor: .bioCyan,
+                            iconColor: Cinema2026.accent,
                             count: videoServices.count,
                             action: { selectedCategory = .video }
                         )
@@ -67,7 +67,7 @@ struct ServiceSelectionView: View {
                             title: "Кинотеатры",
                             subtitle: "Кинопоиск · Ivi · Okko · Wink · Start · Premier · Смотрим · KION",
                             icon: "film.stack",
-                            iconColor: .bioEmerald,
+                            iconColor: Cinema2026.accent,
                             count: cinemaServices.count,
                             action: { selectedCategory = .cinema }
                         )
@@ -76,7 +76,7 @@ struct ServiceSelectionView: View {
                             title: "Браузер / Своя ссылка",
                             subtitle: "Открой любой сайт или вставьте URL",
                             icon: "safari.fill",
-                            iconColor: .bioTeal,
+                            iconColor: Cinema2026.accent,
                             count: nil,
                             action: { selectedCategory = .browser }
                         )
@@ -168,7 +168,7 @@ struct ServiceSelectionView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .frame(width: 40, height: 40)
                     .glassCard(cornerRadius: 20, opacity: 0.06)
             }
@@ -178,7 +178,7 @@ struct ServiceSelectionView: View {
 
             Text("Выбор сервиса")
                 .font(.system(size: 17, weight: .semibold, design: .rounded))
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
 
             Spacer()
 
@@ -217,11 +217,11 @@ struct ServiceSelectionView: View {
                     HStack(spacing: 8) {
                         Text(title)
                             .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         if let count {
                             Text("\(count)")
                                 .font(.system(size: 11, weight: .bold).monospacedDigit())
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(Color.white.opacity(0.08))
@@ -230,7 +230,7 @@ struct ServiceSelectionView: View {
                     }
                     Text(subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
@@ -239,7 +239,7 @@ struct ServiceSelectionView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -305,7 +305,7 @@ struct ServiceListScreen: View {
                         // Footer info
                         Text("Выберите сервис, чтобы создать комнату для совместного просмотра")
                             .font(.system(size: 11))
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                             .padding(.top, 16)
@@ -323,7 +323,7 @@ struct ServiceListScreen: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
             }
@@ -351,10 +351,10 @@ struct ServiceListScreen: View {
                     // 🔧 Show full brand name (e.g. "VK Видео" not "VK")
                     Text(service.brandName)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(service.subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .lineLimit(1)
                 }
 
@@ -362,7 +362,7 @@ struct ServiceListScreen: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -389,20 +389,20 @@ struct BrowserInputScreen: View {
 
                     ZStack {
                         Circle()
-                            .fill(Color.bioCyan.opacity(0.12))
+                            .fill(Cinema2026.accent.opacity(0.12))
                             .frame(width: 80, height: 80)
                         Image(systemName: "safari.fill")
                             .font(.system(size: 36))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
 
                     VStack(spacing: 8) {
                         Text("Браузер / Своя ссылка")
                             .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         Text("Вставьте ссылку на видео или сайт")
                             .font(.system(size: 15))
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     }
 
                     TextField("https://...", text: $url)
@@ -430,9 +430,9 @@ struct BrowserInputScreen: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(Color.bioCyan.opacity(0.2))
+                            .background(Cinema2026.accent.opacity(0.2))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.bioCyan.opacity(0.4), lineWidth: 0.5))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.accent.opacity(0.4), lineWidth: 0.5))
                         }
 
                         Button {
@@ -447,7 +447,7 @@ struct BrowserInputScreen: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(Color.raveGradient)
+                            .background(Cinema2026.accentAction)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                         }
                     }
@@ -466,7 +466,7 @@ struct BrowserInputScreen: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
             }

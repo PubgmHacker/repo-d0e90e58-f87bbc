@@ -79,12 +79,12 @@ struct JoinRoomView: View {
                                             .font(.system(size: 14))
                                             .foregroundColor(.white)
                                             .frame(width: 28, height: 28)
-                                            .background(Color.bioCyan.opacity(0.18))
+                                            .background(Cinema2026.accent.opacity(0.18))
                                             .clipShape(RoundedRectangle(cornerRadius: 7))
 
                                         TextField("ABC123", text: $roomCode)
                                             .font(.system(size: 18, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.raveTextPrimary)
+                                            .foregroundColor(Cinema2026.text)
                                             .multilineTextAlignment(.leading)  // 🔧 FIX: было .center — код был по центру, пароль слева = некрасиво. Теперь оба слева.
                                             .autocapitalization(.allCharacters)
                                             .disableAutocorrection(true)
@@ -106,12 +106,12 @@ struct JoinRoomView: View {
                                                 .font(.system(size: 14))
                                                 .foregroundColor(.white)
                                                 .frame(width: 28, height: 28)
-                                                .background(Color.bioTeal.opacity(0.18))
+                                                .background(Cinema2026.accent.opacity(0.18))
                                                 .clipShape(RoundedRectangle(cornerRadius: 7))
 
                                             SecureField("Пароль комнаты", text: $roomPassword)
                                                 .font(.system(size: 16))
-                                                .foregroundColor(.raveTextPrimary)
+                                                .foregroundColor(Cinema2026.text)
                                                 .autocapitalization(.none)
                                                 .disableAutocorrection(true)
                                         }
@@ -127,10 +127,10 @@ struct JoinRoomView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.raveDanger)
+                                    .foregroundColor(Cinema2026.danger)
                                 Text(errorMessage)
                                     .font(.system(size: 13))
-                                    .foregroundColor(.raveDanger)
+                                    .foregroundColor(Cinema2026.danger)
                             }
                             .padding(.horizontal, 16)
                         }
@@ -140,7 +140,7 @@ struct JoinRoomView: View {
                              ? "Введите 6-значный код комнаты. Открытые комнаты не требуют пароля."
                              : "Введите код комнаты и пароль. Если пароль неверный — доступ будет отказан.")
                             .font(.system(size: 11))
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                             .padding(.horizontal, 16)
 
                         Spacer(minLength: 100)  // 🔧 FIX: было 32 — кнопка зажималась, теперь 100 для запаса
@@ -177,9 +177,9 @@ struct JoinRoomView: View {
                     .font(.system(size: 14, weight: .semibold))
                 Text(tab.subtitle)
                     .font(.system(size: 10))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
-            .foregroundColor(isSelected ? .raveTextPrimary : .raveTextSecondary)
+            .foregroundColor(isSelected ? Cinema2026.text : Cinema2026.secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             // 🔧 TELEGRAM-GLASS: убран cyan raveGradient. Теперь прозрачное стекло

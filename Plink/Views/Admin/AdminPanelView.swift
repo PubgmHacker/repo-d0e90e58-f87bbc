@@ -50,18 +50,18 @@ struct AdminPanelView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 22, height: 22)
-                        .foregroundColor(.raveDanger)
+                        .foregroundColor(Cinema2026.danger)
 
                     Text("Админ-панель")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
 
                     Spacer()
 
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                             .frame(width: 32, height: 32)
                             .background(Circle().fill(Color.white.opacity(0.06)))
                     }
@@ -86,13 +86,13 @@ struct AdminPanelView: View {
                                     Text(tab.title)
                                         .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .medium))
                                 }
-                                .foregroundColor(selectedTab == tab ? .raveDanger : .raveTextSecondary)
+                                .foregroundColor(selectedTab == tab ? Cinema2026.danger : Cinema2026.secondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
 
                                 // 🔧 Minimalist underline indicator
                                 Rectangle()
-                                    .fill(selectedTab == tab ? AnyShapeStyle(Color.raveDanger) : AnyShapeStyle(Color.clear))
+                                    .fill(selectedTab == tab ? AnyShapeStyle(Cinema2026.danger) : AnyShapeStyle(Color.clear))
                                     .frame(height: 2)
                             }
                         }
@@ -112,14 +112,14 @@ struct AdminPanelView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 13))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                     TextField("Поиск...", text: $searchText)
                         .font(.system(size: 14))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .telegramGlass(cornerRadius: 12, borderColor: Color.raveDanger.opacity(0.15))
+                .telegramGlass(cornerRadius: 12, borderColor: Cinema2026.danger.opacity(0.15))
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
 
@@ -142,10 +142,10 @@ struct AdminPanelView: View {
             if let toast = toastMessage {
                 Text(toast)
                     .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .telegramGlass(cornerRadius: 14, borderColor: Color.raveDanger.opacity(0.2))
+                    .telegramGlass(cornerRadius: 14, borderColor: Cinema2026.danger.opacity(0.2))
                     .padding(.top, 50)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .onAppear {
@@ -167,7 +167,7 @@ struct AdminPanelView: View {
             ForEach(filteredUsers) { user in
                 HStack(spacing: 12) {
                     ZStack {
-                        Circle().fill(Color.raveGradient)
+                        Circle().fill(Cinema2026.accentAction)
                         Text(user.username.prefix(1).uppercased())
                             .font(.headline)
                             .foregroundColor(.white)
@@ -177,10 +177,10 @@ struct AdminPanelView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(user.username)
                             .font(.subheadline.bold())
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         Text(user.email)
                             .font(.caption2)
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     }
 
                     Spacer()
@@ -209,7 +209,7 @@ struct AdminPanelView: View {
                     } label: {
                         Image(systemName: user.role == "BANNED" ? "person.badge.checkmark" : "person.badge.xmark")
                             .font(.system(size: 16))
-                            .foregroundColor(user.role == "BANNED" ? .raveGreen : .raveDanger)
+                            .foregroundColor(user.role == "BANNED" ? Cinema2026.accent : Cinema2026.danger)
                             .frame(width: 36, height: 36)
                             .glassCard(cornerRadius: 18, opacity: 0.06)
                     }
@@ -231,7 +231,7 @@ struct AdminPanelView: View {
                 HStack(spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.raveGradient.opacity(0.3))
+                            .fill(Cinema2026.accentAction.opacity(0.3))
                         Image(systemName: "play.rectangle.fill")
                             .font(.title3)
                             .foregroundColor(.white)
@@ -241,11 +241,11 @@ struct AdminPanelView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(room.name)
                             .font(.subheadline.bold())
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                             .lineLimit(1)
                         Text("Хост: \(room.hostName) · \(room.participantCount) чел.")
                             .font(.caption2)
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     }
 
                     Spacer()
@@ -259,7 +259,7 @@ struct AdminPanelView: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 14))
-                            .foregroundColor(.raveDanger)
+                            .foregroundColor(Cinema2026.danger)
                             .frame(width: 36, height: 36)
                             .glassCard(cornerRadius: 18, opacity: 0.06)
                     }
@@ -280,10 +280,10 @@ struct AdminPanelView: View {
             VStack(spacing: 12) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 36))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
                 Text("Сообщения не загружены")
                     .font(.subheadline)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 60)
@@ -292,10 +292,10 @@ struct AdminPanelView: View {
                 ForEach(messages) { msg in
                     HStack(spacing: 10) {
                         ZStack {
-                            Circle().fill(Color.ravePrimary.opacity(0.15))
+                            Circle().fill(Cinema2026.accent.opacity(0.15))
                             Text(msg.senderName.prefix(1).uppercased())
                                 .font(.caption.bold())
-                                .foregroundColor(.ravePrimary)
+                                .foregroundColor(Cinema2026.accent)
                         }
                         .frame(width: 30, height: 30)
 
@@ -303,14 +303,14 @@ struct AdminPanelView: View {
                             HStack(spacing: 6) {
                                 Text(msg.senderName)
                                     .font(.caption.bold())
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                                 Text(msg.timeAgo)
                                     .font(.system(size: 10))
-                                    .foregroundColor(.raveTextTertiary)
+                                    .foregroundColor(Cinema2026.tertiary)
                             }
                             Text(msg.text)
                                 .font(.caption)
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                                 .lineLimit(2)
                         }
                         Spacer()
@@ -384,10 +384,10 @@ struct AdminPanelView: View {
 
     private func roleColor(_ role: String) -> Color {
         switch role.uppercased() {
-        case "ADMIN": return .raveWarning
-        case "BANNED": return .raveDanger
-        case "PREMIUM": return .raveCyan
-        default: return .raveGreen
+        case "ADMIN": return Cinema2026.accent
+        case "BANNED": return Cinema2026.danger
+        case "PREMIUM": return Cinema2026.accent
+        default: return Cinema2026.accent
         }
     }
 }

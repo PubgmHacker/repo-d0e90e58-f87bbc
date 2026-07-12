@@ -147,7 +147,7 @@ struct HomeView: View {
                 if let toast {
                     Label(toast.text, systemImage: toast.icon)
                         .font(.subheadline.bold())
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                         .glassCard(cornerRadius: 14, opacity: 0.08)
@@ -216,13 +216,13 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Привет 👋")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : -8)
 
                 Text(loc.string(.homeDiscover))
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : -8)
             }
@@ -235,7 +235,7 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "person.fill")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .frame(width: 44, height: 44)
                     .telegramGlass(cornerRadius: 22)
             }
@@ -247,7 +247,7 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "link")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .frame(width: 44, height: 44)
                     .telegramGlass(cornerRadius: 22)
             }
@@ -264,7 +264,7 @@ struct HomeView: View {
             HStack(spacing: 8) {
                 Text(loc.string(.homeWatchingNow))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Spacer()
             }
             .padding(.horizontal, 20)
@@ -272,15 +272,15 @@ struct HomeView: View {
             VStack(spacing: 12) {
                 Image(systemName: "tv.slash")
                     .font(.system(size: 36))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
 
                 Text("Пока никто не смотрит")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
 
                 Text("Создайте комнату и пригласите друзей — они появятся здесь")
                     .font(.system(size: 13))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -302,11 +302,11 @@ struct HomeView: View {
             HStack(spacing: 8) {
                 Text(loc.string(.homeWatchingNow))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Spacer()
                 Text("\(liveRooms.count)")
                     .font(.system(size: 13, weight: .bold).monospacedDigit())
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
             .padding(.horizontal, 20)
 
@@ -337,7 +337,7 @@ struct HomeView: View {
             HStack(spacing: 8) {
                 Text("Рекомендации для тебя")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Spacer()
             }
             .padding(.horizontal, 20)
@@ -379,7 +379,7 @@ struct HomeView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.bioCyan, Color.bioEmerald],
+                                colors: [Cinema2026.accent, Cinema2026.accent],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -389,15 +389,15 @@ struct HomeView: View {
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                 }
-                .shadow(color: Color.bioCyan.opacity(0.4), radius: 8, y: 3)
+                .shadow(color: Cinema2026.accent.opacity(0.4), radius: 8, y: 3)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Что посмотреть?")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text("Спроси ИИ — подберёт фильм для совместного просмотра")
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .lineLimit(1)
                 }
 
@@ -405,7 +405,7 @@ struct HomeView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -415,7 +415,7 @@ struct HomeView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(
                         LinearGradient(
-                            colors: [Color.bioCyan.opacity(0.3), Color.white.opacity(0.04)],
+                            colors: [Cinema2026.accent.opacity(0.3), Color.white.opacity(0.04)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -453,7 +453,7 @@ struct HomeView: View {
             dualGlassButton(
                 icon: "plus",
                 text: loc.string(.homeCreateRoom),
-                gradient: Color.raveGradient,
+                gradient: Cinema2026.accentAction,
                 isCollapsed: isCTACollapsed,
                 action: {
                     HapticManager.impact(.medium)
@@ -466,7 +466,7 @@ struct HomeView: View {
                 icon: "arrow.right.circle.fill",
                 text: "Присоединиться",
                 gradient: LinearGradient(
-                    colors: [Color.bioCyan, Color.bioEmerald],
+                    colors: [Cinema2026.accent, Cinema2026.accent],
                     startPoint: .topLeading, endPoint: .bottomTrailing
                 ),
                 isCollapsed: isCTACollapsed,
@@ -518,7 +518,7 @@ struct HomeView: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.ravePrimary.opacity(0.15),
+                                    Cinema2026.accent.opacity(0.15),
                                     Color.clear,
                                 ],
                                 startPoint: .topLeading,
@@ -542,7 +542,7 @@ struct HomeView: View {
                         lineWidth: 0.5
                     )
             )
-            .shadow(color: Color.ravePrimary.opacity(0.3), radius: 8, y: 3)
+            .shadow(color: Cinema2026.accent.opacity(0.3), radius: 8, y: 3)
         }
         .buttonStyle(GlassButtonStyle())
     }
@@ -606,13 +606,13 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 Image(systemName: "link.badge.plus")
                     .font(.system(size: 40))
-                    .foregroundStyle(Color.raveGradient)
+                    .foregroundStyle(Cinema2026.accentAction)
                 Text(loc.string(.joinTitle))
                     .font(.title2.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Text(loc.string(.joinSubtitle))
                     .font(.subheadline)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             TextField("ABC123 или https://...", text: $joinInput)
@@ -647,26 +647,26 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PremiumButtonStyle())
-            .background(Color.raveGradient)
+            .background(Cinema2026.accentAction)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .disabled(!isValidJoinInput || viewModel.isLoading)
             .padding(.horizontal, 40)
 
             if let error = viewModel.errorMessage {
-                Text(error).font(.caption).foregroundColor(.raveDanger)
+                Text(error).font(.caption).foregroundColor(Cinema2026.danger)
             }
 
             Button(loc.string(.cancel)) {
                 showJoinSheet = false
                 joinInput = ""
             }
-            .foregroundColor(.raveTextSecondary)
+            .foregroundColor(Cinema2026.secondary)
 
             Spacer()
         }
         .padding(.top, 32)
         .presentationDetents([.medium])
-        .presentationBackground(Color.raveBackground)
+        .presentationBackground(Cinema2026.background)
         .preferredColorScheme(.dark)
     }
 
@@ -711,8 +711,8 @@ private struct LiveCardView: View {
                             // Loading / failed — gradient placeholder
                             LinearGradient(
                                 colors: [
-                                    Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
-                                    Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
+                                    Cinema2026.accent.opacity(isHovered ? 0.4 : 0.25),
+                                    Cinema2026.accent.opacity(isHovered ? 0.3 : 0.15),
                                     .black
                                 ],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
@@ -723,8 +723,8 @@ private struct LiveCardView: View {
                 } else {
                     LinearGradient(
                         colors: [
-                            Color.bioCyan.opacity(isHovered ? 0.4 : 0.25),
-                            Color.bioEmerald.opacity(isHovered ? 0.3 : 0.15),
+                            Cinema2026.accent.opacity(isHovered ? 0.4 : 0.25),
+                            Cinema2026.accent.opacity(isHovered ? 0.3 : 0.15),
                             .black
                         ],
                         startPoint: .topLeading, endPoint: .bottomTrailing
@@ -747,7 +747,7 @@ private struct LiveCardView: View {
                 // LIVE badge (top-left)
                 HStack(spacing: 4) {
                     Circle()
-                        .fill(Color.raveDanger)
+                        .fill(Cinema2026.danger)
                         .frame(width: 6, height: 6)
                         .scaleEffect(pulse ? 1.3 : 1.0)
                     Text("LIVE")
@@ -756,9 +756,9 @@ private struct LiveCardView: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .background(Color.raveDanger.opacity(0.25))
+                .background(Cinema2026.danger.opacity(0.25))
                 .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.raveDanger.opacity(0.5), lineWidth: 0.5))
+                .overlay(Capsule().stroke(Cinema2026.danger.opacity(0.5), lineWidth: 0.5))
                 .padding(10)
 
                 // 🔧 Service logo (top-right, small)
@@ -784,7 +784,7 @@ private struct LiveCardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(room.name)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
@@ -795,12 +795,12 @@ private struct LiveCardView: View {
                         Text("\(room.participantCount) смотрят")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundColor(.bioEmerald)
+                    .foregroundColor(Cinema2026.accent)
 
                     // Host
                     Text("· \(room.hostName)")
                         .font(.system(size: 11))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                 }
             }
             .padding(.horizontal, 4)
@@ -882,7 +882,7 @@ private struct RecommendationCardView: View {
             // Название
             Text(room.name)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
                 .lineLimit(2)
                 .frame(width: 150, alignment: .leading)
 
@@ -891,11 +891,11 @@ private struct RecommendationCardView: View {
                 if let media = room.mediaItem, let svc = VideoService(rawValue: media.source.rawValue) {
                     Text(svc.brandName)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.bioCyan)
+                        .foregroundColor(Cinema2026.accent)
                 }
                 Text("· \(room.hostName)")
                     .font(.system(size: 10))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .lineLimit(1)
         }
@@ -904,10 +904,10 @@ private struct RecommendationCardView: View {
 
     private var gradientColors: [Color] {
         let palettes: [[Color]] = [
-            [Color.bioCyan.opacity(0.3), Color.bioEmerald.opacity(0.15), .black],
-            [Color.bioTeal.opacity(0.25), Color.bioCyan.opacity(0.1), .black],
-            [Color.bioEmerald.opacity(0.25), Color.bioTeal.opacity(0.1), .black],
-            [Color.bioCyan.opacity(0.2), Color(hex: 0x22D3EE).opacity(0.1), .black],
+            [Cinema2026.accent.opacity(0.3), Cinema2026.accent.opacity(0.15), .black],
+            [Cinema2026.accent.opacity(0.25), Cinema2026.accent.opacity(0.1), .black],
+            [Cinema2026.accent.opacity(0.25), Cinema2026.accent.opacity(0.1), .black],
+            [Cinema2026.accent.opacity(0.2), Color(hex: 0x22D3EE).opacity(0.1), .black],
         ]
         let index = abs(room.id.hashValue) % palettes.count
         return palettes[index]

@@ -76,7 +76,7 @@ struct ChatAppearanceSheet: View {
                         // Footer
                         Text("Выбранный стиль применяется ко всем вашим сообщениям. Сервер проверяет права — стили, недоступные вашей подписке, будут сброшены к «Стандартный».")
                             .font(.system(size: 11))
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                             .padding(.top, 12)
@@ -89,7 +89,7 @@ struct ChatAppearanceSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Готово") { dismiss() }
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 }
             }
             .toolbarBackground(Color.clear, for: .navigationBar)
@@ -120,18 +120,18 @@ struct ChatAppearanceSheet: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(Color.bioAmber.opacity(0.2))
+                    .fill(Cinema2026.amber.opacity(0.2))
                     .frame(width: 56, height: 56)
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.bioAmber)
+                    .foregroundColor(Cinema2026.amber)
             }
             Text("Кастомные стили сообщений")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(.white)
             Text("Выберите уникальное оформление для своих сообщений в разных чатах")
                 .font(.system(size: 12))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
         }
@@ -152,31 +152,31 @@ struct ChatAppearanceSheet: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.bioAmber.opacity(0.15))
+                        .fill(Cinema2026.amber.opacity(0.15))
                         .frame(width: 40, height: 40)
                     Image(systemName: icon)
                         .font(.system(size: 16))
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(subtitle)
                         .font(.system(size: 11))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .lineLimit(2)
                     Text("Текущий: \(currentStyle)")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.bioAmber)
+                        .foregroundColor(Cinema2026.amber)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -184,7 +184,7 @@ struct ChatAppearanceSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.bioAmber.opacity(0.15), lineWidth: 0.5)
+                    .stroke(Cinema2026.amber.opacity(0.15), lineWidth: 0.5)
             )
             .padding(.horizontal, 16)
         }
@@ -198,15 +198,15 @@ struct ChatAppearanceSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 16))
-                    .foregroundColor(.bioAmber)
+                    .foregroundColor(Cinema2026.amber)
                 Text("Плинк+")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.bioAmber)
+                    .foregroundColor(Cinema2026.amber)
                 Spacer()
             }
             Text("Подпишитесь на Плинк+, чтобы получить доступ к уникальным стилям пузырей: милой уточке, неоновому киберпанку и другим.")
                 .font(.system(size: 11))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .multilineTextAlignment(.leading)
             Button {
                 onLockedTap()
@@ -216,7 +216,7 @@ struct ChatAppearanceSheet: View {
                     .foregroundColor(.black)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.bioAmber)
+                    .background(Cinema2026.amber)
                     .clipShape(Capsule())
             }
             .padding(.top, 4)
@@ -227,7 +227,7 @@ struct ChatAppearanceSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.bioAmber.opacity(0.4), lineWidth: 1)
+                .stroke(Cinema2026.amber.opacity(0.4), lineWidth: 1)
         )
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -248,7 +248,7 @@ struct ChatAppearanceSheet: View {
             }
             Text("Ваши сообщения автоматически используют VIP-стиль (чёрный матовый + золотая неоновая рамка). Выбор выше — только для предпросмотра стилей доступных обычным пользователям.")
                 .font(.system(size: 11))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .multilineTextAlignment(.leading)
         }
         .padding(.horizontal, 14)

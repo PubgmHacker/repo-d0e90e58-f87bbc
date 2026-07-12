@@ -141,10 +141,10 @@ struct RoomCreationView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(selectedService.brandName)
                                 .font(.subheadline.bold())
-                                .foregroundColor(.raveTextPrimary)
+                                .foregroundColor(Cinema2026.text)
                             Text(selectedService.subtitle)
                                 .font(.caption)
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                         }
                         Spacer()
                         Button {
@@ -154,7 +154,7 @@ struct RoomCreationView: View {
                         } label: {
                             Text("Изменить")
                                 .font(.caption.bold())
-                                .foregroundColor(.raveAccent)
+                                .foregroundColor(Cinema2026.accent)
                         }
                     }
                     .padding(14)
@@ -163,7 +163,7 @@ struct RoomCreationView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Ссылка на \(selectedService.title)")
                             .font(.subheadline.bold())
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         TextField(selectedService.placeholder, text: $mediaURL, axis: .vertical)
                             .textFieldStyle(RaveTextFieldStyle())
                             .autocorrectionDisabled()
@@ -174,7 +174,7 @@ struct RoomCreationView: View {
                         if let urlError {
                             Text(urlError)
                                 .font(.caption)
-                                .foregroundColor(.raveDanger)
+                                .foregroundColor(Cinema2026.danger)
                                 .transition(.opacity)
                         }
                     }
@@ -183,7 +183,7 @@ struct RoomCreationView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Название комнаты")
                             .font(.subheadline.bold())
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         TextField("Кино вечером 🍿", text: $roomName)
                             .textFieldStyle(RaveTextFieldStyle())
                             .onChange(of: roomName) { _, _ in nameError = nil }
@@ -191,7 +191,7 @@ struct RoomCreationView: View {
                         if let nameError {
                             Text(nameError)
                                 .font(.caption)
-                                .foregroundColor(.raveDanger)
+                                .foregroundColor(Cinema2026.danger)
                                 .transition(.opacity)
                         }
                     }
@@ -201,12 +201,12 @@ struct RoomCreationView: View {
                         HStack {
                             Text("Максимум участников")
                                 .font(.subheadline.bold())
-                                .foregroundColor(.raveTextPrimary)
+                                .foregroundColor(Cinema2026.text)
                             Spacer()
                             if !isPremium {
                                 Text("FREE: до \(maxAllowed)")
                                     .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(.raveWarning)
+                                    .foregroundColor(Cinema2026.accent)
                             }
                         }
                         HStack {
@@ -221,11 +221,11 @@ struct RoomCreationView: View {
                                     }
                                 }
                             ), in: 2...Double(maxAllowed), step: 1)
-                            .tint(.ravePrimary)
+                            .tint(Cinema2026.accent)
 
                             Text("\(maxParticipants)")
                                 .font(.title3.bold().monospacedDigit())
-                                .foregroundColor(.ravePrimary)
+                                .foregroundColor(Cinema2026.accent)
                                 .frame(width: 40)
                         }
                         if !isPremium {
@@ -236,7 +236,7 @@ struct RoomCreationView: View {
                                     Text("Premium: до 50 участников")
                                         .font(.system(size: 12, weight: .medium))
                                 }
-                                .foregroundColor(.raveWarning)
+                                .foregroundColor(Cinema2026.accent)
                             }
                         }
                     }
@@ -244,7 +244,7 @@ struct RoomCreationView: View {
                     // Приватность
                     Text("Кто может присоединиться")
                         .font(.subheadline.bold())
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     ForEach(RoomPrivacy.allCases) { mode in
                         privacyCard(mode)
                     }
@@ -270,13 +270,13 @@ struct RoomCreationView: View {
                         VStack(spacing: 14) {
                             Image(systemName: "person.2.slash")
                                 .font(.system(size: 44))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                             Text("У вас пока нет друзей")
                                 .font(.headline)
-                                .foregroundColor(.raveTextPrimary)
+                                .foregroundColor(Cinema2026.text)
                             Text("Добавьте друзей, чтобы приглашать их в комнаты")
                                 .font(.subheadline)
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                                 .multilineTextAlignment(.center)
                         }
                         .frame(maxWidth: .infinity)
@@ -284,7 +284,7 @@ struct RoomCreationView: View {
                     } else {
                         Text("Выберите друзей (\(selectedFriendIds.count))")
                             .font(.subheadline.bold())
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
 
                         ForEach(friendManager?.friends ?? []) { friend in
                             friendRow(friend)
@@ -315,7 +315,7 @@ struct RoomCreationView: View {
                     Text("Назад")
                         .font(.subheadline.bold())
                 }
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .glassCard(cornerRadius: 20, opacity: 0.08)
@@ -325,14 +325,14 @@ struct RoomCreationView: View {
 
             Text(title)
                 .font(.headline)
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
 
             Spacer()
 
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                     .padding(10)
                     .glassCard(cornerRadius: 20, opacity: 0.08)
             }
@@ -354,31 +354,31 @@ struct RoomCreationView: View {
             HStack(spacing: 14) {
                 Image(systemName: mode.icon)
                     .font(.title3)
-                    .foregroundColor(isSelected ? .white : .ravePrimary)
+                    .foregroundColor(isSelected ? .white : Cinema2026.accent)
                     .frame(width: 40, height: 40)
-                    .background(isSelected ? AnyShapeStyle(Color.raveGradient) : AnyShapeStyle(Color.ravePrimary.opacity(0.12)))
+                    .background(isSelected ? AnyShapeStyle(Cinema2026.accentAction) : AnyShapeStyle(Cinema2026.accent.opacity(0.12)))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(mode.title)
                         .font(.subheadline.bold())
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(mode.subtitle)
                         .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundColor(isSelected ? .raveGreen : .raveTextTertiary)
+                    .foregroundColor(isSelected ? Cinema2026.accent : Cinema2026.tertiary)
             }
             .padding(14)
             .glassCard(cornerRadius: 16, opacity: 0.05)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.raveGreen.opacity(0.4) : Color.white.opacity(0.06), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? Cinema2026.accent.opacity(0.4) : Color.white.opacity(0.06), lineWidth: isSelected ? 2 : 1)
             )
         }
         .buttonStyle(PremiumButtonStyle(glowColor: .clear))
@@ -398,7 +398,7 @@ struct RoomCreationView: View {
         } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    Circle().fill(Color.raveGradient)
+                    Circle().fill(Cinema2026.accentAction)
                     Text(friend.initials)
                         .font(.headline)
                         .foregroundColor(.white)
@@ -408,17 +408,17 @@ struct RoomCreationView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(friend.username)
                         .font(.subheadline.bold())
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(friend.isOnline ? "В сети" : "Не в сети")
                         .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundColor(isSelected ? .raveGreen : .raveTextTertiary)
+                    .foregroundColor(isSelected ? Cinema2026.accent : Cinema2026.tertiary)
             }
             .padding(12)
             .glassCard(cornerRadius: 14, opacity: 0.05)
@@ -439,21 +439,21 @@ struct RoomCreationView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Color.raveGradient)
+                .background(Cinema2026.accentAction)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(Color.white.opacity(0.15), lineWidth: 1)
                 )
             }
-            .buttonStyle(PremiumButtonStyle(glowColor: .ravePrimary))
+            .buttonStyle(PremiumButtonStyle(glowColor: Cinema2026.accent))
             .disabled(!canProceed)
             .opacity(canProceed ? 1 : 0.5)
             // 🔧 SUBTLE: glow pulses only when the form is ready to proceed —
             // functional feedback that says "you can tap me now". When disabled, no animation.
             .modifier(ConditionalGlow(
                 isActive: canProceed && !isCreating,
-                color: Color.ravePrimary,
+                color: Cinema2026.accent,
                 minRadius: 6, maxRadius: 14,
                 minOpacity: 0.15, maxOpacity: 0.35,
                 period: 2.0

@@ -51,7 +51,7 @@ struct ProfileView: View {
                     HStack {
                         Text("Подписки")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         Spacer()
                     }
 
@@ -61,7 +61,7 @@ struct ProfileView: View {
                     HStack {
                         Text("Статистика")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         Spacer()
                     }
 
@@ -72,7 +72,7 @@ struct ProfileView: View {
                     HStack {
                         Text("История просмотров")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                         Spacer()
                     }
 
@@ -192,9 +192,9 @@ struct ProfileView: View {
                 } else {
                     LinearGradient(
                         colors: [
-                            Color.bioCyan.opacity(0.6),
-                            Color.bioEmerald.opacity(0.5),
-                            Color.bioTeal.opacity(0.7)
+                            Cinema2026.accent.opacity(0.6),
+                            Cinema2026.accent.opacity(0.5),
+                            Cinema2026.accent.opacity(0.7)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -211,7 +211,7 @@ struct ProfileView: View {
                 }
 
                 LinearGradient(
-                    colors: [.clear, Color.bioObsidian.opacity(0.9)],
+                    colors: [.clear, Cinema2026.background.opacity(0.9)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -234,7 +234,7 @@ struct ProfileView: View {
             // Read-only display here. Editing only via EditProfileSheet.
             ZStack {
                 Circle()
-                    .fill(Color.bioObsidian)
+                    .fill(Cinema2026.background)
                     .frame(width: 112, height: 112)
                 Circle()
                     .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
@@ -268,7 +268,7 @@ struct ProfileView: View {
 
                 Text(viewModel.email)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
             .padding(.top, 8)
 
@@ -309,7 +309,7 @@ struct ProfileView: View {
     private var avatarFallback: some View {
         ZStack {
             Circle().fill(
-                LinearGradient(colors: [Color.ravePrimary, Color.raveAccent],
+                LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             )
             Text(viewModel.displayName.prefix(2).uppercased())
@@ -329,11 +329,11 @@ struct ProfileView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.bioCyan.opacity(0.15))
+                        .fill(Cinema2026.accent.opacity(0.15))
                         .frame(width: 44, height: 44)
                     Image(systemName: "sparkles")
                         .font(.system(size: 20))
-                        .foregroundColor(.bioCyan)
+                        .foregroundColor(Cinema2026.accent)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -343,28 +343,28 @@ struct ProfileView: View {
                         
                     Text("Действует до \(formatter.string(from: expiryDate))")
                         .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 18))
-                    .foregroundColor(.bioEmerald)
+                    .foregroundColor(Cinema2026.accent)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .telegramGlass(cornerRadius: 16, borderColor: Color.bioCyan.opacity(0.25))
+            .telegramGlass(cornerRadius: 16, borderColor: Cinema2026.accent.opacity(0.25))
         } else {
             Button { showPaywall = true } label: {
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
-                            .fill(Color.bioCyan.opacity(0.15))
+                            .fill(Cinema2026.accent.opacity(0.15))
                             .frame(width: 44, height: 44)
                         Image(systemName: "sparkles")
                             .font(.system(size: 20))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -374,14 +374,14 @@ struct ProfileView: View {
                             
                         Text("Без рекламы · 4K · Дизайн · Бейдж")
                             .font(.caption)
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -401,10 +401,10 @@ struct ProfileView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "waveform")
                             .font(.system(size: 14))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                         Text("Активность")
                             .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
+                            .foregroundColor(Cinema2026.text)
                     }
 
                     // Show last watched item
@@ -412,21 +412,21 @@ struct ProfileView: View {
                         HStack(spacing: 10) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.bioEmerald.opacity(0.15))
+                                    .fill(Cinema2026.accent.opacity(0.15))
                                     .frame(width: 40, height: 40)
                                 Image(systemName: "play.fill")
                                     .font(.system(size: 16))
-                                    .foregroundColor(.bioEmerald)
+                                    .foregroundColor(Cinema2026.accent)
                             }
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(lastItem.title)
                                     .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                                     .lineLimit(1)
                                 Text("Просмотрено \(lastItem.formattedDate)")
                                     .font(.system(size: 13))
-                                    .foregroundColor(.raveTextSecondary)
+                                    .foregroundColor(Cinema2026.secondary)
                             }
                             Spacer()
                         }
@@ -464,10 +464,10 @@ struct ProfileView: View {
         VStack(spacing: 6) {
             Text(value)
                 .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
             Text(label)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -480,13 +480,13 @@ struct ProfileView: View {
             HStack {
                 Text(loc.string(.profileHistory))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     
                 Spacer()
                 if !viewModel.history.isEmpty {
                     Button(loc.string(.profileClear)) { viewModel.clearHistory() }
                         .font(.system(size: 13))
-                        .foregroundColor(.raveDanger)
+                        .foregroundColor(Cinema2026.danger)
                 }
             }
 
@@ -494,10 +494,10 @@ struct ProfileView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 36))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                     Text(loc.string(.profileHistoryEmpty))
                         .font(.subheadline)
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
@@ -529,11 +529,11 @@ struct PremiumAvatarStroke: ShapeStyle {
     func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
         AngularGradient(
             colors: [
-                Color.bioCyan,
-                Color.raveAccent,
+                Cinema2026.accent,
+                Cinema2026.accent,
                 Color(hex: 0x22D3EE),
-                Color.raveAccent,
-                Color.bioCyan,
+                Cinema2026.accent,
+                Cinema2026.accent,
             ],
             center: .center
         )
@@ -552,10 +552,10 @@ struct PremiumAvatarModifier: ViewModifier {
                     .stroke(
                         AngularGradient(
                             colors: [
-                                Color.bioCyan,
-                                Color.raveAccent,
+                                Cinema2026.accent,
+                                Cinema2026.accent,
                                 Color(hex: 0x22D3EE),
-                                Color.bioCyan,
+                                Cinema2026.accent,
                             ],
                             center: .center
                         ),
@@ -588,14 +588,14 @@ struct PremiumGlowCard: ViewModifier {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .stroke(
                         LinearGradient(
-                            colors: [Color.bioCyan.opacity(0.3), Color.raveAccent.opacity(0.15)],
+                            colors: [Cinema2026.accent.opacity(0.3), Cinema2026.accent.opacity(0.15)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 0.5
                     )
             )
-            .shadow(color: Color.bioCyan.opacity(0.15), radius: 12, y: 4)
+            .shadow(color: Cinema2026.accent.opacity(0.15), radius: 12, y: 4)
     }
 }
 
@@ -648,9 +648,9 @@ struct EditProfileSheet: View {
                             } else {
                                 LinearGradient(
                                     colors: [
-                                        Color.bioCyan.opacity(0.6),
-                                        Color.bioEmerald.opacity(0.5),
-                                        Color.bioTeal.opacity(0.7)
+                                        Cinema2026.accent.opacity(0.6),
+                                        Cinema2026.accent.opacity(0.5),
+                                        Cinema2026.accent.opacity(0.7)
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
@@ -667,7 +667,7 @@ struct EditProfileSheet: View {
                             }
 
                             LinearGradient(
-                                colors: [.clear, Color.bioObsidian.opacity(0.9)],
+                                colors: [.clear, Cinema2026.background.opacity(0.9)],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -703,7 +703,7 @@ struct EditProfileSheet: View {
                         // ─── AVATAR (overlapping cover) ───
                         ZStack {
                             Circle()
-                                .fill(Color.bioObsidian)
+                                .fill(Cinema2026.background)
                                 .frame(width: 108, height: 108)
                             Circle()
                                 .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
@@ -723,7 +723,7 @@ struct EditProfileSheet: View {
                                     Image(systemName: "camera.circle.fill")
                                         .font(.system(size: 24))
                                         .foregroundColor(.white)
-                                        .background(Circle().fill(Color.ravePrimary))
+                                        .background(Circle().fill(Cinema2026.accent))
                                         .clipShape(Circle())
                                         .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
                                 }
@@ -742,17 +742,17 @@ struct EditProfileSheet: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "textformat")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.bioAmber)
+                                    .foregroundColor(Cinema2026.amber)
                                 Text("Имя (ник)")
                                     .font(.subheadline.bold())
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                                 if viewModel.user?.isAdmin == true {
                                     AdminBadgeChip(compact: true)
                                 }
                             }
                             Text("Показывается в чате и профиле. Можно использовать пробелы и эмодзи. Пусто — использовать @username.")
                                 .font(.system(size: 11))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                             TextField("Например: Alex Films", text: $newDisplayName)
                                 .textFieldStyle(RaveTextFieldStyle())
@@ -761,8 +761,8 @@ struct EditProfileSheet: View {
                                         .stroke(
                                             LinearGradient(
                                                 colors: [
-                                                    Color.bioAmber.opacity(0.35),
-                                                    Color.bioCoral.opacity(0.15)
+                                                    Cinema2026.amber.opacity(0.35),
+                                                    Cinema2026.danger.opacity(0.15)
                                                 ],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
@@ -781,19 +781,19 @@ struct EditProfileSheet: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "at")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.bioCyan)
+                                    .foregroundColor(Cinema2026.accent)
                                 Text("@username (тег)")
                                     .font(.subheadline.bold())
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                             }
                             Text("Уникальный тег для поиска. Только латиница, цифры, _ и точка. Длина 2–15 символов.")
                                 .font(.system(size: 11))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                             // 🔧 v11: show current @username
                             Text("Текущий: @\(viewModel.username)")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.raveTextTertiary)
+                                .foregroundColor(Cinema2026.tertiary)
                             TextField("например: alex_films", text: $newUsername)
                                 .textFieldStyle(RaveTextFieldStyle())
                                 .textInputAutocapitalization(.never)
@@ -815,8 +815,8 @@ struct EditProfileSheet: View {
                                         .stroke(
                                             LinearGradient(
                                                 colors: [
-                                                    Color.bioCyan.opacity(0.35),
-                                                    Color.bioEmerald.opacity(0.15)
+                                                    Cinema2026.accent.opacity(0.35),
+                                                    Cinema2026.accent.opacity(0.15)
                                                 ],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
@@ -856,13 +856,13 @@ struct EditProfileSheet: View {
                             // 🔧 FIX: visible gradient button — not transparent glass
                             .background(
                                 LinearGradient(
-                                    colors: [Color.bioCyan, Color.bioEmerald],
+                                    colors: [Cinema2026.accent, Cinema2026.accent],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .shadow(color: Color.bioCyan.opacity(0.4), radius: 8, y: 3)
+                            .shadow(color: Cinema2026.accent.opacity(0.4), radius: 8, y: 3)
                         }
                         .disabled(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
                         .opacity(newUsername.trimmingCharacters(in: .whitespaces).isEmpty || isSaving ? 0.5 : 1)
@@ -878,7 +878,7 @@ struct EditProfileSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Отмена") { dismiss() }
-                        .foregroundColor(.bioCyan)
+                        .foregroundColor(Cinema2026.accent)
                 }
             }
             .task {
@@ -936,7 +936,7 @@ struct WatchHistoryPoster: View {
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
                                 Rectangle().fill(Color.black.opacity(0.4)).frame(height: 3)
-                                Rectangle().fill(Color.ravePrimary).frame(width: geo.size.width * progress, height: 3)
+                                Rectangle().fill(Cinema2026.accent).frame(width: geo.size.width * progress, height: 3)
                             }
                         }
                         .frame(width: 120, height: 3)
@@ -956,13 +956,13 @@ struct WatchHistoryPoster: View {
 
                 Text(item.title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(1)
                     .frame(width: 120, alignment: .leading)
 
                 Text(item.formattedDate)
                     .font(.system(size: 11))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
         }
         .buttonStyle(.plain)
@@ -1008,10 +1008,10 @@ struct WatchHistoryPoster: View {
 
     private var gradientPalette: [Color] {
         let palettes: [[Color]] = [
-            [Color.ravePrimary.opacity(0.4), .black],
-            [Color.raveAccent.opacity(0.4), .black],
-            [Color.raveCyan.opacity(0.4), .black],
-            [Color.raveWarning.opacity(0.4), .black],
+            [Cinema2026.accent.opacity(0.4), .black],
+            [Cinema2026.accent.opacity(0.4), .black],
+            [Cinema2026.accent.opacity(0.4), .black],
+            [Cinema2026.accent.opacity(0.4), .black],
         ]
         return palettes[abs(item.id.hashValue) % palettes.count]
     }
@@ -1033,7 +1033,7 @@ struct WatchHistoryCard: View {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Rectangle().fill(Color.black.opacity(0.4)).frame(height: 3)
-                            Rectangle().fill(Color.ravePrimary).frame(width: geo.size.width * progress, height: 3)
+                            Rectangle().fill(Cinema2026.accent).frame(width: geo.size.width * progress, height: 3)
                         }
                     }
                     .frame(width: 100, height: 3)
@@ -1044,11 +1044,11 @@ struct WatchHistoryCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.subheadline.bold())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(2)
                 Text(item.formattedDate)
                     .font(.caption2)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             Spacer()
@@ -1056,7 +1056,7 @@ struct WatchHistoryCard: View {
             Button(action: onRewatch) {
                 Image(systemName: "arrow.clockwise.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.ravePrimary)
+                    .foregroundColor(Cinema2026.accent)
             }
         }
         .padding(12)
@@ -1070,11 +1070,11 @@ struct WatchHistoryCard: View {
                 if let image = phase.image {
                     image.resizable().aspectRatio(contentMode: .fill)
                 } else {
-                    Rectangle().fill(Color.raveSurface)
+                    Rectangle().fill(Cinema2026.raised)
                 }
             }
         } else {
-            Rectangle().fill(Color.raveSurface)
+            Rectangle().fill(Cinema2026.raised)
         }
     }
 }

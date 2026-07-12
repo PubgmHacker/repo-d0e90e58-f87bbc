@@ -27,17 +27,17 @@ struct NotificationsView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "moon.fill")
                                 .font(.system(size: 14))
-                                .foregroundColor(.raveWarning)
+                                .foregroundColor(Cinema2026.accent)
                             Text("Режим «Не беспокоить» включён — вы не получите никаких уведомлений.")
                                 .font(.system(size: 12))
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                         }
                         .padding(12)
-                        .background(Color.raveWarning.opacity(0.1))
+                        .background(Cinema2026.accent.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.raveWarning.opacity(0.2), lineWidth: 0.5)
+                                .stroke(Cinema2026.accent.opacity(0.2), lineWidth: 0.5)
                         )
                         .padding(.horizontal, 16)
                     }
@@ -50,14 +50,14 @@ struct NotificationsView: View {
                                 icon: "moon.fill",
                                 title: "Не беспокоить",
                                 subtitle: "Отключить все уведомления",
-                                iconColor: .raveWarning,
+                                iconColor: Cinema2026.accent,
                                 isOn: $doNotDisturb
                             )
                             PlinkToggleRow(
                                 icon: "bell.badge.fill",
                                 title: loc.string(.notifPush),
                                 subtitle: loc.string(.notifPushSubtitle),
-                                iconColor: .bioCyan,
+                                iconColor: Cinema2026.accent,
                                 isOn: $pushNotifications,
                                 enabled: !doNotDisturb
                             )
@@ -65,7 +65,7 @@ struct NotificationsView: View {
                                 icon: "speaker.wave.2.fill",
                                 title: loc.string(.notifSounds),
                                 subtitle: loc.string(.notifSoundsSubtitle),
-                                iconColor: .bioEmerald,
+                                iconColor: Cinema2026.accent,
                                 isOn: $notificationSounds,
                                 enabled: !doNotDisturb
                             )
@@ -80,7 +80,7 @@ struct NotificationsView: View {
                                 icon: "person.wave.2",
                                 title: loc.string(.notifFriendsOnline),
                                 subtitle: loc.string(.notifFriendsOnlineSubtitle),
-                                iconColor: .bioTeal,
+                                iconColor: Cinema2026.accent,
                                 isOn: $friendsOnline,
                                 enabled: !doNotDisturb
                             )
@@ -88,7 +88,7 @@ struct NotificationsView: View {
                                 icon: "person.badge.plus",
                                 title: "Запросы в друзья",
                                 subtitle: "Когда кто-то хочет добавить вас",
-                                iconColor: .bioCyan,
+                                iconColor: Cinema2026.accent,
                                 isOn: $friendRequests,
                                 enabled: !doNotDisturb
                             )
@@ -96,7 +96,7 @@ struct NotificationsView: View {
                                 icon: "envelope.fill",
                                 title: "Приглашения в комнаты",
                                 subtitle: "Когда друзья зовут вас смотреть вместе",
-                                iconColor: .bioEmerald,
+                                iconColor: Cinema2026.accent,
                                 isOn: $roomInvites,
                                 enabled: !doNotDisturb
                             )
@@ -111,7 +111,7 @@ struct NotificationsView: View {
                                 icon: "plus.circle.fill",
                                 title: loc.string(.notifNewRooms),
                                 subtitle: loc.string(.notifNewRoomsSubtitle),
-                                iconColor: .bioTeal,
+                                iconColor: Cinema2026.accent,
                                 isOn: $newRooms,
                                 enabled: !doNotDisturb
                             )
@@ -119,7 +119,7 @@ struct NotificationsView: View {
                                 icon: "at",
                                 title: "Упоминания в чате",
                                 subtitle: "Когда кто-то упоминает вас в чате комнаты",
-                                iconColor: .bioCyan,
+                                iconColor: Cinema2026.accent,
                                 isOn: $mentions,
                                 enabled: !doNotDisturb
                             )
@@ -129,7 +129,7 @@ struct NotificationsView: View {
                     // ── Footer Info ──
                     Text("Настройки уведомлений сохраняются на этом устройстве. Push-уведомления доставляются через Apple Push Notification Service.")
                         .font(.system(size: 11))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                 }

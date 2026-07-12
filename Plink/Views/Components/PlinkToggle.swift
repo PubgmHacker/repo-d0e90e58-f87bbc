@@ -32,7 +32,7 @@ struct PlinkToggle: View {
                     .fill(
                         LinearGradient(
                             colors: isOn
-                                ? [Color.bioCyan, Color.bioEmerald]
+                                ? [Cinema2026.accent, Cinema2026.accent]
                                 : [Color.white.opacity(0.1), Color.white.opacity(0.06)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -88,11 +88,11 @@ struct PlinkToggleRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                         .lineLimit(2)
                 }
             }
@@ -136,7 +136,7 @@ struct PlinkSectionHeader: View {
     var body: some View {
         Text(text.uppercased())
             .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.raveTextSecondary)
+            .foregroundColor(Cinema2026.secondary)
             .tracking(0.5)
             .padding(.horizontal, 16)
             .padding(.bottom, 6)

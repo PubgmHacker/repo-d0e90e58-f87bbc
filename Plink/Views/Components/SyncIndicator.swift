@@ -53,10 +53,10 @@ struct SyncIndicatorView: View {
 
     private var color: Color {
         switch quality {
-        case .synced: return .raveGreen
-        case .syncing: return .raveWarning
-        case .lagging: return .raveDanger
-        case .offline: return .raveDanger
+        case .synced: return Cinema2026.accent
+        case .syncing: return Cinema2026.accent
+        case .lagging: return Cinema2026.danger
+        case .offline: return Cinema2026.danger
         }
     }
 }
@@ -77,14 +77,14 @@ struct VoiceChatToggle: View {
                     Text(isActive ? "Voice On" : "Join Voice")
                         .font(.caption.bold())
                 }
-                .foregroundColor(isActive ? .raveGreen : .raveTextSecondary)
+                .foregroundColor(isActive ? Cinema2026.accent : Cinema2026.secondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Color.raveCard)
+                .background(Cinema2026.surface)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(isActive ? Color.raveGreen : Color.raveSurface, lineWidth: 1)
+                        .stroke(isActive ? Cinema2026.accent : Cinema2026.raised, lineWidth: 1)
                 )
                 .animation(.easeInOut(duration: 0.2), value: isActive)
             }
@@ -94,9 +94,9 @@ struct VoiceChatToggle: View {
                 Button(action: onMute) {
                     Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
                         .font(.subheadline)
-                        .foregroundColor(isMuted ? .raveDanger : .raveGreen)
+                        .foregroundColor(isMuted ? Cinema2026.danger : Cinema2026.accent)
                         .frame(width: 36, height: 36)
-                        .background(Color.raveCard)
+                        .background(Cinema2026.surface)
                         .clipShape(Circle())
                 }
                 .transition(.scale.combined(with: .opacity))
@@ -115,20 +115,20 @@ struct RoomCodeShareView: View {
         VStack(spacing: 16) {
             Text("Share this code")
                 .font(.caption)
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
 
             // Code display
             Text(code)
                 .font(.system(size: 40, weight: .bold, design: .monospaced))
-                .foregroundColor(.ravePrimary)
+                .foregroundColor(Cinema2026.accent)
                 .tracking(8)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(Color.raveCard)
+                .background(Cinema2026.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.ravePrimary.opacity(0.3), lineWidth: 2)
+                        .stroke(Cinema2026.accent.opacity(0.3), lineWidth: 2)
                 )
 
             Button {
@@ -146,7 +146,7 @@ struct RoomCodeShareView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 10)
-                .background(copied ? Color.raveGreen : Color.ravePrimary)
+                .background(copied ? Cinema2026.accent : Cinema2026.accent)
                 .clipShape(Capsule())
                 .animation(.easeInOut(duration: 0.2), value: copied)
             }

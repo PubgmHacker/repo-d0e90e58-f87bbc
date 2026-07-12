@@ -31,12 +31,12 @@ struct RoomCardView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(room.name)
                     .font(.headline)
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(1)
 
                 Text("Hosted by \(room.hostName)")
                     .font(.caption)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
 
                 // Статус медиа / иконка типа
                 if let mediaItem = room.mediaItem {
@@ -44,17 +44,17 @@ struct RoomCardView: View {
                         mediaTypeIcon(mediaItem.mediaType)
                         Text(mediaItem.displayTitle)
                             .font(.caption2)
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                             .lineLimit(1)
                     }
                 } else {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.viewfinder")
                             .font(.caption2)
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                         Text("Waiting for media")
                             .font(.caption2)
-                            .foregroundColor(.raveTextTertiary)
+                            .foregroundColor(Cinema2026.tertiary)
                     }
                 }
 
@@ -66,14 +66,14 @@ struct RoomCardView: View {
                         userAvatar(user)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.raveCard, lineWidth: 2)
+                                    .stroke(Cinema2026.surface, lineWidth: 2)
                             )
                             .zIndex(Double(4 - index))
                     }
                     if room.participantCount > 4 {
                         Text("+\(room.participantCount - 4)")
                             .font(.caption2.bold())
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                             .padding(.leading, 10)
                     }
                 }
@@ -91,11 +91,11 @@ struct RoomCardView: View {
             opacity: 0.06,
             ringColor: room.isActive
                 ? LinearGradient(
-                    colors: [Color.bioEmerald.opacity(0.5), Color.bioCyan.opacity(0.3)],
+                    colors: [Cinema2026.accent.opacity(0.5), Cinema2026.accent.opacity(0.3)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                : Color.bioNeonRing,
+                : Cinema2026.timeline,
             glow: room.isActive
         )
         .contentShape(Rectangle())
@@ -150,13 +150,13 @@ struct RoomCardView: View {
     private var placeholderThumbnail: some View {
         ZStack {
             LinearGradient(
-                colors: [Color.raveSurface.opacity(0.5), Color.raveCard],
+                colors: [Cinema2026.raised.opacity(0.5), Cinema2026.surface],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Image(systemName: room.mediaItem == nil ? "questionmark.folder" : "play.fill")
                 .font(.title2)
-                .foregroundColor(.raveTextTertiary)
+                .foregroundColor(Cinema2026.tertiary)
         }
     }
 
@@ -169,7 +169,7 @@ struct RoomCardView: View {
                 PulsingDot()
                 Text(formattedParticipantCount)
                     .font(.caption.bold().monospacedDigit())
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -194,11 +194,11 @@ struct RoomCardView: View {
     private func mediaTypeIcon(_ type: MediaItem.MediaType) -> some View {
         let (icon, color): (String, Color) = {
             switch type {
-            case .movie: return ("film", .raveAccent)
-            case .series: return ("tv", .raveSecondary)
-            case .music: return ("music.note", .raveGreen)
-            case .video: return ("video", .raveWarning)
-            case .livestream: return ("dot.radiowaves.left.and.right", .raveDanger)
+            case .movie: return ("film", Cinema2026.accent)
+            case .series: return ("tv", Cinema2026.accent)
+            case .music: return ("music.note", Cinema2026.accent)
+            case .video: return ("video", Cinema2026.accent)
+            case .livestream: return ("dot.radiowaves.left.and.right", Cinema2026.danger)
             }
         }()
 
@@ -233,7 +233,7 @@ struct RoomCardView: View {
         Text(user.username.prefix(1).uppercased())
             .font(.caption2.bold())
             .foregroundColor(Color(hex: 0x14161C))
-            .background(user.isOnline ? AnyShapeStyle(Color.ravePrimary.opacity(0.3)) : AnyShapeStyle(Color.raveSurface))
+            .background(user.isOnline ? AnyShapeStyle(Cinema2026.accent.opacity(0.3)) : AnyShapeStyle(Cinema2026.raised))
     }
 }
 
@@ -242,7 +242,7 @@ struct RoomCardView: View {
 struct PulsingDot: View {
     @State private var isPulsing = false
 
-    var color: Color = .raveGreen
+    var color: Color = Cinema2026.accent
 
     var body: some View {
         Circle()
@@ -280,9 +280,9 @@ struct LiveBadge: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(Color.raveDanger)
+        .background(Cinema2026.danger)
         .clipShape(Capsule())
-        .shadow(color: .raveDanger.opacity(glow ? 0.8 : 0.2), radius: glow ? 8 : 3)
+        .shadow(color: Cinema2026.danger.opacity(glow ? 0.8 : 0.2), radius: glow ? 8 : 3)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 glow = true
@@ -294,7 +294,7 @@ struct LiveBadge: View {
 // MARK: - Preview
 #Preview {
     ZStack {
-        Color.raveBackground.ignoresSafeArea()
+        Cinema2026.background.ignoresSafeArea()
         ScrollView {
             VStack(spacing: 12) {
                 RoomCardView(room: .preview)

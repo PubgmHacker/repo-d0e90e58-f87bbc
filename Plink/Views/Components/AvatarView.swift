@@ -94,7 +94,7 @@ struct AvatarView: View {
         ZStack {
             Circle().fill(
                 LinearGradient(
-                    colors: [Color.ravePrimary, Color.bioEmerald],
+                    colors: [Cinema2026.accent, Cinema2026.accent],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -119,9 +119,9 @@ struct AvatarView: View {
 
     private var shadowColor: Color {
         if isAdmin {
-            return Color.raveDanger.opacity(0.4)
+            return Cinema2026.danger.opacity(0.4)
         } else if isPremium {
-            return Color.ravePrimary.opacity(0.4)
+            return Cinema2026.accent.opacity(0.4)
         }
         return .clear
     }
@@ -137,9 +137,9 @@ struct AvatarView: View {
 
         return ZStack {
             Circle()
-                .fill(Color.bioObsidian)
+                .fill(Cinema2026.background)
             Circle()
-                .stroke(isAdmin ? Color.raveDanger : Color.ravePrimary, lineWidth: 1)
+                .stroke(isAdmin ? Cinema2026.danger : Cinema2026.accent, lineWidth: 1)
 
             if isAdmin {
                 // 🔧 FIX: user's custom admin icon (was SF Symbol 'shield.fill')
@@ -147,11 +147,11 @@ struct AvatarView: View {
                     .resizable()
                     .scaledToFit()
                     .padding(badgeSize * 0.15)
-                    .foregroundColor(.raveDanger)
+                    .foregroundColor(Cinema2026.danger)
             } else {
                 Image(systemName: "crown.fill")
                     .font(.system(size: badgeSize * 0.5, weight: .semibold))
-                    .foregroundColor(.bioAmber)
+                    .foregroundColor(Cinema2026.amber)
             }
         }
         .frame(width: badgeSize, height: badgeSize)
@@ -191,21 +191,21 @@ private struct RingModifier: ViewModifier {
     AvatarView(imageURL: nil, username: "Alexander", size: 96,
                isPremium: false, isAdmin: false)
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }
 
 #Preview("Premium User") {
     AvatarView(imageURL: nil, username: "Premium", size: 96,
                isPremium: true, isAdmin: false)
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }
 
 #Preview("Admin User") {
     AvatarView(imageURL: nil, username: "Admin", size: 96,
                isPremium: false, isAdmin: true)
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }
 #endif
 
@@ -236,18 +236,18 @@ struct AdminBadgeChip: View {
                     .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: -0.4)
             }
         }
-        .foregroundColor(Color.raveDanger)
+        .foregroundColor(Cinema2026.danger)
         .padding(.horizontal, compact ? 6 : 8)
         .padding(.vertical, 3)
         .background(
             Capsule()
-                .fill(Color.raveDanger.opacity(0.15))
+                .fill(Cinema2026.danger.opacity(0.15))
         )
         .overlay(
             Capsule()
-                .stroke(Color.raveDanger.opacity(0.6), lineWidth: 0.5)
+                .stroke(Cinema2026.danger.opacity(0.6), lineWidth: 0.5)
         )
-        .shadow(color: Color.raveDanger.opacity(0.4), radius: 4, y: 1)
+        .shadow(color: Cinema2026.danger.opacity(0.4), radius: 4, y: 1)
     }
 }
 
@@ -257,5 +257,5 @@ struct AdminBadgeChip: View {
         AdminBadgeChip(compact: true)
     }
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }

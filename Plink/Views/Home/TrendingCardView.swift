@@ -23,7 +23,7 @@ struct TrendingCardView: View {
                         default:
                             ZStack {
                                 thumbnailPlaceholder
-                                ProgressView().tint(.raveAccent)
+                                ProgressView().tint(Cinema2026.accent)
                             }
                         }
                     }
@@ -48,7 +48,7 @@ struct TrendingCardView: View {
                     .foregroundColor(Color(hex: 0x14161C))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Color.raveWarning)
+                    .background(Cinema2026.accent)
                     .clipShape(Capsule())
                     .padding(6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -64,14 +64,14 @@ struct TrendingCardView: View {
             // Название
             Text(room.name)
                 .font(.subheadline.bold())
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
                 .lineLimit(1)
 
             // Хост + участники
             HStack(spacing: 4) {
                 Text(room.hostName)
                     .font(.caption2)
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                     .lineLimit(1)
 
                 Spacer()
@@ -86,10 +86,10 @@ struct TrendingCardView: View {
 
     private var thumbnailPlaceholder: some View {
         ZStack {
-            Color.raveCard
+            Cinema2026.surface
             Image(systemName: "photo.tv")
                 .font(.system(size: 24))
-                .foregroundColor(.raveSurface)
+                .foregroundColor(Cinema2026.raised)
         }
         .frame(width: 160, height: 100)
     }
@@ -99,15 +99,15 @@ struct TrendingCardView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color.raveSurface.opacity(0.6),
-                    Color.raveCard,
+                    Cinema2026.raised.opacity(0.6),
+                    Cinema2026.surface,
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Image(systemName: mediaIcon)
                 .font(.system(size: 28))
-                .foregroundColor(.raveTextTertiary)
+                .foregroundColor(Cinema2026.tertiary)
         }
         .frame(width: 160, height: 100)
     }
@@ -135,11 +135,11 @@ struct HorizontalSectionHeader: View {
                 .font(.title3)
             Text(title)
                 .font(.headline)
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
             Spacer()
             Text("\(count)")
                 .font(.caption.bold().monospacedDigit())
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .glassCard(cornerRadius: 10, opacity: 0.05)

@@ -28,21 +28,21 @@ struct PrivacySettingsView: View {
                                 icon: "eye.fill",
                                 title: loc.string(.privacyProfileVisibility),
                                 subtitle: loc.string(.privacyProfileVisibilitySubtitle),
-                                iconColor: .bioCyan,
+                                iconColor: Cinema2026.accent,
                                 isOn: $profileVisibility
                             )
                             PlinkToggleRow(
                                 icon: "circle.fill",
                                 title: loc.string(.privacyOnlineStatus),
                                 subtitle: loc.string(.privacyOnlineStatusSubtitle),
-                                iconColor: .bioEmerald,
+                                iconColor: Cinema2026.accent,
                                 isOn: $onlineStatus
                             )
                             PlinkToggleRow(
                                 icon: "magnifyingglass",
                                 title: "Показывать в поиске",
                                 subtitle: "Другие пользователи могут найти вас по имени",
-                                iconColor: .bioTeal,
+                                iconColor: Cinema2026.accent,
                                 isOn: $showInSearch
                             )
                         }
@@ -56,7 +56,7 @@ struct PrivacySettingsView: View {
                                 icon: "checkmark.circle.fill",
                                 title: loc.string(.privacyReadReceipts),
                                 subtitle: loc.string(.privacyReadReceiptsSubtitle),
-                                iconColor: .bioCyan,
+                                iconColor: Cinema2026.accent,
                                 isOn: $readReceipts
                             )
                             privacyPickerRow(
@@ -88,23 +88,23 @@ struct PrivacySettingsView: View {
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(.white)
                                         .frame(width: 28, height: 28)
-                                        .background(Color.raveDanger.opacity(0.18))
+                                        .background(Cinema2026.danger.opacity(0.18))
                                         .clipShape(RoundedRectangle(cornerRadius: 7))
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(loc.string(.privacyClearCache))
                                             .font(.system(size: 15, weight: .medium))
-                                            .foregroundColor(.raveTextPrimary)
+                                            .foregroundColor(Cinema2026.text)
                                         Text(loc.string(.privacyClearCacheSubtitle))
                                             .font(.system(size: 12))
-                                            .foregroundColor(.raveTextSecondary)
+                                            .foregroundColor(Cinema2026.secondary)
                                     }
 
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12, weight: .semibold))
-                                        .foregroundColor(.raveTextTertiary)
+                                        .foregroundColor(Cinema2026.tertiary)
                                 }
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
@@ -117,7 +117,7 @@ struct PrivacySettingsView: View {
                     // ── Info Footer ──
                     Text(loc.string(.privacyInfo))
                         .font(.system(size: 11))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                 }
@@ -160,27 +160,27 @@ struct PrivacySettingsView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white)
                     .frame(width: 28, height: 28)
-                    .background(Color.bioTeal.opacity(0.18))
+                    .background(Cinema2026.accent.opacity(0.18))
                     .clipShape(RoundedRectangle(cornerRadius: 7))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
 
                 Spacer()
 
                 Text(options.first(where: { $0.0 == value.wrappedValue })?.1 ?? "")
                     .font(.system(size: 14))
-                    .foregroundColor(.bioCyan)
+                    .foregroundColor(Cinema2026.accent)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)

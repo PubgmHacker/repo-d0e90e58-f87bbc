@@ -25,11 +25,11 @@ extension View {
     func raveCardStyle() -> some View {
         self
             .padding()
-            .background(Color.raveCard)
+            .background(Cinema2026.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.raveSurface, lineWidth: 1)
+                    .stroke(Cinema2026.raised, lineWidth: 1)
             )
     }
 
@@ -40,7 +40,7 @@ extension View {
             .foregroundColor(.white)
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .background(Color.ravePrimary)
+            .background(Cinema2026.accent)
             .clipShape(Capsule())
     }
 
@@ -48,14 +48,14 @@ extension View {
     func raveSecondaryButtonStyle() -> some View {
         self
             .font(.headline)
-            .foregroundColor(.ravePrimary)
+            .foregroundColor(Cinema2026.accent)
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .background(Color.raveCard)
+            .background(Cinema2026.surface)
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.ravePrimary, lineWidth: 1.5)
+                    .stroke(Cinema2026.accent, lineWidth: 1.5)
             )
     }
 
@@ -144,8 +144,8 @@ struct ShimmerGradientTextModifier: ViewModifier {
 extension View {
     /// Переливающийся градиентный текст с анимацией 3.5 сек (cyan→emerald спектр).
     func shimmerGradientText(colors: [Color] = [
-        Color.bioCyan, Color.bioEmerald,
-        Color.bioTeal, Color.bioCyan
+        Cinema2026.accent, Cinema2026.accent,
+        Cinema2026.accent, Cinema2026.accent
     ]) -> some View {
         modifier(ShimmerGradientTextModifier(colors: colors))
     }
@@ -214,11 +214,11 @@ extension View {
     func premiumStroke(lineWidth: CGFloat = 2.5) -> some View {
         modifier(AnimatedStrokeModifier(
             colors: [
-                Color.bioCyan,
-                Color.bioObsidian,
-                Color.bioEmerald,
-                Color.bioObsidian,
-                Color.bioCyan,
+                Cinema2026.accent,
+                Cinema2026.background,
+                Cinema2026.accent,
+                Cinema2026.background,
+                Cinema2026.accent,
             ],
             lineWidth: lineWidth
         ))

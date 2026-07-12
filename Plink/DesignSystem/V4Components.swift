@@ -369,9 +369,9 @@ extension View {
 }
 
 // MARK: - shimmerGradientText (used by SettingsSlidePanel)
-extension Text {
-    func shimmerGradientText() -> some View {
-        self.foregroundStyle(Cinema2026.accent)
-            .shadow(color: Cinema2026.accent.opacity(0.5), radius: 6)
+extension View {
+    func shimmerGradientText(colors: [Color] = [Cinema2026.accent, Cinema2026.amber]) -> some View {
+        self.foregroundStyle(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+            .shadow(color: colors.first?.opacity(0.4) ?? .clear, radius: 4)
     }
 }

@@ -314,12 +314,13 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         // https://developers.google.com/youtube/iframe_api_reference#onError
         let message: String
         switch code {
-        case 2:        message = "Invalid video parameter"
-        case 5:        message = "HTML5 player error"
-        case 100:      message = "Video not found or private"
-        case 101, 150: message = "This video cannot be embedded in Plink"
-        case 153:      message = "Missing client identity — try another video"
-        default:       message = "YouTube error \(code) — try another video"
+        case 2:             message = "Invalid video parameter"
+        case 5:             message = "HTML5 player error"
+        case 100:           message = "Video not found or private"
+        case 101, 150:      message = "This video cannot be embedded in Plink"
+        case 152:           message = "Embedding restricted by owner — try another video"
+        case 153:           message = "Missing client identity — try another video"
+        default:            message = "YouTube error \(code) — try another video"
         }
         lastError = message
         isBuffering = false
@@ -374,8 +375,9 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     /// PATCH 03: cleaner HTML with plinkPlayer namespace.
-    /// - Background matches Cinema2026.background (0x0D001A).
-    /// - controls=1, modestbranding=1, rel=0, iv_load_policy=3 (ToS).
+    /// - Background matches Cinema2026.background.
+    /// - controls=0, fs=0, disablekb=1, modestbranding=1, rel=0, iv_load_policy=3 (ToS).
+    ///   Hides ALL native YouTube chrome — Plink renders its own controls via PlayerControlLayer.
     /// - plinkPlay/Pause/Seek/Snapshot helpers exposed on window.
     /// - JSON-encoded videoId (no string interpolation).
     private static func buildHTML(videoIdJSON: String) -> String {
@@ -410,8 +412,12 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                   videoId: \(videoIdJSON),
                   playerVars: {
                     'playsinline': 1,
-                    'controls': 1,
+                    'controls': 0,
+                    'fs': 0,
+                    'disablekb': 1,
+                    'modestbranding': 1,
                     'rel': 0,
+                    'iv_load_policy': 3,
                     'origin': 'https://plink-backend-production-ef31.up.railway.app'
                   },
                   events: {

@@ -29,6 +29,9 @@ struct PlinkPhoneTabShell: View {
             // Комнаты
             NavigationStack {
                 roomsView
+                    .fullScreenCover(item: $navigateToRoom) { room in
+                        watchRoom(for: room)
+                    }
             }
             .tag(AppSection.rooms)
             .tabItem { Label(AppSection.rooms.title, systemImage: AppSection.rooms.symbol) }
@@ -52,6 +55,31 @@ struct PlinkPhoneTabShell: View {
         .toolbarBackground(Cinema2026.background.opacity(0.96), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .environmentObject(dependencies.apiClient)
+        // ONE persistent Create button — visible only on home + rooms tabs
+        .overlay(alignment: .bottom) {
+            if selection == .home || selection == .rooms {
+                createButtonBar
+            }
+        }
+    }
+
+    // MARK: - Create button (shared)
+
+    private var createButtonBar: some View {
+        Button {
+            createPresented = true
+        } label: {
+            Label("Создать комнату", systemImage: "plus")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Cinema2026.background)
+                .frame(maxWidth: .infinity)
+                .frame(height: CompactPhoneMetrics.primaryButtonHeight)
+                .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
+        .padding(.bottom, 72)  // sit above the tab bar
+        .padding(.top, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Home (Netflix-style)
@@ -114,7 +142,7 @@ struct PlinkPhoneTabShell: View {
                     )
                 }
             }
-            .padding(.bottom, 100)
+            .padding(.bottom, 140)  // leave room for the persistent create button
         }
         .scrollIndicators(.hidden)
         .background(Cinema2026.background)
@@ -131,22 +159,6 @@ struct PlinkPhoneTabShell: View {
                 await loadTrending()
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            // ONE create button only
-            Button {
-                createPresented = true
-            } label: {
-                Label("Создать комнату", systemImage: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Cinema2026.background)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: CompactPhoneMetrics.primaryButtonHeight)
-                    .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
-            .padding(.vertical, 8)
-            .background(Cinema2026.background.opacity(0.96))
-        }
     }
 
     // MARK: - Rooms
@@ -158,13 +170,6 @@ struct PlinkPhoneTabShell: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(Cinema2026.text)
                 Spacer()
-                Button {
-                    createPresented = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Cinema2026.accent)
-                }
             }
             .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
             .padding(.top, 14)
@@ -191,11 +196,9 @@ struct PlinkPhoneTabShell: View {
                     Text("Нет активных комнат")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Cinema2026.text)
-                    Button("Создать комнату") {
-                        createPresented = true
-                    }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Cinema2026.accent)
+                    Text("Создайте первую комнату — кнопка внизу")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Cinema2026.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -209,9 +212,6 @@ struct PlinkPhoneTabShell: View {
                 )
             }
             await homeViewModel?.loadRooms()
-        }
-        .fullScreenCover(item: $navigateToRoom) { room in
-            watchRoom(for: room)
         }
     }
 

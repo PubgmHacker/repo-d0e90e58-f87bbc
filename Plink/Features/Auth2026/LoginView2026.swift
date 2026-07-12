@@ -30,11 +30,11 @@ struct LoginView2026: View {
                 }
                 .padding(.bottom, 6)
 
-                // Apple Sign-In
+                // Apple Sign-In (TODO: requires backend /api/auth/apple endpoint)
                 SignInWithAppleButton(.continue) { request in
                     request.requestedScopes = [.fullName, .email]
-                } onCompletion: { _ in
-                    // TODO: wire to AuthService
+                } onCompletion: { result in
+                    handleAppleSignIn(result)
                 }
                 .signInWithAppleButtonStyle(.white)
                 .frame(height: CompactPhoneMetrics.primaryButtonHeight)
@@ -99,5 +99,17 @@ struct LoginView2026: View {
             errorMessage = "Ошибка входа. Проверьте email и пароль."
         }
         isLoading = false
+    }
+
+    /// Apple Sign-In handler.
+    /// TODO: backend `/api/auth/apple` endpoint required to exchange identity token
+    /// for a Plink JWT. Until then, show a friendly message.
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success:
+            errorMessage = "Вход через Apple скоро будет доступен. Используйте email."
+        case .failure(let error):
+            errorMessage = "Не удалось войти через Apple: \(error.localizedDescription)"
+        }
     }
 }

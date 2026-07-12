@@ -57,11 +57,11 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     private var ambientSampleTask: Task<Void, Never>?
 
     // GPT-5.6 Final §7: Room theme + AI state + moderation
-    public private(set) var roomTheme: PlinkLivingTheme = PlinkThemeCatalog.resolve(nil)
-    public private(set) var aiAssistantEnabled = false
-    public private(set) var aiRecommendationsEnabled = false
-    public private(set) var aiState: PlinkAIVisualState = .idle
-    public private(set) var moderationLevel: RoomModerationLevel = .standard
+    var roomTheme: PlinkLivingTheme = PlinkThemeCatalog.resolve(nil)
+    var aiAssistantEnabled = false
+    var aiRecommendationsEnabled = false
+    var aiState: PlinkAIVisualState = .idle
+    var moderationLevel: RoomModerationLevel = .standard
 
     // MARK: - Config
     // P0-30: roomId stored as _roomId (private) + protocol conformance via

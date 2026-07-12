@@ -45,7 +45,7 @@ struct NeutralPlayerContainer<Content: View>: View {
 // GPT-5.6 Final §5: Chat bubble colors — explicit surfaces, not blur
 enum ThemedChatBubbleStyle {
     static let incoming = Color(red: 0.105, green: 0.125, blue: 0.135).opacity(0.94)
-    static let outgoing = Cinema2026.outgoingBubble.opacity(0.96)
+    static let outgoing = Cinema2026.accent.opacity(0.96)
     static let system = Color(red: 0.20, green: 0.16, blue: 0.06).opacity(0.96)
     static let moderated = Color(red: 0.20, green: 0.07, blue: 0.07).opacity(0.96)
 }

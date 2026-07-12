@@ -12,8 +12,9 @@ extension View {
     /// - Parameters:
     ///   - cornerRadius: Corner radius in points (default 16).
     ///   - opacity: Background opacity (default 0.06).
+    ///   - borderColor: Border color (default white.opacity(0.08)).
     @ViewBuilder
-    func telegramGlass(cornerRadius: CGFloat = 16, opacity: Double = 0.06) -> some View {
+    func telegramGlass(cornerRadius: CGFloat = 16, opacity: Double = 0.06, borderColor: Color = Color.white.opacity(0.08)) -> some View {
         self
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -21,7 +22,7 @@ extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                    .stroke(borderColor, lineWidth: 0.5)
             )
             .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 2)
     }

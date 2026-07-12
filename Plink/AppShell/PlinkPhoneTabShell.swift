@@ -208,11 +208,12 @@ struct PlinkPhoneTabShell: View {
                     )
                     await homeViewModel?.loadRooms()
                 }
-            if trendingVideos.isEmpty {
-                await loadTrending()
-            }
-            if plinkPopular.isEmpty {
-                await loadPlinkPopular()
+                if trendingVideos.isEmpty {
+                    await loadTrending()
+                }
+                if plinkPopular.isEmpty {
+                    await loadPlinkPopular()
+                }
             }
         }
     }

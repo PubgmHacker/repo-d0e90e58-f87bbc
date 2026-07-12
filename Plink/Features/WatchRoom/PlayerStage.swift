@@ -64,38 +64,20 @@ struct PlayerStage: View {
                     .transition(.opacity)
             }
 
-            // Chrome — only visible when controls are shown
+            // Chrome — only top bar (YouTube owns player controls per Brain §3)
             if ui.controlsVisible {
-                // Top legibility gradient
                 LinearGradient(
                     colors: [Cinema2026.background.opacity(0.55), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 120)
+                .frame(height: 80)
                 .frame(maxHeight: .infinity, alignment: .top)
-                .allowsHitTesting(false)
-                .transition(.opacity)
-
-                // Bottom legibility gradient
-                LinearGradient(
-                    colors: [.clear, Cinema2026.background.opacity(0.7)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 140)
-                .frame(maxHeight: .infinity, alignment: .bottom)
                 .allowsHitTesting(false)
                 .transition(.opacity)
 
                 PlayerTopChrome(model: model, variant: variant)
                     .transition(.opacity.combined(with: .move(edge: .top)))
-
-                PlayerCenterControl(model: model)
-                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
-
-                PlayerBottomControls(model: model, ui: $ui, variant: variant)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

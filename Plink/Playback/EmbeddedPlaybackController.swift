@@ -410,12 +410,8 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                   videoId: \(videoIdJSON),
                   playerVars: {
                     'playsinline': 1,
-                    'controls': 0,
-                    'modestbranding': 1,
+                    'controls': 1,
                     'rel': 0,
-                    'iv_load_policy': 3,
-                    'disablekb': 1,
-                    'fs': 0,
                     'origin': 'https://plink-backend-production-ef31.up.railway.app'
                   },
                   events: {

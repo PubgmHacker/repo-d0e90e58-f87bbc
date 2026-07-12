@@ -21,11 +21,8 @@ struct PaywallView: View {
 
     var body: some View {
         ZStack {
-            // Чёрный фон + сине-голубые blur-пятна
             Cinema2026.background
-            // TODO: replace with CompactLivingBackdrop
-                
-            )
+            CompactLivingBackdrop(primary: Cinema2026.accent, secondary: Cinema2026.amber)
 
             ScrollView {
                 VStack(spacing: 28) {
@@ -35,9 +32,9 @@ struct PaywallView: View {
                         Button { onDismiss() } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                                 .frame(width: 36, height: 36)
-                                .glassCard(cornerRadius: 18, opacity: 0.06)
+                                .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
                         }
                     }
                     .padding(.horizontal, 24)
@@ -64,7 +61,7 @@ struct PaywallView: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [Color.ravePrimary.opacity(glowPulse ? 0.35 : 0.1), .clear],
+                            colors: [ColorCinema2026.accent.opacity(glowPulse ? 0.35 : 0.1), .clear],
                             center: .center,
                             startRadius: 20,
                             endRadius: 90
@@ -78,17 +75,17 @@ struct PaywallView: View {
                     .fill(
                         AngularGradient(
                             colors: [
-                                Color.bioCyan,
+                                Cinema2026.secondary,
                                 Color(hex: 0x3D8DE0),
                                 Color(hex: 0x22D3EE),
-                                Color.bioCyan,
+                                Cinema2026.secondary,
                             ],
                             center: .center
                         )
                     )
                     .frame(width: 88, height: 88)
                     .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
-                    .shadow(color: Color.ravePrimary.opacity(0.5), radius: 24)
+                    .shadow(color: ColorCinema2026.accent.opacity(0.5), radius: 24)
 
                 Image(systemName: "crown.fill")
                     .font(.system(size: 40, weight: .bold))
@@ -105,11 +102,11 @@ struct PaywallView: View {
             VStack(spacing: 8) {
                 Text("Премиум доступ")
                     .font(.system(size: 32, weight: .heavy, design: .rounded))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
 
                 Text("Смотри с друзьями без ограничений")
                     .font(.system(size: 16))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -148,7 +145,7 @@ struct PaywallView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Color.raveAccent)
+                        .background(ColorCinema2026.accent)
                         .clipShape(Capsule())
                 } else {
                     Text(" ")
@@ -158,24 +155,24 @@ struct PaywallView: View {
 
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
 
                 Text(price)
                     .font(.system(size: 19, weight: .bold, design: .rounded))
-                    .foregroundColor(isSelected ? .ravePrimary : .raveTextPrimary)
+                    .foregroundColor(isSelected ? Cinema2026.accent : Cinema2026.text)
 
                 Text(perMonth)
                     .font(.system(size: 10))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .glassCard(cornerRadius: 16, opacity: isSelected ? 0.12 : 0.04)
+            .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.ravePrimary.opacity(0.6) : Color.white.opacity(0.06), lineWidth: isSelected ? 1.5 : 0.5)
+                    .stroke(isSelected ? ColorCinema2026.accent.opacity(0.6) : Color.white.opacity(0.06), lineWidth: isSelected ? 1.5 : 0.5)
             )
-            .shadow(color: isSelected ? Color.ravePrimary.opacity(0.25) : .clear, radius: 14, y: 4)
+            .shadow(color: isSelected ? ColorCinema2026.accent.opacity(0.25) : .clear, radius: 14, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -197,16 +194,16 @@ struct PaywallView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)
-                .background(Color.raveGradient)
+                .background(Cinema2026.accent)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: Color.ravePrimary.opacity(0.4), radius: 16, y: 8)
+                .shadow(color: ColorCinema2026.accent.opacity(0.4), radius: 16, y: 8)
             }
-            .buttonStyle(PremiumButtonStyle())
+            .buttonStyle(AuthPrimaryButtonStyle())
             .padding(.horizontal, 24)
 
             Text("Затем \(plans[selectedPlan].price) — \(plans[selectedPlan].title.lowercased())")
                 .font(.system(size: 13))
-                .foregroundColor(.raveTextSecondary)
+                .foregroundColor(Cinema2026.secondary)
         }
     }
 
@@ -225,7 +222,7 @@ struct PaywallView: View {
             comparisonRow(icon: "bubble.left.and.bubble.right.fill", title: "Цветной ник", free: "—", premium: "✓")
         }
         .padding(.vertical, 8)
-        .glassCard(cornerRadius: 18, opacity: 0.04)
+        .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, 20)
     }
 
@@ -240,18 +237,18 @@ struct PaywallView: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundColor(.ravePrimary)
+                .foregroundColor(Cinema2026.accent)
                 .frame(width: 24)
 
             Text(title)
                 .font(.system(size: 15))
-                .foregroundColor(.raveTextPrimary)
+                .foregroundColor(Cinema2026.text)
 
             Spacer()
 
             Text(free)
                 .font(.system(size: 13))
-                .foregroundColor(.raveTextTertiary)
+                .foregroundColor(Cinema2026.divider)
                 .frame(width: 50, alignment: .center)
 
             HStack(spacing: 4) {
@@ -262,7 +259,7 @@ struct PaywallView: View {
                 Text(premium)
                     .font(.system(size: 13, weight: .bold))
             }
-            .foregroundColor(.ravePrimary)
+            .foregroundColor(Cinema2026.accent)
             .frame(width: 60, alignment: .center)
         }
         .padding(.horizontal, 16)
@@ -276,12 +273,12 @@ struct PaywallView: View {
             Button { onRestore() } label: {
                 Text("Восстановить покупку")
                     .font(.system(size: 14))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
             }
 
             Text("Отмена в любой момент в настройках Apple ID")
                 .font(.system(size: 12))
-                .foregroundColor(.raveTextTertiary)
+                .foregroundColor(Cinema2026.divider)
         }
     }
 }
@@ -295,8 +292,8 @@ struct PremiumGlowBadge: View {
     var body: some View {
         Image(systemName: "crown.fill")
             .font(.system(size: size))
-            .foregroundColor(.ravePrimary)
-            .shadow(color: .ravePrimary.opacity(glow ? 0.8 : 0.3), radius: glow ? 8 : 4)
+            .foregroundColor(Cinema2026.accent)
+            .shadow(color: Cinema2026.accent.opacity(glow ? 0.8 : 0.3), radius: glow ? 8 : 4)
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                     glow = true

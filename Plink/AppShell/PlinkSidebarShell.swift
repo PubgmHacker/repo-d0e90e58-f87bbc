@@ -19,7 +19,8 @@ struct PlinkSidebarShell: View {
 
                 Section("Смотреть") {
                     nav(.home)
-                    nav(.discover)
+                    nav(.rooms)
+                    nav(.ai)
                     nav(.friends)
                 }
 
@@ -58,10 +59,10 @@ struct PlinkSidebarShell: View {
         switch section {
         case .home:
             SidebarHomeWrapper(dependencies: dependencies)
-        case .discover:
+        case .rooms:
             DiscoverScreen(dependencies: dependencies, navigateToRoom: .constant(nil))
-        case .create:
-            EmptyView()
+        case .ai:
+            AIAssistantView()
         case .friends:
             FriendsScreen(dependencies: dependencies)
         case .profile:

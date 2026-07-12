@@ -1,8 +1,9 @@
-// Plink/AppShell/PlinkPhoneTabShell.swift — GPT-5.6 SOL Recovery §8.8
+// Plink/AppShell/PlinkPhoneTabShell.swift — GPT-5.6 Approved Patch §3
 //
-// Single iPhone composition root. 5 tabs: Home, Discover, Create, Friends, Profile.
-// Create is a presentation trigger (opens RoomCreationView), not a separate view.
-// One shell, one tab model — no duplicate MainTabView.
+// Single iPhone composition root.
+// 5 tabs: Home, Rooms, AI, Friends, Profile.
+// Create is a persistent action on Home/Rooms (not a sixth tab).
+// One shell, one tab model, one room-creation presentation owner.
 
 import SwiftUI
 
@@ -15,7 +16,6 @@ struct PlinkPhoneTabShell: View {
     @State private var homeViewModel: HomeViewModel?
     @State private var trendingVideos: [YouTubeVideoSummary] = []
     @State private var plinkPopular: [PlinkPopularItem] = []
-    @State private var previousSelection: AppSection = .home
 
     var body: some View {
         TabView(selection: $selection) {
@@ -27,54 +27,52 @@ struct PlinkPhoneTabShell: View {
                     }
             }
             .tag(AppSection.home)
-            .tabItem { Label(AppSection.home.title, systemImage: AppSection.home.symbol) }
+            .tabItem { Label(AppSection.home.title, systemImage: AppSection.home.icon) }
 
-            // Обзор — discovery screen
+            // Комнаты — discovery screen
             NavigationStack {
                 DiscoverScreen(dependencies: dependencies, navigateToRoom: $navigateToRoom)
                     .fullScreenCover(item: $navigateToRoom) { room in
                         watchRoom(for: room)
                     }
             }
-            .tag(AppSection.discover)
-            .tabItem { Label(AppSection.discover.title, systemImage: AppSection.discover.symbol) }
+            .tag(AppSection.rooms)
+            .tabItem { Label(AppSection.rooms.title, systemImage: AppSection.rooms.icon) }
 
-            // Создать — presentation trigger only (no view content)
-            Color.clear
-                .tag(AppSection.create)
-                .tabItem { Label(AppSection.create.title, systemImage: AppSection.create.symbol) }
+            // ИИ — AI companion tab
+            NavigationStack {
+                AIAssistantView()
+            }
+            .tag(AppSection.ai)
+            .tabItem { Label(AppSection.ai.title, systemImage: AppSection.ai.icon) }
 
-            // Друзья — redesigned friends screen
+            // Друзья — friends screen
             NavigationStack {
                 FriendsScreen(dependencies: dependencies)
             }
             .tag(AppSection.friends)
-            .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.symbol) }
+            .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.icon) }
 
             // Профиль — settings lives here
             NavigationStack {
                 ProfileScreen(authService: dependencies.authService)
             }
             .tag(AppSection.profile)
-            .tabItem { Label(AppSection.profile.title, systemImage: AppSection.profile.symbol) }
+            .tabItem { Label(AppSection.profile.title, systemImage: AppSection.profile.icon) }
         }
         .tint(Cinema2026.accent)
         .toolbarBackground(Cinema2026.background.opacity(0.96), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .environmentObject(dependencies.apiClient)
-        // GPT-5.6 SOL: Create tab is a trigger — when selected, present RoomCreationView
-        // then restore previous selection.
-        .onChange(of: selection) { _, newSelection in
-            if newSelection == .create {
-                selection = previousSelection
-                createIntent = .chooseService
-            } else {
-                previousSelection = newSelection
+        // GPT-5.6 §1: Create is a persistent action on Home/Rooms (not a sixth tab).
+        .overlay(alignment: .bottom) {
+            if selection == .home || selection == .rooms {
+                createButtonBar
             }
         }
     }
 
-    // MARK: - Create button (removed — Create tab handles presentation)
+    // MARK: - Create button (persistent on Home/Rooms)
 
     private var createButtonBar: some View {
         Button {
@@ -88,7 +86,7 @@ struct PlinkPhoneTabShell: View {
                 .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
         }
         .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
-        .padding(.bottom, 72)  // sit above the tab bar
+        .padding(.bottom, 72)
         .padding(.top, 8)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }

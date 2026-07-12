@@ -58,11 +58,11 @@ enum V4Theme: String, CaseIterable, Identifiable {
     var name: String { rawValue.capitalized }
     var colors: (Color, Color, Color, Color) {
         switch self {
-        case .electric: return (.oklch(.09,.02,255), .oklch(.53,.17,258), .oklch(.79,.12,210), .oklch(.65,.17,270))
-        case .ember: return (.oklch(.10,.025,45), .oklch(.56,.19,35), .oklch(.82,.15,78), .oklch(.68,.18,28))
-        case .violet: return (.oklch(.09,.025,285), .oklch(.51,.19,285), .oklch(.68,.20,325), .oklch(.75,.13,310))
-        case .plink: return (.oklch(.09,.02,190), .oklch(.57,.13,185), .oklch(.55,.17,258), .oklch(.68,.14,326))
-        case .bloom: return (.oklch(.10,.03,320), .oklch(.54,.21,330), .oklch(.68,.21,15), .oklch(.74,.16,350))
+        case .electric: return (.oklch(0.09,0.02,255), .oklch(0.53,0.17,258), .oklch(0.79,0.12,210), .oklch(0.65,0.17,270))
+        case .ember: return (.oklch(0.10,0.025,45), .oklch(0.56,0.19,35), .oklch(0.82,0.15,78), .oklch(0.68,0.18,28))
+        case .violet: return (.oklch(0.09,0.025,285), .oklch(0.51,0.19,285), .oklch(0.68,0.20,325), .oklch(0.75,0.13,310))
+        case .plink: return (.oklch(0.09,0.02,190), .oklch(0.57,0.13,185), .oklch(0.55,0.17,258), .oklch(0.68,0.14,326))
+        case .bloom: return (.oklch(0.10,0.03,320), .oklch(0.54,0.21,330), .oklch(0.68,0.21,15), .oklch(0.74,0.16,350))
         }
     }
 }
@@ -145,9 +145,9 @@ struct V4Hero: View {
     var body: some View {
         let (_, c1, c2, _) = theme.colors
         ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: [c1, Color.oklch(.10,.02,190)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            RadialGradient(colors: [c2, .clear], center: UnitPoint(x: .72, y: .22), startRadius: 0, endRadius: height * .42)
-            LinearGradient(colors: [.clear, Color.oklch(.06,.01,190,alpha:.95)], startPoint: UnitPoint(x:.5,y:.28), endPoint: .bottom)
+            LinearGradient(colors: [c1, Color.oklch(0.10,0.02,190)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            RadialGradient(colors: [c2, .clear], center: UnitPoint(x: 0.72, y: 0.22), startRadius: 0, endRadius: height * 0.42)
+            LinearGradient(colors: [.clear, Color.oklch(0.06,0.01,190,alpha:.95)], startPoint: UnitPoint(x:.5,y:.28), endPoint: .bottom)
             VStack(alignment: .leading, spacing: 10) {
                 Text(title).font(.system(size: 26.4, weight: .bold)).foregroundStyle(V4.ink)
                 Text(meta).font(.system(size: 13.12)).foregroundStyle(V4.muted)
@@ -160,7 +160,7 @@ struct V4Hero: View {
         }
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
-        .shadow(color: .black.opacity(.40), radius: 27, y: 25)
+        .shadow(color: .black.opacity(0.40), radius: 27, y: 25)
     }
 }
 
@@ -177,17 +177,17 @@ struct V4LivingBackground: View {
             let (c0, c1, c2, c3) = theme.colors
             ZStack {
                 c0
-                blob(c1, g, x: -0.35, y: -0.15, dx: .44, dy: .30, scale: 1.14, rotation: 7, duration: 14)
-                blob(c2, g, x:  0.45, y:  0.28, dx: -.39, dy: -.21, scale: .92, rotation: -6, duration: 16)
-                blob(c3, g, x:  0.12, y:  0.70, dx: .10, dy: -.30, scale: 1.12, rotation: 0, duration: 13)
+                blob(c1, g, x: -0.35, y: -0.15, dx: 0.44, dy: 0.30, scale: 1.14, rotation: 7, duration: 14)
+                blob(c2, g, x:  0.45, y:  0.28, dx: -.39, dy: -.21, scale: 0.92, rotation: -6, duration: 16)
+                blob(c3, g, x:  0.12, y:  0.70, dx: 0.10, dy: -.30, scale: 1.12, rotation: 0, duration: 13)
                 LinearGradient(stops: [
-                    .init(color: .clear, location: .10),
-                    .init(color: Color.oklch(.06,.01,190,alpha:.10), location: .36),
-                    .init(color: Color.oklch(.06,.01,190,alpha:.86), location: 1)
+                    .init(color: .clear, location: 0.10),
+                    .init(color: Color.oklch(0.06,0.01,190,alpha:.10), location: 0.36),
+                    .init(color: Color.oklch(0.06,0.01,190,alpha:.86), location: 1)
                 ], startPoint: .top, endPoint: .bottom)
             }
             .frame(width: g.size.width * 1.3, height: g.size.height * 1.3)
-            .offset(x: -g.size.width * .15, y: -g.size.height * .15)
+            .offset(x: -g.size.width * 0.15, y: -g.size.height * 0.15)
             .clipped()
             .onAppear { if !reduceMotion { phase = true } }
         }.ignoresSafeArea()
@@ -196,13 +196,13 @@ struct V4LivingBackground: View {
     private func blob(_ color: Color, _ g: GeometryProxy, x: CGFloat, y: CGFloat,
                       dx: CGFloat, dy: CGFloat, scale: CGFloat, rotation: Double, duration: Double) -> some View {
         let side = g.size.width * 1.17
-        return RoundedRectangle(cornerRadius: side * .48, style: .continuous)
+        return RoundedRectangle(cornerRadius: side * 0.48, style: .continuous)
             .fill(color).frame(width: side, height: side)
-            .blur(radius: 55).opacity(.52)
-            .position(x: g.size.width * (x + .45), y: g.size.height * (y + .45))
+            .blur(radius: 55).opacity(0.52)
+            .position(x: g.size.width * (x + 0.45), y: g.size.height * (y + 0.45))
             .offset(x: phase ? g.size.width * dx : 0, y: phase ? g.size.height * dy : 0)
             .scaleEffect(phase ? scale : 1).rotationEffect(.degrees(phase ? rotation : 0))
-            .animation(reduceMotion ? nil : .timingCurve(.16, 1, .3, 1, duration: duration).repeatForever(autoreverses: true), value: phase)
+            .animation(reduceMotion ? nil : .timingCurve(.16, 1, 0.3, 1, duration: duration).repeatForever(autoreverses: true), value: phase)
     }
 }
 
@@ -288,11 +288,11 @@ struct V4MorphOrb: View {
                 p.addCurve(to:CGPoint(x:r.midX,y:r.minY),control1:CGPoint(x:r.minX,y:r.maxY*(.28-.08*k)),control2:CGPoint(x:r.maxX*(.28+.10*k),y:r.minY))
                 p.closeSubpath()
                 context.fill(p, with:.radialGradient(Gradient(stops:[
-                    .init(color:Color.white.opacity(.6),location:0), .init(color:c3,location:.25),
+                    .init(color:Color.white.opacity(0.6),location:0), .init(color:c3,location:.25),
                     .init(color:c2,location:.53), .init(color:c1,location:.70), .init(color:c0,location:.77)
                 ]),center:CGPoint(x:canvas.width*.34,y:canvas.height*.24),startRadius:0,endRadius:canvas.width*.72))
                 var inner = p.applying(CGAffineTransform(translationX:canvas.width*.18,y:canvas.height*.18).scaledBy(x:.64,y:.64).rotated(by:.pi/7.2))
-                context.stroke(inner,with:.color(.white.opacity(.47)),lineWidth:1)
+                context.stroke(inner,with:.color(.white.opacity(0.47)),lineWidth:1)
             }.rotationEffect(.degrees(rotation))
         }.frame(width:size,height:size).shadow(color:c2,radius:glow)
     }
@@ -332,7 +332,7 @@ struct V4AIView: View {
                             chip("Очередь","Собери очередь"); chip("У друзей","Что смотрят друзья?"); chip("Комната","Создай комнату")
                         }
                     }.padding(.horizontal,16).padding(.top,8).padding(.bottom,92)
-                }.background(LinearGradient(colors:[.clear,Color.oklch(.06,.01,190,alpha:.76)],startPoint:UnitPoint(x:.5,y:.16),endPoint:.bottom))
+                }.background(LinearGradient(colors:[.clear,Color.oklch(0.06,0.01,190,alpha:.76)],startPoint:UnitPoint(x:.5,y:.16),endPoint:.bottom))
             }.foregroundStyle(V4.ink)
             HStack(spacing:6) {
                 Button("🎙") { state="Слушаю…" }.frame(width:42,height:42).background(V4.raised).clipShape(RoundedRectangle(cornerRadius:14))
@@ -449,7 +449,7 @@ struct V4TabBar: View {
     @Binding var selection: Int
     let items=[("house","Главная"),("circle.circle","Комнаты"),("sparkles","ИИ"),("person","Друзья"),("person.crop.circle","Профиль")]
     var body: some View {
-        HStack(spacing:0){ ForEach(items.indices,id:\.self){ i in Button{selection=i}{VStack(spacing:2){Image(systemName:items[i].0).font(.system(size:17.28));Text(items[i].1).font(.system(size:9.44))}.frame(maxWidth:.infinity,maxHeight:.infinity).foregroundStyle(selection==i ? V4.accent:V4.muted).background(selection==i ? V4.accent.opacity(.08):.clear).clipShape(RoundedRectangle(cornerRadius:15))} } }
+        HStack(spacing:0){ ForEach(items.indices,id:\.self){ i in Button{selection=i}{VStack(spacing:2){Image(systemName:items[i].0).font(.system(size:17.28));Text(items[i].1).font(.system(size:9.44))}.frame(maxWidth:.infinity,maxHeight:.infinity).foregroundStyle(selection==i ? V4.accent:V4.muted).background(selection==i ? V4.accent.opacity(0.08):.clear).clipShape(RoundedRectangle(cornerRadius:15))} } }
         .padding(6).frame(height:69).background(.ultraThinMaterial).background(V4.navBG).clipShape(RoundedRectangle(cornerRadius:23)).overlay(RoundedRectangle(cornerRadius:23).stroke(V4.line)).padding(.horizontal,13).padding(.bottom,10)
     }
 }
@@ -475,7 +475,7 @@ struct PlinkApprovedV4Root: View {
                 }
             }
             .transition(.offset(y:8).combined(with:.opacity))
-            .animation(.timingCurve(.16,1,.3,1,duration:.32),value:tab)
+            .animation(.timingCurve(.16,1,0.3,1,duration:.32),value:tab)
             if tab != 2 { V4TabBar(selection:$tab) }
             if appearance { V4AppearanceView(theme:$theme,presented:$appearance).zIndex(25).transition(.opacity) }
             // room == true must present existing WatchRoom as full-screenCover.

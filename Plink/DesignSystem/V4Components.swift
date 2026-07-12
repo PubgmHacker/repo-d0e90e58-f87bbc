@@ -296,3 +296,50 @@ private struct ThemeOptionRow: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - PulsingDot (used by FriendsView)
+struct PulsingDot: View {
+    let color: Color
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .scaleEffect(pulse ? 1.3 : 1.0)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { pulse = true }
+            }
+    }
+}
+
+// MARK: - LiveBadge (used by TrendingCardView)
+struct LiveBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            PulsingDot(color: .white)
+            Text("LIVE")
+                .font(.system(size: 9, weight: .black))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Cinema2026.danger, in: Capsule())
+        .foregroundStyle(.white)
+    }
+}
+
+// MARK: - View.if modifier (used by SettingsSlidePanel)
+extension View {
+    @ViewBuilder
+    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+        if condition { transform(self) } else { self }
+    }
+}
+
+// MARK: - adminShimmerText (used by SettingsSlidePanel)
+extension Text {
+    func adminShimmerText() -> some View {
+        self.foregroundStyle(Cinema2026.amber)
+            .shadow(color: Cinema2026.amber.opacity(0.4), radius: 4)
+    }
+}

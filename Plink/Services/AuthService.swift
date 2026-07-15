@@ -368,12 +368,10 @@ struct AuthUser: Codable, Sendable {
     let createdAt: Date?
 }
 
-// MARK: - Shared Instance + Local Sign Out (for V4/V5 compatibility)
+// MARK: - Local Sign Out (for V4/V5 compatibility)
+// AuthService.shared is already defined in V5/PlinkSessionSyncGate.swift
 
 extension AuthService {
-    /// Shared singleton for V4/V5 code that expects AuthService.shared
-    static let shared = AuthService(api: APIClient.shared)
-
     /// Synchronous local sign-out (no network call).
     /// Clears Keychain tokens + cached user immediately.
     func signOutLocally() {

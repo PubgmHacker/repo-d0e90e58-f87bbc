@@ -20,11 +20,7 @@ struct WatchChatComposer: View {
         PremiumStatusManager.shared.isPremium
     }
 
-    private let emojiPacks: [EmojiPack] = [
-        EmojiPack(name: "Reactions", emojis: ["emoji_laugh", "emoji_fire", "emoji_heart", "emoji_thumbs_up", "emoji_thumbs_down", "emoji_scream", "emoji_cry", "emoji_love", "emoji_think", "emoji_cool", "emoji_party", "emoji_angry", "emoji_sad", "emoji_wow", "emoji_sleepy", "emoji_clap", "emoji_pray", "emoji_ok", "emoji_poop", "emoji_flex"], isPremium: false),
-        EmojiPack(name: "Plink+", emojis: ["emoji_neon_laugh", "emoji_neon_fire", "emoji_neon_heart", "emoji_neon_thumbs_up", "emoji_neon_party", "emoji_neon_cool", "emoji_neon_wow", "emoji_neon_clap"], isPremium: true),
-        EmojiPack(name: "Fun", emojis: ["emoji_popcorn", "emoji_movie", "emoji_clapper", "emoji_director", "emoji_oscar", "emoji_ticket", "emoji_film", "emoji_camera"], isPremium: true),
-    ]
+    private let emojiPacks: [EmojiPack] = PlinkEmojiCatalog.allPacks
 
     private var currentPack: EmojiPack {
         guard currentPackIndex >= 0 && currentPackIndex < emojiPacks.count else { return emojiPacks[0] }
@@ -281,21 +277,92 @@ extension Notification.Name {
     static let plinkInsertAtCursor = Notification.Name("plinkInsertAtCursor")
 }
 
-// Helper to load custom PNG emoji from bundle Resources/Emojis/<pack>/
+// Helper to load custom PNG/GIF emoji from bundle Resources/Emojis/<pack>/
+// Supports both SF Symbol renders (Reactions, Plink+, Fun packs)
+// and custom art (Cute Faces, Pepe, Stickers, Cats, Le Pepe packs).
 struct EmojiAssetImage: View {
     let name: String
     let pack: String
 
+    @State private var gifFrames: [UIImage] = []
+    @State private var gifLoaded = false
+
     var body: some View {
-        let packDir = pack.lowercased().replacingOccurrences(of: "+", with: "")
-        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Emojis/\(packDir)"),
+        Group {
+            if let uiImage = loadStaticImage() {
+                Image(uiImage: uiImage)
+                    .resizable()
+            } else if !gifFrames.isEmpty {
+                GifPlayerView(images: gifFrames)
+            } else {
+                // Fallback to SF Symbol
+                Image(systemName: "face.smiling")
+                    .resizable()
+            }
+        }
+        .onAppear { loadGifIfNeeded() }
+    }
+
+    private func packDir() -> String {
+        PlinkEmojiCatalog.packDirectory(for: pack)
+    }
+
+    private func loadStaticImage() -> UIImage? {
+        // Try PNG first
+        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Emojis/\(packDir())"),
            let data = try? Data(contentsOf: url),
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
+           let img = UIImage(data: data) {
+            return img
+        }
+        // Try Assets.xcassets (for new custom packs)
+        if let img = UIImage(named: name, in: .main, with: nil) {
+            return img
+        }
+        return nil
+    }
+
+    private func loadGifIfNeeded() {
+        guard !gifLoaded else { return }
+        gifLoaded = true
+
+        // Try GIF
+        guard let url = Bundle.main.url(forResource: name, withExtension: "gif", subdirectory: "Emojis/\(packDir())"),
+              let data = try? Data(contentsOf: url) else {
+            return
+        }
+        gifFrames = decodeGif(data)
+    }
+
+    private func decodeGif(_ data: Data) -> [UIImage] {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return [] }
+        let count = CGImageSourceGetCount(source)
+        var images: [UIImage] = []
+        for i in 0..<count {
+            if let cgImage = CGImageSourceCreateImageAtIndex(source, i, nil) {
+                images.append(UIImage(cgImage: cgImage))
+            }
+        }
+        return images
+    }
+}
+
+// Simple GIF player — cycles through frames
+struct GifPlayerView: View {
+    let images: [UIImage]
+    @State private var currentFrame = 0
+    private let frameDuration: TimeInterval = 0.1
+
+    var body: some View {
+        if images.isEmpty {
+            Color.clear
         } else {
-            // Fallback to SF Symbol or text
-            Image(systemName: "face.smiling")
+            Image(uiImage: images[currentFrame])
+                .resizable()
+                .onAppear {
+                    Timer.scheduledTimer(withTimeInterval: frameDuration, repeats: true) { _ in
+                        currentFrame = (currentFrame + 1) % images.count
+                    }
+                }
         }
     }
 }

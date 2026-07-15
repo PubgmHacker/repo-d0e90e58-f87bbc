@@ -1,10 +1,12 @@
 export interface User {
   id: string;
   username: string;
+  displayName?: string;
   email: string;
   avatarURL?: string | null;
   avatarData?: string | null;
   isPremium?: boolean;
+  isAdmin?: boolean;
   role?: string;
 }
 
@@ -27,6 +29,16 @@ export interface MediaItem {
   videoId?: string;
 }
 
+export interface Participant {
+  id: string;
+  userId: string;
+  username: string;
+  displayName?: string;
+  avatarURL?: string | null;
+  isHost?: boolean;
+  isOnline?: boolean;
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -37,18 +49,22 @@ export interface Room {
   mediaItem?: MediaItem | null;
   isActive: boolean;
   participantCount?: number;
+  participants?: Participant[];
 }
 
 export interface TrendingVideo {
   id: string;
   title: string;
   thumbnailURL?: string;
+  channel?: string;
   channelTitle?: string;
+  duration?: number;
 }
 
 export interface Friend {
   id: string;
   username: string;
+  displayName?: string;
   avatarURL?: string | null;
   isOnline: boolean;
   friendsSince?: string;

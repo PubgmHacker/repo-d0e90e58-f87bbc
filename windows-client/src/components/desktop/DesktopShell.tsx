@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { User } from '../../lib/types';
-import { detectPlatform } from '../../lib/platform';
 import {
   IconAi, IconChat, IconFriends, IconHome, IconPlus, IconRooms, IconSearch, IconSettings,
 } from '../ui/Icons';
@@ -20,95 +19,128 @@ type Props = {
   onJoinCode?: () => void;
 };
 
+// iOS tab bar items — те же что в PlinkAppShell, но для desktop sidebar
 const NAV: { id: NavItem; icon: ReactNode; label: string }[] = [
-  { id: 'home', icon: <IconHome size={18} />, label: 'Home' },
-  { id: 'rooms', icon: <IconRooms size={18} />, label: 'Rooms' },
-  { id: 'friends', icon: <IconFriends size={18} />, label: 'Friends' },
-  { id: 'dms', icon: <IconChat size={18} />, label: 'Messages' },
+  { id: 'home', icon: <IconHome size={18} />, label: 'Главная' },
+  { id: 'rooms', icon: <IconRooms size={18} />, label: 'Комнаты' },
+  { id: 'friends', icon: <IconFriends size={18} />, label: 'Друзья' },
+  { id: 'dms', icon: <IconChat size={18} />, label: 'Сообщения' },
   { id: 'ai', icon: <IconAi size={18} />, label: 'AI' },
-  { id: 'settings', icon: <IconSettings size={18} />, label: 'Settings' },
+  { id: 'settings', icon: <IconSettings size={18} />, label: 'Настройки' },
 ];
 
+/**
+ * Desktop Shell — 1:1 с iOS PlinkAppShell.
+ * Единый дизайн для Mac и Windows.
+ *
+ * Layout:
+ * ┌──────────────────────────────────────────────┐
+ * │ Titlebar (drag region + brand + search)      │
+ * ├─────────┬─────────────────────────────┬──────┤
+ * │ Sidebar │ Main pane                   │Detail│
+ * │ (220px) │ (flex)                      │(360) │
+ * └─────────┴─────────────────────────────┴──────┘
+ */
 export function DesktopShell({
   user, nav, collapsed, onNav, onToggleSidebar, detail, status, children, onNewRoom, onJoinCode,
 }: Props) {
-  const isMac = detectPlatform() === 'mac';
-
   return (
-    <div className={`desktop-app ${isMac ? 'layout-mac' : 'layout-win'}`}>
+    <div className="desktop-app">
+      {/* Titlebar */}
       <header className="titlebar">
         <div className="titlebar-left">
           <span className="titlebar-brand">Plink</span>
-          {!isMac && (
-            <nav className="top-nav">
-              {NAV.slice(0, 4).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`top-nav-item ${nav === item.id ? 'active' : ''}`}
-                  onClick={() => onNav(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-          )}
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={onToggleSidebar}
+            aria-label="Toggle sidebar"
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? '›' : '‹'}
+          </button>
         </div>
 
         <div className="titlebar-search">
           <IconSearch size={16} />
-          <input type="search" placeholder="Search rooms, videos…" className="titlebar-search-input" />
+          <input type="search" placeholder="Поиск комнат, видео…" className="titlebar-search-input" />
+          <kbd className="kbd">⌘K</kbd>
         </div>
 
         <div className="titlebar-actions">
-          <button type="button" className="tb-btn primary" onClick={onNewRoom} title="New room">
+          <button type="button" className="tb-btn primary" onClick={onNewRoom} title="Новая комната (⌘N)">
             <IconPlus size={14} />
-            New Room
+            <span>Новая комната</span>
           </button>
-          <button type="button" className="tb-btn" onClick={onJoinCode}>Join</button>
-          <button type="button" className="titlebar-user" onClick={() => onNav('profile')}>
+          <button type="button" className="tb-btn" onClick={onJoinCode} title="Присоединиться (⌘J)">
+            Войти по коду
+          </button>
+          <button type="button" className="titlebar-user" onClick={() => onNav('profile')} title="Профиль">
             {user.avatarURL ? (
               <img src={user.avatarURL} alt="" className="titlebar-avatar" />
             ) : (
-              <span className="titlebar-avatar">{user.username[0]?.toUpperCase()}</span>
+              <span className="titlebar-avatar placeholder">
+                {user.username?.[0]?.toUpperCase() ?? '?'}
+              </span>
             )}
-            <span className="titlebar-username">{user.username}</span>
+            <span className="titlebar-username">{user.displayName || user.username}</span>
           </button>
         </div>
       </header>
 
+      {/* Body */}
       <div className="desktop-body">
-        {isMac && (
-          <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-            <button type="button" className="sidebar-toggle" onClick={onToggleSidebar} aria-label="Toggle sidebar">
-              {collapsed ? '›' : '‹'}
-            </button>
-            <nav className="sidebar-nav">
-              {NAV.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`sidebar-item ${nav === item.id ? 'active' : ''}`}
-                  onClick={() => onNav(item.id)}
-                  title={item.label}
-                >
-                  <span className="sidebar-icon-wrap">{item.icon}</span>
-                  {!collapsed && <span>{item.label}</span>}
-                </button>
-              ))}
-            </nav>
-            <div className="sidebar-footer">
-              {user.isPremium && !collapsed && <span className="plink-plus-badge">Plink+</span>}
-            </div>
-          </aside>
-        )}
+        {/* Sidebar — всегда видна, как iOS tab bar но вертикально */}
+        <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+          <nav className="sidebar-nav">
+            {NAV.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`sidebar-item ${nav === item.id ? 'active' : ''}`}
+                onClick={() => onNav(item.id)}
+                title={item.label}
+              >
+                <span className="sidebar-icon-wrap">{item.icon}</span>
+                {!collapsed && <span className="sidebar-label">{item.label}</span>}
+              </button>
+            ))}
+          </nav>
 
+          <div className="sidebar-footer">
+            {user.isPremium && !collapsed && (
+              <div className="plink-plus-badge">
+                <span className="plus-icon">✨</span>
+                <span>Plink+</span>
+              </div>
+            )}
+            {!user.isPremium && !collapsed && (
+              <button
+                type="button"
+                className="sidebar-upgrade"
+                onClick={() => onNav('plus')}
+              >
+                <span className="plus-icon">✨</span>
+                <span>Получить Plink+</span>
+              </button>
+            )}
+          </div>
+        </aside>
+
+        {/* Main content */}
         <main className="main-pane">{children}</main>
 
+        {/* Optional detail pane (right) */}
         {detail && <aside className="detail-pane">{detail}</aside>}
       </div>
 
-      {status && <footer className="status-bar"><span>{status}</span></footer>}
+      {/* Status bar (как iOS status info) */}
+      {status && (
+        <footer className="status-bar">
+          <span className="status-indicator" />
+          <span>{status}</span>
+        </footer>
+      )}
     </div>
   );
 }

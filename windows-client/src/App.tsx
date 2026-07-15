@@ -7,6 +7,7 @@ import { RoomPage } from './pages/RoomPage';
 import { ProHomePage } from './pages/ProHomePage';
 import { DesktopShell, type NavItem } from './components/desktop/DesktopShell';
 import { DetailPane, type DetailTarget } from './components/desktop/DetailPane';
+import { LivingBackground } from './components/desktop/LivingBackground';
 import { MiniPlayer } from './components/MiniPlayer';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { setupTrayListener } from './lib/tauri';
@@ -71,36 +72,51 @@ export default function App() {
     return () => cleanup?.();
   }, []);
 
-  if (booting) return <div className="page center">Loading Plink…</div>;
+  if (booting) {
+    return (
+      <>
+        <LivingBackground />
+        <div className="page center" style={{ position: 'relative', zIndex: 1 }}>
+          Loading Plink…
+        </div>
+      </>
+    );
+  }
 
   if (screen === 'auth' || !user) {
     return (
-      <AuthPage
-        onAuth={(u) => {
-          setUser(u);
-          setScreen('app');
-        }}
-      />
+      <>
+        <LivingBackground />
+        <AuthPage
+          onAuth={(u) => {
+            setUser(u);
+            setScreen('app');
+          }}
+        />
+      </>
     );
   }
 
   if (screen === 'profile' || nav === 'profile') {
     return (
-      <DesktopShell
-        user={user}
-        nav="profile"
-        collapsed={sidebarCollapsed}
-        onNav={(n) => { if (n === 'home') setScreen('app'); else setNav(n); }}
-        onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
-        status={status}
-      >
-        <ProfilePage
+      <>
+        <LivingBackground />
+        <DesktopShell
           user={user}
-          onUserUpdate={setUser}
-          onLogout={() => { setUser(null); setScreen('auth'); }}
-          onBack={() => { setNav('home'); setScreen('app'); }}
-        />
-      </DesktopShell>
+          nav="profile"
+          collapsed={sidebarCollapsed}
+          onNav={(n) => { if (n === 'home') setScreen('app'); else setNav(n); }}
+          onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
+          status={status}
+        >
+          <ProfilePage
+            user={user}
+            onUserUpdate={setUser}
+            onLogout={() => { setUser(null); setScreen('auth'); }}
+            onBack={() => { setNav('home'); setScreen('app'); }}
+          />
+        </DesktopShell>
+      </>
     );
   }
 
@@ -130,37 +146,40 @@ export default function App() {
   }
 
   return (
-    <UrlDropZone onUrl={() => setJoinPrompt(true)}>
-      <DesktopShell
-        user={user}
-        nav={nav}
-        collapsed={sidebarCollapsed}
-        onNav={(n) => { if (n === 'profile') setScreen('profile'); else setNav(n); }}
-        onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
-        detail={<DetailPane target={detail} onJoinRoom={openRoom} />}
-        status={status}
-        onNewRoom={() => setNav('home')}
-        onJoinCode={() => setJoinPrompt(true)}
-      >
-        <ProHomePage
-          onOpenRoom={openRoom}
-          onHoverChange={setDetail}
-          onJoinPrompt={() => setJoinPrompt(true)}
-        />
-      </DesktopShell>
+    <>
+      <LivingBackground />
+      <UrlDropZone onUrl={() => setJoinPrompt(true)}>
+        <DesktopShell
+          user={user}
+          nav={nav}
+          collapsed={sidebarCollapsed}
+          onNav={(n) => { if (n === 'profile') setScreen('profile'); else setNav(n); }}
+          onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
+          detail={<DetailPane target={detail} onJoinRoom={openRoom} />}
+          status={status}
+          onNewRoom={() => setNav('home')}
+          onJoinCode={() => setJoinPrompt(true)}
+        >
+          <ProHomePage
+            onOpenRoom={openRoom}
+            onHoverChange={setDetail}
+            onJoinPrompt={() => setJoinPrompt(true)}
+          />
+        </DesktopShell>
 
-      {joinPrompt && (
-        <div className="modal-overlay" role="dialog">
-          <div className="modal glass-panel">
-            <h3>Join by code</h3>
-            <JoinByCodeForm
-              onClose={() => setJoinPrompt(false)}
-              onJoined={(r) => { setJoinPrompt(false); openRoom(r); }}
-            />
+        {joinPrompt && (
+          <div className="modal-overlay" role="dialog">
+            <div className="modal glass-panel">
+              <h3>Войти по коду</h3>
+              <JoinByCodeForm
+                onClose={() => setJoinPrompt(false)}
+                onJoined={(r) => { setJoinPrompt(false); openRoom(r); }}
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </UrlDropZone>
+        )}
+      </UrlDropZone>
+    </>
   );
 }
 

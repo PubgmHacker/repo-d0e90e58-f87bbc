@@ -48,6 +48,12 @@ targets:
       - path: Plink/Resources
         excludes:
           - "**/.DS_Store"
+      - path: Plink/Resources/Emojis
+        type: folder
+      - path: Plink/Resources/LiveThemes
+        type: folder
+      - path: Plink/Resources/Avatars
+        type: folder
     # PATCH 15: LiveKit dependency disabled — see comment at top of file.
     # dependencies:
     #   - package: LiveKit

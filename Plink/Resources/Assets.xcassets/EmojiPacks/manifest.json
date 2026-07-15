@@ -1,0 +1,498 @@
+{
+  "cute-faces": [
+    {
+      "emojiId": "12",
+      "assetName": "emoji_cute_12",
+      "filename": "10221-12.png",
+      "animated": false
+    },
+    {
+      "emojiId": "cuteemojiwithcat",
+      "assetName": "emoji_cute_cuteemojiwithcat",
+      "filename": "10870-cuteemojiwithcat.png",
+      "animated": false
+    },
+    {
+      "emojiId": "knife",
+      "assetName": "emoji_cute_knife",
+      "filename": "1217-emoji-knife.png",
+      "animated": false
+    },
+    {
+      "emojiId": "owo",
+      "assetName": "emoji_cute_owo",
+      "filename": "1403-owo.png",
+      "animated": false
+    },
+    {
+      "emojiId": "loading",
+      "assetName": "emoji_cute_loading",
+      "filename": "22981-loading.png",
+      "animated": false
+    },
+    {
+      "emojiId": "rainboarf",
+      "assetName": "emoji_cute_rainboarf",
+      "filename": "2695-rainboarf.png",
+      "animated": false
+    },
+    {
+      "emojiId": "cursedemojieepy",
+      "assetName": "emoji_cute_cursedemojieepy",
+      "filename": "3090-cursedemojieepy.png",
+      "animated": false
+    },
+    {
+      "emojiId": "sighh",
+      "assetName": "emoji_cute_sighh",
+      "filename": "3123-sighh.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pleadcat",
+      "assetName": "emoji_cute_pleadcat",
+      "filename": "3380-emoji-pleadcat.png",
+      "animated": false
+    },
+    {
+      "emojiId": "oh",
+      "assetName": "emoji_cute_oh",
+      "filename": "34080-oh.png",
+      "animated": false
+    },
+    {
+      "emojiId": "shy",
+      "assetName": "emoji_cute_shy",
+      "filename": "34904-shy.png",
+      "animated": false
+    },
+    {
+      "emojiId": "shawty",
+      "assetName": "emoji_cute_shawty",
+      "filename": "4208-sup-shawty.png",
+      "animated": false
+    },
+    {
+      "emojiId": "embarassed",
+      "assetName": "emoji_cute_embarassed",
+      "filename": "4496-embarassed.png",
+      "animated": false
+    },
+    {
+      "emojiId": "staring",
+      "assetName": "emoji_cute_staring",
+      "filename": "45654-staring.png",
+      "animated": false
+    },
+    {
+      "emojiId": "explainthisshit",
+      "assetName": "emoji_cute_explainthisshit",
+      "filename": "4990-explainthisshit.png",
+      "animated": false
+    },
+    {
+      "emojiId": "munching",
+      "assetName": "emoji_cute_munching",
+      "filename": "5181-munching.png",
+      "animated": false
+    },
+    {
+      "emojiId": "give",
+      "assetName": "emoji_cute_give",
+      "filename": "57751-pat-pat-give.png",
+      "animated": false
+    },
+    {
+      "emojiId": "confused",
+      "assetName": "emoji_cute_confused",
+      "filename": "6687-emoji-confused.png",
+      "animated": false
+    },
+    {
+      "emojiId": "sleepy",
+      "assetName": "emoji_cute_sleepy",
+      "filename": "6912-emoji-sleepy.png",
+      "animated": false
+    },
+    {
+      "emojiId": "blehhh",
+      "assetName": "emoji_cute_blehhh",
+      "filename": "8036-blehhh.png",
+      "animated": false
+    },
+    {
+      "emojiId": "owono",
+      "assetName": "emoji_cute_owono",
+      "filename": "8237-owono.png",
+      "animated": false
+    },
+    {
+      "emojiId": "murder",
+      "assetName": "emoji_cute_murder",
+      "filename": "8468-emoji-murder.png",
+      "animated": false
+    },
+    {
+      "emojiId": "petpetemoji",
+      "assetName": "emoji_cute_petpetemoji",
+      "filename": "8596-petpetemoji.png",
+      "animated": false
+    },
+    {
+      "emojiId": "loverainbow",
+      "assetName": "emoji_cute_loverainbow",
+      "filename": "8714-take-my-loverainbow.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "birthdayhat",
+      "assetName": "emoji_cute_birthdayhat",
+      "filename": "9288-emoji-birthdayhat.png",
+      "animated": false
+    },
+    {
+      "emojiId": "zooted",
+      "assetName": "emoji_cute_zooted",
+      "filename": "93422-zooted.png",
+      "animated": false
+    },
+    {
+      "emojiId": "awwemojix",
+      "assetName": "emoji_cute_awwemojix",
+      "filename": "9732-awwemojix.png",
+      "animated": false
+    },
+    {
+      "emojiId": "inlovehearts",
+      "assetName": "emoji_cute_inlovehearts",
+      "filename": "9848-inlovehearts.png",
+      "animated": false
+    }
+  ],
+  "pepe": [
+    {
+      "emojiId": "pepecross",
+      "assetName": "emoji_pepe_pepecross",
+      "filename": "120458-pepecross.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepetyping",
+      "assetName": "emoji_pepe_pepetyping",
+      "filename": "121023-pepetyping.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepeheart",
+      "assetName": "emoji_pepe_pepeheart",
+      "filename": "149743-pepeheart.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepelaugh",
+      "assetName": "emoji_pepe_pepelaugh",
+      "filename": "175472-pepelaugh.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepeperfect",
+      "assetName": "emoji_pepe_pepeperfect",
+      "filename": "182109-pepeperfect.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepedumb",
+      "assetName": "emoji_pepe_pepedumb",
+      "filename": "236705-pepedumb.png",
+      "animated": false
+    },
+    {
+      "emojiId": "strongpepe",
+      "assetName": "emoji_pepe_strongpepe",
+      "filename": "249299-strongpepe.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepehang",
+      "assetName": "emoji_pepe_pepehang",
+      "filename": "304977-pepehang.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepesmile",
+      "assetName": "emoji_pepe_pepesmile",
+      "filename": "383141-pepesmile.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepeclap",
+      "assetName": "emoji_pepe_pepeclap",
+      "filename": "431882-pepeclap.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepetorchfire",
+      "assetName": "emoji_pepe_pepetorchfire",
+      "filename": "436131-pepetorchfire.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepescream",
+      "assetName": "emoji_pepe_pepescream",
+      "filename": "543336-pepescream.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepeooo",
+      "assetName": "emoji_pepe_pepeooo",
+      "filename": "583748-pepeooo.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepeuwu",
+      "assetName": "emoji_pepe_pepeuwu",
+      "filename": "588971-pepeuwu.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepeokay",
+      "assetName": "emoji_pepe_pepeokay",
+      "filename": "618704-pepeokay.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepelmao",
+      "assetName": "emoji_pepe_pepelmao",
+      "filename": "690612-pepelmao.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "kingpepe",
+      "assetName": "emoji_pepe_kingpepe",
+      "filename": "702336-kingpepe.png",
+      "animated": false
+    },
+    {
+      "emojiId": "kingpepe",
+      "assetName": "emoji_pepe_kingpepe",
+      "filename": "733150-kingpepe.png",
+      "animated": false
+    },
+    {
+      "emojiId": "nou",
+      "assetName": "emoji_pepe_nou",
+      "filename": "798781-nou.png",
+      "animated": false
+    },
+    {
+      "emojiId": "peperain",
+      "assetName": "emoji_pepe_peperain",
+      "filename": "827729-peperain.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "peperich",
+      "assetName": "emoji_pepe_peperich",
+      "filename": "828203-peperich.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepe",
+      "assetName": "emoji_pepe_pepe",
+      "filename": "830563-pepe.png",
+      "animated": false
+    },
+    {
+      "emojiId": "praypepe",
+      "assetName": "emoji_pepe_praypepe",
+      "filename": "877975-praypepe.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepehacker",
+      "assetName": "emoji_pepe_pepehacker",
+      "filename": "950522-pepehacker.gif",
+      "animated": true
+    }
+  ],
+  "cat": [
+    {
+      "emojiId": "flowersforyou",
+      "assetName": "emoji_cat_flowersforyou",
+      "filename": "129403-flowersforyou.png",
+      "animated": false
+    },
+    {
+      "emojiId": "stinky",
+      "assetName": "emoji_cat_stinky",
+      "filename": "233828-stinky.png",
+      "animated": false
+    },
+    {
+      "emojiId": "plotting",
+      "assetName": "emoji_cat_plotting",
+      "filename": "486800-plotting.png",
+      "animated": false
+    },
+    {
+      "emojiId": "sadqueen",
+      "assetName": "emoji_cat_sadqueen",
+      "filename": "563716-sadqueen.png",
+      "animated": false
+    },
+    {
+      "emojiId": "peace",
+      "assetName": "emoji_cat_peace",
+      "filename": "617091-peace.png",
+      "animated": false
+    },
+    {
+      "emojiId": "ring",
+      "assetName": "emoji_cat_ring",
+      "filename": "736199-ring.png",
+      "animated": false
+    }
+  ],
+  "emojis": [
+    {
+      "emojiId": "wassup",
+      "assetName": "emoji_sticker_wassup",
+      "filename": "18038-wassup.png",
+      "animated": false
+    },
+    {
+      "emojiId": "stinky",
+      "assetName": "emoji_sticker_stinky",
+      "filename": "233828-stinky.png",
+      "animated": false
+    },
+    {
+      "emojiId": "redcard",
+      "assetName": "emoji_sticker_redcard",
+      "filename": "440174-redcard.png",
+      "animated": false
+    },
+    {
+      "emojiId": "inlove",
+      "assetName": "emoji_sticker_inlove",
+      "filename": "455353-inlove.png",
+      "animated": false
+    },
+    {
+      "emojiId": "plotting",
+      "assetName": "emoji_sticker_plotting",
+      "filename": "486800-plotting.png",
+      "animated": false
+    },
+    {
+      "emojiId": "nobrain",
+      "assetName": "emoji_sticker_nobrain",
+      "filename": "501481-nobrain.png",
+      "animated": false
+    },
+    {
+      "emojiId": "downvote",
+      "assetName": "emoji_sticker_downvote",
+      "filename": "502259-downvote.png",
+      "animated": false
+    },
+    {
+      "emojiId": "lickingscreen",
+      "assetName": "emoji_sticker_lickingscreen",
+      "filename": "549205-lickingscreen.png",
+      "animated": false
+    },
+    {
+      "emojiId": "approve",
+      "assetName": "emoji_sticker_approve",
+      "filename": "559934-approve.png",
+      "animated": false
+    },
+    {
+      "emojiId": "glasses",
+      "assetName": "emoji_sticker_glasses",
+      "filename": "600559-glasses.png",
+      "animated": false
+    },
+    {
+      "emojiId": "peace",
+      "assetName": "emoji_sticker_peace",
+      "filename": "617091-peace.png",
+      "animated": false
+    },
+    {
+      "emojiId": "hungry",
+      "assetName": "emoji_sticker_hungry",
+      "filename": "67803-hungry.png",
+      "animated": false
+    },
+    {
+      "emojiId": "give",
+      "assetName": "emoji_sticker_give",
+      "filename": "767943-give.png",
+      "animated": false
+    },
+    {
+      "emojiId": "gunpoint",
+      "assetName": "emoji_sticker_gunpoint",
+      "filename": "77254-gunpoint.png",
+      "animated": false
+    },
+    {
+      "emojiId": "fight",
+      "assetName": "emoji_sticker_fight",
+      "filename": "794547-fight.png",
+      "animated": false
+    },
+    {
+      "emojiId": "moneyhands",
+      "assetName": "emoji_sticker_moneyhands",
+      "filename": "980819-moneyhands.png",
+      "animated": false
+    }
+  ],
+  "ze-frog-es-le-pepe": [
+    {
+      "emojiId": "blushy",
+      "assetName": "emoji_lepepe_blushy",
+      "filename": "3439-pepe-blushy.png",
+      "animated": false
+    },
+    {
+      "emojiId": "sad",
+      "assetName": "emoji_lepepe_sad",
+      "filename": "370700-pepe-sad.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepehug",
+      "assetName": "emoji_lepepe_pepehug",
+      "filename": "477732-pepehug.png",
+      "animated": false
+    },
+    {
+      "emojiId": "hehe",
+      "assetName": "emoji_lepepe_hehe",
+      "filename": "47945-pepe-hehe.gif",
+      "animated": true
+    },
+    {
+      "emojiId": "pepes",
+      "assetName": "emoji_lepepe_pepes",
+      "filename": "638973-pepes.png",
+      "animated": false
+    },
+    {
+      "emojiId": "sleepypepe",
+      "assetName": "emoji_lepepe_sleepypepe",
+      "filename": "733056-sleepypepe.png",
+      "animated": false
+    },
+    {
+      "emojiId": "pepohappy",
+      "assetName": "emoji_lepepe_pepohappy",
+      "filename": "857990-pepohappy.png",
+      "animated": false
+    }
+  ]
+}

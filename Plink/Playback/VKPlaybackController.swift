@@ -18,9 +18,11 @@ public final class VKPlaybackController: PlaybackControlling {
 
     public var capabilities: PlaybackCapabilities {
         PlaybackCapabilities(
-            supportsPause: true,
-            supportsSeek: true,
-            supportsRateCorrection: false
+            seekable: true,
+            supportsPiP: false,
+            supportsAirPlay: false,
+            supportsRateCorrection: false,
+            supportsDRM: false
         )
     }
 

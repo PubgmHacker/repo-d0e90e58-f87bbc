@@ -190,7 +190,7 @@ struct PacksPopover: View {
             if !hasPremium {
                 Text("Plink+ packs require subscription")
                     .font(.caption)
-                    .foregroundStyle(Cinema2026.muted)
+                    .foregroundStyle(Cinema2026.secondary)
                     .padding(.horizontal)
             }
         }

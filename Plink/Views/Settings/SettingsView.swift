@@ -43,9 +43,18 @@ struct SettingsView: View {
         NavigationStack(path: $navigationPath) {
             ZStack {
                 // 🔧 SETTINGS: grayscale gradient (black top → grey center → black bottom)
-                // + horizontal shimmer band. No orbs — minimalist B&W per user request.
-                SettingsBackground(energy: 0.7)
-                    .ignoresSafeArea()
+                // No orbs — minimalist B&W per user request.
+                // SettingsBackground was a custom View deleted in cleanup — using LinearGradient
+                LinearGradient(
+                    colors: [
+                        Color(hex: 0x0E1113),
+                        Color(white: 0.18),
+                        Color(hex: 0x0E1113),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 24) {

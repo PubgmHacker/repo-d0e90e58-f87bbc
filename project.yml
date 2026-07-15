@@ -12,20 +12,13 @@ options:
 # only for <= 4). LiveKit SDK provides Room, Participant, Track, and
 # DataChannel APIs that RoomRTCController wraps.
 #
-# PATCH 15: LiveKit SPM dependency temporarily disabled for builds without
-# reliable network (SPM fetch of WebRTC ~500MB fails on slow/unstable
-# connections). Re-enable by uncommenting the packages block below AND
-# the `- package: LiveKit` line in targets.Plink.dependencies AND removing
-# the `#if canImport(LiveKit)` guards in:
-#   - Plink/RTC/RoomRTCController.swift
-#   - Plink/RTC/ParticipantVideoView.swift
-# When LiveKit is re-enabled, voice/video chat works. Without it, the app
-# builds and all non-RTC features work (playback, chat, danmaku, reactions,
-# ambient, billing, admin, Rutube).
-# packages:
-#   LiveKit:
-#     url: https://github.com/livekit/client-sdk-swift
-#     from: 2.0.0
+# PATCH 15 + P0 voice: LiveKit re-enabled.
+# Note: On first enable, Xcode/SPM will download WebRTC (~large). Use stable
+# connection or pre-cache. If network fails, fall back to Agora/Daily.co.
+packages:
+  LiveKit:
+    url: https://github.com/livekit/client-sdk-swift
+    from: 2.0.0
 
 settings:
   base:
@@ -64,6 +57,8 @@ targets:
         DEVELOPMENT_TEAM: "2QAMUC4Z4P"
         CODE_SIGN_IDENTITY: "Apple Development"
         SUPPORTS_MACCATALYST: NO
+    dependencies:
+      - package: LiveKit
     info:
       path: Plink/Resources/Info.plist
       properties:

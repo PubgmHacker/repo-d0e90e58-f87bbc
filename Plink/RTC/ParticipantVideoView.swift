@@ -35,9 +35,6 @@
 
 import SwiftUI
 
-// PATCH 15: LiveKit is optional. See Plink/RTC/RoomRTCController.swift for
-// re-enable instructions.
-#if canImport(LiveKit)
 import LiveKit
 
 /// SwiftUI wrapper for LiveKit's VideoView. Renders a participant's
@@ -135,4 +132,4 @@ struct ParticipantAvatarWithVideo: View {
     }
 }
 
-#endif // canImport(LiveKit)
+

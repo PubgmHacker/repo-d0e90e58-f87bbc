@@ -118,6 +118,7 @@ final class PremiumStatusManager: ObservableObject {
         guard isPremium else { return }
         selectedRoomTheme = theme
         defaults.set(theme.rawValue, forKey: roomThemeKey)
+        AnalyticsService.shared.themeChanged(theme.rawValue)
     }
 
     // MARK: - Persistence

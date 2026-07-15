@@ -409,6 +409,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             clientMessageId: clientMessageId,
             text: text
         )))
+        AnalyticsService.shared.messageSent()
         // P1-54: schedule 5s timeout — mark as failed if no server echo
         scheduleChatSendTimeout(clientMessageId: clientMessageId)
     }

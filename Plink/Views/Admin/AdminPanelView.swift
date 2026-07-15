@@ -48,6 +48,17 @@ struct AdminPanelView: View {
                     // Small admin icon
                     Image("AdminBadge")
                         .resizable()
+
+                    // P0: Test Push button in admin
+                    Button("Test Push") {
+                        Task { await sendTestPush() }
+                    }
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Cinema2026.accent.opacity(0.2))
+                    .clipShape(Capsule())
+                }
                         .scaledToFit()
                         .frame(width: 22, height: 22)
                         .foregroundColor(.raveDanger)
@@ -418,4 +429,19 @@ struct AdminMessage: Identifiable {
     let senderName: String
     let text: String
     let timeAgo: String
+}
+
+// P0: Test push from admin panel
+private func sendTestPush() async {
+    guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/dev/test-push") else { return }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    if let token = KeychainHelper.read(for: "rave_auth_token") {
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+    let body: [String: Any] = ["title": "Admin Test", "body": "Push from admin panel", "deepLink": "plink://room/test"]
+    req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+    _ = try? await URLSession.shared.data(for: req)
+    toastMessage = "Test push sent (check device)"
 }

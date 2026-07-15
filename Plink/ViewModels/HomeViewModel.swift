@@ -103,15 +103,23 @@ final class HomeViewModel {
         )
         let room = try await roomService.createRoom(request)
         rooms.insert(room, at: 0)
+        AnalyticsService.shared.roomCreated()
         return room
     }
 
     func joinRoom(code: String, password: String? = nil) async throws -> Room {
         let room = try await roomService.joinRoom(code: code, password: password)
-        // P1: apply host-chosen theme for the guest
-        if let themeRaw = room.mediaItem?.appearanceTheme,
-           let theme = RoomTheme(rawValue: themeRaw) {
-            PremiumStatusManager.shared.selectedRoomTheme = theme
+        // P1: apply host-chosen theme for the guest (standard or live Plink+)
+        if let themeRaw = room.mediaItem?.appearanceTheme {
+            if themeRaw.hasPrefix("live:") {
+                let name = String(themeRaw.dropFirst(5))
+                if let live = PlinkPlusLiveTheme.allCases.first(where: { $0.name.lowercased() == name.lowercased() }) {
+                    UserDefaults.standard.set(live.rawValue, forKey: "plink.liveTheme")
+                    NotificationCenter.default.post(name: .plinkLiveThemeChanged, object: live.rawValue)
+                }
+            } else if let theme = RoomTheme(rawValue: themeRaw) {
+                PremiumStatusManager.shared.selectedRoomTheme = theme
+            }
         }
         rooms.insert(room, at: 0)
         return room

@@ -54,6 +54,8 @@ targets:
         type: folder
       - path: Plink/Resources/Avatars
         type: folder
+      - path: Plink/Resources/Banners
+        type: folder
     # PATCH 15: LiveKit dependency disabled — see comment at top of file.
     # dependencies:
     #   - package: LiveKit

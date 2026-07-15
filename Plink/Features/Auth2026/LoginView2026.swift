@@ -275,13 +275,14 @@ struct LoginView2026: View {
         errorMessage = nil
 
         do {
+            let authService = AuthService()
             if isSignUp {
-                try await AuthService.shared.signUp(
+                try await authService.signUp(
                     email: email, password: password,
-                    displayName: username.isEmpty ? email.split(separator: "@").first.map(String.init) ?? "User" : username
+                    username: username.isEmpty ? email.split(separator: "@").first.map(String.init) ?? "User" : username
                 )
             } else {
-                try await AuthService.shared.signIn(email: email, password: password)
+                try await authService.signIn(email: email, password: password)
             }
             onAuthenticated()
         } catch {

@@ -245,58 +245,10 @@ struct RoomCardView: View {
 }
 
 // MARK: - Pulsing Dot
-/// Плавно пульсирующая зелёная точка — индикатор живой комнаты.
-struct PulsingDot: View {
-    @State private var isPulsing = false
-
-    var color: Color = .raveGreen
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 7, height: 7)
-            .overlay(
-                Circle()
-                    .fill(color.opacity(0.35))
-                    .frame(width: 7, height: 7)
-                    .scaleEffect(isPulsing ? 2.2 : 1)
-                    .opacity(isPulsing ? 0 : 0.7)
-            )
-            .onAppear {
-                withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
-                    isPulsing = true
-                }
-            }
-    }
-}
+/// PulsingDot is defined in PremiumComponents.swift (single source of truth)
 
 // MARK: - LIVE Badge
-/// Ярлык «LIVE» с красным фоном и пульсирующим свечением.
-struct LiveBadge: View {
-    @State private var glow = false
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Circle()
-                .fill(Color.white)
-                .frame(width: 5, height: 5)
-            Text("LIVE")
-                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                .foregroundColor(.white)
-                .tracking(0.5)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(Color.raveDanger)
-        .clipShape(Capsule())
-        .shadow(color: .raveDanger.opacity(glow ? 0.8 : 0.2), radius: glow ? 8 : 3)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                glow = true
-            }
-        }
-    }
-}
+/// LiveBadge is defined in PremiumComponents.swift (single source of truth)
 
 // MARK: - Preview
 #Preview {

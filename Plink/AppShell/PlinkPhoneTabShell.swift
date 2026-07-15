@@ -64,7 +64,7 @@ struct PlinkPhoneTabShell: View {
                     }
                 )
             }
-            .tag(AppSection.settings)
+            .tag(AppSection.profile)
             .tabItem { Label("Профиль", systemImage: "person.circle.fill") }
         }
         .tint(Cinema2026.accent)

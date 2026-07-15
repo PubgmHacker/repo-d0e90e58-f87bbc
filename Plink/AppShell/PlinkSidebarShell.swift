@@ -1,4 +1,5 @@
 // Plink/AppShell/PlinkSidebarShell.swift — §4 Final Architecture
+// iPad/Mac sidebar shell. Uses AppSection enum (home/rooms/ai/friends/profile).
 
 import SwiftUI
 
@@ -35,7 +36,7 @@ struct PlinkSidebarShell: View {
                 }
 
                 Section {
-                    nav(.settings)
+                    nav(.profile)
                 }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
@@ -58,7 +59,6 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            // Use DiscoveryHomeView as home content
             DiscoveryHomeView(dependencies: dependencies)
         case .rooms:
             RoomsHubView(dependencies: dependencies)
@@ -66,7 +66,7 @@ struct PlinkSidebarShell: View {
             AIAssistantView()
         case .friends:
             FriendsView()
-        case .settings:
+        case .profile:
             ProfileView(
                 viewModel: ProfileViewModel(authService: dependencies.authService),
                 onSignOut: { Task { try? await dependencies.authService.signOut() } }

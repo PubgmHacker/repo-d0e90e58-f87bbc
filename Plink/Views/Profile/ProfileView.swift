@@ -121,8 +121,9 @@ struct ProfileView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            if let concreteAuth = viewModel.authService as? AuthService {
-                SettingsView(authService: concreteAuth)
+            // SettingsView was deleted — redirect to NotificationsView
+            NavigationStack {
+                NotificationsView()
             }
         }
         .sheet(isPresented: $showEditProfile) {

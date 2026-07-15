@@ -54,27 +54,14 @@ struct RoomCreationView: View {
 
             switch currentStep {
             case .service:
-                ServiceSelectionView(
-                    onSelect: { service in
-                        // Browser / customURL — go straight to details (URL entry)
-                        selectedService = service
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                            currentStep = .details
-                        }
-                    },
-                    onContentSelected: { service, contentURL, contentTitle, thumbnailURL in
-                        // 🔧 FIX: используем .fullScreenCover(item:) с RoomSetupConfig.
-                        // SwiftUI bug: .fullScreenCover(isPresented:) захватывает @State
-                        // значения при создании closure, а не при срабатывании.
-                        // Через item: значения передаются напрямую как параметр closure.
-                        // 🔧 v33: forward thumbnailURL to RoomSetupView.
-                        print("🔍 RoomCreationView.onContentSelected: creating config with contentURL='\(contentURL)', thumbnailURL='\(thumbnailURL ?? "nil")'")
-
-                        // v2: No prewarming — EmbeddedPlaybackController handles YouTube
+                // ServiceSelectionView was deleted — use YouTubeSearchView directly
+                YouTubeSearchView(
+                    onSelect: { videoId, title, thumbnailURL in
+                        selectedService = .youtube
                         roomSetupConfig = RoomSetupConfig(
-                            service: service,
-                            contentURL: contentURL,
-                            contentTitle: contentTitle,
+                            service: .youtube,
+                            contentURL: "https://www.youtube.com/watch?v=\(videoId)",
+                            contentTitle: title,
                             thumbnailURL: thumbnailURL
                         )
                     }

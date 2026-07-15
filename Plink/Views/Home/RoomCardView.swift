@@ -86,17 +86,24 @@ struct RoomCardView: View {
         }
         .padding(14)
         // ── Bioluminescent Glass: матовое стекло с неоновой подсветкой ──
-        .premiumGlass(
-            cornerRadius: 18,
-            opacity: 0.06,
-            ringColor: room.isActive
-                ? LinearGradient(
-                    colors: [Color.bioEmerald.opacity(0.5), Color.bioCyan.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+        // premiumGlass modifier was removed in cleanup — using glassCard
+        .glassCard(cornerRadius: 18, opacity: 0.06)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(
+                    room.isActive
+                        ? LinearGradient(
+                            colors: [Color.bioEmerald.opacity(0.5), Color.bioCyan.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        : LinearGradient(
+                            colors: [Color.white.opacity(0.08), Color.white.opacity(0.04)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                    lineWidth: 1
                 )
-                : Color.bioNeonRing,
-            glow: room.isActive
         )
         .contentShape(Rectangle())
         // UGC-модерация (Блок 1): контекстное меню

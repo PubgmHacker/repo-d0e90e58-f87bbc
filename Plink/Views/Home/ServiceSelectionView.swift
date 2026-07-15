@@ -173,7 +173,7 @@ struct ServiceSelectionView: View {
                     .frame(width: 40, height: 40)
                     .glassCard(cornerRadius: 20, opacity: 0.06)
             }
-            .buttonStyle(PremiumButtonStyle(glowColor: .clear))
+            .buttonStyle(PremiumButtonStyle(filled: false))
 
             Spacer()
 

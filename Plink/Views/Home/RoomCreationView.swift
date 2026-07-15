@@ -381,7 +381,7 @@ struct RoomCreationView: View {
                     .stroke(isSelected ? Color.raveGreen.opacity(0.4) : Color.white.opacity(0.06), lineWidth: isSelected ? 2 : 1)
             )
         }
-        .buttonStyle(PremiumButtonStyle(glowColor: .clear))
+        .buttonStyle(PremiumButtonStyle(filled: false))
     }
 
     // MARK: - Friend Row
@@ -423,7 +423,7 @@ struct RoomCreationView: View {
             .padding(12)
             .glassCard(cornerRadius: 14, opacity: 0.05)
         }
-        .buttonStyle(PremiumButtonStyle(glowColor: .clear))
+        .buttonStyle(PremiumButtonStyle(filled: false))
     }
 
     // MARK: - Bottom Bar
@@ -446,18 +446,18 @@ struct RoomCreationView: View {
                         .stroke(Color.white.opacity(0.15), lineWidth: 1)
                 )
             }
-            .buttonStyle(PremiumButtonStyle(glowColor: .ravePrimary))
+            .buttonStyle(PremiumButtonStyle(filled: true))
             .disabled(!canProceed)
             .opacity(canProceed ? 1 : 0.5)
             // 🔧 SUBTLE: glow pulses only when the form is ready to proceed —
             // functional feedback that says "you can tap me now". When disabled, no animation.
-            .modifier(ConditionalGlow(
-                isActive: canProceed && !isCreating,
-                color: Color.ravePrimary,
-                minRadius: 6, maxRadius: 14,
-                minOpacity: 0.15, maxOpacity: 0.35,
-                period: 2.0
-            ))
+            // ConditionalGlow modifier was removed in cleanup — using shadow animation
+            .shadow(
+                color: canProceed && !isCreating
+                    ? Color.ravePrimary.opacity(0.3)
+                    : Color.clear,
+                radius: canProceed && !isCreating ? 12 : 0
+            )
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

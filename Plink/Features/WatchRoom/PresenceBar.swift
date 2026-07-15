@@ -47,10 +47,20 @@ struct PresenceBar: View {
 
             Spacer()
 
-            // Voice/camera group — single capsule
+            // Voice/camera group — Plink+ only for speaking (P0.3)
+            let hasPremium = PremiumStatusManager.shared.isPremium
             HStack(spacing: 4) {
-                VoiceActionButton(state: model.microphoneState) {
-                    Task { await model.toggleMicrophone() }
+                if hasPremium {
+                    VoiceActionButton(state: model.microphoneState) {
+                        Task { await model.toggleMicrophone() }
+                    }
+                } else {
+                    // Free users can only listen
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Cinema2026.muted)
+                        .frame(width: 36, height: 36)
+                        .background(Cinema2026.raised.opacity(0.5), in: Capsule())
                 }
                 CameraActionButton(state: model.cameraState) {
                     Task { await model.toggleCamera() }

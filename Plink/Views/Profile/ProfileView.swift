@@ -44,41 +44,43 @@ struct ProfileView: View {
             .ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 20) {
-                    profileHeader
+                VStack(alignment: .leading, spacing: 28) {
+                    // Header per spec: 80pt avatar with rotating ring, name 22pt, @ 14pt, email 12pt, badges under username
+                    profileHeaderNew
 
-                    // 🔧 NEW: "Подписки:" label before premium banner
-                    HStack {
-                        Text("Подписки")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
-                        Spacer()
+                    // Grouped cards (RoundedRectangle 14pt)
+                    VStack(spacing: 0) {
+                        profileCard(title: "Аккаунт", icon: "person.circle", action: { showEditProfile = true })
+                        profileCard(title: "Подписка", icon: "crown", action: { showPaywall = true })
+                        profileCard(title: "Приложение", icon: "app", action: { showSettings = true })
+                        if viewModel.isAdmin {
+                            profileCard(title: "Админ", icon: "shield", action: { /* admin */ })
+                        }
+                        profileCard(title: "Безопасность", icon: "lock", action: { /* security */ })
                     }
+                    .background(Cinema2026.raised.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.06), lineWidth: 0.5))
 
-                    premiumBanner
-
-                    // 🔧 NEW: "Статистика:" label
-                    HStack {
-                        Text("Статистика")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
-                        Spacer()
+                    // Logout button (red, arrow.right.square.fill)
+                    Button(role: .destructive) {
+                        onSignOut()
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.right.square.fill")
+                            Text("Выйти")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(.red)
+                        .padding()
+                        .background(Cinema2026.raised.opacity(0.6))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-
-                    statsRow
-                    activityBlock
-
-                    // 🔧 NEW: "История:" label
-                    HStack {
-                        Text("История просмотров")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.raveTextPrimary)
-                        Spacer()
-                    }
-
-                    watchHistorySection
+                    .padding(.top, 12)
                 }
                 .padding(.horizontal, 20)
+                .padding(.top, 48)
                 .padding(.bottom, 40)
             }
         }
@@ -1075,6 +1077,99 @@ struct WatchHistoryCard: View {
             }
         } else {
             Rectangle().fill(Color.raveSurface)
+        }
+    }
+}
+
+// MARK: - P0.2 New Profile Header and Cards (Apple ID / Telegram style)
+private var profileHeaderNew: some View {
+    VStack(alignment: .leading, spacing: 12) {
+        ZStack {
+            Circle()
+                .stroke(
+                    AngularGradient(
+                        colors: (viewModel.user?.isAdmin ?? false) ? [Color.red, Color.red.opacity(0.6), Color.red] : [Cinema2026.accent, Cinema2026.accent.opacity(0.6), Cinema2026.accent],
+                        center: .center
+                    ),
+                    lineWidth: 3
+                )
+                .frame(width: 86, height: 86)
+                .rotationEffect(.degrees(ringRotation))
+                .onAppear {
+                    withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) { ringRotation = 360 }
+                }
+            AvatarView(
+                image: viewModel.avatarImage,
+                imageURL: viewModel.avatarURL,
+                username: viewModel.displayName,
+                size: 80,
+                isPremium: isPremium,
+                isAdmin: viewModel.user?.isAdmin ?? false
+            )
+        }
+        .padding(.top, 8)
+
+        Text(viewModel.displayName)
+            .font(.system(size: 22, weight: .bold))
+
+        if let username = viewModel.user?.username {
+            Text("@\(username)")
+                .font(.system(size: 14))
+                .foregroundStyle(Cinema2026.muted)
+        }
+
+        if let email = viewModel.user?.email {
+            Text(email)
+                .font(.system(size: 12))
+                .foregroundStyle(Cinema2026.muted)
+        }
+
+        HStack(spacing: 8) {
+            if viewModel.user?.isAdmin == true {
+                Text("АДМИН")
+                    .font(.system(size: 10, weight: .heavy))
+                    .padding(.horizontal, 8).padding(.vertical, 2)
+                    .background(Color.red.opacity(0.2))
+                    .clipShape(Capsule())
+                    .foregroundStyle(Color.red)
+            }
+            if isPremium {
+                Text("PLINK+")
+                    .font(.system(size: 10, weight: .heavy))
+                    .padding(.horizontal, 8).padding(.vertical, 2)
+                    .background(Cinema2026.accent.opacity(0.2))
+                    .clipShape(Capsule())
+                    .foregroundStyle(Cinema2026.accent)
+            }
+        }
+    }
+}
+
+@State private var ringRotation: Double = 0
+
+private func profileCard(title: String, icon: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        HStack {
+            Image(systemName: icon)
+                .foregroundStyle(Cinema2026.accent)
+                .frame(width: 24)
+            Text(title)
+                .foregroundStyle(Cinema2026.text)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .foregroundStyle(Cinema2026.muted)
+                .font(.system(size: 14))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+    .buttonStyle(.plain)
+    .overlay(alignment: .bottom) {
+        if title != "Безопасность" {
+            Rectangle()
+                .fill(Cinema2026.divider.opacity(0.3))
+                .frame(height: 0.5)
+                .padding(.leading, 48)
         }
     }
 }

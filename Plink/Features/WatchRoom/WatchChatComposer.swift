@@ -9,6 +9,8 @@ struct WatchChatComposer: View {
 
     @State private var state = ChatComposerState()
     @State private var showEmojiPanel = false
+    @State private var currentPackIndex = 0
+    @State private var showPacksPopover = false
 
     private var canSend: Bool {
         state.canSend(connected: model.connectionState == .connected)
@@ -18,18 +20,34 @@ struct WatchChatComposer: View {
         PremiumStatusManager.shared.isPremium
     }
 
+    private let emojiPacks: [EmojiPack] = [
+        EmojiPack(name: "Reactions", emojis: ["❤️", "😂", "🔥", "👏", "😮", "💜"], isPremium: false),
+        EmojiPack(name: "Plink+", emojis: ["🎉", "🤩", "👑", "🚀", "✨", "🌟", "💫", "🏆"], isPremium: true),
+        EmojiPack(name: "Fun", emojis: ["🥳", "😎", "🤔", "🥺", "😭", "🤣", "💯", "🌈"], isPremium: true),
+    ]
+
+    private var currentPack: EmojiPack {
+        guard currentPackIndex >= 0 && currentPackIndex < emojiPacks.count else { return emojiPacks[0] }
+        return emojiPacks[currentPackIndex]
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // PATCH 26: inline emoji panel (Telegram-style)
             if showEmojiPanel {
                 EmojiInlinePanel(
+                    pack: currentPack,
                     hasPremium: hasPremium,
                     onPick: { emoji in
                         state.insertAtCursor(emoji)
                     },
                     onPremiumUpsell: {
                         showEmojiPanel = false
-                    }
+                    },
+                    onSwitchPack: { index in
+                        currentPackIndex = index
+                    },
+                    packs: emojiPacks
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -48,6 +66,12 @@ struct WatchChatComposer: View {
                         .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
                 }
                 .accessibilityLabel("Emoji")
+                .onLongPressGesture {
+                    showPacksPopover = true
+                }
+                .popover(isPresented: $showPacksPopover) {
+                    PacksPopover(packs: emojiPacks, currentIndex: $currentPackIndex, hasPremium: hasPremium, onDismiss: { showPacksPopover = false })
+                }
 
                 VStack(spacing: 4) {
                     TextField("Message…", text: $state.text, axis: .vertical)
@@ -117,59 +141,134 @@ struct WatchChatComposer: View {
     }
 }
 
-// MARK: - PATCH 26: Inline emoji panel (Telegram-style)
+// MARK: - Emoji Pack Model (custom packs for Plink+)
+
+struct EmojiPack: Identifiable {
+    let id = UUID()
+    let name: String
+    let emojis: [String]
+    let isPremium: Bool
+}
+
+// MARK: - Packs Popover (long tap on emoji button → Telegram style)
+
+struct PacksPopover: View {
+    let packs: [EmojiPack]
+    @Binding var currentIndex: Int
+    let hasPremium: Bool
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Emoji Packs")
+                .font(.headline)
+                .padding(.horizontal)
+
+            ForEach(Array(packs.enumerated()), id: \.element.id) { index, pack in
+                Button {
+                    if !pack.isPremium || hasPremium {
+                        currentIndex = index
+                        onDismiss()
+                    }
+                } label: {
+                    HStack {
+                        Text(pack.name)
+                            .foregroundStyle(Cinema2026.text)
+                        Spacer()
+                        if pack.isPremium {
+                            Image(systemName: "crown.fill")
+                                .foregroundStyle(Cinema2026.accent)
+                        }
+                        if currentIndex == index {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Cinema2026.accent)
+                        }
+                    }
+                    .padding(8)
+                    .background(currentIndex == index ? Cinema2026.raised : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .disabled(pack.isPremium && !hasPremium)
+            }
+
+            if !hasPremium {
+                Text("Plink+ packs require subscription")
+                    .font(.caption)
+                    .foregroundStyle(Cinema2026.muted)
+                    .padding(.horizontal)
+            }
+        }
+        .padding()
+        .frame(width: 280)
+        .background(Cinema2026.surface)
+    }
+}
+
+// MARK: - Inline emoji panel (Telegram-style, custom packs)
 
 struct EmojiInlinePanel: View {
+    let pack: EmojiPack
     let hasPremium: Bool
     let onPick: (String) -> Void
     let onPremiumUpsell: () -> Void
-
-    private let freeEmojis = ["❤️", "😂", "😢", "😡", "😮", "🔥", "👏", "💜"]
-    private let premiumEmojis = ["🎉", "🤩", "🥳", "😎", "🤔", "🥺", "😭", "🤣", "💯", "✨", "🌟", "💫", "👑", "🏆", "🚀", "🌈"]
+    let onSwitchPack: (Int) -> Void
+    let packs: [EmojiPack]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(freeEmojis, id: \.self) { emoji in
-                    Button {
-                        onPick(emoji)
-                    } label: {
-                        Text(emoji)
-                            .font(.system(size: 28))
-                            .frame(width: 44, height: 44)
-                    }
-                }
-
-                Divider()
-                    .frame(height: 30)
-                    .padding(.horizontal, 4)
-
-                ForEach(premiumEmojis, id: \.self) { emoji in
-                    Button {
-                        if hasPremium {
-                            onPick(emoji)
-                        } else {
-                            onPremiumUpsell()
-                        }
-                    } label: {
-                        Text(emoji)
-                            .font(.system(size: 28))
-                            .frame(width: 44, height: 44)
-                            .opacity(hasPremium ? 1.0 : 0.4)
-                            .overlay {
-                                if !hasPremium {
-                                    Image(systemName: "lock.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Cinema2026.amber)
-                                        .offset(x: 14, y: -14)
-                                }
+        VStack(spacing: 4) {
+            // Pack switcher
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(packs.enumerated()), id: \.element.id) { index, p in
+                        Button {
+                            if !p.isPremium || hasPremium {
+                                onSwitchPack(index)
+                            } else {
+                                onPremiumUpsell()
                             }
+                        } label: {
+                            Text(p.name)
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(p.id == pack.id ? Cinema2026.accent.opacity(0.2) : Cinema2026.raised)
+                                .clipShape(Capsule())
+                                .foregroundStyle(p.id == pack.id ? Cinema2026.accent : Cinema2026.text)
+                                .overlay {
+                                    if p.isPremium && !hasPremium {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(Cinema2026.amber)
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
+                        }
                     }
                 }
+                .padding(.horizontal, 8)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(pack.emojis, id: \.self) { emoji in
+                        Button {
+                            if pack.isPremium && !hasPremium {
+                                onPremiumUpsell()
+                            } else {
+                                onPick(emoji)
+                            }
+                        } label: {
+                            Text(emoji)
+                                .font(.system(size: 26))
+                                .frame(width: 40, height: 40)
+                                .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
         }
+        .padding(.vertical, 6)
         .background(Cinema2026.surface.opacity(0.98))
         .overlay(alignment: .top) {
             Rectangle().fill(Cinema2026.divider.opacity(0.4)).frame(height: 0.5)

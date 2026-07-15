@@ -49,10 +49,10 @@ enum PlinkEmojiCatalog {
         EmojiPack(
             name: "Stickers",
             emojis: [
-                "18038-wassup", "233828-stinky", "440174-redcard", "455353-inlove",
-                "486800-plotting", "501481-nobrain", "502259-downvote",
+                "18038-wassup", "440174-redcard", "455353-inlove",
+                "501481-nobrain", "502259-downvote",
                 "549205-lickingscreen", "559934-approve", "600559-glasses",
-                "617091-peace", "67803-hungry", "767943-give", "77254-gunpoint",
+                "67803-hungry", "767943-give", "77254-gunpoint",
                 "794547-fight", "980819-moneyhands",
             ],
             isPremium: true

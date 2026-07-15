@@ -54,7 +54,13 @@ struct ProfileView: View {
                         profileCard(title: "Подписка", icon: "crown", action: { showPaywall = true })
                         profileCard(title: "Приложение", icon: "app", action: { showSettings = true })
                         if viewModel.isAdmin {
-                            profileCard(title: "Админ", icon: "shield", action: { /* admin */ })
+                            profileCard(title: "Админ", icon: "shield", action: { /* open admin */ })
+                            if viewModel.user?.isAdmin == true {
+                                Button("Тест push") {
+                                    Task { /* call /api/dev/test-push */ }
+                                }
+                                .font(.caption)
+                            }
                         }
                         profileCard(title: "Безопасность", icon: "lock", action: { /* security */ })
                     }

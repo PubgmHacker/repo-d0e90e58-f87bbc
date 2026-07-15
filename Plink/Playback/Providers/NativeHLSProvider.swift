@@ -44,7 +44,7 @@ public final class NativeHLSProvider: ProviderAdapter {
             headers = h
         case .external(let u):
             url = u
-        case .youtube, .rutube, .vk:
+        case .youtube, .rutube, .vk, .embed:
             throw ProviderError.unsupportedSource
         }
 

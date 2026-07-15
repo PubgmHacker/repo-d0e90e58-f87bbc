@@ -3,12 +3,13 @@ import { api, getToken, setToken, youtubeMediaItem } from './lib/api';
 import { analytics } from './lib/analytics';
 import type { Room, User } from './lib/types';
 import { AuthPage } from './pages/AuthPage';
-import { ProfilePage } from './pages/ProfilePage';
 import { RoomPage } from './pages/RoomPage';
 import { ProHomePage } from './pages/ProHomePage';
 import { RoomsPage } from './pages/RoomsPage';
 import { AIPage } from './pages/AIPage';
 import { FriendsPage } from './pages/FriendsPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { DMPage } from './pages/DMPage';
 import { DesktopShell, type NavItem } from './components/desktop/DesktopShell';
 import { MiniPlayer } from './components/MiniPlayer';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -157,9 +158,11 @@ export default function App() {
         return <AIPage onPickTrending={() => setNav('home')} />;
       case 'friends':
         return <FriendsPage />;
+      case 'dms':
+        return <DMPage />;
       case 'settings':
         return (
-          <ProfilePage
+          <SettingsPage
             user={currentUser!}
             onUserUpdate={setUser}
             onLogout={() => { setUser(null); setScreen('auth'); setNav('home'); }}

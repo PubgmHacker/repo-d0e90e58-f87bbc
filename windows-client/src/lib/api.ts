@@ -186,6 +186,31 @@ export const api = {
       body: JSON.stringify({ avatar: dataUrl }),
     });
   },
+
+  // ═══ Moderation API — App Store / Web UGC compliance ═══
+  moderationReport(targetUserId: string, reason: string, details = '') {
+    return request<{ success: boolean }>('/moderation/report', {
+      method: 'POST',
+      body: JSON.stringify({ targetUserId, reason, details }),
+    });
+  },
+
+  moderationBlock(userId: string) {
+    return request<{ success: boolean }>('/moderation/block', {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  },
+
+  moderationUnblock(userId: string) {
+    return request<{ success: boolean }>(`/moderation/block/${userId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  moderationListBlocked() {
+    return request<{ blocked: Array<{ id: string; username: string }> }>('/moderation/blocked');
+  },
 };
 
 export { youtubeMediaItem, parseMediaFromUrl, embedUrlForMedia } from './mediaUrl';

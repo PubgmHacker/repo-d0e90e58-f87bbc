@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { User } from '../../lib/types';
 
-export type NavItem = 'home' | 'rooms' | 'ai' | 'friends' | 'settings';
+export type NavItem = 'home' | 'rooms' | 'ai' | 'friends' | 'dms' | 'settings';
 
 type Props = {
   user: User;
@@ -16,6 +16,7 @@ const TOP_NAV: { id: NavItem; label: string }[] = [
   { id: 'rooms', label: 'Комнаты' },
   { id: 'ai', label: 'ИИ' },
   { id: 'friends', label: 'Друзья' },
+  { id: 'dms', label: 'Сообщения' },
   { id: 'settings', label: 'Настройки' },
 ];
 

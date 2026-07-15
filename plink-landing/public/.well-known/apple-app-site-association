@@ -1,0 +1,25 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["2QAMUC4Z4P.com.syncwatch.plink"],
+        "components": {
+          "/r/*": {
+            "comment": "Room deep links: plink.io/r/ABCD12"
+          },
+          "/u/*": {
+            "comment": "User invite links: plink.io/u/userId"
+          },
+          "/room/*": {
+            "comment": "Alternative room deep links: plink.io/room/ABCD12"
+        }
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["2QAMUC4Z4P.com.syncwatch.plink"]
+  },
+  "activitycontinuation": {
+    "apps": ["2QAMUC4Z4P.com.syncwatch.plink"]
+  }
+}

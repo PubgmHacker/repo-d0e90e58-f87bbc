@@ -361,6 +361,7 @@ struct AuthUser: Codable, Sendable {
     let username: String
     let email: String
     let avatarURL: String?
+    let avatarData: String?  // P0: base64 avatar support
     let isOnline: Bool?
     let isPremium: Bool?
     let role: String?

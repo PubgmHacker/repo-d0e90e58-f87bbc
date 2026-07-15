@@ -167,9 +167,16 @@ struct MemorySafeLivingBackdrop: View {
             width: radius * 2,
             height: radius * 2
         )
-        ctx.drawLayer { layer in
-            layer.filter = .blur(radius: 68)
-            layer.fill(Path(ellipseIn: rect), with: .color(color))
-        }
+        // GraphicsContext doesn't support .filter blur directly.
+        // Use radial gradient instead to simulate soft glow.
+        let gradient = GraphicsContext.Shading.color(
+            RadialGradient(
+                colors: [color, color.opacity(0)],
+                center: .center,
+                startRadius: 0,
+                endRadius: radius
+            )
+        )
+        ctx.fill(Path(ellipseIn: rect), with: gradient)
     }
 }

@@ -40,14 +40,23 @@ struct WatchChatBubble: View {
                     }
                 }
 
-                Text(message.text)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(isOwn ? .white : Cinema2026.text)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 9)
-                    .background(bubbleBackground)
-                    .clipShape(BubbleShape(isOwn: isOwn))
-                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                // P0.4: support custom emoji PNG names
+                Group {
+                    if message.text.hasPrefix("emoji_") {
+                        Image(message.text)
+                            .resizable()
+                            .frame(width: 24, height: 24)
+                    } else {
+                        Text(message.text)
+                            .font(.system(size: 15, weight: .regular))
+                    }
+                }
+                .foregroundStyle(isOwn ? .white : Cinema2026.text)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 9)
+                .background(bubbleBackground)
+                .clipShape(BubbleShape(isOwn: isOwn))
+                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
 
                 if message.isPending {
                     Text("Sending…")

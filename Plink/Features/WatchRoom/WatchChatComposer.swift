@@ -21,9 +21,9 @@ struct WatchChatComposer: View {
     }
 
     private let emojiPacks: [EmojiPack] = [
-        EmojiPack(name: "Reactions", emojis: ["❤️", "😂", "🔥", "👏", "😮", "💜"], isPremium: false),
-        EmojiPack(name: "Plink+", emojis: ["🎉", "🤩", "👑", "🚀", "✨", "🌟", "💫", "🏆"], isPremium: true),
-        EmojiPack(name: "Fun", emojis: ["🥳", "😎", "🤔", "🥺", "😭", "🤣", "💯", "🌈"], isPremium: true),
+        EmojiPack(name: "Reactions", emojis: ["emoji_laugh", "emoji_fire", "emoji_heart", "emoji_thumbs_up", "emoji_thumbs_down", "emoji_scream", "emoji_cry", "emoji_love", "emoji_think", "emoji_cool", "emoji_party", "emoji_angry", "emoji_sad", "emoji_wow", "emoji_sleepy", "emoji_clap", "emoji_pray", "emoji_ok", "emoji_poop", "emoji_flex"], isPremium: false),
+        EmojiPack(name: "Plink+", emojis: ["emoji_neon_laugh", "emoji_neon_fire", "emoji_neon_heart", "emoji_neon_thumbs_up", "emoji_neon_party", "emoji_neon_cool", "emoji_neon_wow", "emoji_neon_clap"], isPremium: true),
+        EmojiPack(name: "Fun", emojis: ["emoji_popcorn", "emoji_movie", "emoji_clapper", "emoji_director", "emoji_oscar", "emoji_ticket", "emoji_film", "emoji_camera"], isPremium: true),
     ]
 
     private var currentPack: EmojiPack {
@@ -250,18 +250,25 @@ struct EmojiInlinePanel: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(pack.emojis, id: \.self) { emoji in
+                    ForEach(pack.emojis, id: \.self) { emojiName in
                         Button {
                             if pack.isPremium && !hasPremium {
                                 onPremiumUpsell()
                             } else {
-                                onPick(emoji)
+                                onPick(emojiName)  // pass name; chat will render Image or text
                             }
                         } label: {
-                            Text(emoji)
-                                .font(.system(size: 26))
-                                .frame(width: 40, height: 40)
-                                .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
+                            if emojiName.hasPrefix("emoji_") {
+                                Image(emojiName)
+                                    .resizable()
+                                    .frame(width: 28, height: 28)
+                                    .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
+                            } else {
+                                Text(emojiName)
+                                    .font(.system(size: 26))
+                                    .frame(width: 40, height: 40)
+                                    .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
+                            }
                         }
                     }
                 }

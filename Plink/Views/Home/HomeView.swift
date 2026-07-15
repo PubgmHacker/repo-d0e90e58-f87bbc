@@ -544,7 +544,8 @@ struct HomeView: View {
             )
             .shadow(color: Color.ravePrimary.opacity(0.3), radius: 8, y: 3)
         }
-        .buttonStyle(GlassButtonStyle())
+        // GlassButtonStyle is iOS 26+ only — using CinematicPrimaryButtonStyle instead
+        .buttonStyle(CinematicPrimaryButtonStyle())
     }
 
     // MARK: - CTA Collapse Timer

@@ -74,6 +74,24 @@ struct WatchRoomScreen: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                 .zIndex(101)
             }
+
+            // Offline / error state (P0)
+            if model.connectionState == .failed, let error = model.lastError {
+                VStack {
+                    Image(systemName: "wifi.slash")
+                        .font(.largeTitle)
+                    Text("Connection lost")
+                    Text(error)
+                        .font(.caption)
+                    Button("Retry") {
+                        Task { await model.connect() }
+                    }
+                }
+                .padding()
+                .background(Cinema2026.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .zIndex(200)
+            }
         }
         .background(Cinema2026.background.ignoresSafeArea())
         .preferredColorScheme(.dark)

@@ -203,6 +203,12 @@ public enum FeatureFlags {
     }
 
     /// P1-56: fetch remote flags from backend — call on app launch
+    /// P0 voice: LiveKit availability (checked from backend)
+    public static var liveKitVoiceEnabled: Bool { false }
+
+    /// P0 voice: Refresh LiveKit availability from backend
+    public static func refreshLiveKitAvailability(apiBaseURL: URL) async { }
+
     public static func fetchRemoteFlags(apiBaseURL: URL, authToken: String) async {
         var request = URLRequest(url: apiBaseURL.appendingPathComponent("api/feature-flags"))
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")

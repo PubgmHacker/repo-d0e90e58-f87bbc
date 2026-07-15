@@ -332,7 +332,3 @@ extension Color {
 }
 
 // MARK: - FeatureFlags stub (for PresenceBar, RaveCloneApp)
-enum FeatureFlags {
-    static var liveKitVoiceEnabled: Bool { false }
-    static func refreshLiveKitAvailability(apiBaseURL: URL) async { }
-}

@@ -76,3 +76,17 @@ struct PremiumButtonStyle: ButtonStyle {
 
 // Note: Color(hex:alpha:) is already defined in Plink/Extensions/Color+Theme.swift
 // Do not redeclare here — would cause 'Invalid redeclaration' + 'Ambiguous use'
+
+// MARK: - Rave TextField Style
+
+struct RaveTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.04))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .foregroundStyle(Cinema2026.text)
+    }
+}

@@ -173,7 +173,7 @@ struct RoomCardView: View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
                 // Пульсирующая зелёная точка
-                PulsingDot()
+                PulsingDot(color: .raveGreen)
                 Text(formattedParticipantCount)
                     .font(.caption.bold().monospacedDigit())
                     .foregroundColor(.raveTextPrimary)

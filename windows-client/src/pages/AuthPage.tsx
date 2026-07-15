@@ -35,39 +35,51 @@ export function AuthPage({ onAuth }: Props) {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>Plink</h1>
-        <p className="subtitle">Смотри вместе — Windows</p>
+        <div className="auth-logo">Plink</div>
+        <p className="subtitle">Watch together. Anywhere. Together.</p>
         <form onSubmit={handleSubmit}>
           {mode === 'signup' && (
-            <input
-              placeholder="Username (5-32 chars)"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
+            <>
+              <label htmlFor="username">Username</label>
+              <input
+                id="username"
+                placeholder="yourname"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                minLength={5}
+                maxLength={32}
+              />
+            </>
           )}
+          <label htmlFor="email">Email</label>
           <input
+            id="email"
             type="email"
-            placeholder="Email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
           />
+          <label htmlFor="password">Password</label>
           <input
+            id="password"
             type="password"
-            placeholder="Password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
+            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
           />
-          {error && <p className="error">{error}</p>}
-          <button type="submit" disabled={loading}>
-            {loading ? '...' : mode === 'signin' ? 'Войти' : 'Регистрация'}
+          {error && <p className="error banner" style={{ marginTop: 16 }}>{error}</p>}
+          <button type="submit" className="submit-btn" disabled={loading}>
+            {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
         <button className="link-btn" type="button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
-          {mode === 'signin' ? 'Создать аккаунт' : 'Уже есть аккаунт?'}
+          {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
         </button>
       </div>
     </div>

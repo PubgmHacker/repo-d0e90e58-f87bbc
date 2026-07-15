@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, youtubeMediaItem } from '../lib/api';
 import type { Friend, Room, TrendingVideo } from '../lib/types';
+import { IconPlay, IconSearch } from '../components/ui/Icons';
+import { HomeSkeleton } from '../components/ui/Skeleton';
 
 type HoverTarget =
   | { kind: 'room'; room: Room }
@@ -53,17 +55,22 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
 
   const filteredRooms = rooms.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()));
 
-  if (loading) return <div className="pro-loading">Loading home…</div>;
+  if (loading) return <HomeSkeleton />;
+
+  const hero = trending[0];
 
   return (
     <div className="pro-home">
       <div className="pro-search-row">
-        <input
-          className="pro-search"
-          placeholder="Search rooms, videos… (Ctrl+K)"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="pro-search-wrap">
+          <span className="search-icon"><IconSearch size={18} /></span>
+          <input
+            className="pro-search"
+            placeholder="Search rooms, videos…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
         <button type="button" className="pro-btn" onClick={onJoinPrompt}>Join by code</button>
       </div>
 
@@ -71,21 +78,28 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
 
       <section className="hero-banner">
         <div className="hero-video">
-          {trending[0]?.thumbnailURL && <img src={trending[0].thumbnailURL} alt="" />}
+          {hero?.thumbnailURL && <img src={hero.thumbnailURL} alt="" />}
           <div className="hero-overlay">
-            <h2>{trending[0]?.title ?? 'Watch together'}</h2>
-            <button type="button" className="pro-btn primary" onClick={() => trending[0] && createFromVideo(trending[0])}>
-              Quick Room
-            </button>
+            <h2>{hero?.title ?? 'Watch together with friends'}</h2>
+            <p>{hero?.channelTitle ?? 'Pick a video and start a sync room in one click'}</p>
+            {hero && (
+              <button type="button" className="pro-btn primary" onClick={() => createFromVideo(hero)}>
+                <IconPlay size={16} />
+                Quick Room
+              </button>
+            )}
           </div>
         </div>
       </section>
 
       <div className="pro-columns">
-        <section className="pro-column">
-          <h3>🔥 Trending</h3>
+        <section className="pro-column glass-panel">
+          <h3 className="section-label">
+            Trending
+            <span className="count">{trending.length}</span>
+          </h3>
           <div className="video-grid-pro">
-            {trending.slice(0, 9).map((v) => (
+            {trending.slice(0, 8).map((v) => (
               <button
                 key={v.id}
                 type="button"
@@ -94,18 +108,29 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
                 onMouseEnter={() => onHoverChange({ kind: 'video', video: v })}
                 onContextMenu={(e) => { e.preventDefault(); createFromVideo(v); }}
               >
-                {v.thumbnailURL && <img src={v.thumbnailURL} alt="" />}
-                <span>{v.title}</span>
+                <div className="thumb-wrap">
+                  {v.thumbnailURL && <img src={v.thumbnailURL} alt="" />}
+                  <div className="play-badge"><span><IconPlay size={18} /></span></div>
+                </div>
+                <span className="card-title">{v.title}</span>
               </button>
             ))}
           </div>
         </section>
 
-        <section className="pro-column">
-          <h3>🎬 Active Rooms</h3>
+        <section className="pro-column glass-panel">
+          <h3 className="section-label">
+            Active Rooms
+            <span className="count">{filteredRooms.length}</span>
+          </h3>
           <div className="room-list-pro">
             {filteredRooms.length === 0 ? (
-              <p className="muted">No active rooms</p>
+              <div className="empty-state">
+                <p>No active rooms yet</p>
+                <button type="button" className="pro-btn primary" onClick={() => hero && createFromVideo(hero)}>
+                  Start watching
+                </button>
+              </div>
             ) : (
               filteredRooms.map((room) => (
                 <button
@@ -116,19 +141,24 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
                   onMouseEnter={() => onHoverChange({ kind: 'room', room })}
                 >
                   <strong>{room.name}</strong>
-                  <span>Code: {room.code}</span>
-                  <span>{room.hostName}</span>
+                  <span className="room-meta">Host · {room.hostName}</span>
+                  <span className="room-code">{room.code}</span>
                 </button>
               ))
             )}
           </div>
         </section>
 
-        <section className="pro-column">
-          <h3>👥 Friends</h3>
+        <section className="pro-column glass-panel">
+          <h3 className="section-label">
+            Friends
+            <span className="count">{friends.length}</span>
+          </h3>
           <div className="friends-list-pro">
             {friends.length === 0 ? (
-              <p className="muted">No friends yet</p>
+              <div className="empty-state">
+                <p>Invite friends to watch together</p>
+              </div>
             ) : (
               friends.map((f) => (
                 <div
@@ -136,9 +166,15 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
                   className="friend-row-pro"
                   onMouseEnter={() => onHoverChange({ kind: 'friend', friend: f })}
                 >
-                  {f.avatarURL ? <img src={f.avatarURL} alt="" /> : <span className="avatar-fallback">{f.username[0]}</span>}
-                  <span>{f.username}</span>
-                  <span className={f.isOnline ? 'online-dot' : 'offline-dot'} />
+                  {f.avatarURL ? (
+                    <img src={f.avatarURL} alt="" />
+                  ) : (
+                    <span className="avatar-fallback">{f.username[0]?.toUpperCase()}</span>
+                  )}
+                  <span className="friend-name">{f.username}</span>
+                  <span className={`status-pill ${f.isOnline ? 'online' : 'offline'}`}>
+                    {f.isOnline ? 'Online' : 'Away'}
+                  </span>
                 </div>
               ))
             )}

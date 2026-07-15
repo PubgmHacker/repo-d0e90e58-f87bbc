@@ -15,7 +15,7 @@ export function DetailPane({ target, onJoinRoom }: Props) {
   if (!target) {
     return (
       <div className="detail-empty">
-        <p className="muted">Hover a room, friend, or video for preview</p>
+        <p>Hover a room, friend, or video for a quick preview</p>
       </div>
     );
   }

@@ -71,7 +71,7 @@ export default function App() {
     return () => cleanup?.();
   }, []);
 
-  if (booting) return <div className="page center">Plink Desktop…</div>;
+  if (booting) return <div className="page center">Loading Plink…</div>;
 
   if (screen === 'auth' || !user) {
     return (

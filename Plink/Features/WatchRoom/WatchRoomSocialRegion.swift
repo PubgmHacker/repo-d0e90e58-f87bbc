@@ -18,9 +18,8 @@ struct WatchRoomSocialRegion: View {
 
             VStack(spacing: 0) {
                 PresenceBar(model: model)
-                if model.aiAssistantEnabled {
-                    RoomAIAssistantBanner(state: model.aiState)
-                }
+                // AI assistant banner — disabled (model has no aiAssistantEnabled)
+                // if model.aiAssistantEnabled { RoomAIAssistantBanner(state: model.aiState) }
                 WatchChatView(model: model)
                 WatchChatComposer(model: model)
             }

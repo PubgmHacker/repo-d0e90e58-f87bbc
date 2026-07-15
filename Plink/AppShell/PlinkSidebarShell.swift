@@ -61,7 +61,7 @@ struct PlinkSidebarShell: View {
         case .home:
             DiscoveryHomeView(dependencies: dependencies)
         case .rooms:
-            RoomsHubView(dependencies: dependencies)
+            VStack { Text("Комнаты").font(.title) }
         case .ai:
             AIAssistantView()
         case .friends:

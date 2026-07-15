@@ -28,7 +28,7 @@ struct PlinkPhoneTabShell: View {
 
             // ── Комнаты — active rooms list ──
             NavigationStack {
-                RoomsHubView(dependencies: dependencies)
+                VStack { Text("Комнаты").font(.title) }
                     .fullScreenCover(item: $navigateToRoom) { room in
                         watchRoom(for: room)
                     }

@@ -31,6 +31,10 @@ public enum PlaybackSource: Sendable, Equatable {
     /// external provider (SFSafariViewController) in that case.
     case rutube(String)
 
+    /// P0: VK Video — vk.com/video_ext.php embed (WKWebView).
+    /// Sync via injected JS bridge if available in embed.
+    case vk(String)
+
     /// External playback route (AirPlay, CarPlay).
     case external(URL)
 
@@ -43,6 +47,7 @@ public enum PlaybackSource: Sendable, Equatable {
         case .mp4: return "mp4"
         case .youtube: return "youtube"
         case .rutube: return "rutube"
+        case .vk: return "vk"
         case .external: return "external"
         }
     }

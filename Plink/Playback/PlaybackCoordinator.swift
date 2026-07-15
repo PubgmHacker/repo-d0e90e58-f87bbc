@@ -51,6 +51,9 @@ public final class PlaybackCoordinator: AnyObject {
         if let rutube = currentController as? RutubePlaybackController {
             return rutube.embeddedView
         }
+        if let vk = currentController as? VKPlaybackController {
+            return vk.embeddedView
+        }
         return nil
     }
 
@@ -65,6 +68,7 @@ public final class PlaybackCoordinator: AnyObject {
             if let native = prev as? NativePlayerController { native.teardown() }
             if let embedded = prev as? EmbeddedPlaybackController { embedded.teardown() }
             if let rutube = prev as? RutubePlaybackController { rutube.teardown() }
+            if let vk = prev as? VKPlaybackController { vk.teardown() }
         }
         currentController = nil
 
@@ -83,6 +87,10 @@ public final class PlaybackCoordinator: AnyObject {
                 let rutube = RutubePlaybackController()
                 try await rutube.prepare(source)
                 controller = rutube
+            case .vk:
+                let vk = VKPlaybackController()
+                try await vk.prepare(source)
+                controller = vk
             }
             currentController = controller
             currentSource = source
@@ -98,6 +106,7 @@ public final class PlaybackCoordinator: AnyObject {
         if let native = currentController as? NativePlayerController { native.teardown() }
         if let embedded = currentController as? EmbeddedPlaybackController { embedded.teardown() }
         if let rutube = currentController as? RutubePlaybackController { rutube.teardown() }
+        if let vk = currentController as? VKPlaybackController { vk.teardown() }
         currentController = nil
         currentSource = nil
         lastError = nil

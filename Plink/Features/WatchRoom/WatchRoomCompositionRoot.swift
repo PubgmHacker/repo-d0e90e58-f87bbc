@@ -59,6 +59,10 @@ public enum WatchRoomCompositionRoot {
         if let rtId = extractRutubeVideoId(from: mediaItem.streamURL) {
             return .rutube(rtId)
         }
+        // VK Video (P0)
+        if let vkId = extractVKVideoId(from: mediaItem.streamURL) {
+            return .vk(vkId)
+        }
         // Direct stream URL → native AVPlayer
         let urlString = mediaItem.streamURL
         if let url = URL(string: urlString) {
@@ -107,6 +111,23 @@ public enum WatchRoomCompositionRoot {
             }
         }
 
+        return nil
+    }
+
+    /// P0: extract VK id from video_ext or video URL.
+    private static func extractVKVideoId(from url: String) -> String? {
+        let lower = url.lowercased()
+        guard lower.contains("vk.com") || lower.contains("vk.ru") else { return nil }
+        if lower.contains("video_ext.php") {
+            // keep query as the id
+            if let q = url.split(separator: "?").last { return String(q) }
+        }
+        // vk.com/video-123_456 or /video/123_456
+        if let range = lower.range(of: "/video") {
+            let tail = url[range.upperBound...]
+            let idPart = tail.split(separator: "/").first.map(String.init) ?? ""
+            if idPart.contains("_") || idPart.count > 3 { return idPart }
+        }
         return nil
     }
 

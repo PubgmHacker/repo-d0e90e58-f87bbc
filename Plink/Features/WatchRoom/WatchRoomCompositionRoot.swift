@@ -63,6 +63,10 @@ public enum WatchRoomCompositionRoot {
         if let vkId = extractVKVideoId(from: mediaItem.streamURL) {
             return .vk(vkId)
         }
+        // Cinema / generic web embeds (Kinopoisk, Ivi, Okko, browser, custom pages)
+        if let embedURL = makeEmbedURL(from: mediaItem) {
+            return .embed(embedURL)
+        }
         // Direct stream URL → native AVPlayer
         let urlString = mediaItem.streamURL
         if let url = URL(string: urlString) {
@@ -112,6 +116,34 @@ public enum WatchRoomCompositionRoot {
         }
 
         return nil
+    }
+
+    /// P1: Cinema & generic embed support.
+    /// Returns a URL suitable for loading in EmbedPlaybackController when the item
+    /// is a cinema service page, browser page, or any non-direct web content.
+    private static func makeEmbedURL(from mediaItem: MediaItem) -> URL? {
+        let urlString = mediaItem.streamURL
+        guard let url = URL(string: urlString) else { return nil }
+
+        let lower = urlString.lowercased()
+
+        // Explicit cinema services or known patterns
+        let cinemaHosts = ["kinopoisk", "ivi", "okko", "wink", "start", "premier", "smotrim", "kion", "netflix", "disney"]
+        let isCinema = cinemaHosts.contains { lower.contains($0) } || mediaItem.source.rawValue == "url" && !isDirectStream(urlString)
+
+        // Browser / custom pages that are not direct media files
+        let isBrowserOrCustom = lower.contains("browser") || mediaItem.source == .url && !isDirectStream(urlString)
+
+        if isCinema || isBrowserOrCustom || lower.contains("http") {
+            // Prefer the original page URL for cinema (user sees the real player + chrome)
+            return url
+        }
+        return nil
+    }
+
+    private static func isDirectStream(_ url: String) -> Bool {
+        let l = url.lowercased()
+        return l.hasSuffix(".mp4") || l.hasSuffix(".m3u8") || l.contains(".m3u8?") || l.contains("googlevideo")
     }
 
     /// P0: extract VK id from video_ext or video URL.

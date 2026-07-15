@@ -35,6 +35,12 @@ public enum PlaybackSource: Sendable, Equatable {
     /// Sync via injected JS bridge if available in embed.
     case vk(String)
 
+    /// P1: Generic web embed / cinema services (Kinopoisk, Ivi, Okko, etc.).
+    /// Loads arbitrary watch page URL in WKWebView and attempts basic
+    /// <video> element control + service-specific JS for sync.
+    /// App Store compliant (no extraction).
+    case embed(URL)
+
     /// External playback route (AirPlay, CarPlay).
     case external(URL)
 
@@ -48,6 +54,7 @@ public enum PlaybackSource: Sendable, Equatable {
         case .youtube: return "youtube"
         case .rutube: return "rutube"
         case .vk: return "vk"
+        case .embed: return "embed"
         case .external: return "external"
         }
     }

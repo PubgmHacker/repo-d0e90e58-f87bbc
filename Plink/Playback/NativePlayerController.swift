@@ -66,7 +66,7 @@ public final class NativePlayerController: PlaybackControlling {
         switch source {
         case .hls, .mp4, .external:
             provider = NativeHLSProvider()
-        case .youtube, .rutube, .vk:
+        case .youtube, .rutube, .vk, .embed:
             throw ProviderError.unsupportedSource  // unreachable
         }
         self.provider = provider

@@ -153,22 +153,9 @@ struct AIAssistantView: View {
 
             VStack(spacing: 18) {
                 ZStack {
-                    // 🔧 Premium: двойное кольцо вокруг иконки
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.bioAmber, Color.bioCoral],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 84, height: 84)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 38, weight: .bold))
-                        .foregroundColor(.white)
+                    // NEW: AI Companion Orb (Canvas-based, state-reactive)
+                    AICompanionOrb(state: isLoading ? .thinking : .idle, size: 100)
                 }
-                .shadow(color: Color.bioAmber.opacity(0.5), radius: 18, y: 6)
-                // glowPulse modifier was removed in cleanup — using static shadow instead
-                // To restore animation, use .shadow with .animation modifier
 
                 VStack(spacing: 8) {
                     Text("Что посмотреть?")
@@ -217,10 +204,12 @@ struct AIAssistantView: View {
     }
 
     private let quickPrompts = [
-        "Что посмотреть сегодня?",
-        "Лучшие новинки 2025",
-        "Подбери фильм на вечер",
-        "Фильм ужасов 2024",
+        "Что посмотреть на субботний вечер?",
+        "Лучшие новинки 2026",
+        "Подбери фильм для компании",
+        "Что популярно на YouTube?",
+        "Комедия для настроения",
+        "Научно-фантастический фильм",
     ]
 
     // MARK: - Input Bar

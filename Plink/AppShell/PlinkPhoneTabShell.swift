@@ -58,7 +58,8 @@ struct PlinkPhoneTabShell: View {
                     ),
                     onSignOut: {
                         Task {
-                            dependencies.authService.forceLocalSignOut()
+                            try? await dependencies.authService.signOut()
+                            NotificationCenter.default.post(name: .plinkSignedOut, object: nil)
                         }
                     }
                 )
@@ -70,8 +71,8 @@ struct PlinkPhoneTabShell: View {
         .toolbarBackground(Cinema2026.background.opacity(0.96), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .environmentObject(dependencies.apiClient)
-        .environmentObject(dependencies.friendManager)
-        .environmentObject(dependencies.dmChatService)
+        .environmentObject(dependencies.friendManager ?? FriendManager(api: dependencies.apiClient))
+        .environmentObject(dependencies.dmChatService ?? DMChatService(api: dependencies.apiClient))
     }
 
     // MARK: - Watch Room

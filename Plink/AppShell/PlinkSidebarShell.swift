@@ -67,7 +67,10 @@ struct PlinkSidebarShell: View {
         case .friends:
             FriendsView()
         case .settings:
-            SettingsView(authService: dependencies.authService)
+            ProfileView(
+                viewModel: ProfileViewModel(authService: dependencies.authService),
+                onSignOut: { Task { try? await dependencies.authService.signOut() } }
+            )
         }
     }
 }

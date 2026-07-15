@@ -30,6 +30,10 @@ struct DiscoveryHomeView: View {
                     HeroVideoCarousel()
                         .padding(.horizontal, 18)
 
+                    // Quick Room card
+                    quickRoomCard
+                        .padding(.horizontal, 18)
+
                     if !model.featured.isEmpty {
                         FeaturedCarousel(items: model.featured)
                     }
@@ -62,12 +66,62 @@ struct HomeHeader: View {
                 Text("Plink")
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(Cinema2026.text)
-                Text("Смотрите вместе")
+                Text("Смотрим вместе")
                     .font(.system(size: 14))
                     .foregroundStyle(Cinema2026.secondary)
             }
             Spacer()
+            Text("С кем смотрим?")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Cinema2026.accent)
         }
+    }
+}
+
+// MARK: - Quick Room Card
+
+extension DiscoveryHomeView {
+    private var quickRoomCard: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Cinema2026.accent, Color(red: 0.15, green: 0.85, blue: 0.64)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Cinema2026.background)
+            }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Быстрая комната")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Cinema2026.text)
+                Text("Создать или войти по коду")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Cinema2026.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Cinema2026.secondary)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Быстрая комната — создать или войти по коду")
     }
 }
 

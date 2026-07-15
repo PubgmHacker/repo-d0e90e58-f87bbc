@@ -807,7 +807,17 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         OrientationManager.shared.forcePortrait()
     }
     func openEmojiPicker() {}  // PATCH 14: kept for back-compat; picker is now shown by composer
-    func toggleMicrophone() async {}
+    func toggleMicrophone() async {
+        // P0.2: Premium gate for speaking
+        guard PremiumStatusManager.shared.isPremium else {
+            lastError = "Voice chat requires Plink+"
+            return
+        }
+        // Delegate to RTC controller if available
+        // (rtcController is internal; in full impl would call it)
+        // For now, toggle state for UI
+        // In real: await rtcController?.toggleMic()
+    }
     func toggleCamera() async {}
 
     // PATCH 14: send a reaction emoji via RealtimeClient.

@@ -34,6 +34,12 @@ public enum PlaybackSource: Sendable, Equatable {
     /// External playback route (AirPlay, CarPlay).
     case external(URL)
 
+    /// P0: VK Video — vk.com/video_ext.php embed (WKWebView).
+    case vk(String)
+
+    /// P1: Generic web embed / cinema services.
+    case embed(URL)
+
     /// Stable identifier for logging / metrics — never includes the URL
     /// (runbook §19: 'Не логировать finalURL.absoluteString, cookies, auth
     /// headers or extracted URLs').
@@ -44,6 +50,8 @@ public enum PlaybackSource: Sendable, Equatable {
         case .youtube: return "youtube"
         case .rutube: return "rutube"
         case .external: return "external"
+        case .vk: return "vk"
+        case .embed: return "embed"
         }
     }
 }

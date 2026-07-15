@@ -8,6 +8,7 @@ import SwiftUI
 struct PlinkAppShell: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selection: AppSection = .home
+    @State private var createPresented: Bool = false
     @State private var createIntent: CreateRoomIntent?
     @State private var createdRoom: Room?
 
@@ -18,14 +19,14 @@ struct PlinkAppShell: View {
             #if os(macOS)
             PlinkSidebarShell(
                 selection: $selection,
-                createIntent: $createIntent,
+                createPresented: $createPresented,
                 dependencies: dependencies
             )
             #else
             if horizontalSizeClass == .regular {
                 PlinkSidebarShell(
                     selection: $selection,
-                    createIntent: $createIntent,
+                    createPresented: $createPresented,
                     dependencies: dependencies
                 )
             } else {

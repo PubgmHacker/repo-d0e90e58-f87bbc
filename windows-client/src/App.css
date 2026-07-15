@@ -1356,6 +1356,170 @@ body {
 
 .netflix-hero-actions { display: flex; gap: 12px; align-items: center; }
 
+/* ═══ Hero Video Carousel (3 video banners) ═══ */
+.hero-video-carousel {
+  position: relative;
+  height: 480px;
+  margin: 0 calc(var(--inset-x) * -1) var(--section-gap);
+  border-radius: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.hero-video-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hero-video-backdrop video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.7) saturate(1.1);
+}
+
+.hero-video-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(14, 17, 19, 0.6) 70%, var(--bg) 100%);
+}
+
+.hero-video-dots {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+}
+
+.hero-video-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  border: none;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.hero-video-dot.active {
+  width: 24px;
+}
+
+.hero-video-content {
+  position: absolute;
+  left: var(--inset-x);
+  right: var(--inset-x);
+  bottom: 32px;
+  z-index: 2;
+  max-width: 600px;
+}
+
+.hero-video-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(22, 27, 30, 0.82);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #26D9A4;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.hero-video-badge .live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #26D9A4;
+  box-shadow: 0 0 8px #26D9A4;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.hero-video-title {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ECEBEA;
+  margin: 0 0 8px;
+  line-height: 1.1;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+.hero-video-subtitle {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 20px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.hero-video-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-video-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #2DE2E6 0%, #26D9A4 100%);
+  color: #0E1113;
+  font-weight: 700;
+  font-size: 15px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(45, 226, 230, 0.4), 0 0 40px rgba(45, 226, 230, 0.2);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-video-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(45, 226, 230, 0.4), 0 12px 32px rgba(45, 226, 230, 0.3);
+}
+
+.hero-video-primary:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.hero-video-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(22, 27, 30, 0.82);
+  backdrop-filter: blur(20px);
+  color: #ECEBEA;
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hero-video-secondary:hover {
+  background: rgba(34, 40, 42, 0.95);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.hero-video-secondary:active {
+  transform: scale(0.97);
+}
+
 .cinema-btn {
   display: inline-flex;
   align-items: center;

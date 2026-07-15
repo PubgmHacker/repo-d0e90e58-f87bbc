@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, youtubeMediaItem } from '../lib/api';
 import type { Friend, Room, TrendingVideo } from '../lib/types';
 import { LivingBackdrop } from '../components/cinema/LivingBackdrop';
+import { HeroVideoCarousel } from '../components/cinema/HeroVideoCarousel';
 import {
   AIEntryCard,
   EditorialCollections,
   FriendsRail,
   HomeHeader,
   LiveRoomsRail,
-  NetflixHero,
   StickyCreateCTA,
   TrendingRail,
 } from '../components/cinema/HomeSections';
@@ -91,11 +91,10 @@ export function ProHomePage({ onOpenRoom, onJoinPrompt, onOpenAI }: Props) {
 
         <HomeHeader />
 
-        {hero ? (
-          <NetflixHero video={hero} busy={busy === hero.id} onWatch={() => createFromVideo(hero)} />
-        ) : (
-          <div className="netflix-hero-skeleton glass-surface">Загрузка популярного…</div>
-        )}
+        <HeroVideoCarousel
+          onJoinPrompt={onJoinPrompt}
+          onWatchTogether={() => hero && createFromVideo(hero)}
+        />
 
         <AIEntryCard onTap={onOpenAI} />
 

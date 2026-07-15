@@ -36,7 +36,8 @@ struct ServiceSelectionView: View {
         var id: String { rawValue }
     }
 
-    private let videoServices: [VideoService] = [.youtube, .vk, .rutube, .netflix, .disney]
+    // App Store safe: exclude Netflix/Disney to avoid ToS reject risk (host login pattern for protected content)
+    private let videoServices: [VideoService] = [.youtube, .vk, .rutube]
     private let cinemaServices: [VideoService] = [.kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion]
 
     var body: some View {

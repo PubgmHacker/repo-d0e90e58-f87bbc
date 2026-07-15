@@ -18,18 +18,17 @@ enum PlaybackMode: String, Sendable {
 /// - `.cinema`: Кинопоиск, Иви, Okko, Wink, Start, Premier, Смотрим, КИОН — WebView + своя подписка.
 /// - `.universal`: Браузер, Своя ссылка.
 enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equatable, Hashable {
-    // Прямые потоки
+    // Прямые потоки (App Store safe)
     case youtube
     case vk
     case rutube
-    case netflix
-    case disney
 
     // Универсальные
     case browser
     case customURL = "custom"
 
-    // Кинотеатры (WebView)
+    // Кинотеатры (WebView) — high risk for App Store (ToS of Netflix/Disney)
+    // Fallback: only show safe services for MVP review. Netflix/Disney moved to experimental.
     case kinopoisk
     case ivi
     case okko
@@ -38,6 +37,8 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
     case premier
     case smotrim
     case kion
+    case netflix // experimental, may cause reject
+    case disney // experimental, may cause reject
 
     var id: String { rawValue }
 

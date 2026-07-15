@@ -11,7 +11,7 @@ struct WatchRoomSocialRegion: View {
     var body: some View {
         ZStack {
             // GPT-5.6 Final §4: theme at 38-48% intensity for chat surface
-            PlinkLivingBackground(theme: model.roomTheme, surface: .chat)
+            PlinkLivingBackground(theme: PlinkThemeCatalog.electricBlue, surface: .chat)
 
             // GPT-5.6 Final §4: opaque overlay for readability + Reduce Transparency
             Color.black.opacity(reduceTransparency ? 0.88 : 0.48)

@@ -58,19 +58,16 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            HomeTabContent(
-                onProfileTap: { selection = .settings },
-                onSwitchToAITab: nil,
-                onSwitchToJoinTab: nil
-            )
+            // Use DiscoveryHomeView as home content
+            DiscoveryHomeView(dependencies: dependencies)
         case .rooms:
-            RoomsTabContent()
+            RoomsHubView()
         case .ai:
             AIAssistantView()
         case .friends:
             FriendsView()
         case .settings:
-            SettingsTabContent(authService: dependencies.authService)
+            SettingsView()
         }
     }
 }

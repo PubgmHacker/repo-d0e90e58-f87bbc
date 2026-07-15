@@ -54,7 +54,7 @@ struct ProfileView: View {
                         profileCard(title: "Аккаунт", icon: "person.circle", action: { showEditProfile = true })
                         profileCard(title: "Подписка", icon: "crown", action: { showPaywall = true })
                         profileCard(title: "Приложение", icon: "app", action: { showSettings = true })
-                        if viewModel.isAdmin {
+                        if viewModel.user?.isAdmin == true {
                             profileCard(title: "Админ", icon: "shield", action: { /* open admin */ })
                             if viewModel.user?.isAdmin == true {
                                 Button("Тест push") {
@@ -1089,7 +1089,8 @@ struct WatchHistoryCard: View {
 }
 
 // MARK: - P0.2 New Profile Header and Cards (Apple ID / Telegram style)
-private var profileHeaderNew: some View {
+extension ProfileView {
+    var profileHeaderNew: some View {
     VStack(alignment: .leading, spacing: 12) {
         ZStack {
             Circle()
@@ -1122,13 +1123,13 @@ private var profileHeaderNew: some View {
         if let username = viewModel.user?.username {
             Text("@\(username)")
                 .font(.system(size: 14))
-                .foregroundStyle(Cinema2026.muted)
+                .foregroundStyle(Cinema2026.secondary)
         }
 
         if let email = viewModel.user?.email {
             Text(email)
                 .font(.system(size: 12))
-                .foregroundStyle(Cinema2026.muted)
+                .foregroundStyle(Cinema2026.secondary)
         }
 
         HStack(spacing: 8) {
@@ -1150,6 +1151,7 @@ private var profileHeaderNew: some View {
             }
         }
     }
+    }
 }
 
 // ringRotation moved into ProfileView struct (was top-level — illegal)
@@ -1164,7 +1166,7 @@ private func profileCard(title: String, icon: String, action: @escaping () -> Vo
                 .foregroundStyle(Cinema2026.text)
             Spacer()
             Image(systemName: "chevron.right")
-                .foregroundStyle(Cinema2026.muted)
+                .foregroundStyle(Cinema2026.secondary)
                 .font(.system(size: 14))
         }
         .padding(.horizontal, 16)

@@ -59,7 +59,7 @@ struct PresenceBar: View {
                         // Free users can only listen
                         Image(systemName: "speaker.wave.2.fill")
                             .font(.system(size: 16))
-                            .foregroundStyle(Cinema2026.muted)
+                            .foregroundStyle(Cinema2026.secondary)
                             .frame(width: 36, height: 36)
                             .background(Cinema2026.raised.opacity(0.5), in: Capsule())
                     }

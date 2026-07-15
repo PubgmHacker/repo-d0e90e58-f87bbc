@@ -108,6 +108,11 @@ final class HomeViewModel {
 
     func joinRoom(code: String, password: String? = nil) async throws -> Room {
         let room = try await roomService.joinRoom(code: code, password: password)
+        // P1: apply host-chosen theme for the guest
+        if let themeRaw = room.mediaItem?.appearanceTheme,
+           let theme = RoomTheme(rawValue: themeRaw) {
+            PremiumStatusManager.shared.selectedRoomTheme = theme
+        }
         rooms.insert(room, at: 0)
         return room
     }

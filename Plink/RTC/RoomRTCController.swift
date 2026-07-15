@@ -49,6 +49,7 @@ import Foundation
 import AVFoundation
 import Observation
 
+#if canImport(LiveKit)
 import LiveKit
 
 @MainActor
@@ -380,5 +381,17 @@ public enum RTConnectionState: Sendable, Equatable {
         }
     }
 }
+
+#else
+// Stub when LiveKit not available (for builds without SPM)
+@MainActor
+@Observable
+public final class RoomRTCController {
+    public private(set) var isConnected = false
+    // ... other stubs as needed
+    public func connect(roomId: String) async { }
+    public func toggleMicrophone() async { }
+}
+#endif
 
 

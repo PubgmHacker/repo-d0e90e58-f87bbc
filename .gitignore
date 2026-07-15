@@ -75,3 +75,6 @@ plink-backend/
 !.env.example
 
 Plink.xcodeproj/
+
+*.xcuserstate
+GoogleService-Info.plist

@@ -38,8 +38,10 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // P1.4 Firebase
+        // P1.4 Firebase - optional import for build without SDK
+        #if canImport(FirebaseCore)
         FirebaseApp.configure()
+        #endif
         return true
     }
 }

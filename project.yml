@@ -60,6 +60,9 @@ targets:
         DEVELOPMENT_TEAM: "2QAMUC4Z4P"
         CODE_SIGN_IDENTITY: "Apple Development"
         SUPPORTS_MACCATALYST: NO
+    frameworks:
+      - Metal.framework
+      - MetalKit.framework
     dependencies:
       - package: LiveKit
       - package: Firebase

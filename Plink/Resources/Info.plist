@@ -25,12 +25,6 @@
 		<string>audio</string>
 		<string>picture-in-picture</string>
 	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Plink uses the microphone for voice chat in watch parties (Plink+ feature only).</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Plink may use the camera for future video chat features.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Plink uses your photo library to let you choose a custom avatar.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

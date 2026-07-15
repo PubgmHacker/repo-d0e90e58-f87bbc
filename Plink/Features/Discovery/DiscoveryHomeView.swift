@@ -145,7 +145,7 @@ extension DiscoveryHomeView {
 
     private func promoBanner(title: String, subtitle: String, icon: String, isPremium: Bool = false) -> some View {
         let bannerAccent = isPremium ? Color(hex: 0xD7A750) : Cinema2026.accent
-        let bannerSecondary = isPremium ? Color(hex: 0xFF8FAB) : Color(red: 0.15, green: 0.85, blue: 0.64)
+        let _ = isPremium
 
         return HStack(spacing: 14) {
             // Icon

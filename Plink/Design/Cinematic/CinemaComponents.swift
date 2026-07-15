@@ -332,3 +332,61 @@ extension Color {
 }
 
 // MARK: - FeatureFlags stub (for PresenceBar, RaveCloneApp)
+
+// MARK: - Missing types for DiscoveryHomeView
+
+extension CinemaRadius {
+    static let poster: CGFloat = 12
+    static let card: CGFloat = 13
+    static let control: CGFloat = 14
+    static let panel: CGFloat = 20
+}
+
+// ParticipantAvatarStack — overlapping avatar circles
+struct ParticipantAvatarStack: View {
+    let participants: [String]  // avatar URLs or initials
+    
+    var body: some View {
+        HStack(spacing: -8) {
+            ForEach(Array(participants.prefix(3).enumerated()), id: \.offset) { index, p in
+                Circle()
+                    .fill(Cinema2026.accent.opacity(0.3))
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Text(String(p.prefix(1)).uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                    .overlay(Circle().stroke(Cinema2026.background, lineWidth: 2))
+                    .zIndex(Double(3 - index))
+            }
+        }
+    }
+}
+
+// hoverScale modifier
+extension View {
+    func hoverScale(_ active: Bool = true) -> some View {
+        self.scaleEffect(active ? 1.05 : 1.0)
+            .animation(.easeOut(duration: 0.2), value: active)
+    }
+}
+
+// ShimmerView — loading placeholder
+struct ShimmerView: View {
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Cinema2026.surface,
+                        Cinema2026.raised,
+                        Cinema2026.surface,
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .opacity(0.6)
+    }
+}

@@ -76,7 +76,7 @@ struct WatchRoomScreen: View {
             }
 
             // Offline / error state (P0)
-            if model.connectionState == .failed, let error = model.lastError {
+            if model.connectionState == .failed as RealtimeConnectionState, let error = model.lastError {
                 VStack {
                     Image(systemName: "wifi.slash")
                         .font(.largeTitle)

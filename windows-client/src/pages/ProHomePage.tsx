@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api, youtubeMediaItem } from '../lib/api';
 import type { Friend, Room, TrendingVideo } from '../lib/types';
-import { IconPlay, IconSearch } from '../components/ui/Icons';
+import { IconPlay, IconPlus } from '../components/ui/Icons';
 import { HomeSkeleton } from '../components/ui/Skeleton';
+import { detectPlatform } from '../lib/platform';
 
 type HoverTarget =
   | { kind: 'room'; room: Room }
@@ -16,13 +17,15 @@ type Props = {
   onJoinPrompt: () => void;
 };
 
+const GENRES = ['YouTube', 'Adventure', 'Together', 'Live'];
+
 export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) {
   const [trending, setTrending] = useState<TrendingVideo[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const isMac = detectPlatform() === 'mac';
 
   useEffect(() => {
     (async () => {
@@ -53,134 +56,144 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
     }
   }
 
-  const filteredRooms = rooms.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()));
-
+  const filteredRooms = rooms;
   if (loading) return <HomeSkeleton />;
 
   const hero = trending[0];
+  const onlineFriends = friends.filter((f) => f.isOnline).length;
 
   return (
-    <div className="pro-home">
-      <div className="pro-search-row">
-        <div className="pro-search-wrap">
-          <span className="search-icon"><IconSearch size={18} /></span>
-          <input
-            className="pro-search"
-            placeholder="Search rooms, videos…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <button type="button" className="pro-btn" onClick={onJoinPrompt}>Join by code</button>
-      </div>
-
+    <div className="discovery-home">
       {error && <p className="error banner">{error}</p>}
 
-      <section className="hero-banner">
-        <div className="hero-video">
+      {/* Hero — macOS Steam / Windows Disney+ style */}
+      <section className={`hero-stage ${isMac ? 'hero-mac' : 'hero-win'}`}>
+        <div className="hero-backdrop">
           {hero?.thumbnailURL && <img src={hero.thumbnailURL} alt="" />}
-          <div className="hero-overlay">
-            <h2>{hero?.title ?? 'Watch together with friends'}</h2>
-            <p>{hero?.channelTitle ?? 'Pick a video and start a sync room in one click'}</p>
-            {hero && (
-              <button type="button" className="pro-btn primary" onClick={() => createFromVideo(hero)}>
-                <IconPlay size={16} />
-                Quick Room
+          <div className="hero-gradient" />
+        </div>
+
+        <div className="hero-content">
+          <div className="hero-main">
+            <div className="genre-pills">
+              {GENRES.map((g) => (
+                <span key={g} className="genre-pill">{g}</span>
+              ))}
+              <button type="button" className="genre-pill add" aria-label="Add tag"><IconPlus size={12} /></button>
+            </div>
+            <h1 className="hero-title">{hero?.title ?? 'Watch together'}</h1>
+            <p className="hero-meta">
+              {hero?.channelTitle && <span>{hero.channelTitle}</span>}
+              <span className="match-badge">Live sync</span>
+              {onlineFriends > 0 && <span>{onlineFriends} friends online</span>}
+            </p>
+            <div className="hero-actions">
+              <button type="button" className="pro-btn primary hero-play" onClick={() => hero && createFromVideo(hero)}>
+                <IconPlay size={18} />
+                Play now
               </button>
-            )}
+              <button type="button" className="pro-btn" onClick={onJoinPrompt}>Join by code</button>
+            </div>
           </div>
+
+          {isMac && hero && (
+            <aside className="hero-info-card glass-panel">
+              <h3>{hero.title}</h3>
+              <p className="muted">{hero.channelTitle ?? 'Trending on Plink'}</p>
+              <div className="hero-info-actions">
+                <button type="button" className="pro-btn primary" onClick={() => createFromVideo(hero)}>
+                  Start room
+                </button>
+              </div>
+              <div className="hero-thumbs">
+                {trending.slice(1, 3).map((v) => (
+                  <button key={v.id} type="button" className="hero-thumb" onClick={() => createFromVideo(v)}>
+                    {v.thumbnailURL && <img src={v.thumbnailURL} alt="" />}
+                  </button>
+                ))}
+              </div>
+            </aside>
+          )}
         </div>
       </section>
 
-      <div className="pro-columns">
-        <section className="pro-column glass-panel">
-          <h3 className="section-label">
-            Trending
-            <span className="count">{trending.length}</span>
-          </h3>
-          <div className="video-grid-pro">
-            {trending.slice(0, 8).map((v) => (
+      {/* Horizontal rails — iOS Discovery + refs */}
+      <section className="content-rail">
+        <div className="rail-header">
+          <h2>Trending</h2>
+          <span className="rail-count">{trending.length}</span>
+        </div>
+        <div className="rail-scroll">
+          {trending.slice(0, 12).map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              className="rail-card"
+              onClick={() => createFromVideo(v)}
+              onMouseEnter={() => onHoverChange({ kind: 'video', video: v })}
+            >
+              <div className="rail-card-img">
+                {v.thumbnailURL && <img src={v.thumbnailURL} alt="" />}
+                <span className="rail-play"><IconPlay size={20} /></span>
+              </div>
+              <span className="rail-card-title">{v.title}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="content-rail">
+        <div className="rail-header">
+          <h2>Active rooms</h2>
+          <span className="rail-count">{filteredRooms.length}</span>
+        </div>
+        <div className="rail-scroll rooms-rail">
+          {filteredRooms.length === 0 ? (
+            <div className="empty-state glass-panel">
+              <p>No active rooms — start one from Trending</p>
+            </div>
+          ) : (
+            filteredRooms.map((room) => (
               <button
-                key={v.id}
+                key={room.id}
                 type="button"
-                className="video-card-pro"
-                onClick={() => createFromVideo(v)}
-                onMouseEnter={() => onHoverChange({ kind: 'video', video: v })}
-                onContextMenu={(e) => { e.preventDefault(); createFromVideo(v); }}
+                className="room-rail-card glass-panel"
+                onClick={() => onOpenRoom(room)}
+                onMouseEnter={() => onHoverChange({ kind: 'room', room })}
               >
-                <div className="thumb-wrap">
-                  {v.thumbnailURL && <img src={v.thumbnailURL} alt="" />}
-                  <div className="play-badge"><span><IconPlay size={18} /></span></div>
-                </div>
-                <span className="card-title">{v.title}</span>
+                <span className="live-dot" />
+                <strong>{room.name}</strong>
+                <span className="muted">{room.hostName}</span>
+                <span className="room-code">{room.code}</span>
               </button>
+            ))
+          )}
+        </div>
+      </section>
+
+      {friends.length > 0 && (
+        <section className="content-rail">
+          <div className="rail-header">
+            <h2>Friends</h2>
+            <span className="rail-count">{friends.length}</span>
+          </div>
+          <div className="friends-row">
+            {friends.map((f) => (
+              <div
+                key={f.id}
+                className="friend-chip glass-panel"
+                onMouseEnter={() => onHoverChange({ kind: 'friend', friend: f })}
+              >
+                {f.avatarURL ? <img src={f.avatarURL} alt="" /> : <span>{f.username[0]}</span>}
+                <span>{f.username}</span>
+                <span className={`status-pill ${f.isOnline ? 'online' : 'offline'}`}>
+                  {f.isOnline ? 'Online' : 'Away'}
+                </span>
+              </div>
             ))}
           </div>
         </section>
-
-        <section className="pro-column glass-panel">
-          <h3 className="section-label">
-            Active Rooms
-            <span className="count">{filteredRooms.length}</span>
-          </h3>
-          <div className="room-list-pro">
-            {filteredRooms.length === 0 ? (
-              <div className="empty-state">
-                <p>No active rooms yet</p>
-                <button type="button" className="pro-btn primary" onClick={() => hero && createFromVideo(hero)}>
-                  Start watching
-                </button>
-              </div>
-            ) : (
-              filteredRooms.map((room) => (
-                <button
-                  key={room.id}
-                  type="button"
-                  className="room-card-pro"
-                  onClick={() => onOpenRoom(room)}
-                  onMouseEnter={() => onHoverChange({ kind: 'room', room })}
-                >
-                  <strong>{room.name}</strong>
-                  <span className="room-meta">Host · {room.hostName}</span>
-                  <span className="room-code">{room.code}</span>
-                </button>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="pro-column glass-panel">
-          <h3 className="section-label">
-            Friends
-            <span className="count">{friends.length}</span>
-          </h3>
-          <div className="friends-list-pro">
-            {friends.length === 0 ? (
-              <div className="empty-state">
-                <p>Invite friends to watch together</p>
-              </div>
-            ) : (
-              friends.map((f) => (
-                <div
-                  key={f.id}
-                  className="friend-row-pro"
-                  onMouseEnter={() => onHoverChange({ kind: 'friend', friend: f })}
-                >
-                  {f.avatarURL ? (
-                    <img src={f.avatarURL} alt="" />
-                  ) : (
-                    <span className="avatar-fallback">{f.username[0]?.toUpperCase()}</span>
-                  )}
-                  <span className="friend-name">{f.username}</span>
-                  <span className={`status-pill ${f.isOnline ? 'online' : 'offline'}`}>
-                    {f.isOnline ? 'Online' : 'Away'}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-      </div>
+      )}
     </div>
   );
 }

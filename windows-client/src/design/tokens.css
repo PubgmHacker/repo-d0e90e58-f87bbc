@@ -1,0 +1,61 @@
+/* Plink Desktop — iOS Cinema2026 + bioluminescent tokens */
+:root {
+  /* Cinema2026 (Discovery / Auth shell) */
+  --void: #0e1113;
+  --bg: #0e1113;
+  --surface: #171b1e;
+  --raised: #222729;
+  --divider: #343a3b;
+  --text: #ecebea;
+  --text-secondary: #a6acad;
+  --text-tertiary: #6e7578;
+
+  /* iOS bio accent spectrum */
+  --accent: #5ab09d;
+  --accent-bright: #2de2e6;
+  --accent-deep: #0eb5c9;
+  --accent-pressed: #488f7c;
+  --live: #5ab09d;
+  --amber: #d7a750;
+  --danger: #d14b45;
+
+  /* Cinematic purple (room / premium) */
+  --plink: #a970ff;
+  --gradient-accent: linear-gradient(135deg, #5ab09d 0%, #488f7c 100%);
+  --gradient-bio: linear-gradient(135deg, #2de2e6 0%, #26d9a4 100%);
+  --gradient-hero: linear-gradient(180deg, transparent 0%, rgba(14, 17, 19, 0.4) 45%, rgba(14, 17, 19, 0.95) 100%);
+
+  /* Glass */
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-strong: rgba(22, 27, 30, 0.82);
+
+  /* Layout */
+  --sidebar-w: 220px;
+  --sidebar-collapsed: 72px;
+  --detail-w: 360px;
+  --titlebar-h: 52px;
+  --radius-poster: 12px;
+  --radius-control: 14px;
+  --radius-panel: 20px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable', system-ui, sans-serif;
+
+  /* macOS ref — warm sidebar highlight */
+  --mac-accent: #ff7a45;
+  --mac-accent-glow: rgba(255, 122, 69, 0.25);
+
+  /* Windows ref — teal hero */
+  --win-accent: #2de2e6;
+  --win-accent-glow: rgba(45, 226, 230, 0.2);
+}
+
+.platform-mac {
+  --nav-accent: var(--mac-accent);
+  --nav-accent-glow: var(--mac-accent-glow);
+}
+
+.platform-win,
+.platform-other {
+  --nav-accent: var(--win-accent);
+  --nav-accent-glow: var(--win-accent-glow);
+}

@@ -17,6 +17,7 @@ export function RoomPage({ room, userId, onLeave, onPopOut }: Props) {
   const [connected, setConnected] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
+  const [chatOpen, setChatOpen] = useState(true);
   const clientRef = useRef<PlinkRealtimeClient | null>(null);
   const videoId = room.mediaItem?.videoId;
 
@@ -67,62 +68,85 @@ export function RoomPage({ room, userId, onLeave, onPopOut }: Props) {
   }
 
   return (
-    <div className="page room-page">
-      <header className="top-bar">
-        <button onClick={onLeave}>← Назад</button>
-        <div>
-          <strong>{room.name}</strong>
-          <span className="muted"> Код: {room.code}</span>
-        </div>
-        <div className="room-toolbar">
-          {onPopOut && <button type="button" onClick={onPopOut} title="Mini player">Pop out</button>}
-          <span className={connected ? 'status ok' : 'status'}>{connected ? 'Online' : 'Offline'}</span>
-        </div>
-      </header>
+    <div className="cinematic-room">
+      <div className="player-stage">
+        {embedUrl ? (
+          <iframe
+            className="player-iframe"
+            title={room.name}
+            src={embedUrl}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <div className="player-placeholder">No video selected</div>
+        )}
 
-      {error && <p className="error banner">{error}</p>}
-
-      <div className="room-layout">
-        <div className="player-pane">
-          {embedUrl ? (
-            <iframe
-              title={room.name}
-              src={embedUrl}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
-            <div className="player-placeholder">Видео не выбрано</div>
-          )}
-          <div className="presence-bar">
-            {participants.map((p) => (
-              <span key={p.userId} className="presence-chip">
-                {p.avatarURL ? <img src={p.avatarURL} alt="" /> : <span className="avatar-fallback">{p.username[0]}</span>}
-                {p.username}
+        {/* Glass overlay — horizontal player ref */}
+        <div className="player-overlay">
+          <div className="player-top-bar glass-pill">
+            <button type="button" className="overlay-btn" onClick={onLeave} aria-label="Close">✕</button>
+            <span className="overlay-title">{room.name}</span>
+            <div className="overlay-top-actions">
+              {onPopOut && (
+                <button type="button" className="overlay-btn" onClick={onPopOut}>Pop out</button>
+              )}
+              <span className={`sync-pill ${connected ? 'live' : ''}`}>
+                {connected ? 'Synced' : 'Connecting…'}
               </span>
-            ))}
+            </div>
+          </div>
+
+          <div className="player-bottom glass-pill">
+            <div className="player-meta">
+              <strong>{room.name}</strong>
+              <span className="muted">Code {room.code}</span>
+            </div>
+            <div className="player-progress">
+              <div className="progress-track"><div className="progress-fill" style={{ width: '35%' }} /></div>
+            </div>
+            <div className="player-pills">
+              <button type="button" className="meta-pill" onClick={() => setChatOpen((o) => !o)}>
+                Chat {messages.length > 0 && `(${messages.length})`}
+              </button>
+              <button type="button" className="meta-pill">Participants ({participants.length})</button>
+              <button type="button" className="meta-pill">Sync</button>
+            </div>
           </div>
         </div>
-
-        <aside className="chat-pane">
-          <h4>Чат</h4>
-          <div className="chat-messages">
-            {messages.map((m) => (
-              <div key={m.id} className={m.senderID === userId ? 'msg mine' : 'msg'}>
-                <p>{m.text}</p>
-              </div>
-            ))}
-          </div>
-          <form className="chat-composer" onSubmit={sendMessage}>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Сообщение..."
-            />
-            <button type="submit">→</button>
-          </form>
-        </aside>
       </div>
+
+      {error && <p className="error banner room-error">{error}</p>}
+
+      <aside className={`room-chat-panel ${chatOpen ? 'open' : ''}`}>
+        <header className="chat-panel-header">
+          <h4>Live chat</h4>
+          <button type="button" className="overlay-btn" onClick={() => setChatOpen(false)}>✕</button>
+        </header>
+        <div className="presence-bar">
+          {participants.map((p) => (
+            <span key={p.userId} className="presence-chip">
+              {p.avatarURL ? <img src={p.avatarURL} alt="" /> : <span>{p.username[0]}</span>}
+              {p.username}
+            </span>
+          ))}
+        </div>
+        <div className="chat-messages">
+          {messages.map((m) => (
+            <div key={m.id} className={m.senderID === userId ? 'msg mine' : 'msg'}>
+              <p>{m.text}</p>
+            </div>
+          ))}
+        </div>
+        <form className="chat-composer" onSubmit={sendMessage}>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Message…"
+          />
+          <button type="submit" className="pro-btn primary">Send</button>
+        </form>
+      </aside>
     </div>
   );
 }

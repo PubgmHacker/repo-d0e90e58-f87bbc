@@ -61,7 +61,7 @@
       }
     },
     "security": {
-      "csp": "default-src 'self'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; connect-src 'self' https://plink-backend-production-ef31.up.railway.app wss://plink-backend-production-ef31.up.railway.app https://*.livekit.cloud wss://*.livekit.cloud http://localhost:5173 ipc:; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://*.youtube-nocookie.com https://www.youtube-nocookie.com"
+      "csp": "default-src 'self'; img-src 'self' https: data: blob: https://image.tmdb.org https://img.youtube.com https://i.ytimg.com; media-src 'self' https: blob:; connect-src 'self' https://plink-backend-production-ef31.up.railway.app wss://plink-backend-production-ef31.up.railway.app https://*.livekit.cloud wss://*.livekit.cloud http://localhost:5173 ipc:; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://*.youtube-nocookie.com https://www.youtube-nocookie.com"
     },
     "systemTray": {
       "iconPath": "icons/icon.png",

@@ -1,9 +1,10 @@
-// Plink/AppShell/PlinkSidebarShell.swift — GPT-5.6 V4 (fixed)
+// Plink/AppShell/PlinkSidebarShell.swift — §4 Final Architecture
+
 import SwiftUI
 
 struct PlinkSidebarShell: View {
     @Binding var selection: AppSection
-    @Binding var createIntent: CreateRoomIntent?
+    @Binding var createPresented: Bool
     let dependencies: AppDependencies
 
     var body: some View {
@@ -15,17 +16,27 @@ struct PlinkSidebarShell: View {
                         .foregroundStyle(Cinema2026.text)
                         .listRowBackground(Color.clear)
                 }
+
                 Section("Смотреть") {
-                    nav(.home); nav(.rooms); nav(.ai); nav(.friends)
+                    nav(.home)
+                    nav(.rooms)
+                    nav(.ai)
+                    nav(.friends)
                 }
+
                 Section {
-                    Button { createIntent = .chooseService } label: {
+                    Button {
+                        createPresented = true
+                    } label: {
                         Label("Создать комнату", systemImage: "plus.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Cinema2026.accent)
                 }
-                Section { nav(.profile) }
+
+                Section {
+                    nav(.settings)
+                }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
             .scrollContentBackground(.hidden)
@@ -47,18 +58,19 @@ struct PlinkSidebarShell: View {
     private func detail(for section: AppSection) -> some View {
         switch section {
         case .home:
-            VStack { Text("Главная").font(.largeTitle.bold()).foregroundStyle(Cinema2026.text) }
-                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Cinema2026.background)
+            // Use DiscoveryHomeView as home content
+            DiscoveryHomeView(dependencies: dependencies)
         case .rooms:
-            VStack { Text("Комнаты").font(.largeTitle.bold()).foregroundStyle(Cinema2026.text) }
-                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Cinema2026.background)
+            RoomsHubView(dependencies: dependencies)
         case .ai:
             AIAssistantView()
         case .friends:
-            VStack { Text("Друзья").font(.largeTitle.bold()).foregroundStyle(Cinema2026.text) }
-                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Cinema2026.background)
-        case .profile:
-            SettingsView(authService: dependencies.authService)
+            FriendsView()
+        case .settings:
+            ProfileView(
+                viewModel: ProfileViewModel(authService: dependencies.authService),
+                onSignOut: { Task { try? await dependencies.authService.signOut() } }
+            )
         }
     }
 }

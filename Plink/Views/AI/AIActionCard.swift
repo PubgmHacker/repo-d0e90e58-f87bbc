@@ -1,9 +1,27 @@
 // Plink/Views/AI/AIActionCard.swift
 //
 // AI Companion Pro — Confirm Actions UI Component
-// Uses AIProposedAction from V4/PlinkV4BackendBridge.swift (type: String)
+// Renders proposed AI actions (seek/pause/play) with confirm/cancel buttons.
 
 import SwiftUI
+
+// MARK: - AI Action Model
+
+struct AIProposedAction: Identifiable, Equatable {
+    let id = UUID()
+    let type: ActionType
+    let timestamp: TimeInterval?  // for seek
+    let description: String
+    let confirmationId: String?  // backend ID for confirm endpoint
+
+    enum ActionType: String, Codable {
+        case seek
+        case pause
+        case play
+        case createRoom
+        case buildQueue
+    }
+}
 
 // MARK: - AI Action Card View
 
@@ -42,7 +60,7 @@ struct AIActionCard: View {
                     .textCase(.uppercase)
                     .tracking(0.5)
 
-                Text(action.payloadPreview?.title ?? action.type)
+                Text(action.description)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Cinema2026.text)
                     .lineLimit(2)
@@ -96,15 +114,15 @@ struct AIActionCard: View {
         )
     }
 
-    // MARK: - Action icon (based on V4 string type)
+    // MARK: - Action icon
 
     private var actionIcon: String {
         switch action.type {
-        case "seek", "create_room": return "forward.fill"
-        case "pause": return "pause.fill"
-        case "play": return "play.fill"
-        case "build_queue": return "list.bullet.rectangle"
-        default: return "sparkles"
+        case .seek: return "forward.fill"
+        case .pause: return "pause.fill"
+        case .play: return "play.fill"
+        case .createRoom: return "plus.circle.fill"
+        case .buildQueue: return "list.bullet.rectangle"
         }
     }
 }
@@ -124,29 +142,35 @@ final class AIActionExecutor {
         guard let roomModel else { return }
 
         switch action.type {
-        case "seek":
-            await roomModel.sendSeekCommand(to: 0)
-            AnalyticsService.shared.trackAIActionExecuted(type: "seek", timestamp: 0)
+        case .seek:
+            if let timestamp = action.timestamp {
+                await roomModel.sendSeekCommand(to: timestamp)
+                AnalyticsService.shared.trackAIActionExecuted(type: "seek", timestamp: timestamp)
+            }
 
-        case "pause":
+        case .pause:
             roomModel.sendPauseCommand()
             AnalyticsService.shared.trackAIActionExecuted(type: "pause", timestamp: nil)
 
-        case "play":
+        case .play:
             await roomModel.sendPlayCommand()
             AnalyticsService.shared.trackAIActionExecuted(type: "play", timestamp: nil)
 
-        default:
+        case .createRoom, .buildQueue:
+            // Handle via callback (these need UI navigation)
             break
         }
 
         // Confirm with backend if confirmationId exists
-        if !action.confirmationId.isEmpty {
-            await confirmWithBackend(confirmationId: action.confirmationId)
+        if let confirmationId = action.confirmationId {
+            await confirmWithBackend(confirmationId: confirmationId)
         }
     }
 
     private func confirmWithBackend(confirmationId: String) async {
+        // POST /api/ai/confirm-action { confirmationId }
+        // TODO: add confirmAIAction to APIClient when backend endpoint is wired
+        // For now, fire-and-forget via URLSession
         guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/ai/confirm-action") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -174,13 +198,29 @@ extension AnalyticsService {
 // MARK: - Preview
 
 #if DEBUG
-#Preview("AI Action Card") {
+#Preview("AI Action Card — Seek") {
     AIActionCard(
         action: AIProposedAction(
-            type: "seek",
-            confirmationId: "test-id",
-            expiresAt: nil,
-            payloadPreview: AIPayloadPreview(title: "Перемотать на 20:34?", privacy: nil, queueCount: nil)
+            type: .seek,
+            timestamp: 1234.5,
+            description: "Перемотать на 20:34 где главный момент?",
+            confirmationId: nil
+        ),
+        onConfirm: { print("Confirmed") },
+        onDismiss: { print("Dismissed") }
+    )
+    .padding()
+    .background(Cinema2026.background)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("AI Action Card — Pause") {
+    AIActionCard(
+        action: AIProposedAction(
+            type: .pause,
+            timestamp: nil,
+            description: "Поставить паузу для обсуждения сцены?",
+            confirmationId: nil
         ),
         onConfirm: { print("Confirmed") },
         onDismiss: { print("Dismissed") }

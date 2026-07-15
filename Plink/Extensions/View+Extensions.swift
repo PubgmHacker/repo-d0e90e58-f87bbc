@@ -8,10 +8,8 @@ extension View {
         modifier(ShimmerModifier(active: active))
     }
 
-    /// Скрывает клавиатуру при тапе по фону. Применять к ZStack-фону экрана.
-    func dismissKeyboardOnTap() -> some View {
-        modifier(DismissKeyboardOnTapModifier())
-    }
+    /// dismissKeyboardOnTap() is defined in PremiumComponents.swift
+    /// (using UIApplication.shared.sendAction instead of custom modifier)
 
     /// Стандартный модификатор для экранов с текстовыми полями:
     /// свайп вниз по скроллу + тап по фону скрывают клавиатуру.
@@ -141,15 +139,8 @@ struct ShimmerGradientTextModifier: ViewModifier {
     }
 }
 
-extension View {
-    /// Переливающийся градиентный текст с анимацией 3.5 сек (cyan→emerald спектр).
-    func shimmerGradientText(colors: [Color] = [
-        Color.bioCyan, Color.bioEmerald,
-        Color.bioTeal, Color.bioCyan
-    ]) -> some View {
-        modifier(ShimmerGradientTextModifier(colors: colors))
-    }
-}
+// shimmerGradientText(colors:) is defined in PremiumComponents.swift
+// (using LinearGradient foregroundStyle instead of custom modifier)
 
 // MARK: - Animated Stroke Modifier (пульсирующая обводка)
 /// Вращает AngularGradient вокруг центра контента — обводка пульсирует.

@@ -107,20 +107,4 @@ struct BubbleShape: Shape {
     }
 }
 
-// Helper to load custom PNG emoji from bundle (for this file)
-struct EmojiAssetImage: View {
-    let name: String
-    let pack: String
 
-    var body: some View {
-        let packDir = pack.lowercased().replacingOccurrences(of: "+", with: "")
-        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Emojis/\(packDir)"),
-           let data = try? Data(contentsOf: url),
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-        } else {
-            Image(systemName: "face.smiling")
-        }
-    }
-}

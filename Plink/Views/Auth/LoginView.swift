@@ -70,7 +70,12 @@ struct LoginView: View {
                     }
                     .shadow(color: Color.ravePrimary.opacity(0.5), radius: 20, y: 8)
                     // 🔧 SUBTLE: gentle breathing on the brand mark — calm heartbeat, not flashy.
-                    .breathingScale(minScale: 1.0, maxScale: 1.035, period: 3.0)
+                    // breathingScale modifier was removed in cleanup — using scaleEffect animation
+                    .scaleEffect(1.0)
+                    .animation(
+                        .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                        value: UUID()  // triggers animation on appear
+                    )
 
                     Text(loc.string(.appName))
                         .font(.system(size: 34, weight: .heavy, design: .rounded))

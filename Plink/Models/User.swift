@@ -80,18 +80,21 @@ struct User: Codable, Identifiable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, username, email, avatarURL
+        case avatarData
         case displayName
         case coverURL
         case isOnline, isPremium, role, createdAt
     }
 
     init(id: String, username: String, email: String, avatarURL: String?,
+         avatarData: String? = nil,
          displayName: String? = nil, coverURL: String? = nil,
          isOnline: Bool, isPremium: Bool, role: String? = nil, createdAt: Date) {
         self.id = id
         self.username = username
         self.email = email
         self.avatarURL = avatarURL
+        self.avatarData = avatarData
         self.displayName = displayName
         self.coverURL = coverURL
         self.isOnline = isOnline
@@ -106,6 +109,7 @@ struct User: Codable, Identifiable, Sendable {
         username = try container.decode(String.self, forKey: .username)
         email = try container.decode(String.self, forKey: .email)
         avatarURL = try container.decodeIfPresent(String.self, forKey: .avatarURL)
+        avatarData = try container.decodeIfPresent(String.self, forKey: .avatarData)
         // 🔧 v11: optional fields, fall back gracefully on old backends
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
         coverURL = try container.decodeIfPresent(String.self, forKey: .coverURL)
@@ -121,6 +125,7 @@ struct User: Codable, Identifiable, Sendable {
         try container.encode(username, forKey: .username)
         try container.encode(email, forKey: .email)
         try container.encodeIfPresent(avatarURL, forKey: .avatarURL)
+        try container.encodeIfPresent(avatarData, forKey: .avatarData)
         try container.encodeIfPresent(displayName, forKey: .displayName)
         try container.encodeIfPresent(coverURL, forKey: .coverURL)
         try container.encode(isOnline, forKey: .isOnline)

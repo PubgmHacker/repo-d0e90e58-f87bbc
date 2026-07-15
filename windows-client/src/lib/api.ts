@@ -24,7 +24,15 @@ async function request<T>(
     if (token) headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (err) {
+    const hint = err instanceof TypeError
+      ? ' (сеть/CORS — обнови бэкенд и пересобери .app)'
+      : '';
+    throw new Error(`Load failed${hint}`);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `HTTP ${res.status}`);

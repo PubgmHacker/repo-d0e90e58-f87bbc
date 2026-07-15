@@ -94,12 +94,13 @@ struct ChatMessage: Codable, Identifiable, Sendable {
         (senderDisplayName?.isEmpty == false) ? senderDisplayName! : senderName
     }
 
-    /// 🔧 v10: Typed accessor for the bubble style. Defensive — unknown values
-    /// (e.g. backend adds a new style before client is updated) fall back to
-    /// `.default` so we never crash on rendering.
-    var effectiveBubbleStyle: BubbleStyle {
-        BubbleStyle.from(bubbleStyle)
-    }
+    /// 🔧 v10 → V5: bubble style ID is now used directly as a string.
+    /// The old `BubbleStyle` enum and `effectiveBubbleStyle` accessor have been
+    /// removed. Use `BubbleStyleRegistry.safeDescriptor(id: message.bubbleStyle)`
+    /// to resolve the descriptor for rendering. Legacy backend IDs (`default`,
+    /// `cute_duck`, `neon_cyber`, `admin_bubble`) are migrated automatically
+    /// via `BubbleStyleRegistry.migrateLegacyID(_:)`.
+    var bubbleStyleID: String? { bubbleStyle }
 
     var timeString: String {
         timestamp.formatted(.dateTime.hour().minute())

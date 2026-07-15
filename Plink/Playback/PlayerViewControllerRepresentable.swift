@@ -25,6 +25,29 @@ public struct PlayerSurfaceView: View {
                 PlayerViewControllerRepresentable(controller: vc)
             } else if let embedded = coordinator.embeddedView {
                 EmbeddedViewRepresentable(view: embedded)
+            } else if let error = coordinator.lastError {
+                // Media prepare failed (e.g. YouTube timeout) — show error
+                // overlay so the user knows why the player is blank.
+                // Chat + participants + reactions still work over WebSocket.
+                Color.black
+                    .overlay(
+                        VStack(spacing: 14) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.yellow)
+                            Text("Не удалось загрузить видео")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text(error)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 24)
+                            Text("Чат и участники работают")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                    )
             } else {
                 Color.black
                     .overlay(

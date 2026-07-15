@@ -60,7 +60,7 @@ struct DMChatView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.raveBackground, for: .navigationBar)
+        .toolbarBackground(Cinema2026.background, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -86,11 +86,11 @@ struct DMChatView: View {
                             .foregroundColor(.white)
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(friend.isOnline ? Color.raveGreen : Color.raveTextTertiary)
+                                .fill(friend.isOnline ? Cinema2026.accent : Cinema2026.tertiary)
                                 .frame(width: 6, height: 6)
                             Text(friend.isOnline ? "в сети" : "не в сети")
                                 .font(.system(size: 12))
-                                .foregroundColor(.raveTextSecondary)
+                                .foregroundColor(Cinema2026.secondary)
                         }
                     }
                 }
@@ -105,7 +105,7 @@ struct DMChatView: View {
     private var avatarHeader: some View {
         ZStack {
             Circle()
-                .fill(LinearGradient(colors: [.ravePrimary, .raveAccent],
+                .fill(LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
             Text(friend.initials)
                 .font(.system(size: 12, weight: .bold))
@@ -126,7 +126,7 @@ struct DMChatView: View {
             } label: {
                 Image(systemName: showEmojiPicker ? "keyboard.fill" : "face.smiling.fill")
                     .font(.system(size: 22))
-                    .foregroundColor(showEmojiPicker ? .ravePrimary : .raveTextSecondary)
+                    .foregroundColor(showEmojiPicker ? Cinema2026.accent : Cinema2026.secondary)
             }
 
             // Текстовое поле 16pt
@@ -152,7 +152,7 @@ struct DMChatView: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 30))
                     .foregroundColor(messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? .raveTextTertiary : .ravePrimary)
+                        ? Cinema2026.tertiary : Cinema2026.accent)
             }
             .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
         }
@@ -229,7 +229,7 @@ private struct DMBubble: View {
                 // Время 12pt
                 Text(message.timeString)
                     .font(.system(size: 12))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
                     .padding(.trailing, message.isOwnMessage ? 4 : 0)
                     .padding(.leading, message.isOwnMessage ? 0 : 4)
             }
@@ -242,15 +242,15 @@ private struct DMBubble: View {
             // Анимированный градиент для премиум-сообщений
             LinearGradient(
                 colors: [
-                    Color.bioCyan,
-                    Color.ravePrimary,
-                    Color.bioCyan,
+                    Cinema2026.accent,
+                    Cinema2026.accent,
+                    Cinema2026.accent,
                 ],
                 startPoint: UnitPoint(x: shimmer, y: 0),
                 endPoint: UnitPoint(x: shimmer + 1, y: 1)
             )
         } else if message.isOwnMessage {
-            Color.ravePrimary.opacity(0.85)
+            Cinema2026.accent.opacity(0.85)
         } else {
             Color.white.opacity(0.08)
         }
@@ -287,7 +287,7 @@ private struct DMBubble: View {
     }
 
     private var avatarColor: Color {
-        let palette: [Color] = [.ravePrimary, .raveAccent, .raveGreen, .raveWarning, .raveCyan, .raveSecondary]
+        let palette: [Color] = [Cinema2026.accent, Cinema2026.accent, Cinema2026.accent, Cinema2026.accent, Cinema2026.accent, Cinema2026.accent]
         let hash = abs(message.senderID.hashValue)
         return palette[hash % palette.count]
     }
@@ -300,7 +300,7 @@ private struct DMDayDivider: View {
     var body: some View {
         Text(label)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(.raveTextSecondary)
+            .foregroundColor(Cinema2026.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.white.opacity(0.06))

@@ -55,18 +55,6 @@ public enum WatchRoomCompositionRoot {
         if let ytId = extractYouTubeVideoId(from: mediaItem.streamURL) {
             return .youtube(ytId)
         }
-        // Rutube (P0) — wire embed to sync controller
-        if let rtId = extractRutubeVideoId(from: mediaItem.streamURL) {
-            return .rutube(rtId)
-        }
-        // VK Video (P0)
-        if let vkId = extractVKVideoId(from: mediaItem.streamURL) {
-            return .vk(vkId)
-        }
-        // Cinema / generic web embeds (Kinopoisk, Ivi, Okko, browser, custom pages)
-        if let embedURL = makeEmbedURL(from: mediaItem) {
-            return .embed(embedURL)
-        }
         // Direct stream URL → native AVPlayer
         let urlString = mediaItem.streamURL
         if let url = URL(string: urlString) {
@@ -115,72 +103,6 @@ public enum WatchRoomCompositionRoot {
             }
         }
 
-        return nil
-    }
-
-    /// P1: Cinema & generic embed support.
-    /// Returns a URL suitable for loading in EmbedPlaybackController when the item
-    /// is a cinema service page, browser page, or any non-direct web content.
-    private static func makeEmbedURL(from mediaItem: MediaItem) -> URL? {
-        let urlString = mediaItem.streamURL
-        guard let url = URL(string: urlString) else { return nil }
-
-        let lower = urlString.lowercased()
-
-        // Explicit cinema services or known patterns
-        let cinemaHosts = ["kinopoisk", "ivi", "okko", "wink", "start", "premier", "smotrim", "kion", "netflix", "disney"]
-        let isCinema = cinemaHosts.contains { lower.contains($0) } || mediaItem.source.rawValue == "url" && !isDirectStream(urlString)
-
-        // Browser / custom pages that are not direct media files
-        let isBrowserOrCustom = lower.contains("browser") || mediaItem.source == .url && !isDirectStream(urlString)
-
-        if isCinema || isBrowserOrCustom || lower.contains("http") {
-            // Prefer the original page URL for cinema (user sees the real player + chrome)
-            return url
-        }
-        return nil
-    }
-
-    private static func isDirectStream(_ url: String) -> Bool {
-        let l = url.lowercased()
-        return l.hasSuffix(".mp4") || l.hasSuffix(".m3u8") || l.contains(".m3u8?") || l.contains("googlevideo")
-    }
-
-    /// P0: extract VK id from video_ext or video URL.
-    private static func extractVKVideoId(from url: String) -> String? {
-        let lower = url.lowercased()
-        guard lower.contains("vk.com") || lower.contains("vk.ru") else { return nil }
-        if lower.contains("video_ext.php") {
-            // keep query as the id
-            if let q = url.split(separator: "?").last { return String(q) }
-        }
-        // vk.com/video-123_456 or /video/123_456
-        if let range = lower.range(of: "/video") {
-            let tail = url[range.upperBound...]
-            let idPart = tail.split(separator: "/").first.map(String.init) ?? ""
-            if idPart.contains("_") || idPart.count > 3 { return idPart }
-        }
-        return nil
-    }
-
-    /// PATCH P0: extract Rutube video ID from embed or public URL.
-    /// Supports /play/embed/ID/ and /video/ID/
-    private static func extractRutubeVideoId(from url: String) -> String? {
-        let lower = url.lowercased()
-        guard lower.contains("rutube") else { return nil }
-
-        // /play/embed/VIDEO_ID/
-        if let range = lower.range(of: "/play/embed/") {
-            let after = url[range.upperBound...]
-            let id = after.split(separator: "/").first.map(String.init) ?? ""
-            if id.count >= 8 { return id } // accept variable length ids
-        }
-        // /video/VIDEO_ID/
-        if let range = lower.range(of: "/video/") {
-            let after = url[range.upperBound...]
-            let id = after.split(separator: "/").first.map(String.init) ?? ""
-            if id.count >= 8 { return id }
-        }
         return nil
     }
 
@@ -258,7 +180,6 @@ public enum WatchRoomCompositionRoot {
 public enum FeatureFlags {
     private static let cacheKey = "plink.feature_flags_cache"
     private static let cacheTTL: TimeInterval = 300  // 5 minutes
-    private static let liveKitCacheKey = "plink.livekit_voice_enabled"
 
     /// P0-37: master switch for v2 realtime + playback path.
     /// P1-56: checks remote config first (cached), falls back to UserDefaults.
@@ -269,39 +190,6 @@ public enum FeatureFlags {
         }
         // P1-59: check cached remote config
         return true  // P1-56: temporarily forced TRUE for v2 testing
-    }
-
-    /// Voice/camera UI — only when LiveKit is configured in production.
-    /// Overridable via Info.plist ENABLE_LIVEKIT_VOICE or remote /api/rtc/status.
-    public static var liveKitVoiceEnabled: Bool {
-        if let flag = Bundle.main.object(forInfoDictionaryKey: "ENABLE_LIVEKIT_VOICE") {
-            if let b = flag as? Bool { return b }
-            if let n = flag as? NSNumber { return n.boolValue }
-            if let s = flag as? String {
-                return s.lowercased() == "true" || s == "1"
-            }
-        }
-        if let env = ProcessInfo.processInfo.environment["ENABLE_LIVEKIT_VOICE"] {
-            return env.lowercased() == "true" || env == "1"
-        }
-        if UserDefaults.standard.object(forKey: liveKitCacheKey) != nil {
-            return UserDefaults.standard.bool(forKey: liveKitCacheKey)
-        }
-        return cachedRemoteFlags["livekitVoice"] ?? false
-    }
-
-    /// Call on launch (or after login) to pick up LiveKit availability.
-    public static func refreshLiveKitAvailability(apiBaseURL: URL) async {
-        let url = apiBaseURL.appendingPathComponent("api/rtc/status")
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-            let enabled = (json["livekitEnabled"] as? Bool) ?? false
-            UserDefaults.standard.set(enabled, forKey: liveKitCacheKey)
-        } catch {
-            // Keep previous cache / default false
-        }
     }
 
     /// P1-56: cached remote flags fetched from backend
@@ -450,9 +338,19 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
         let url = baseURL.appendingPathComponent("api/rooms/\(roomId)/participants")
         let (data, _) = try await makeAuthenticatedRequest(url: url)
         let decoded = try JSONDecoder().decode(ParticipantsResponse.self, from: data)
-        return decoded.participants.map { p in
+        var result = decoded.participants.map { p in
             ParticipantSnapshot(userId: p.userId, username: p.username)
         }
+        // P0-57: backend returns host separately with online status.
+        // Merge host into participants list if they're online and not already
+        // in the list — otherwise the host (who has no RoomParticipant row)
+        // never appears in the presence bar.
+        if let host = decoded.host, host.online {
+            if !result.contains(where: { $0.userId == host.userId }) {
+                result.append(ParticipantSnapshot(userId: host.userId, username: host.username))
+            }
+        }
+        return result
     }
 }
 
@@ -481,6 +379,14 @@ private struct MessagesResponse: Decodable {
 // P0-50: participant snapshot response
 private struct ParticipantsResponse: Decodable {
     let participants: [ParticipantDTO]
+    // P0-57: host returned separately with online status
+    let host: HostDTO?
+}
+
+private struct HostDTO: Decodable {
+    let userId: String
+    let username: String
+    let online: Bool
 }
 
 private struct ParticipantDTO: Decodable {

@@ -1,35 +1,36 @@
-// Plink/AppShell/AppSection.swift — §4 Final Architecture
+// Plink/AppShell/AppSection.swift — GPT-5.6 Approved Patch §3
 //
-// Exactly 5 tabs: Главная, Комнаты, ИИ, Друзья, Настройки
+// Canonical tab architecture: Home, Rooms, AI, Friends, Profile.
+// AI stays because it is a domain-specific watch-party companion.
+// Create is a persistent action on Home/Rooms, not a sixth tab.
 
-import Foundation
+import SwiftUI
 
-enum AppSection: String, CaseIterable, Identifiable, Hashable {
-    case home
-    case rooms
-    case ai
-    case friends
-    case settings
+enum AppSection: String, CaseIterable, Identifiable, Sendable {
+    case home, rooms, ai, friends, profile
 
-    var id: String { rawValue }
+    var id: Self { self }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .home: "Главная"
         case .rooms: "Комнаты"
         case .ai: "ИИ"
         case .friends: "Друзья"
-        case .settings: "Настройки"
+        case .profile: "Профиль"
         }
     }
 
-    var symbol: String {
+    var icon: String {
         switch self {
-        case .home: "house"
-        case .rooms: "rectangle.stack.badge.play"
+        case .home: "house.fill"
+        case .rooms: "play.rectangle.on.rectangle.fill"
         case .ai: "sparkles"
-        case .friends: "person.2"
-        case .settings: "gearshape"
+        case .friends: "person.2.fill"
+        case .profile: "person.crop.circle.fill"
         }
     }
+
+    // Back-compat aliases
+    var symbol: String { icon }
 }

@@ -43,10 +43,6 @@ final class AppDependencies {
         let apiClient = APIClient(baseURL: apiBaseURL)
         let authService = AuthService(api: apiClient)
         let roomService = RoomService(api: apiClient)
-
-        // P1 IAP sandbox: ensure StoreManager knows where to verify JWS
-        StoreManager.shared.apiBaseURL = URL(string: apiBaseURL)
-
         return AppDependencies(
             apiClient: apiClient,
             authService: authService,

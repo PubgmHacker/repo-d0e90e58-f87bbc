@@ -44,7 +44,7 @@ struct ServiceBrowserView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.raveBackground.ignoresSafeArea()
+                Cinema2026.background.ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     // 🔧 Auth banner (shown for subscription services)
@@ -78,7 +78,7 @@ struct ServiceBrowserView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
             }
@@ -101,15 +101,15 @@ struct ServiceBrowserView: View {
         HStack(spacing: 10) {
             Image(systemName: "lock.fill")
                 .font(.system(size: 14))
-                .foregroundColor(.raveWarning)
+                .foregroundColor(Cinema2026.accent)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Требуется подписка \(service.brandName)")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                 Text("Войдите в свой аккаунт для доступа к контенту. YouTube, VK Видео и Rutube не требуют входа.")
                     .font(.system(size: 10))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                     .lineLimit(2)
             }
 
@@ -120,14 +120,14 @@ struct ServiceBrowserView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.raveTextTertiary)
+                    .foregroundColor(Cinema2026.tertiary)
                     .frame(width: 24, height: 24)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.raveWarning.opacity(0.08))
-        .overlay(Rectangle().fill(Color.raveWarning.opacity(0.2)).frame(height: 0.5))
+        .background(Cinema2026.accent.opacity(0.08))
+        .overlay(Rectangle().fill(Cinema2026.accent.opacity(0.2)).frame(height: 0.5))
     }
 
     // MARK: - Video Detected Banner
@@ -143,10 +143,10 @@ struct ServiceBrowserView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Видео найдено!")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.bioEmerald)
+                    .foregroundColor(Cinema2026.accent)
                 Text(video.title ?? pageTitle)
                     .font(.system(size: 12))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(1)
             }
 
@@ -165,7 +165,7 @@ struct ServiceBrowserView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.raveGradient)
+                .background(Cinema2026.accentAction)
                 .clipShape(Capsule())
             }
         }
@@ -174,7 +174,7 @@ struct ServiceBrowserView: View {
         .background(.ultraThinMaterial)
         .overlay(
             Rectangle()
-                .fill(LinearGradient(colors: [Color.bioEmerald.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing))
+                .fill(LinearGradient(colors: [Cinema2026.accent.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing))
                 .frame(height: 2)
                 .offset(y: -22)
         )
@@ -187,12 +187,12 @@ struct ServiceBrowserView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(pageTitle.isEmpty ? "Выберите контент" : pageTitle)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(1)
                 if let url = currentURL {
                     Text(url.host ?? "")
                         .font(.system(size: 10))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                         .lineLimit(1)
                 }
             }
@@ -211,9 +211,9 @@ struct ServiceBrowserView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.raveGradient)
+                .background(Cinema2026.accentAction)
                 .clipShape(Capsule())
-                .shadow(color: .ravePrimary.opacity(0.4), radius: 8, y: 3)
+                .shadow(color: Cinema2026.accent.opacity(0.4), radius: 8, y: 3)
             }
             .disabled(currentURL == nil)
             .opacity(currentURL == nil ? 0.5 : 1)
@@ -296,23 +296,21 @@ extension VideoService {
             }
 
         case .rutube:
-            // rutube.ru/video/VIDEO_ID/  (P0 wired)
+            // rutube.ru/video/VIDEO_ID/
             if host.contains("rutube.ru") || host.contains("rutube.video") {
-                // Inline P0 extraction for Rutube ID
-                let lowerPath = urlString.lowercased()
-                var videoId: String?
-                if let r = lowerPath.range(of: "/video/") {
-                    videoId = String(urlString[r.upperBound...].split(separator: "/").first ?? "")
-                } else if let r = lowerPath.range(of: "/play/embed/") {
-                    videoId = String(urlString[r.upperBound...].split(separator: "/").first ?? "")
-                }
-                if let id = videoId, id.count >= 6 {
-                    return DetectedVideo(
-                        title: title,
-                        embedURL: "https://rutube.ru/play/embed/\(id)",
-                        originalURL: urlString,
-                        service: .rutube
-                    )
+                let path = url.path
+                if path.contains("/video/") {
+                    // Extract video ID from path
+                    let segments = path.split(separator: "/")
+                    if segments.count >= 2, segments[0] == "video" {
+                        let videoId = String(segments[1])
+                        return DetectedVideo(
+                            title: title,
+                            embedURL: "https://rutube.ru/play/embed/\(videoId)",
+                            originalURL: urlString,
+                            service: .rutube
+                        )
+                    }
                 }
             }
 
@@ -439,8 +437,8 @@ struct ServiceWebView: UIViewRepresentable {
         webView.load(URLRequest(url: initialURL))
 
         webView.isOpaque = false
-        webView.backgroundColor = UIColor(Color.raveBackground)
-        webView.scrollView.backgroundColor = UIColor(Color.raveBackground)
+        webView.backgroundColor = UIColor(Cinema2026.background)
+        webView.scrollView.backgroundColor = UIColor(Cinema2026.background)
 
         return webView
     }

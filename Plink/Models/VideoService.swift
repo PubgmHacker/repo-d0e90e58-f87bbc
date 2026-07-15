@@ -18,17 +18,18 @@ enum PlaybackMode: String, Sendable {
 /// - `.cinema`: Кинопоиск, Иви, Okko, Wink, Start, Premier, Смотрим, КИОН — WebView + своя подписка.
 /// - `.universal`: Браузер, Своя ссылка.
 enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equatable, Hashable {
-    // Прямые потоки (App Store safe)
+    // Прямые потоки
     case youtube
     case vk
     case rutube
+    case netflix
+    case disney
 
     // Универсальные
     case browser
     case customURL = "custom"
 
-    // Кинотеатры (WebView) — high risk for App Store (ToS of Netflix/Disney)
-    // Fallback: only show safe services for MVP review. Netflix/Disney moved to experimental.
+    // Кинотеатры (WebView)
     case kinopoisk
     case ivi
     case okko
@@ -37,8 +38,6 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
     case premier
     case smotrim
     case kion
-    case netflix // experimental, may cause reject
-    case disney // experimental, may cause reject
 
     var id: String { rawValue }
 
@@ -86,23 +85,6 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
 
     var requiresSubscription: Bool {
         group == .cinema
-    }
-
-    /// P0.5 App Store safety: cinema (Netflix/Disney/etc.) OFF by default.
-    /// Enable only via Info.plist `ENABLE_CINEMA=true` / `1` / Bool true, or env.
-    static var cinemaEnabled: Bool {
-        if let flag = Bundle.main.object(forInfoDictionaryKey: "ENABLE_CINEMA") {
-            if let b = flag as? Bool { return b }
-            if let n = flag as? NSNumber { return n.boolValue }
-            if let s = flag as? String {
-                return s.lowercased() == "true" || s == "1"
-            }
-        }
-        if let env = ProcessInfo.processInfo.environment["ENABLE_CINEMA"] {
-            return env.lowercased() == "true" || env == "1"
-        }
-        // Default OFF — avoids App Store rejection for third-party cinema ToS.
-        return false
     }
 
     // MARK: - Display
@@ -178,7 +160,7 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
         case .netflix: return Color(hex: 0xE50914)
         case .disney: return Color(hex: 0x113CCF)
         case .browser: return Color(hex: 0x0077FF)
-        case .customURL: return Color.bioCyan
+        case .customURL: return Cinema2026.accent
         case .kinopoisk: return Color(hex: 0xFF6600)
         case .ivi: return Color(hex: 0xE40000)
         case .okko: return Color(hex: 0xFF0033)

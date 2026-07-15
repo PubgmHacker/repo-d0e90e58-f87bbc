@@ -34,7 +34,7 @@ struct LanguagePickerView: View {
                     // ── Info ──
                     Text("Язык изменится мгновенно. Все тексты в приложении переключатся на выбранный язык.")
                         .font(.system(size: 11))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
 
@@ -73,10 +73,10 @@ struct LanguagePickerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(lang.nativeName)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(lang.englishName)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
 
                 Spacer()
@@ -84,7 +84,7 @@ struct LanguagePickerView: View {
                 // Selection checkmark
                 Image(systemName: loc.currentLanguage == lang ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20))
-                    .foregroundColor(loc.currentLanguage == lang ? .bioCyan : .raveTextTertiary)
+                    .foregroundColor(loc.currentLanguage == lang ? Cinema2026.accent : Cinema2026.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

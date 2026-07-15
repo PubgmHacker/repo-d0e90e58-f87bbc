@@ -137,7 +137,7 @@ struct Room: Codable, Identifiable, Sendable, Hashable {
     // MARK: - Mock Rooms
     // 🔧 FIX L2: mockRooms removed from production. Was misleading — if the server
     // returned empty/401, users saw fake "active" rooms with fake participant counts.
-    // Now the UI must handle the empty state explicitly (HomeView shows a friendly
+    // Now the UI must handle the empty state explicitly (the UI shows a friendly
     // empty state instead of fake content).
     #if DEBUG
     /// Mock rooms for SwiftUI previews and unit tests only.
@@ -182,9 +182,6 @@ struct CreateRoomRequest: Codable, Sendable {
     /// но если JWT не содержит username — fallback на это поле).
     /// Бэкенд rooms.ts: `hostName: request.user.username || body.hostName`
     let hostName: String?
-    /// P1: Host-selected room appearance/theme (standard or Plink+ live).
-    /// Guests should see the same theme.
-    let appearanceTheme: String?
 }
 
 // MARK: - Join Room Request
@@ -227,3 +224,4 @@ enum RoomPrivacy: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 }
+struct ActiveRoomResponse: Decodable { let room: Room? }

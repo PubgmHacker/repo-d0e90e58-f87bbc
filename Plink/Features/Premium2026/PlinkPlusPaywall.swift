@@ -157,44 +157,61 @@ struct PaywallBenefits: View {
     }
 }
 
+struct PlanPickerRow: View {
+    let product: Product
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            planRowContent
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var planRowContent: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(product.displayName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Cinema2026.text)
+                Text(product.description)
+                    .font(.caption)
+                    .foregroundStyle(Cinema2026.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Text(product.displayPrice)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Cinema2026.text)
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? Cinema2026.accent : Cinema2026.tertiary)
+        }
+        .padding(16)
+        .background(rowBackground)
+        .overlay(rowBorder)
+    }
+
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: CinemaRadius.medium)
+            .fill(isSelected ? Cinema2026.accent.opacity(0.08) : Cinema2026.surface)
+    }
+
+    private var rowBorder: some View {
+        RoundedRectangle(cornerRadius: CinemaRadius.medium)
+            .stroke(isSelected ? Cinema2026.accent.opacity(0.4) : .clear, lineWidth: 1)
+    }
+}
+
 struct PlanPicker: View {
     @Binding var selectedID: String?
 
     var body: some View {
         VStack(spacing: 10) {
             ForEach(StoreManager.shared.products, id: \.id) { product in
-                Button {
+                PlanPickerRow(product: product, isSelected: selectedID == product.id) {
                     selectedID = product.id
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(product.displayName)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(Cinema2026.text)
-                            Text(product.description)
-                                .font(.caption)
-                                .foregroundStyle(Cinema2026.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Text(product.displayPrice)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Cinema2026.text)
-
-                        Image(systemName: selectedID == product.id ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selectedID == product.id ? Cinema2026.accent : Cinema2026.tertiary)
-                    }
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: CinemaRadius.control)
-                            .fill(selectedID == product.id ? Cinema2026.accent.opacity(0.08) : Cinema2026.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CinemaRadius.control)
-                            .stroke(selectedID == product.id ? Cinema2026.accent.opacity(0.4) : .clear, lineWidth: 1)
-                    )
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 24)

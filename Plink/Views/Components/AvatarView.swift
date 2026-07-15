@@ -94,7 +94,7 @@ struct AvatarView: View {
         ZStack {
             Circle().fill(
                 LinearGradient(
-                    colors: [Color.ravePrimary, Color.bioEmerald],
+                    colors: [Cinema2026.accent, Cinema2026.accent],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -119,9 +119,9 @@ struct AvatarView: View {
 
     private var shadowColor: Color {
         if isAdmin {
-            return Color.raveDanger.opacity(0.4)
+            return Cinema2026.danger.opacity(0.4)
         } else if isPremium {
-            return Color.ravePrimary.opacity(0.4)
+            return Cinema2026.accent.opacity(0.4)
         }
         return .clear
     }
@@ -137,9 +137,9 @@ struct AvatarView: View {
 
         return ZStack {
             Circle()
-                .fill(Color.bioObsidian)
+                .fill(Cinema2026.background)
             Circle()
-                .stroke(isAdmin ? Color.raveDanger : Color.ravePrimary, lineWidth: 1)
+                .stroke(isAdmin ? Cinema2026.danger : Cinema2026.accent, lineWidth: 1)
 
             if isAdmin {
                 // 🔧 FIX: user's custom admin icon (was SF Symbol 'shield.fill')
@@ -147,11 +147,11 @@ struct AvatarView: View {
                     .resizable()
                     .scaledToFit()
                     .padding(badgeSize * 0.15)
-                    .foregroundColor(.raveDanger)
+                    .foregroundColor(Cinema2026.danger)
             } else {
                 Image(systemName: "crown.fill")
                     .font(.system(size: badgeSize * 0.5, weight: .semibold))
-                    .foregroundColor(.bioAmber)
+                    .foregroundColor(Cinema2026.amber)
             }
         }
         .frame(width: badgeSize, height: badgeSize)
@@ -191,21 +191,21 @@ private struct RingModifier: ViewModifier {
     AvatarView(imageURL: nil, username: "Alexander", size: 96,
                isPremium: false, isAdmin: false)
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }
 
 #Preview("Premium User") {
     AvatarView(imageURL: nil, username: "Premium", size: 96,
                isPremium: true, isAdmin: false)
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }
 
 #Preview("Admin User") {
     AvatarView(imageURL: nil, username: "Admin", size: 96,
                isPremium: false, isAdmin: true)
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }
 #endif
 
@@ -216,13 +216,46 @@ private struct RingModifier: ViewModifier {
 //
 // 🔧 FIX: Uses Image('AdminBadge') — user's custom admin icon (uploaded PNG,
 // 512×512 RGBA). Was using SF Symbol 'shield.fill' which user didn't want.
-// AdminBadgeChip is defined in PremiumComponents.swift (single source of truth)
-// Removed duplicate from AvatarView to fix 'Ambiguous use of init'
+struct AdminBadgeChip: View {
+    var compact: Bool = false    // true = только иконка (для tight layouts)
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image("AdminBadge")
+                .resizable()
+                .scaledToFit()
+                .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
+            if !compact {
+                Text("АДМИН")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .tracking(0.5)
+                    // 🔧 TEXT STROKE: тонкая чёрная обводка для читаемости красного текста
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0.4, y: 0)
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: -0.4, y: 0)
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: 0.4)
+                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: -0.4)
+            }
+        }
+        .foregroundColor(Cinema2026.danger)
+        .padding(.horizontal, compact ? 6 : 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(Cinema2026.danger.opacity(0.15))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Cinema2026.danger.opacity(0.6), lineWidth: 0.5)
+        )
+        .shadow(color: Cinema2026.danger.opacity(0.4), radius: 4, y: 1)
+    }
+}
 
 #Preview("Admin Badge Chip") {
     VStack(spacing: 12) {
         AdminBadgeChip()
+        AdminBadgeChip(compact: true)
     }
     .padding()
-    .background(Color.bioObsidian)
+    .background(Cinema2026.background)
 }

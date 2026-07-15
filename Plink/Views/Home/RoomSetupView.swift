@@ -55,7 +55,7 @@ struct RoomSetupView: View {
                             VStack(spacing: 0) {
                                 TextField("Название комнаты", text: $roomName)
                                     .font(.system(size: 16))
-                                    .foregroundColor(.raveTextPrimary)
+                                    .foregroundColor(Cinema2026.text)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 14)
                                     .background(.ultraThinMaterial)
@@ -86,17 +86,17 @@ struct RoomSetupView: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Пароль комнаты")
                                         .font(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(.raveTextSecondary)
+                                        .foregroundColor(Cinema2026.secondary)
                                         .tracking(0.5)
                                         .padding(.horizontal, 2)
 
                                     HStack(spacing: 10) {
                                         Image(systemName: "lock.fill")
                                             .font(.system(size: 14))
-                                            .foregroundColor(.bioTeal)
+                                            .foregroundColor(Cinema2026.accent)
                                         SecureField("Введите пароль", text: $roomPassword)
                                             .font(.system(size: 16))
-                                            .foregroundColor(.raveTextPrimary)
+                                            .foregroundColor(Cinema2026.text)
                                             .autocapitalization(.none)
                                             .disableAutocorrection(true)
                                     }
@@ -121,16 +121,16 @@ struct RoomSetupView: View {
                                         .font(.system(size: 14))
                                         .foregroundColor(.white)
                                         .frame(width: 28, height: 28)
-                                        .background(Color.bioCyan.opacity(0.18))
+                                        .background(Cinema2026.accent.opacity(0.18))
                                         .clipShape(RoundedRectangle(cornerRadius: 7))
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("\(maxParticipants) человек")
                                             .font(.system(size: 15, weight: .medium))
-                                            .foregroundColor(.raveTextPrimary)
+                                            .foregroundColor(Cinema2026.text)
                                         Text(isPremium ? "Премиум: до \(premiumMaxParticipants)" : "Бесплатно: до \(freeMaxParticipants)")
                                             .font(.system(size: 12))
-                                            .foregroundColor(.raveTextSecondary)
+                                            .foregroundColor(Cinema2026.secondary)
                                     }
 
                                     Spacer()
@@ -148,7 +148,7 @@ struct RoomSetupView: View {
                         if let errorMessage {
                             Text(errorMessage)
                                 .font(.system(size: 13))
-                                .foregroundColor(.raveDanger)
+                                .foregroundColor(Cinema2026.danger)
                                 .padding(.horizontal, 16)
                         }
 
@@ -172,7 +172,7 @@ struct RoomSetupView: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: "lock.fill")
                                         .font(.system(size: 14))
-                                        .foregroundColor(.raveTextTertiary)
+                                        .foregroundColor(Cinema2026.tertiary)
                                         .frame(width: 28, height: 28)
                                         .background(Color.white.opacity(0.04))
                                         .clipShape(RoundedRectangle(cornerRadius: 7))
@@ -180,20 +180,20 @@ struct RoomSetupView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Кастомные темы комнаты")
                                             .font(.system(size: 15, weight: .medium))
-                                            .foregroundColor(.raveTextPrimary)
+                                            .foregroundColor(Cinema2026.text)
                                         Text("Живой фон чата, оформление плеера, рамки — только с подпиской Плинк+")
                                             .font(.system(size: 12))
-                                            .foregroundColor(.raveTextSecondary)
+                                            .foregroundColor(Cinema2026.secondary)
                                     }
 
                                     Spacer()
 
                                     Text("Плинк+")
                                         .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                        .foregroundColor(.bioEmerald)
+                                        .foregroundColor(Cinema2026.accent)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
-                                        .background(Color.bioEmerald.opacity(0.15))
+                                        .background(Cinema2026.accent.opacity(0.15))
                                         .clipShape(Capsule())
                                 }
                                 .padding(.horizontal, 14)
@@ -229,7 +229,7 @@ struct RoomSetupView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.bioCyan)
+                            .foregroundColor(Cinema2026.accent)
                     }
                 }
             }
@@ -257,16 +257,16 @@ struct RoomSetupView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(contentTitle.isEmpty ? "Выбранный контент" : contentTitle)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.raveTextPrimary)
+                    .foregroundColor(Cinema2026.text)
                     .lineLimit(2)
                 Text(service.brandName)
                     .font(.system(size: 12))
-                    .foregroundColor(.raveTextSecondary)
+                    .foregroundColor(Cinema2026.secondary)
                 // Read-only URL (small, truncated)
                 if let url = URL(string: contentURL) {
                     Text(url.host ?? contentURL)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.raveTextTertiary)
+                        .foregroundColor(Cinema2026.tertiary)
                         .lineLimit(1)
                 }
             }
@@ -280,7 +280,7 @@ struct RoomSetupView: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(
                     LinearGradient(
-                        colors: [Color.bioCyan.opacity(0.2), Color.white.opacity(0.04)],
+                        colors: [Cinema2026.accent.opacity(0.2), Color.white.opacity(0.04)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
@@ -311,10 +311,10 @@ struct RoomSetupView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(level.title)
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     Text(level.subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(.raveTextSecondary)
+                        .foregroundColor(Cinema2026.secondary)
                 }
 
                 Spacer()
@@ -322,7 +322,7 @@ struct RoomSetupView: View {
                 // Selection checkmark
                 Image(systemName: privacy == level ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18))
-                    .foregroundColor(privacy == level ? .bioCyan : .raveTextTertiary)
+                    .foregroundColor(privacy == level ? Cinema2026.accent : Cinema2026.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -341,9 +341,9 @@ struct RoomSetupView: View {
 
     private func privacyColor(_ level: RoomPrivacy) -> Color {
         switch level {
-        case .publicRoom:   return .bioCyan
-        case .byLink:       return .bioEmerald
-        case .privateRoom:  return .bioTeal
+        case .publicRoom:   return Cinema2026.accent
+        case .byLink:       return Cinema2026.accent
+        case .privateRoom:  return Cinema2026.accent
         }
     }
 
@@ -368,9 +368,9 @@ struct RoomSetupView: View {
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(Color.raveGradient)
+            .background(Cinema2026.accentAction)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .ravePrimary.opacity(0.4), radius: 12, y: 4)
+            .shadow(color: Cinema2026.accent.opacity(0.4), radius: 12, y: 4)
         }
         .buttonStyle(.plain)
         .disabled(isCreating || roomName.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -496,8 +496,7 @@ struct RoomSetupView: View {
                     mediaItem: mediaItem,
                     privacy: privacy,
                     password: privacy == .privateRoom && !roomPassword.isEmpty ? roomPassword : nil,
-                    hostName: AuthService(api: apiClient).currentUserValue?.username,
-                    appearanceTheme: selectedTheme.rawValue
+                    hostName: AuthService(api: apiClient).currentUserValue?.username
                 )
                 let room = try await roomService.createRoom(request)
                 await MainActor.run {
@@ -543,15 +542,15 @@ struct RoomSetupView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(theme.displayName)
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.raveTextPrimary)
+                        .foregroundColor(Cinema2026.text)
                     if theme.hasPlayerBorder {
                         Text("С рамкой плеера + живой фон чата")
                             .font(.system(size: 12))
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     } else {
                         Text("Стандартное оформление")
                             .font(.system(size: 12))
-                            .foregroundColor(.raveTextSecondary)
+                            .foregroundColor(Cinema2026.secondary)
                     }
                 }
 
@@ -559,7 +558,7 @@ struct RoomSetupView: View {
 
                 Image(systemName: selectedTheme == theme ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18))
-                    .foregroundColor(selectedTheme == theme ? .bioCyan : .raveTextTertiary)
+                    .foregroundColor(selectedTheme == theme ? Cinema2026.accent : Cinema2026.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

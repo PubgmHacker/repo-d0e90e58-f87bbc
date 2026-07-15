@@ -83,6 +83,14 @@ public final class PlaybackCoordinator: AnyObject {
                 let rutube = RutubePlaybackController()
                 try await rutube.prepare(source)
                 controller = rutube
+            case .vk:
+                let vk = VKPlaybackController()
+                try await vk.prepare(source)
+                controller = vk
+            case .embed:
+                let embedded = EmbeddedPlaybackController()
+                try await embedded.prepare(source)
+                controller = embedded
             }
             currentController = controller
             currentSource = source

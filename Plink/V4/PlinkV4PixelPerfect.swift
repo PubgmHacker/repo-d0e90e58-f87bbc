@@ -2315,3 +2315,68 @@ struct AvatarPickerSheet: View {
         }
     }
 }
+
+// MARK: - Missing types for V4 compatibility
+
+// AI Orb State (used by V4 AI section)
+enum AIOrbState: Equatable {
+    case idle
+    case listening
+    case thinking
+    case speaking
+}
+
+// AI Companion Model (Canvas-based, matches V4 init signature)
+struct AICompanionModel: View {
+    let theme: V4Theme
+    let size: CGFloat
+    let glow: CGFloat
+    let state: AIOrbState
+
+    @State private var phase: Double = 0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, canvasSize in
+                let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+                let baseRadius = min(canvasSize.width, canvasSize.height) * 0.35
+                let speed: Double
+                switch state {
+                case .idle: speed = 0.8
+                case .listening: speed = 2.0
+                case .thinking: speed = 4.0
+                case .speaking: speed = 3.0
+                }
+                let pulseRadius = baseRadius * (1.0 + sin(t * speed) * 0.12)
+                let accentColor = theme.accentColor
+                let gradient = Gradient(colors: [accentColor.opacity(0.8), accentColor.opacity(0.2), Color.clear])
+                ctx.fill(
+                    Path(ellipseIn: CGRect(x: center.x - pulseRadius, y: center.y - pulseRadius,
+                                            width: pulseRadius * 2, height: pulseRadius * 2)),
+                    with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: pulseRadius)
+                )
+            }
+        }
+        .frame(width: size, height: size)
+        .shadow(color: theme.accentColor.opacity(0.3), radius: glow)
+    }
+}
+
+// PlinkAppDelegate extension for notification permission
+extension PlinkAppDelegate {
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            if granted {
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            }
+        }
+    }
+}
+
+// plinkLiveThemeChanged notification
+extension Notification.Name {
+    static let plinkLiveThemeChanged = Notification.Name("plinkLiveThemeChanged")
+}

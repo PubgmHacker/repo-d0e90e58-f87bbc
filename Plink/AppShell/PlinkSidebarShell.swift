@@ -67,7 +67,7 @@ struct PlinkSidebarShell: View {
         case .friends:
             FriendsView()
         case .settings:
-            SettingsView()
+            SettingsView(authService: dependencies.authService)
         }
     }
 }

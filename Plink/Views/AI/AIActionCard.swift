@@ -144,17 +144,17 @@ final class AIActionExecutor {
         switch action.type {
         case .seek:
             if let timestamp = action.timestamp {
-                roomModel.seek(to: timestamp)
-                AnalyticsService.shared.logAIActionExecuted(type: "seek", timestamp: timestamp)
+                await roomModel.sendSeekCommand(to: timestamp)
+                AnalyticsService.shared.trackAIActionExecuted(type: "seek", timestamp: timestamp)
             }
 
         case .pause:
-            roomModel.pause()
-            AnalyticsService.shared.logAIActionExecuted(type: "pause", timestamp: nil)
+            roomModel.sendPauseCommand()
+            AnalyticsService.shared.trackAIActionExecuted(type: "pause", timestamp: nil)
 
         case .play:
-            roomModel.play()
-            AnalyticsService.shared.logAIActionExecuted(type: "play", timestamp: nil)
+            await roomModel.sendPlayCommand()
+            AnalyticsService.shared.trackAIActionExecuted(type: "play", timestamp: nil)
 
         case .createRoom, .buildQueue:
             // Handle via callback (these need UI navigation)
@@ -169,24 +169,29 @@ final class AIActionExecutor {
 
     private func confirmWithBackend(confirmationId: String) async {
         // POST /api/ai/confirm-action { confirmationId }
-        do {
-            try await APIClient.shared.confirmAIAction(confirmationId: confirmationId)
-        } catch {
-            // Silent fail — action already executed locally
-            print("[AIActionExecutor] Failed to confirm with backend: \(error)")
+        // TODO: add confirmAIAction to APIClient when backend endpoint is wired
+        // For now, fire-and-forget via URLSession
+        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/ai/confirm-action") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = KeychainHelper.read(for: "rave_auth_token") {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["confirmationId": confirmationId])
+        _ = try? await URLSession.shared.data(for: req)
     }
 }
 
 // MARK: - Analytics Extension
 
 extension AnalyticsService {
-    func logAIActionExecuted(type: String, timestamp: TimeInterval?) {
+    func trackAIActionExecuted(type: String, timestamp: TimeInterval?) {
         var params: [String: Any] = ["action_type": type]
         if let timestamp {
             params["timestamp"] = timestamp
         }
-        logEvent("ai_action_executed", parameters: params)
+        track("ai_action_executed", parameters: params)
     }
 }
 

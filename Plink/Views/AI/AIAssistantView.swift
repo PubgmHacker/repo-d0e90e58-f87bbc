@@ -167,7 +167,8 @@ struct AIAssistantView: View {
                         .foregroundColor(.white)
                 }
                 .shadow(color: Color.bioAmber.opacity(0.5), radius: 18, y: 6)
-                .glowPulse(color: Color.bioAmber, minRadius: 14, maxRadius: 26, minOpacity: 0.2, maxOpacity: 0.6, period: 2.4)
+                // glowPulse modifier was removed in cleanup — using static shadow instead
+                // To restore animation, use .shadow with .animation modifier
 
                 VStack(spacing: 8) {
                     Text("Что посмотреть?")

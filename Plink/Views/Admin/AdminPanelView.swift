@@ -400,6 +400,21 @@ struct AdminPanelView: View {
         default: return .raveGreen
         }
     }
+
+    // P0: Test push from admin panel
+    private func sendTestPush() async {
+        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/dev/test-push") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = KeychainHelper.read(for: "rave_auth_token") {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let body: [String: Any] = ["title": "Admin Test", "body": "Push from admin panel", "deepLink": "plink://room/test"]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        _ = try? await URLSession.shared.data(for: req)
+        toastMessage = "Test push sent (check device)"
+    }
 }
 
 // MARK: - Admin Models
@@ -430,17 +445,5 @@ struct AdminMessage: Identifiable {
     let timeAgo: String
 }
 
-// P0: Test push from admin panel
-private func sendTestPush() async {
-    guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/dev/test-push") else { return }
-    var req = URLRequest(url: url)
-    req.httpMethod = "POST"
-    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    if let token = KeychainHelper.read(for: "rave_auth_token") {
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    }
-    let body: [String: Any] = ["title": "Admin Test", "body": "Push from admin panel", "deepLink": "plink://room/test"]
-    req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-    _ = try? await URLSession.shared.data(for: req)
-    toastMessage = "Test push sent (check device)"
-}
+// P0: Test push from admin panel — moved inside AdminPanelView struct
+// (was free function, couldn't access @State toastMessage)

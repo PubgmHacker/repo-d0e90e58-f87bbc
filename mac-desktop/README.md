@@ -1,11 +1,11 @@
 # Plink Mac Desktop
 
-**Option A (native):** Mac Catalyst from `plink-ios/` — enable `SUPPORTS_MACCATALYST: YES` in `project.yml` (done). Requires `#if targetEnvironment(macCatalyst)` guards for iOS-only APIs.
+**Option A (native):** Mac Catalyst from repo root (`Plink/`, `project.yml`). Requires `#if targetEnvironment(macCatalyst)` guards for iOS-only APIs.
 
-**Option B (recommended for PRO UI parity):** Use the same `windows-client/` codebase wrapped with Tauri:
+**Option B (recommended for PRO UI parity):** Use `windows-client/` wrapped with Tauri:
 
 ```bash
-cd ../windows-client
+cd windows-client
 npm run tauri init
 npm run tauri build -- --target aarch64-apple-darwin
 npm run tauri build -- --target x86_64-apple-darwin

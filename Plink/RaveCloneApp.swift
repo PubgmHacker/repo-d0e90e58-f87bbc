@@ -38,9 +38,24 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // P1.4 Firebase - optional import for build without SDK
+        // P1.4 Firebase - optional, only configure if valid GoogleService-Info.plist exists
         #if canImport(FirebaseCore)
-        FirebaseApp.configure()
+        if let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let plistData = FileManager.default.contents(atPath: plistPath),
+           let plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any],
+           let appId = plist["GOOGLE_APP_ID"] as? String,
+           !appId.isEmpty,
+           appId != "YOUR_GOOGLE_APP_ID"  // placeholder check
+        {
+            // Valid Firebase config — configure
+            FirebaseApp.configure()
+            AnalyticsService.firebaseConfigured = true
+            print("[Firebase] Configured successfully")
+        } else {
+            // No valid GoogleService-Info.plist — skip Firebase (no crash)
+            print("[Firebase] Skipped — GoogleService-Info.plist is placeholder or missing")
+            AnalyticsService.firebaseConfigured = false
+        }
         #endif
         AnalyticsService.shared.appOpen()
         // Soft-detect LiveKit so mic UI can appear when ops enable keys

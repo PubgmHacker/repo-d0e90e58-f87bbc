@@ -1,10 +1,17 @@
 // Analytics — Firebase + console. Core funnel for MVP beta.
+// P1/P2 fix: Firebase is optional. If GoogleService-Info.plist is placeholder
+// or missing, Analytics.logEvent calls are skipped (no crash).
 
 import Foundation
+#if canImport(FirebaseAnalytics)
 import FirebaseAnalytics
+#endif
 
 final class AnalyticsService {
     static let shared = AnalyticsService()
+
+    /// Set to true only when FirebaseApp.configure() succeeded.
+    static var firebaseConfigured: Bool = false
 
     private init() {}
 
@@ -12,6 +19,11 @@ final class AnalyticsService {
         var params: [String: Any] = parameters
         params["ts"] = Int(Date().timeIntervalSince1970)
         print("[Analytics] \(event) \(params)")
+
+        // Only call Firebase if configured — otherwise crash
+        guard Self.firebaseConfigured else { return }
+
+        #if canImport(FirebaseAnalytics)
         // Firebase rejects non-string/number values — sanitize
         let safe = params.compactMapValues { v -> Any? in
             switch v {
@@ -20,6 +32,7 @@ final class AnalyticsService {
             }
         }
         Analytics.logEvent(event, parameters: safe)
+        #endif
     }
 
     // MARK: - Lifecycle / auth

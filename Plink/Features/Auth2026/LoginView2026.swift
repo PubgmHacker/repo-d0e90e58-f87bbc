@@ -275,7 +275,7 @@ struct LoginView2026: View {
         errorMessage = nil
 
         do {
-            let authService = AuthService()
+            let authService = AuthService(api: apiClient)
             if isSignUp {
                 try await authService.signUp(
                     email: email, password: password,

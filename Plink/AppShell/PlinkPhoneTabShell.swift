@@ -43,10 +43,21 @@ struct PlinkPhoneTabShell: View {
                 .tag(AppSection.friends)
                 .tabItem { Label(AppSection.friends.title, systemImage: AppSection.friends.symbol) }
 
-            // Настройки
-            SettingsView(authService: dependencies.authService)
-                .tag(AppSection.settings)
-                .tabItem { Label(AppSection.settings.title, systemImage: AppSection.settings.symbol) }
+            // Настройки — ProfileView (Apple ID style with rotating ring)
+            NavigationStack {
+                ProfileView(
+                    viewModel: ProfileViewModel(
+                        authService: dependencies.authService
+                    ),
+                    onSignOut: {
+                        Task {
+                            dependencies.authService.forceLocalSignOut()
+                        }
+                    }
+                )
+            }
+            .tag(AppSection.settings)
+            .tabItem { Label(AppSection.settings.title, systemImage: AppSection.settings.symbol) }
         }
         .tint(Cinema2026.accent)
         .toolbarBackground(Cinema2026.background.opacity(0.96), for: .tabBar)
@@ -57,96 +68,8 @@ struct PlinkPhoneTabShell: View {
     // MARK: - Home (Netflix-style)
 
     private var homeView: some View {
-        ScrollView {
-            LazyVStack(spacing: CompactPhoneMetrics.sectionSpacing) {
-                // Netflix-style hero banner — always visible from trending
-                if let hero = trendingVideos.first {
-                    NetflixHeroBanner(video: hero) {
-                        // Tap on hero → create room with this video
-                        createPresented = true
-                    }
-                } else {
-                    // Loading state
-                    Rectangle()
-                        .fill(Cinema2026.surface)
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 0))
-                        .overlay {
-                            ProgressView().tint(Cinema2026.accent)
-                        }
-                }
-
-                // AI CTA
-                CompactAIEntryCard {
-                    selection = .ai
-                }
-                .padding(.top, 8)
-
-                // Live rooms (if any)
-                if let vm = homeViewModel, !vm.activeRooms.isEmpty {
-                    CompactRoomRail(
-                        title: "Сейчас смотрят",
-                        rooms: vm.activeRooms,
-                        style: .landscape,
-                        open: { navigateToRoom = $0 }
-                    )
-                }
-
-                // Trending — ALWAYS visible (all services label)
-                if !trendingVideos.isEmpty {
-                    TrendingRail(
-                        title: "Популярное",
-                        videos: trendingVideos,
-                        onSelect: { _ in
-                            createPresented = true
-                        }
-                    )
-                }
-
-                // Secondary trending (different items)
-                if trendingVideos.count > 6 {
-                    TrendingRail(
-                        title: "Рекомендуем",
-                        videos: Array(trendingVideos.shuffled().prefix(10)),
-                        onSelect: { _ in
-                            createPresented = true
-                        }
-                    )
-                }
-            }
-            .padding(.bottom, 100)
-        }
-        .scrollIndicators(.hidden)
-        .background(Cinema2026.background)
-        .navigationTitle("")
-        .task {
-            if homeViewModel == nil {
-                homeViewModel = HomeViewModel(
-                    roomService: dependencies.roomService,
-                    authService: dependencies.authService
-                )
-                await homeViewModel?.loadRooms()
-            }
-            if trendingVideos.isEmpty {
-                await loadTrending()
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            // ONE create button only
-            Button {
-                createPresented = true
-            } label: {
-                Label("Создать комнату", systemImage: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Cinema2026.background)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: CompactPhoneMetrics.primaryButtonHeight)
-                    .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.horizontal, CompactPhoneMetrics.horizontalInset)
-            .padding(.vertical, 8)
-            .background(Cinema2026.background.opacity(0.96))
-        }
+        // NEW: Use DiscoveryHomeView with HeroVideoCarousel (3 video banners)
+        DiscoveryHomeView(dependencies: dependencies)
     }
 
     // MARK: - Rooms

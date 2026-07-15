@@ -76,10 +76,10 @@ struct PaywallView: View {
                     .fill(
                         AngularGradient(
                             colors: [
-                                Color.bioCyan,
+                                Cinema2026.accent,
                                 Color(hex: 0x3D8DE0),
                                 Color(hex: 0x22D3EE),
-                                Color.bioCyan,
+                                Cinema2026.accent,
                             ],
                             center: .center
                         )

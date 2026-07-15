@@ -82,6 +82,13 @@ struct FeaturedCarousel: View {
             }
             .padding(.horizontal, 18)
         }
+
+        // Swipe hint for hero carousel (first time users)
+        Text("Swipe to see more →")
+            .font(.caption)
+            .foregroundStyle(Cinema2026.muted)
+            .padding(.leading, 18)
+            .padding(.top, 4)
     }
 }
 

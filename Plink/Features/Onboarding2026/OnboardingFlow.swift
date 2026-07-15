@@ -28,6 +28,9 @@ struct OnboardingFlow: View {
         .init(id: "room", symbol: "bubble.left.and.bubble.right.fill",
               title: "Всё важное рядом",
               body: "Участники, чат и точная синхронизация остаются вокруг видео."),
+        .init(id: "firstroom", symbol: "plus.circle.fill",
+              title: "Создайте первую комнату",
+              body: "Нажмите «Создать комнату», выберите YouTube, пригласите друзей по коду."),
     ]
 
     var body: some View {

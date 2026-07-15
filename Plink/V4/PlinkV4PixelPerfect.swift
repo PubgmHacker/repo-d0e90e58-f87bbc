@@ -2365,7 +2365,7 @@ struct AICompanionModel: View {
 
 // PlinkAppDelegate extension for notification permission
 extension PlinkAppDelegate {
-    func requestNotificationPermission() {
+    static func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
             if granted {
                 DispatchQueue.main.async {

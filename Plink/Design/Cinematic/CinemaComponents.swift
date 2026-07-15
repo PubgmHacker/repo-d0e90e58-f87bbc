@@ -315,3 +315,24 @@ extension Color {
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
+
+// MARK: - Bio Color Aliases (for ProfileView, RaveCloneApp compatibility)
+extension Color {
+    static var bioCyan: Color { Cinema2026.accent }
+    static var bioEmerald: Color { Color(red: 0.15, green: 0.85, blue: 0.64) }
+    static var bioTeal: Color { Color(red: 0.05, green: 0.71, blue: 0.79) }
+    static var bioAmber: Color { Cinema2026.amber }
+    static var bioCoral: Color { Color(red: 1.0, green: 0.42, blue: 0.42) }
+    static var bioRose: Color { Color(red: 1.0, green: 0.56, blue: 0.67) }
+    static var bioObsidian: Color { Cinema2026.background }
+    static var bioNeonRing: LinearGradient {
+        LinearGradient(colors: [Color.bioCyan.opacity(0.5), Color.bioEmerald.opacity(0.25)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+}
+
+// MARK: - FeatureFlags stub (for PresenceBar, RaveCloneApp)
+enum FeatureFlags {
+    static var liveKitVoiceEnabled: Bool { false }
+    static func refreshLiveKitAvailability(apiBaseURL: URL) async { }
+}

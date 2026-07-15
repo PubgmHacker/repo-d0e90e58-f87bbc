@@ -291,7 +291,7 @@ struct PlinkApp: App {
 struct SplashView: View {
     var body: some View {
         ZStack {
-            Color.bioObsidian.ignoresSafeArea()
+            Cinema2026.background.ignoresSafeArea()
 
             VStack(spacing: 18) {
                 ZStack {

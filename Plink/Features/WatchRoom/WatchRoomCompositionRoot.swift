@@ -55,6 +55,10 @@ public enum WatchRoomCompositionRoot {
         if let ytId = extractYouTubeVideoId(from: mediaItem.streamURL) {
             return .youtube(ytId)
         }
+        // Rutube (P0) — wire embed to sync controller
+        if let rtId = extractRutubeVideoId(from: mediaItem.streamURL) {
+            return .rutube(rtId)
+        }
         // Direct stream URL → native AVPlayer
         let urlString = mediaItem.streamURL
         if let url = URL(string: urlString) {
@@ -103,6 +107,27 @@ public enum WatchRoomCompositionRoot {
             }
         }
 
+        return nil
+    }
+
+    /// PATCH P0: extract Rutube video ID from embed or public URL.
+    /// Supports /play/embed/ID/ and /video/ID/
+    private static func extractRutubeVideoId(from url: String) -> String? {
+        let lower = url.lowercased()
+        guard lower.contains("rutube") else { return nil }
+
+        // /play/embed/VIDEO_ID/
+        if let range = lower.range(of: "/play/embed/") {
+            let after = url[range.upperBound...]
+            let id = after.split(separator: "/").first.map(String.init) ?? ""
+            if id.count >= 8 { return id } // accept variable length ids
+        }
+        // /video/VIDEO_ID/
+        if let range = lower.range(of: "/video/") {
+            let after = url[range.upperBound...]
+            let id = after.split(separator: "/").first.map(String.init) ?? ""
+            if id.count >= 8 { return id }
+        }
         return nil
     }
 

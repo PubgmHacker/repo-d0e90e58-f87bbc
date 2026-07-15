@@ -296,21 +296,23 @@ extension VideoService {
             }
 
         case .rutube:
-            // rutube.ru/video/VIDEO_ID/
+            // rutube.ru/video/VIDEO_ID/  (P0 wired)
             if host.contains("rutube.ru") || host.contains("rutube.video") {
-                let path = url.path
-                if path.contains("/video/") {
-                    // Extract video ID from path
-                    let segments = path.split(separator: "/")
-                    if segments.count >= 2, segments[0] == "video" {
-                        let videoId = String(segments[1])
-                        return DetectedVideo(
-                            title: title,
-                            embedURL: "https://rutube.ru/play/embed/\(videoId)",
-                            originalURL: urlString,
-                            service: .rutube
-                        )
-                    }
+                // Inline P0 extraction for Rutube ID
+                let lowerPath = urlString.lowercased()
+                var videoId: String?
+                if let r = lowerPath.range(of: "/video/") {
+                    videoId = String(urlString[r.upperBound...].split(separator: "/").first ?? "")
+                } else if let r = lowerPath.range(of: "/play/embed/") {
+                    videoId = String(urlString[r.upperBound...].split(separator: "/").first ?? "")
+                }
+                if let id = videoId, id.count >= 6 {
+                    return DetectedVideo(
+                        title: title,
+                        embedURL: "https://rutube.ru/play/embed/\(id)",
+                        originalURL: urlString,
+                        service: .rutube
+                    )
                 }
             }
 

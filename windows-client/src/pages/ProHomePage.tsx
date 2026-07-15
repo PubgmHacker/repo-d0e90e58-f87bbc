@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, youtubeMediaItem } from '../lib/api';
 import type { Friend, Room, TrendingVideo } from '../lib/types';
 import { IconPlay, IconPlus } from '../components/ui/Icons';
@@ -16,10 +16,37 @@ type Props = {
   onJoinPrompt: () => void;
 };
 
+// ════════════════════════════════════════════════════════════════════
+// Hero video banners — 3 pre-loaded MP4 files
+// ════════════════════════════════════════════════════════════════════
+const HERO_BANNERS = [
+  {
+    id: 'watch_together',
+    title: 'Смотрим вместе',
+    subtitle: 'Watch together. Anywhere. Together.',
+    accent: '#2DE2E6',
+    cta: 'Смотреть вместе',
+  },
+  {
+    id: 'ai_companion',
+    title: 'AI Companion',
+    subtitle: 'Умный помощник для совместного просмотра',
+    accent: '#26D9A4',
+    cta: 'Plink+',
+  },
+  {
+    id: 'sync_devices',
+    title: 'Синхронный просмотр',
+    subtitle: 'Sync ±2s across iOS, Android, Mac, Windows',
+    accent: '#0EB5C9',
+    cta: 'Скачать',
+  },
+] as const;
+
 /**
  * ProHomePage — 1:1 with iOS V4HomeViewLive.
  * Sections:
- * 1. V4 Hero (большое видео + Plink+ баннеры)
+ * 1. Hero Video Carousel (3 video banners with auto-scroll)
  * 2. Quick Room (быстрая комната)
  * 3. Популярное rail (horizontal scroll)
  * 4. Смотрят сейчас (active rooms)
@@ -66,7 +93,6 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
 
   if (loading) return <HomeSkeleton />;
 
-  const hero = trending[0];
   const onlineFriends = friends.filter((f) => f.isOnline);
   const formatDuration = (s?: number) => {
     if (!s) return '';
@@ -79,47 +105,10 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
     <div className="discovery-home">
       {error && <p className="error banner">{error}</p>}
 
-      {/* ═══ 1. V4 Hero (как iOS V4Hero) ═══ */}
-      {hero && (
-        <section className="v4-hero" onClick={() => createFromVideo(hero)}>
-          <div className="hero-backdrop">
-            <img src={hero.thumbnailURL} alt={hero.title} />
-            <div className="hero-gradient" />
-          </div>
+      {/* ═══ 1. Hero Video Carousel (3 banners with auto-scroll) ═══ */}
+      <HeroVideoCarousel onJoinPrompt={onJoinPrompt} />
 
-          <div className="hero-banners">
-            <div className="banner banner-premium">
-              ✨ Plink+ — Living themes, voice chat, custom emoji
-            </div>
-          </div>
-
-          <div className="hero-content">
-            <span className="hero-badge">
-              <span className="live-dot" /> LIVE NOW
-            </span>
-            <h1 className="hero-title">{hero.title}</h1>
-            <p className="hero-channel">{hero.channel}</p>
-            <div className="hero-actions">
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={(e) => { e.stopPropagation(); createFromVideo(hero); }}
-              >
-                <IconPlay size={18} /> Смотреть вместе
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={(e) => { e.stopPropagation(); onJoinPrompt(); }}
-              >
-                Войти по коду
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ═══ 2. Quick Room card (как iOS "Быстрая комната") ═══ */}
+      {/* ═══ 2. Quick Room card ═══ */}
       <div className="quick-room-card">
         <div className="quick-room-glow" />
         <div className="quick-room-content">
@@ -140,7 +129,7 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
         </div>
       </div>
 
-      {/* ═══ 3. Популярное rail (как iOS "Популярное") ═══ */}
+      {/* ═══ 3. Популярное rail ═══ */}
       <section className="v4-rail">
         <div className="rail-header">
           <h2 className="rail-title">Популярное</h2>
@@ -168,7 +157,7 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
         </div>
       </section>
 
-      {/* ═══ 4. Смотрят сейчас (как iOS active rooms rail) ═══ */}
+      {/* ═══ 4. Смотрят сейчас ═══ */}
       <section className="v4-rail">
         <div className="rail-header">
           <h2 className="rail-title">Смотрят сейчас</h2>
@@ -259,5 +248,110 @@ export function ProHomePage({ onOpenRoom, onHoverChange, onJoinPrompt }: Props) 
         </section>
       )}
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Hero Video Carousel — auto-scrolling 3 video banners
+// ════════════════════════════════════════════════════════════════════
+function HeroVideoCarousel({ onJoinPrompt }: { onJoinPrompt: () => void }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Auto-scroll every 6 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % HERO_BANNERS.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Play video when banner changes
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {
+        // Autoplay blocked — will play on user interaction
+      });
+    }
+  }, [currentIndex]);
+
+  const banner = HERO_BANNERS[currentIndex];
+
+  return (
+    <section className="v4-hero" style={{ position: 'relative' }}>
+      <div className="hero-backdrop">
+        <video
+          ref={videoRef}
+          autoPlay
+          loop
+          muted
+          playsInline
+          poster={`/banners/hero_banner_${banner.id}_poster.png`}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            filter: 'brightness(0.7) saturate(1.1)',
+          }}
+        >
+          <source src={`/banners/hero_banner_${banner.id}.mp4`} type="video/mp4" />
+          <source src={`/banners/hero_banner_${banner.id}.webm`} type="video/webm" />
+        </video>
+        <div className="hero-gradient" />
+      </div>
+
+      {/* Dots indicator */}
+      <div style={{
+        position: 'absolute',
+        top: 24,
+        right: 24,
+        zIndex: 3,
+        display: 'flex',
+        gap: 6,
+      }}>
+        {HERO_BANNERS.map((b, i) => (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => setCurrentIndex(i)}
+            style={{
+              width: i === currentIndex ? 24 : 8,
+              height: 8,
+              borderRadius: 4,
+              border: 'none',
+              background: i === currentIndex ? b.accent : 'rgba(255,255,255,0.3)',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+            }}
+            aria-label={`Banner ${i + 1}`}
+          />
+        ))}
+      </div>
+
+      <div className="hero-content">
+        <span className="hero-badge">
+          <span className="live-dot" /> PLINK+
+        </span>
+        <h1 className="hero-title">{banner.title}</h1>
+        <p className="hero-channel" style={{ color: banner.accent }}>{banner.subtitle}</p>
+        <div className="hero-actions">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={onJoinPrompt}
+          >
+            <IconPlay size={18} /> {banner.cta}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onJoinPrompt}
+          >
+            Войти по коду
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

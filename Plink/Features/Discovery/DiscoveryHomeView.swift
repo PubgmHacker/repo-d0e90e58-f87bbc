@@ -26,6 +26,10 @@ struct DiscoveryHomeView: View {
                 case .failed(let message):
                     DiscoveryErrorState(message: message) { Task { await model.load() } }
                 case .loaded:
+                    // Premium video hero carousel (3 banners from Grok Imagine)
+                    HeroVideoCarousel()
+                        .padding(.horizontal, 18)
+
                     if !model.featured.isEmpty {
                         FeaturedCarousel(items: model.featured)
                     }

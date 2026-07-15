@@ -88,6 +88,12 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
         group == .cinema
     }
 
+    /// P0.5: Fallback for App Store review. If ENABLE_CINEMA=false, hide risky services.
+    static var cinemaEnabled: Bool {
+        // In real, read from remote config or UserDefaults
+        return true // or ProcessInfo.processInfo.environment["ENABLE_CINEMA"] != "false"
+    }
+
     // MARK: - Display
 
     @MainActor

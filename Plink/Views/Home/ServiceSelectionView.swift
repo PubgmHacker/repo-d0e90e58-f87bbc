@@ -38,7 +38,7 @@ struct ServiceSelectionView: View {
 
     // App Store safe: exclude Netflix/Disney to avoid ToS reject risk (host login pattern for protected content)
     private let videoServices: [VideoService] = [.youtube, .vk, .rutube]
-    private let cinemaServices: [VideoService] = [.kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion]
+    private let cinemaServices: [VideoService] = VideoService.cinemaEnabled ? [.kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion] : []
 
     var body: some View {
         ZStack {

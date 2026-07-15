@@ -1,135 +1,90 @@
 // Plink/RTC/ParticipantVideoView.swift — PATCH 09: LiveKit video rendering
 //
-// GLM-5.2 master implementation patch — Commit Group 9.
+// P1/P2 Sprint fix: LiveKit integration disabled (see RoomRTCController.swift).
+// Voice/video chat UI hidden on all platforms (audit Option B).
 //
-// SwiftUI wrapper around LiveKit's VideoView. Renders a participant's
-// camera track (local or remote) inside a circular avatar that replaces
-// the letter-based avatar when the participant has video enabled.
-//
-// Usage:
-//   ParticipantVideoView(track: controller.videoTrack(forParticipantIdentity: id))
-//     .frame(width: 36, height: 36)
-//     .clipShape(Circle())
-//
-// Design:
-//   - Mirrored layout for local participant (selfie convention).
-//   - .scaleAspectFill by default — fills the circle, may crop.
-//   - Smooth transition when track appears/disappears (opacity fade).
-//   - Falls back to letter avatar when track is nil.
-//
-// Architecture:
-//   - ParticipantVideoView is a UIViewRepresentable wrapping LiveKit's
-//     VideoView (UIKit-based for performance).
-//   - The VideoView is reusable — updateUIView rebinds the track without
-//     recreating the underlying view.
-//   - Layout parameters (mirror, aspect fill) are set once in makeUIView.
-//
-// Performance:
-//   - VideoView uses Metal for rendering — sub-millisecond frame updates.
-//   - One VideoView per visible participant (max 5 in PresenceBar).
-//   - When a participant leaves, dismantleUIView stops the track render.
-//
-// Testing:
-//   - Runtime test plan: publish local camera, verify self-preview shows;
-//     remote participant publishes, verify their avatar shows video.
+// Replaced with stub that shows letter avatar fallback.
+// When LiveKit is re-enabled, restore real VideoView implementation
+// using `import LiveKit` + `LiveKit.VideoView`.
 
 import SwiftUI
 
-import LiveKit
+/// Stub — shows letter avatar fallback (no LiveKit video).
+struct ParticipantVideoView: View {
+    var track: Any? = nil  // ignored, kept for API compatibility
+    var isMirrored: Bool = false
 
-/// SwiftUI wrapper for LiveKit's VideoView. Renders a participant's
-/// camera track inside a circular avatar.
-struct ParticipantVideoView: UIViewRepresentable {
-    let track: VideoTrack?
-    let isMirrored: Bool
-
-    init(track: VideoTrack?, isMirrored: Bool = false) {
-        self.track = track
-        self.isMirrored = isMirrored
-    }
-
-    func makeUIView(context: Context) -> VideoView {
-        let view = VideoView()
-        view.mirrorMode = isMirrored ? .mirror : .off
-        view.contentMode = .scaleAspectFill
-        view.backgroundColor = UIColor(Cinema2026.raised)
-        return view
-    }
-
-    func updateUIView(_ uiView: VideoView, context: Context) {
-        // Rebind track — VideoView handles attach/detach internally.
-        if uiView.track !== track {
-            uiView.track = track
-        }
-    }
-
-    static func dismantleUIView(_ uiView: VideoView, coordinator: ()) {
-        // Detach track to stop rendering when view is removed.
-        uiView.track = nil
+    var body: some View {
+        Color.clear  // No-op when LiveKit disabled
     }
 }
 
-/// Composite view that shows video when track is available, falls back
-/// to letter avatar otherwise. Used in PresenceBar.
+/// Composite view — video when available, letter avatar fallback.
+/// Currently always shows letter avatar (LiveKit disabled).
 struct ParticipantAvatarWithVideo: View {
-    let participant: RTCParticipant
+    let participantId: String
+    let participantName: String
     let hostId: String?
     let isSpeaking: Bool
-    let videoTrack: VideoTrack?
+    let avatarURL: String?
+    var videoTrack: Any? = nil  // ignored
 
-    private var isHost: Bool { participant.identity == hostId }
-    private var hasVideo: Bool { videoTrack != nil }
+    private var isHost: Bool { participantId == hostId }
+    private var hasVideo: Bool { false }  // LiveKit disabled
 
     var body: some View {
         ZStack {
-            if let track = videoTrack {
-                ParticipantVideoView(
-                    track: track,
-                    isMirrored: participant.isLocal
-                )
-                .frame(width: 36, height: 36)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(ringColor, lineWidth: 1.5)
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            // Letter avatar fallback
+            if let urlStr = avatarURL, let url = URL(string: urlStr) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        letterAvatar
+                    }
+                }
             } else {
-                // Letter avatar fallback
+                letterAvatar
+            }
+
+            // Speaking indicator ring
+            if isSpeaking {
                 Circle()
-                    .fill(Cinema2026.raised)
-                    .frame(width: 36, height: 36)
-                    .overlay(
-                        Text(String(participant.identity.prefix(1)).uppercased())
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Cinema2026.text)
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(ringColor, lineWidth: 1.5)
-                    )
-                    .transition(.opacity)
+                    .strokeBorder(Color(hex: 0x26D9A4), lineWidth: 2)
+                    .frame(width: 40, height: 40)
             }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            // Host crown badge — always shown regardless of video state
+
+            // Host badge
             if isHost {
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 8))
-                    .foregroundStyle(Cinema2026.amber)
-                    .background(Cinema2026.background, in: Circle())
-                    .frame(width: 14, height: 14)
-                    .offset(x: 1, y: 1)
+                Circle()
+                    .fill(Color(hex: 0xD7A750))
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Text("★")
+                            .font(.system(size: 6, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                    .offset(x: 14, y: -14)
             }
         }
-        .animation(.easeOut(duration: 0.2), value: hasVideo)
+        .frame(width: 36, height: 36)
     }
 
-    private var ringColor: Color {
-        if isSpeaking { return Cinema2026.accent }
-        if isHost { return Cinema2026.amber.opacity(0.6) }
-        return Cinema2026.accent.opacity(0.18)
+    private var letterAvatar: some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [Color(hex: 0x2DE2E6), Color(hex: 0x26D9A4)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                Text(participantName.first?.uppercased() ?? "?")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(hex: 0x0E1113))
+            )
     }
 }
-
-

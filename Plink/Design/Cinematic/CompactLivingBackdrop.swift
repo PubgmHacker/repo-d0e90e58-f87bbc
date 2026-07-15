@@ -168,15 +168,14 @@ struct MemorySafeLivingBackdrop: View {
             height: radius * 2
         )
         // GraphicsContext doesn't support .filter blur directly.
-        // Use radial gradient instead to simulate soft glow.
-        let gradient = GraphicsContext.Shading.color(
-            RadialGradient(
-                colors: [color, color.opacity(0)],
-                center: .center,
-                startRadius: 0,
-                endRadius: radius
-            )
+        // Use radial gradient shading to simulate soft glow.
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let gradient = RadialGradient(
+            colors: [color, color.opacity(0)],
+            center: .center,
+            startRadius: 0,
+            endRadius: radius
         )
-        ctx.fill(Path(ellipseIn: rect), with: gradient)
+        ctx.fill(Path(ellipseIn: rect), with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: radius))
     }
 }

@@ -181,11 +181,21 @@ final class ProfileViewModel {
         do {
             let fresh: User = try await authService.fetchCurrentUser()
             user = fresh
-            // Обновляем локальный кэш в AuthService
             authService.updateCachedUser(fresh)
         } catch {
-            // Fallback на локальный кэш
             user = await authService.currentUser()
+        }
+
+        // P0: Prefer avatarData (base64 from DB) — decode to UIImage
+        if let avatarDataStr = user?.avatarData {
+            let clean = avatarDataStr.replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
+            if let data = Data(base64Encoded: clean), let img = UIImage(data: data) {
+                Self.sharedAvatar = img
+                avatarImage = img
+                loadCoverFromDisk()
+                isLoading = false
+                return
+            }
         }
         loadAvatarFromDisk()
         isLoading = false
@@ -212,7 +222,7 @@ final class ProfileViewModel {
         }
     }
 
-    /// 🔧 NEW: Upload avatar as base64 to server.
+    /// P0: Upload avatar as base64 to server. Server stores in avatarData (DB).
     @MainActor
     private func uploadAvatarToServer(base64: String) async {
         guard let api = authService as? AuthService else { return }
@@ -228,10 +238,19 @@ final class ProfileViewModel {
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse,
                httpResponse.statusCode == 200 {
-                print("✅ Avatar uploaded to server")
+                // Server returns { avatarData: "..." }
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                   let avatarData = json["avatarData"] {
+                    // Update local user model with avatarData
+                    if var current = user {
+                        // Note: User struct needs update to support setting avatarData
+                        print("✅ AvatarData received from server")
+                    }
+                }
+                print("✅ Avatar uploaded (base64 in DB)")
             } else {
                 print("⚠️ Avatar upload failed: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
             }

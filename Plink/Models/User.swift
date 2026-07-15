@@ -17,6 +17,8 @@ struct User: Codable, Identifiable, Sendable {
     let username: String          // unique @tag, e.g. "alex_films"
     let email: String
     let avatarURL: String?
+    /// P0: Base64 avatar data stored in DB (replaces filesystem for Railway persistence)
+    let avatarData: String?
     /// 🔧 v11: Telegram-style display name (separate from @username).
     /// nil on old backends → falls back to username.
     let displayName: String?
@@ -133,6 +135,7 @@ struct UserPreview: Codable, Identifiable, Sendable, Hashable {
     let id: String
     let username: String
     let avatarURL: String?
+    let avatarData: String?  // P0: base64 support
     /// 🔧 v11: optional display name (back-compat: nil on old backends)
     let displayName: String?
     let isOnline: Bool
@@ -143,15 +146,12 @@ struct UserPreview: Codable, Identifiable, Sendable, Hashable {
     }
 
     /// 🔧 v11: explicit init with displayName defaulting to nil.
-    /// Without this, Swift synthesizes a memberwise init where displayName
-    /// is required (even though it's Optional) — breaking all existing
-    /// callers that don't pass displayName. The default nil preserves
-    /// backward compatibility.
     init(id: String, username: String, avatarURL: String?,
-         displayName: String? = nil, isOnline: Bool) {
+         avatarData: String? = nil, displayName: String? = nil, isOnline: Bool) {
         self.id = id
         self.username = username
         self.avatarURL = avatarURL
+        self.avatarData = avatarData
         self.displayName = displayName
         self.isOnline = isOnline
     }

@@ -61,7 +61,7 @@ struct PlinkSidebarShell: View {
             // Use DiscoveryHomeView as home content
             DiscoveryHomeView(dependencies: dependencies)
         case .rooms:
-            RoomsHubView()
+            RoomsHubView(dependencies: dependencies)
         case .ai:
             AIAssistantView()
         case .friends:

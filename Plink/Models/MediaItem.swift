@@ -14,6 +14,10 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
     /// instead of ?b64url=... — backend extracts URL with its own IP.
     var videoId: String?
 
+    /// P1: Room appearance theme chosen by host (standard or live Plink+).
+    /// Guests read this from the room's mediaItem to apply the same look.
+    var appearanceTheme: String?
+
     enum MediaType: String, Codable, Sendable {
         case movie = "movie"
         case series = "series"

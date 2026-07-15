@@ -496,7 +496,8 @@ struct RoomSetupView: View {
                     mediaItem: mediaItem,
                     privacy: privacy,
                     password: privacy == .privateRoom && !roomPassword.isEmpty ? roomPassword : nil,
-                    hostName: AuthService(api: apiClient).currentUserValue?.username
+                    hostName: AuthService(api: apiClient).currentUserValue?.username,
+                    appearanceTheme: selectedTheme.rawValue
                 )
                 let room = try await roomService.createRoom(request)
                 await MainActor.run {

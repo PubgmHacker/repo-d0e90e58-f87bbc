@@ -182,6 +182,9 @@ struct CreateRoomRequest: Codable, Sendable {
     /// но если JWT не содержит username — fallback на это поле).
     /// Бэкенд rooms.ts: `hostName: request.user.username || body.hostName`
     let hostName: String?
+    /// P1: Host-selected room appearance/theme (standard or Plink+ live).
+    /// Guests should see the same theme.
+    let appearanceTheme: String?
 }
 
 // MARK: - Join Room Request

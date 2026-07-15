@@ -344,8 +344,8 @@ extension CinemaRadius {
 
 // ParticipantAvatarStack — overlapping avatar circles
 struct ParticipantAvatarStack: View {
-    let participants: [String]  // avatar URLs or initials
-    
+    let participants: [UserPreview]
+
     var body: some View {
         HStack(spacing: -8) {
             ForEach(Array(participants.prefix(3).enumerated()), id: \.offset) { index, p in
@@ -353,7 +353,7 @@ struct ParticipantAvatarStack: View {
                     .fill(Cinema2026.accent.opacity(0.3))
                     .frame(width: 24, height: 24)
                     .overlay(
-                        Text(String(p.prefix(1)).uppercased())
+                        Text(String((p.displayName ?? p.username).prefix(1)).uppercased())
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.white)
                     )

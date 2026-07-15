@@ -770,7 +770,7 @@ struct PlinkApprovedV4Root: View {
             hostName: AuthService.shared.currentUserValue?.username
         )
         do {
-            let api = APIClient(baseURL: "https://plink-backend-production-ef31.up.railway.app/api")
+            let api = APIClient.shared
             let room = try await RoomService(api: api).createRoom(request)
             await MainActor.run {
                 HapticManager.roomJoined()
@@ -806,7 +806,7 @@ struct PlinkApprovedV4Root: View {
             hostName: AuthService.shared.currentUserValue?.username
         )
         do {
-            let api = APIClient(baseURL: "https://plink-backend-production-ef31.up.railway.app/api")
+            let api = APIClient.shared
             let room = try await RoomService(api: api).createRoom(request)
             await MainActor.run {
                 HapticManager.roomJoined()
@@ -818,7 +818,7 @@ struct PlinkApprovedV4Root: View {
     }
 
     private func bootstrap() async {
-        let api = APIClient(baseURL: "https://plink-backend-production-ef31.up.railway.app/api")
+        let api = APIClient.shared
         let rs = RoomService(api: api)
         let fm = FriendManager(api: api)
         let as_ = AuthService(api: api)
@@ -1477,7 +1477,7 @@ struct V4HomeViewLive: View {
             hostName: AuthService.shared.currentUserValue?.username
         )
         do {
-            let api = APIClient(baseURL: "https://plink-backend-production-ef31.up.railway.app/api")
+            let api = APIClient.shared
             let room = try await RoomService(api: api).createRoom(request)
             await MainActor.run {
                 HapticManager.roomJoined()

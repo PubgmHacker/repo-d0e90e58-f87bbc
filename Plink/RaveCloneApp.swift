@@ -126,7 +126,7 @@ struct PlinkApp: App {
 
         let api = APIClient()
         apiClient = api
-        authService = AuthService(api: api)
+        authService = AuthService.shared
         mediaService = MediaService()
         roomService = RoomService(api: api)
         // 🔧 FIX C5: Shared authenticated client injected into social layer

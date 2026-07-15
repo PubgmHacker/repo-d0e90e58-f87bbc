@@ -10,8 +10,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "tauri:build:debug": "tauri build --debug"
+    "dmg:clean": "bash scripts/dmg-clean.sh",
+    "tauri:build": "npm run dmg:clean && CI=true tauri build",
+    "tauri:build:debug": "npm run dmg:clean && CI=true tauri build --debug"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.6.0",

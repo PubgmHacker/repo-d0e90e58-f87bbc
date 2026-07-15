@@ -74,13 +74,5 @@ struct PremiumButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Color hex helper (if not already defined)
-
-extension Color {
-    init(hex: UInt32, alpha: Double = 1.0) {
-        let r = Double((hex >> 16) & 0xFF) / 255.0
-        let g = Double((hex >> 8) & 0xFF) / 255.0
-        let b = Double(hex & 0xFF) / 255.0
-        self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
-    }
-}
+// Note: Color(hex:alpha:) is already defined in Plink/Extensions/Color+Theme.swift
+// Do not redeclare here — would cause 'Invalid redeclaration' + 'Ambiguous use'

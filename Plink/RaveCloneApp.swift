@@ -1,6 +1,9 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import FirebaseCore
+import FirebaseAnalytics
+import FirebaseCrashlytics
 
 // MARK: - AppDelegate (orientation lock)
 //
@@ -32,6 +35,12 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
         let lock = PlinkAppDelegate.orientationLock
         print("📱 AppDelegate supportedInterfaceOrientationsFor → \(lock)")
         return lock
+    }
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // P1.4 Firebase
+        FirebaseApp.configure()
+        return true
     }
 }
 

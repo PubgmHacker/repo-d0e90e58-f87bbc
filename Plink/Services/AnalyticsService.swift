@@ -2,13 +2,14 @@
 // Track key events for P1.
 
 import Foundation
+import FirebaseAnalytics
 
 final class AnalyticsService {
     static let shared = AnalyticsService()
 
     func track(_ event: String, parameters: [String: Any] = [:]) {
         print("[Analytics] \(event) \(parameters)")
-        // TODO: FirebaseAnalytics.logEvent(event, parameters: parameters)
+        Analytics.logEvent(event, parameters: parameters)
     }
 
     func roomCreated() { track("room_created") }

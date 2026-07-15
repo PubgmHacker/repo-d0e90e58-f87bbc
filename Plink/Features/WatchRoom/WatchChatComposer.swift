@@ -258,17 +258,9 @@ struct EmojiInlinePanel: View {
                                 onPick(emojiName)  // pass name; chat will render Image or text
                             }
                         } label: {
-                            if emojiName.hasPrefix("emoji_") {
-                                Image(emojiName)
-                                    .resizable()
-                                    .frame(width: 28, height: 28)
-                                    .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
-                            } else {
-                                Text(emojiName)
-                                    .font(.system(size: 26))
-                                    .frame(width: 40, height: 40)
-                                    .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
-                            }
+                            EmojiAssetImage(name: emojiName, pack: pack.name)
+                                .frame(width: 28, height: 28)
+                                .opacity(pack.isPremium && !hasPremium ? 0.5 : 1)
                         }
                     }
                 }
@@ -287,4 +279,23 @@ struct EmojiInlinePanel: View {
 
 extension Notification.Name {
     static let plinkInsertAtCursor = Notification.Name("plinkInsertAtCursor")
+}
+
+// Helper to load custom PNG emoji from bundle Resources/Emojis/<pack>/
+struct EmojiAssetImage: View {
+    let name: String
+    let pack: String
+
+    var body: some View {
+        let packDir = pack.lowercased().replacingOccurrences(of: "+", with: "")
+        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Emojis/\(packDir)"),
+           let data = try? Data(contentsOf: url),
+           let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+        } else {
+            // Fallback to SF Symbol or text
+            Image(systemName: "face.smiling")
+        }
+    }
 }

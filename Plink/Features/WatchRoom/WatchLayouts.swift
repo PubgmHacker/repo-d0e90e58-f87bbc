@@ -82,29 +82,33 @@ struct TabletWatchLayout: View {
     @Binding var ui: WatchRoomUIState
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                PlayerStage(model: model, ui: $ui, variant: .tablet)
-                    .id("plink.player.stage")
-                    .aspectRatio(16 / 9, contentMode: .fit)
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                // Player ~60%
+                VStack(spacing: 0) {
+                    PlayerStage(model: model, ui: $ui, variant: .tablet)
+                        .id("plink.player.stage")
+                        .frame(width: geo.size.width * 0.6, height: geo.size.width * 0.6 * 9 / 16)
 
-                RoomIdentityBar(model: model)
-                PresenceBar(model: model)
-                Spacer(minLength: 0)
+                    RoomIdentityBar(model: model)
+                    PresenceBar(model: model)
+                    Spacer(minLength: 0)
+                }
+                .frame(width: geo.size.width * 0.6)
+
+                Rectangle()
+                    .fill(Cinema2026.divider.opacity(0.45))
+                    .frame(width: 0.5)
+
+                // Chat ~40%
+                VStack(spacing: 0) {
+                    WatchChatHeader(model: model)
+                    WatchChatView(model: model)
+                    WatchChatComposer(model: model)
+                }
+                .frame(width: geo.size.width * 0.4)
+                .background(Cinema2026.background.opacity(0.95))
             }
-            .frame(maxWidth: .infinity)
-
-            Rectangle()
-                .fill(Cinema2026.divider.opacity(0.45))
-                .frame(width: 0.5)
-
-            VStack(spacing: 0) {
-                WatchChatHeader(model: model)
-                WatchChatView(model: model)
-                WatchChatComposer(model: model)
-            }
-            .frame(width: 360)
-            .background(Cinema2026.background.opacity(0.95))
         }
     }
 }

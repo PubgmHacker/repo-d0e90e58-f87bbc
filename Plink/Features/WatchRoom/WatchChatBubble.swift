@@ -43,8 +43,7 @@ struct WatchChatBubble: View {
                 // P0.4: support custom emoji PNG names
                 Group {
                     if message.text.hasPrefix("emoji_") {
-                        Image(message.text)
-                            .resizable()
+                        EmojiAssetImage(name: message.text, pack: "reactions") // default, can enhance with pack info
                             .frame(width: 24, height: 24)
                     } else {
                         Text(message.text)
@@ -105,5 +104,23 @@ struct BubbleShape: Shape {
             topTrailing: isOwn ? 6 : 16
         )
         return Path(roundedRect: rect, cornerRadii: radii)
+    }
+}
+
+// Helper to load custom PNG emoji from bundle (for this file)
+struct EmojiAssetImage: View {
+    let name: String
+    let pack: String
+
+    var body: some View {
+        let packDir = pack.lowercased().replacingOccurrences(of: "+", with: "")
+        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Emojis/\(packDir)"),
+           let data = try? Data(contentsOf: url),
+           let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+        } else {
+            Image(systemName: "face.smiling")
+        }
     }
 }

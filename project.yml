@@ -19,6 +19,9 @@ packages:
   LiveKit:
     url: https://github.com/livekit/client-sdk-swift
     from: 2.0.0
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 10.0.0
 
 settings:
   base:
@@ -59,6 +62,10 @@ targets:
         SUPPORTS_MACCATALYST: NO
     dependencies:
       - package: LiveKit
+      - package: Firebase
+        product: FirebaseAnalytics
+      - package: Firebase
+        product: FirebaseCrashlytics
     info:
       path: Plink/Resources/Info.plist
       properties:

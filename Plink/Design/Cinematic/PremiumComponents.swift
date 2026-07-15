@@ -40,13 +40,32 @@ struct PremiumUsernameText: View {
 // MARK: - Admin Badge Chip
 
 struct AdminBadgeChip: View {
+    var compact: Bool = false
+
     var body: some View {
-        Text("АДМИН")
-            .font(.system(size: 9, weight: .heavy))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Cinema2026.danger.opacity(0.2), in: Capsule())
-            .foregroundStyle(Cinema2026.danger)
+        HStack(spacing: 4) {
+            Image("AdminBadge")
+                .resizable()
+                .scaledToFit()
+                .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
+            if !compact {
+                Text("АДМИН")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .tracking(0.5)
+            }
+        }
+        .foregroundColor(Cinema2026.danger)
+        .padding(.horizontal, compact ? 6 : 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(Cinema2026.danger.opacity(0.15))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Cinema2026.danger.opacity(0.6), lineWidth: 0.5)
+        )
+        .shadow(color: Cinema2026.danger.opacity(0.4), radius: 4, y: 1)
     }
 }
 

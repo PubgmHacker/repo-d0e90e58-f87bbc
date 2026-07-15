@@ -216,45 +216,12 @@ private struct RingModifier: ViewModifier {
 //
 // 🔧 FIX: Uses Image('AdminBadge') — user's custom admin icon (uploaded PNG,
 // 512×512 RGBA). Was using SF Symbol 'shield.fill' which user didn't want.
-struct AdminBadgeChip: View {
-    var compact: Bool = false    // true = только иконка (для tight layouts)
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image("AdminBadge")
-                .resizable()
-                .scaledToFit()
-                .frame(width: compact ? 12 : 14, height: compact ? 12 : 14)
-            if !compact {
-                Text("АДМИН")
-                    .font(.system(size: 9, weight: .heavy, design: .rounded))
-                    .tracking(0.5)
-                    // 🔧 TEXT STROKE: тонкая чёрная обводка для читаемости красного текста
-                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0.4, y: 0)
-                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: -0.4, y: 0)
-                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: 0.4)
-                    .shadow(color: .black.opacity(0.7), radius: 0.4, x: 0, y: -0.4)
-            }
-        }
-        .foregroundColor(Color.raveDanger)
-        .padding(.horizontal, compact ? 6 : 8)
-        .padding(.vertical, 3)
-        .background(
-            Capsule()
-                .fill(Color.raveDanger.opacity(0.15))
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.raveDanger.opacity(0.6), lineWidth: 0.5)
-        )
-        .shadow(color: Color.raveDanger.opacity(0.4), radius: 4, y: 1)
-    }
-}
+// AdminBadgeChip is defined in PremiumComponents.swift (single source of truth)
+// Removed duplicate from AvatarView to fix 'Ambiguous use of init'
 
 #Preview("Admin Badge Chip") {
     VStack(spacing: 12) {
         AdminBadgeChip()
-        AdminBadgeChip(compact: true)
     }
     .padding()
     .background(Color.bioObsidian)

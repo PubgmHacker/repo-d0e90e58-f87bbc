@@ -183,21 +183,8 @@ struct PlinkApp: App {
 
     // MARK: - Login Content
 
-    @ViewBuilder
-    private var loginContent: some View {
-        NavigationStack {
-            LoginView(
-                viewModel: AuthViewModel(authService: authService),
-                onSignIn: {
-                    Task {
-                        await bridgeAuthToken()
-                        await MainActor.run { isSignedIn = true }
-                        await friendManager.loadAll()
-                    }
-                }
-            )
-        }
-    }
+    // loginContent removed — AuthLaunchGate handles auth flow
+    // (uses LoginView2026 from Auth2026 folder)
 
     // MARK: - Deep-Link Handler (Блок 3)
 

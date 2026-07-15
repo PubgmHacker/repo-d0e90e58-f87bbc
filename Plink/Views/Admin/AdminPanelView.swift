@@ -48,6 +48,15 @@ struct AdminPanelView: View {
                     // Small admin icon
                     Image("AdminBadge")
                         .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .foregroundColor(.raveDanger)
+
+                    Text("Админ-панель")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(.raveTextPrimary)
+
+                    Spacer()
 
                     // P0: Test Push button in admin
                     Button("Test Push") {
@@ -58,16 +67,6 @@ struct AdminPanelView: View {
                     .padding(.vertical, 4)
                     .background(Cinema2026.accent.opacity(0.2))
                     .clipShape(Capsule())
-                }
-                        .scaledToFit()
-                        .frame(width: 22, height: 22)
-                        .foregroundColor(.raveDanger)
-
-                    Text("Админ-панель")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(.raveTextPrimary)
-
-                    Spacer()
 
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")

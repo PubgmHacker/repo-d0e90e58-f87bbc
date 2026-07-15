@@ -37,19 +37,19 @@ extension View {
 /// Use these instead of hardcoded font sizes for Dynamic Type support.
 enum PlinkFont {
     static func largeTitle() -> Font {
-        .system(size: 34, weight: .800, design: .default)
+        .system(size: 34, weight: .heavy, design: .default)
     }
 
     static func title1() -> Font {
-        .system(size: 28, weight: .700, design: .default)
+        .system(size: 28, weight: .bold, design: .default)
     }
 
     static func title2() -> Font {
-        .system(size: 22, weight: .600, design: .default)
+        .system(size: 22, weight: .semibold, design: .default)
     }
 
     static func title3() -> Font {
-        .system(size: 20, weight: .600, design: .default)
+        .system(size: 20, weight: .semibold, design: .default)
     }
 
     static func body() -> Font {

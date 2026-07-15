@@ -55,13 +55,13 @@ struct AIActionCard: View {
             // Description
             VStack(alignment: .leading, spacing: 2) {
                 Text("AI предлагает")
-                    .font(.system(size: 11, weight: .600))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color(hex: 0x2DE2E6))
                     .textCase(.uppercase)
                     .tracking(0.5)
 
                 Text(action.description)
-                    .font(.system(size: 14, weight: .500))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Cinema2026.text)
                     .lineLimit(2)
             }

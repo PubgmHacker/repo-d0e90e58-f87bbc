@@ -63,13 +63,13 @@ struct HeroVideoBanner: View {
             if showsOverlay {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(banner.title)
-                        .font(.system(size: 34, weight: .800))
+                        .font(.system(size: 34, weight: .heavy))
                         .tracking(-0.8)
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.6), radius: 8)
 
                     Text(banner.subtitle)
-                        .font(.system(size: 14, weight: .600))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(banner.accentColor)
                         .shadow(color: .black.opacity(0.6), radius: 4)
 
@@ -81,7 +81,7 @@ struct HeroVideoBanner: View {
                                 Image(systemName: "play.fill")
                                 Text("Смотреть вместе")
                             }
-                            .font(.system(size: 15, weight: .700))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color(hex: 0x0E1113))
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
@@ -100,7 +100,7 @@ struct HeroVideoBanner: View {
                             // TODO: open Plink+ paywall
                         } label: {
                             Text(banner.cta2)
-                                .font(.system(size: 15, weight: .600))
+                                .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 12)

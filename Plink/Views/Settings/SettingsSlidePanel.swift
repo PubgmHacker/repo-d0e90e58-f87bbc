@@ -74,7 +74,7 @@ struct SettingsSlidePanel: View {
             if let profileVM {
                 NavigationStack {
                     ProfileView(viewModel: profileVM, onSignOut: {
-                        AuthService.shared.forceLocalSignOut()
+                        AuthService.shared.signOutLocally()
                         closePanel()
                     })
                 }
@@ -142,7 +142,7 @@ struct SettingsSlidePanel: View {
             Button {
                 // Synchronous, guaranteed to work — no async, no network,
                 // no try? that can swallow errors. Clears Keychain immediately.
-                AuthService.shared.forceLocalSignOut()
+                AuthService.shared.signOutLocally()
                 closePanel()
             } label: {
                 HStack(spacing: 10) {

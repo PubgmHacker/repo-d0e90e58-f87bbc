@@ -2052,7 +2052,7 @@ struct V4ProfileViewLive: View {
                     setting("xmark","Удалить аккаунт","›",danger:true){showDeleteAccount = true}
                     // Выйти — synchronous, guaranteed
                     Button {
-                        AuthService.shared.forceLocalSignOut()
+                        AuthService.shared.signOutLocally()
                     } label: {
                         HStack(spacing:11) {
                             Image(systemName: "arrow.right.square.fill").frame(width:30)

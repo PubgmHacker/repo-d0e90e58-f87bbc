@@ -97,7 +97,7 @@ internal struct PrivacySecurityView: View {
                     ActiveSessionsView(sessions: sessions)
                 }
                 Button(role: .destructive) {
-                    AuthService.shared.forceLocalSignOut()
+                    AuthService.shared.signOutLocally()
                 } label: {
                     Text("Выйти на всех устройствах")
                 }

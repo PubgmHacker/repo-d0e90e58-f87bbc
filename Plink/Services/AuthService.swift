@@ -367,3 +367,26 @@ struct AuthUser: Codable, Sendable {
     let role: String?
     let createdAt: Date?
 }
+
+// MARK: - Shared Instance + Local Sign Out (for V4/V5 compatibility)
+
+extension AuthService {
+    /// Shared singleton for V4/V5 code that expects AuthService.shared
+    static let shared = AuthService(api: APIClient.shared)
+
+    /// Synchronous local sign-out (no network call).
+    /// Clears Keychain tokens + cached user immediately.
+    func signOutLocally() {
+        KeychainHelper.delete(for: Keys.authToken)
+        KeychainHelper.delete(for: Keys.tokenExpiry)
+        KeychainHelper.delete(for: Keys.refreshToken)
+        defaults.removeObject(forKey: Keys.savedUser)
+        defaults.removeObject(forKey: "plink_current_user_id")
+        authToken = nil
+        tokenExpiry = 0
+        refreshToken = nil
+        api.authToken = nil
+        currentUser = nil
+        NotificationCenter.default.post(name: .plinkSignedOut, object: nil)
+    }
+}

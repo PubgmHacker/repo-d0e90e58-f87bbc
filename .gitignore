@@ -79,3 +79,19 @@ Plink.xcodeproj/
 *.xcuserstate
 GoogleService-Info.plist
 repo-d0e90e58-f87bbc/
+
+# --- Desktop / web clients (Tauri + landing) ---
+node_modules/
+dist/
+.next/
+out/
+windows-client/src-tauri/target/
+build/
+*.ipa
+*.apk
+plink-landing/public/downloads/*.dmg
+plink-landing/public/downloads/*.exe
+plink-landing/public/downloads/*.apk
+android-client/.gradle/
+android-client/app/build/
+android-client/local.properties

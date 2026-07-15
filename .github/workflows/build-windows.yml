@@ -1,0 +1,49 @@
+name: Build Windows .exe
+
+on:
+  push:
+    tags:
+      - 'windows-v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Install JS deps
+        working-directory: windows-client
+        run: npm ci
+
+      - name: Build web assets
+        working-directory: windows-client
+        run: npm run build
+
+      - name: Build .exe (when Tauri configured)
+        working-directory: windows-client
+        run: |
+          if [ -f src-tauri/Cargo.toml ]; then
+            npm run tauri build
+          else
+            echo "Tauri not initialized yet — run 'npm run tauri init' in windows-client first"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: plink-windows-exe
+          path: windows-client/src-tauri/target/release/bundle/nsis/*.exe

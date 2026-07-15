@@ -20,6 +20,7 @@ struct ProfileView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedCoverItem: PhotosPickerItem?  // 🔧 NEW: cover photo selection
     @State private var friendManager: FriendManager? = nil
+    @State private var ringRotation: Double = 0  // moved from top-level (line 1154)
     @State private var isPremium = false
 
     init(viewModel: ProfileViewModel, onSignOut: @escaping () -> Void) {
@@ -1151,7 +1152,7 @@ private var profileHeaderNew: some View {
     }
 }
 
-@State private var ringRotation: Double = 0
+// ringRotation moved into ProfileView struct (was top-level — illegal)
 
 private func profileCard(title: String, icon: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {

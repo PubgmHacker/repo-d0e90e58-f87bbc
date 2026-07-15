@@ -34,6 +34,23 @@ struct DiscoveryHomeView: View {
                     quickRoomCard
                         .padding(.horizontal, 18)
 
+                    // Promo banners
+                    promoBanner(
+                        title: "Смотрите вместе",
+                        subtitle: "Создай комнату и пригласи друзей смотреть кино синхронно",
+                        icon: "person.2.fill",
+                        isPremium: false
+                    )
+                    .padding(.horizontal, 18)
+
+                    promoBanner(
+                        title: "Plink+ премиум",
+                        subtitle: "Живые темы, анимированные эмодзи и эксклюзивные функции",
+                        icon: "crown.fill",
+                        isPremium: true
+                    )
+                    .padding(.horizontal, 18)
+
                     if !model.featured.isEmpty {
                         FeaturedCarousel(items: model.featured)
                     }
@@ -122,6 +139,53 @@ extension DiscoveryHomeView {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Быстрая комната — создать или войти по коду")
+    }
+
+    // MARK: - Promo Banner (from V4)
+
+    private func promoBanner(title: String, subtitle: String, icon: String, isPremium: Bool = false) -> some View {
+        let bannerAccent = isPremium ? Color(hex: 0xD7A750) : Cinema2026.accent
+        let bannerSecondary = isPremium ? Color(hex: 0xFF8FAB) : Color(red: 0.15, green: 0.85, blue: 0.64)
+
+        return HStack(spacing: 14) {
+            // Icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(bannerAccent.opacity(0.2))
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(bannerAccent)
+            }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Cinema2026.text)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Cinema2026.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [bannerAccent.opacity(0.08), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(bannerAccent.opacity(0.2), lineWidth: 1)
+            }
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(subtitle)")
     }
 }
 

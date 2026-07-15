@@ -98,7 +98,6 @@ struct WatchRoomScreen: View {
         .animation(.plinkLayout, value: layoutVariant)
         .onChange(of: layoutVariant) { _, newVariant in
             // PATCH 14: update danmaku lane count on rotation.
-            // Portrait = 5 lanes, landscape = 7 lanes, tablet = 5 lanes.
             let laneCount: Int
             switch newVariant {
             case .portrait:  laneCount = 5
@@ -106,6 +105,11 @@ struct WatchRoomScreen: View {
             case .tablet:    laneCount = 5
             }
             model.updateDanmakuLaneCount(laneCount)
+
+            // P0.3: in landscape, show chat drawer by default for YouTube
+            if newVariant == .landscape && !ui.chatDrawerVisible {
+                ui.chatDrawerVisible = true
+            }
         }
         .task { await model.connect() }
         .onDisappear {

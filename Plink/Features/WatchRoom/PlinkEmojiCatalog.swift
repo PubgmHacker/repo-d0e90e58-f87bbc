@@ -98,9 +98,7 @@ enum PlinkEmojiCatalog {
             "emoji_popcorn", "emoji_movie", "emoji_clapper", "emoji_director",
             "emoji_oscar", "emoji_ticket", "emoji_film", "emoji_camera",
         ], isPremium: true),
-        // New custom art packs (PNG + GIF, premium only)
-        ...premiumPacks,
-    ]
+    ] + premiumPacks
 
     /// Pack directory name for filesystem lookup
     /// (EmojiAssetImage loads from Resources/Emojis/{packDir}/)

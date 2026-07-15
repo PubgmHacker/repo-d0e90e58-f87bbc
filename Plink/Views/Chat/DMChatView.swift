@@ -51,18 +51,8 @@ struct DMChatView: View {
 
                 // ── Эмодзи-пикер ─────────────────────────────────────
                 if showEmojiPicker {
-                    // Use EmojiInlinePanel from WatchChatComposer (Plink+ emoji packs)
-                    EmojiInlinePanel(
-                        pack: PlinkEmojiCatalog.allPacks.first ?? EmojiPack(name: "Reactions", emojis: [], isPremium: false),
-                        hasPremium: true,
-                        onPick: { emoji in
-                            messageText += emoji
-                        },
-                        onPremiumUpsell: { showEmojiPicker = false },
-                        onSwitchPack: { _ in },
-                        packs: PlinkEmojiCatalog.allPacks
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    EmojiPickerGrid(chatText: $messageText)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 // ── Поле ввода ───────────────────────────────────────

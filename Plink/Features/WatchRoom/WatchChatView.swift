@@ -298,7 +298,7 @@ private struct WatchChatBubbleInline: View {
             if isOwn { ChatAvatarInline(message: message) }
             if !isOwn { Spacer(minLength: 56) }
         }
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        // No aggressive transition — was causing chat list to flash/vanish on send
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isOwn ? "Вы" : message.senderName): \(message.text)")
         .accessibilityHint(isOwn ? "" : "Удерживайте для жалобы или блокировки")

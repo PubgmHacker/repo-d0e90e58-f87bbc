@@ -132,14 +132,21 @@ final class DMChatService: ObservableObject {
                     senderAvatarURL: isOwn ? nil : friendAvatarURL
                 )
             }
-            conversations[convID] = messages
-            historyEpoch &+= 1
-            if let last = messages.last {
+            // Never replace a non-empty local thread with an empty server list
+            // (avoids chat "vanishing" after send if server lags).
+            if messages.isEmpty, let existing = conversations[convID], !existing.isEmpty {
+                print("[DM] history empty from server — keep \(existing.count) local msgs")
+            } else {
+                conversations[convID] = messages
+                historyEpoch &+= 1
+            }
+            if let last = (conversations[convID] ?? messages).last {
                 lastPreviewByFriend[friendId] = last.text
             }
-            print("[DM] history \(messages.count) msgs with \(friendId)")
+            print("[DM] history \(conversations[convID]?.count ?? 0) msgs with \(friendId)")
         } catch {
             print("[DM] loadHistory error: \(error.localizedDescription)")
+            // Keep existing conversation on error
         }
     }
 
@@ -156,11 +163,20 @@ final class DMChatService: ObservableObject {
         guard !trimmed.isEmpty else { return }
         let payload = String(trimmed.prefix(280))
 
+        ensureToken()
+        // Stable id for isOwnMessage + conversation key
+        let me = currentUserId
+            ?? UserDefaults.standard.string(forKey: "plink_current_user_id")
+            ?? "me"
+        if me != "me", UserDefaults.standard.string(forKey: "plink_current_user_id") == nil {
+            UserDefaults.standard.set(me, forKey: "plink_current_user_id")
+        }
+
         let convID = conversationID(with: friend.id)
-        let me = currentUserId ?? "me"
+        let localID = UUID().uuidString
 
         let message = DirectMessage(
-            id: UUID().uuidString,
+            id: localID,
             conversationID: convID,
             senderID: me,
             recipientID: friend.id,
@@ -171,46 +187,43 @@ final class DMChatService: ObservableObject {
             senderAvatarURL: nil
         )
 
-        if conversations[convID] == nil { conversations[convID] = [] }
-        conversations[convID]?.append(message)
+        var list = conversations[convID] ?? []
+        list.append(message)
+        conversations[convID] = list
         historyEpoch &+= 1
         lastPreviewByFriend[friend.id] = payload
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
         struct Body: Encodable { let receiverId: String; let content: String }
-        ensureToken()
-        Task {
+        Task { @MainActor in
             do {
                 let saved: DMMessageDTO = try await api.request(
                     "messages/dm",
                     method: .post,
                     body: Body(receiverId: friend.id, content: payload)
                 )
-                if let idx = conversations[convID]?.firstIndex(where: { $0.id == message.id }) {
-                    var list = conversations[convID] ?? []
-                    list[idx] = DirectMessage(
+                // Replace optimistic message in-place — do NOT wipe history
+                // (full reload was clearing UI / crashing identity updates).
+                if var cur = conversations[convID],
+                   let idx = cur.firstIndex(where: { $0.id == localID }) {
+                    cur[idx] = DirectMessage(
                         id: saved.id,
                         conversationID: convID,
-                        senderID: saved.senderID,
-                        recipientID: saved.receiverID,
+                        senderID: saved.senderID.isEmpty ? me : saved.senderID,
+                        recipientID: saved.receiverID.isEmpty ? friend.id : saved.receiverID,
                         senderName: "You",
-                        text: saved.content,
+                        text: saved.content.isEmpty ? payload : saved.content,
                         timestamp: saved.createdAt,
                         isRead: false,
                         senderAvatarURL: nil
                     )
-                    conversations[convID] = list
+                    conversations[convID] = cur
                     historyEpoch &+= 1
                 }
-                await loadHistory(
-                    friendId: friend.id,
-                    friendName: friend.username,
-                    friendAvatarURL: friend.avatarURL,
-                    quiet: true
-                )
             } catch {
                 errorMessage = error.localizedDescription
                 print("[DM] sendMessage error: \(error.localizedDescription)")
+                // Keep optimistic message visible so chat does not "disappear"
             }
         }
     }

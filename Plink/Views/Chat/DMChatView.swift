@@ -66,13 +66,21 @@ struct DMChatView: View {
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .onChange(of: dmService.historyEpoch) { _, _ in
-                        scrollToBottom(proxy: proxy)
+                        // Delay so LazyVStack has registered new message ids
+                        DispatchQueue.main.async {
+                            scrollToBottom(proxy: proxy)
+                        }
                     }
-                    .onChange(of: messages.count) { _, _ in
-                        scrollToBottom(proxy: proxy)
+                    .onChange(of: messages.count) { oldCount, newCount in
+                        guard newCount > oldCount else { return }
+                        DispatchQueue.main.async {
+                            scrollToBottom(proxy: proxy)
+                        }
                     }
                     .onAppear {
-                        scrollToBottom(proxy: proxy, animated: false)
+                        DispatchQueue.main.async {
+                            scrollToBottom(proxy: proxy, animated: false)
+                        }
                     }
                 }
 
@@ -298,7 +306,7 @@ private struct DMBubble: View {
                     .foregroundColor(Cinema2026.tertiary)
                     .padding(.horizontal, 4)
             }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: isOwn ? .trailing : .leading)
+            .frame(maxWidth: 280, alignment: isOwn ? .trailing : .leading)
 
             if isOwn {
                 DMCircleAvatar(url: avatarURL, letter: letter, size: 28)

@@ -18,7 +18,9 @@ extension Color {
         let trimmed = string.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
         var rgbValue: UInt64 = 0
         Scanner(string: trimmed).scanHexInt64(&rgbValue)
-        self.init(hex: UInt32(rgbValue))
+        // Clamp to 24-bit RGB — never trap on UInt32 conversion
+        let clamped = UInt32(rgbValue & 0x00FF_FFFF)
+        self.init(hex: clamped)
     }
 }
 

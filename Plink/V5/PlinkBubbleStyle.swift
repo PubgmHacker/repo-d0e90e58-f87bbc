@@ -292,116 +292,63 @@ extension Notification.Name {
 // MARK: - Shared bubble for DM + room chat
 
 /// Renders text in the selected bubble style (Оформление).
-/// Own messages use `styleID` (defaults to user preference); peer uses quiet surface.
+/// Crash-safe: never force-indexes color arrays; own messages use preference.
 struct PlinkMessageBubble: View {
     let text: String
     let isOwn: Bool
     var styleID: String? = nil
     var fontSize: CGFloat = 15
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var animatePulse = false
-    @State private var animateComet = false
-    @State private var animateSignal = false
+    private var styleKey: String {
+        guard isOwn else { return "peer" }
+        return BubbleStyleRegistry.migrateLegacyID(styleID ?? PlinkBubbleStylePrefs.currentID)
+    }
 
-    private var resolvedID: String {
-        if isOwn {
-            return BubbleStyleRegistry.migrateLegacyID(styleID ?? PlinkBubbleStylePrefs.currentID)
+    private var fillColors: [Color] {
+        guard isOwn else { return [Color.white.opacity(0.10)] }
+        let desc = BubbleStyleRegistry.safeDescriptor(id: styleKey)
+        let hexes = desc.previewColors
+        let parsed: [Color] = hexes.compactMap { hex -> Color? in
+            let t = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+            guard t.count == 6, let v = UInt32(t, radix: 16) else { return nil }
+            return Color(hex: v)
         }
-        return "bubble-quiet"
+        if parsed.count >= 2 { return parsed }
+        if let one = parsed.first { return [one, one.opacity(0.85)] }
+        // Solid accent fallback — never crash
+        return [Cinema2026.accent.opacity(0.92)]
     }
 
     var body: some View {
-        let desc = BubbleStyleRegistry.safeDescriptor(id: resolvedID)
         Text(text)
             .font(.system(size: fontSize, weight: .regular))
             .foregroundStyle(.white)
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
-            .background(background(for: desc, isOwn: isOwn))
-            .overlay(overlay(for: desc))
+            .background(bubbleFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isOwn ? 0.14 : 0.06), lineWidth: 0.8)
+            )
             .clipShape(V5BubbleShape(isOutgoing: isOwn))
-            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
-            .onAppear {
-                guard isOwn, !reduceMotion else { return }
-                trigger(for: desc.id)
-            }
+            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
     }
 
     @ViewBuilder
-    private func background(for desc: AppearanceDescriptor, isOwn: Bool) -> some View {
-        if !isOwn {
-            Color.white.opacity(0.10)
-        } else {
-            switch desc.id {
+    private var bubbleFill: some View {
+        if isOwn {
+            switch styleKey {
             case "bubble-quiet":
-                Color.white.opacity(0.12)
-            case "bubble-accent":
-                LinearGradient(
-                    colors: desc.previewColors.map { Color(hex: $0) },
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case "bubble-ink-flow":
-                LinearGradient(
-                    colors: desc.previewColors.map { Color(hex: $0) },
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            case "bubble-prism":
-                LinearGradient(
-                    colors: desc.previewColors.map { Color(hex: $0) },
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case "bubble-pulse-ring", "bubble-comet", "bubble-signal":
-                LinearGradient(
-                    colors: [
-                        Color(hex: desc.previewColors.first ?? "#3FE8C8").opacity(0.85),
-                        Color(hex: desc.previewColors.last ?? "#00D4FF").opacity(0.75)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                Color.white.opacity(0.14)
             default:
-                Cinema2026.accent.opacity(0.90)
+                LinearGradient(
+                    colors: fillColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
             }
-        }
-    }
-
-    @ViewBuilder
-    private func overlay(for desc: AppearanceDescriptor) -> some View {
-        switch desc.id {
-        case "bubble-pulse-ring":
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(hex: desc.previewColors[0]), lineWidth: 1.5)
-                .opacity(animatePulse ? 1 : 0.35)
-                .scaleEffect(animatePulse ? 1.03 : 1)
-        case "bubble-comet":
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(hex: desc.previewColors[0]).opacity(0.7), lineWidth: 1.2)
-        case "bubble-signal":
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(hex: desc.previewColors[0]).opacity(animateSignal ? 0.9 : 0.35), lineWidth: 1.2)
-        case "bubble-ink-flow", "bubble-prism", "bubble-accent":
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-        default:
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
-        }
-    }
-
-    private func trigger(for id: String) {
-        switch id {
-        case "bubble-pulse-ring":
-            withAnimation(.easeOut(duration: 0.7)) { animatePulse = true }
-        case "bubble-comet":
-            withAnimation(.easeInOut(duration: 0.6)) { animateComet = true }
-        case "bubble-signal":
-            withAnimation(.easeOut(duration: 0.6)) { animateSignal = true }
-        default:
-            break
+        } else {
+            Color.white.opacity(0.10)
         }
     }
 }

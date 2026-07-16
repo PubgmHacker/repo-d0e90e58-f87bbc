@@ -1,5 +1,4 @@
-// Plink/V4/V4AIView.swift — split from PlinkV4PixelPerfect (move-only, no logic change)
-// Source of truth: V4 design module. Do not change visuals.
+// Plink/V4/V4AIView.swift — AI companion tab with 3D state sphere
 
 import SwiftUI
 import PhotosUI
@@ -101,20 +100,38 @@ struct V4AIViewLive: View {
     @State private var keyboard = KeyboardObserver()
 
     private var orbState: AIOrbState {
-        if store.state == "Думаю…" { return .thinking }
+        let s = store.state.lowercased()
+        if s.contains("ошиб") || s.contains("error") || s.contains("не удалось") { return .error }
+        if store.state == "Думаю…" || s.contains("дума") { return .thinking }
+        if store.state == "Слушаю…" || s.contains("слуша") { return .listening }
         if keyboard.isVisible && !input.trimmingCharacters(in: .whitespaces).isEmpty { return .listening }
         if Date() < speakingPulseUntil { return .speaking }
         return .idle
     }
 
+    private var stateCaption: String {
+        switch orbState {
+        case .idle: return store.state.isEmpty ? "Готов помочь" : store.state
+        case .listening: return "Слушаю…"
+        case .thinking: return "Думаю…"
+        case .speaking: return "Отвечаю…"
+        case .error: return store.state
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                AICompanionModel(theme: theme, size: 41, glow: 18, state: orbState)
+            HStack(spacing: 10) {
+                AICompanionModel(theme: theme, size: 44, glow: 20, state: orbState)
+                    .frame(width: 48, height: 48)
+                    .clipped()
                 VStack(alignment:.leading,spacing:2) {
                     Text("Plink AI").font(.system(size:16,weight:.bold))
-                    Text("Кинокомпаньон").font(.system(size:11.04)).foregroundStyle(V4.muted)
+                    Text(stateCaption)
+                        .font(.system(size:11.04, weight: .medium))
+                        .foregroundStyle(headerStateColor)
+                        .lineLimit(1)
                 }
                 Spacer()
                 Button {
@@ -136,18 +153,45 @@ struct V4AIViewLive: View {
             .frame(height:61)
             .padding(.horizontal,17)
 
-            // AI orb zone — collapses ONLY when keyboard is visible
+            // 3D AI sphere zone — collapses when keyboard is visible
             ZStack(alignment:.bottom) {
-                AICompanionModel(theme: theme, size: 220, glow: 60, state: orbState)
-                VStack(spacing:3) {
-                    Text("Что смотрим сегодня?").font(.system(size:16,weight:.bold))
-                    Text(store.state).font(.system(size:11.52)).foregroundStyle(V4.muted)
-                }.padding(.bottom,13)
+                // Soft radial stage under the orb (does not block living theme completely)
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                headerStateColor.opacity(0.18),
+                                .clear,
+                            ],
+                            center: .center,
+                            startRadius: 20,
+                            endRadius: 140
+                        )
+                    )
+                    .frame(width: 280, height: 280)
+                    .offset(y: -20)
+                    .allowsHitTesting(false)
+
+                AICompanionModel(theme: theme, size: 200, glow: 70, state: orbState)
+                    .offset(y: -18)
+
+                VStack(spacing: 4) {
+                    Text("Что смотрим сегодня?")
+                        .font(.system(size: 17, weight: .bold))
+                    Text(stateCaption)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(headerStateColor.opacity(0.95))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(headerStateColor.opacity(0.12), in: Capsule())
+                }
+                .padding(.bottom, 10)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: keyboard.isVisible ? 0 : 270)
+            .frame(height: keyboard.isVisible ? 0 : 290)
             .clipped()
             .animation(.easeInOut(duration: 0.3), value: keyboard.isVisible)
+            .animation(.easeInOut(duration: 0.35), value: orbState)
 
             // Chat messages
             ScrollViewReader { proxy in
@@ -204,15 +248,22 @@ struct V4AIViewLive: View {
             // Composer — full width, no side gaps
             HStack(spacing:6) {
                 Button {
-                    // mic toggle
+                    HapticManager.impact(.light)
+                    // Visual “listening” pulse (voice STT can hook here later)
+                    store.setStatus("Слушаю…")
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_800_000_000)
+                        if store.state == "Слушаю…" { store.setStatus("Готов помочь") }
+                    }
                 } label: {
-                    Image(systemName: "mic.fill")
+                    Image(systemName: orbState == .listening ? "mic.fill" : "mic")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(V4.ink)
+                        .foregroundStyle(orbState == .listening ? V4.accentInk : V4.ink)
                 }
                 .frame(width:42,height:42)
-                .background(V4.raised)
+                .background(orbState == .listening ? V4.accent : V4.raised)
                 .clipShape(RoundedRectangle(cornerRadius:14))
+                .accessibilityLabel("Голосовой ввод")
 
                 TextField("Спроси про фильмы и комнаты", text:$input)
                     .foregroundStyle(V4.ink)
@@ -220,6 +271,7 @@ struct V4AIViewLive: View {
 
                 Button {
                     let text = input
+                    guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                     input = ""
                     HapticManager.impact(.light)
                     Task { await store.send(text) }
@@ -255,19 +307,31 @@ struct V4AIViewLive: View {
         }
     }
 
+    private var headerStateColor: Color {
+        switch orbState {
+        case .idle: return V4.accent
+        case .listening: return Color(red: 0.45, green: 0.55, blue: 1.0)
+        case .thinking: return Color(red: 0.85, green: 0.4, blue: 1.0)
+        case .speaking: return Color(red: 0.25, green: 0.9, blue: 0.7)
+        case .error: return Color(red: 1.0, green: 0.4, blue: 0.4)
+        }
+    }
+
     private func chip(_ label:String,_ prompt:String)->some View {
         Button {
             input = prompt
+            HapticManager.impact(.light)
+            Task { await store.send(prompt) }
         } label: {
             Text(label)
-                .font(.system(size:11.52))
+                .font(.system(size:11.52, weight: .semibold))
                 .foregroundStyle(V4.ink)
                 .padding(.horizontal,11)
                 .frame(height:36)
+                .background(V4.surface.opacity(0.55))
+                .clipShape(RoundedRectangle(cornerRadius:12))
+                .overlay(RoundedRectangle(cornerRadius:12).stroke(V4.line))
         }
-        .background(V4.surface)
-        .clipShape(RoundedRectangle(cornerRadius:12))
-        .overlay(RoundedRectangle(cornerRadius:12).stroke(V4.line))
         .buttonStyle(.plain)
     }
 }
@@ -373,44 +437,8 @@ enum AIOrbState: Equatable {
     case listening
     case thinking
     case speaking
+    case error
 }
 
-// AI Companion Model (Canvas-based, matches V4 init signature)
-struct AICompanionModel: View {
-    let theme: V4Theme
-    let size: CGFloat
-    let glow: CGFloat
-    let state: AIOrbState
-
-    @State private var phase: Double = 0
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            Canvas { ctx, canvasSize in
-                let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
-                let baseRadius = min(canvasSize.width, canvasSize.height) * 0.35
-                let speed: Double
-                switch state {
-                case .idle: speed = 0.8
-                case .listening: speed = 2.0
-                case .thinking: speed = 4.0
-                case .speaking: speed = 3.0
-                }
-                let pulseRadius = baseRadius * (1.0 + sin(t * speed) * 0.12)
-                let accentColor = theme.accentColor
-                let gradient = Gradient(colors: [accentColor.opacity(0.8), accentColor.opacity(0.2), Color.clear])
-                ctx.fill(
-                    Path(ellipseIn: CGRect(x: center.x - pulseRadius, y: center.y - pulseRadius,
-                                            width: pulseRadius * 2, height: pulseRadius * 2)),
-                    with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: pulseRadius)
-                )
-            }
-        }
-        .frame(width: size, height: size)
-        .shadow(color: theme.accentColor.opacity(0.3), radius: glow)
-    }
-}
-
-// PlinkAppDelegate extension for notification permission
+// AICompanionModel is defined in AI3DCompanionSphere.swift (real SceneKit 3D orb)
 

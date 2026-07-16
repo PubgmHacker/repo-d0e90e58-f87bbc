@@ -183,6 +183,10 @@ final class V4AIStore {
         Message(isOwn: false, text: "Привет! Я Plink AI. Спроси про фильмы, попроси создать комнату или узнать что смотрят друзья.", isBot: true)
     ]
     private(set) var state: String = "Готов помочь"
+
+    func setStatus(_ text: String) {
+        state = text
+    }
     private let apiBase = "https://plink-backend-production-ef31.up.railway.app"
 
     func send(_ text: String) async {

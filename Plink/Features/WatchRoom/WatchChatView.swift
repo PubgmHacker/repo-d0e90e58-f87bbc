@@ -319,18 +319,43 @@ private struct WatchChatBubbleInline: View {
 private struct ChatAvatarInline: View {
     let message: ChatMessageInfo
 
-    private var initials: String {
-        let parts = message.senderName.split(separator: " ")
-        let letters = parts.compactMap { $0.first }.prefix(2)
-        return letters.map { String($0).uppercased() }.joined()
+    private var letter: String {
+        PlinkAvatarURL.letter(from: message.senderName)
+    }
+
+    private var avatarURL: URL? {
+        // Bind strictly to this message's sender — never current user
+        PlinkAvatarURL.resolve(userId: message.senderId, stored: nil)
     }
 
     var body: some View {
+        Group {
+            if let avatarURL {
+                AsyncImage(url: avatarURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        letterCircle
+                    }
+                }
+            } else {
+                letterCircle
+            }
+        }
+        .frame(width: 28, height: 28)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    private var letterCircle: some View {
         Circle()
             .fill(Cinema2026.accent.opacity(0.25))
-            .overlay(Text(initials).font(.system(size: 11, weight: .bold)).foregroundStyle(.white))
-            .frame(width: 28, height: 28)
-            .accessibilityHidden(true)
+            .overlay(
+                Text(letter)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            )
     }
 }
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - DM Chat View v4 (Telegram-style left/right + live poll)
+// MARK: - DM Chat View v5 — per-user avatars + Telegram left/right
 struct DMChatView: View {
     @EnvironmentObject private var dmService: DMChatService
     @Environment(\.dismiss) private var dismiss
@@ -13,8 +13,27 @@ struct DMChatView: View {
     private let charLimit = 150
     @State private var lastSendTime: Date = .distantPast
 
-    private var friendAvatarURL: URL? {
+    private var peerAvatarURL: URL? {
         PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
+    }
+
+    private var peerLetter: String {
+        PlinkAvatarURL.letter(from: friend.displayTitle)
+    }
+
+    private var meId: String {
+        UserDefaults.standard.string(forKey: "plink_current_user_id") ?? ""
+    }
+
+    private var meLetter: String {
+        let name = UserDefaults.standard.string(forKey: "plink_current_display_name")
+            ?? UserDefaults.standard.string(forKey: "plink_current_username")
+            ?? "?"
+        return PlinkAvatarURL.letter(from: name)
+    }
+
+    private var meAvatarURL: URL? {
+        PlinkAvatarURL.resolve(userId: meId.isEmpty ? nil : meId, stored: nil)
     }
 
     private var messages: [DirectMessage] {
@@ -32,11 +51,12 @@ struct DMChatView: View {
                             DMDayDivider(label: "Сегодня")
 
                             ForEach(messages) { msg in
+                                let own = msg.isOwnMessage
                                 DMBubble(
                                     message: msg,
-                                    isOwn: msg.isOwnMessage,
-                                    peerAvatarURL: friendAvatarURL,
-                                    peerInitials: friend.initials
+                                    isOwn: own,
+                                    avatarURL: own ? meAvatarURL : peerAvatarURL,
+                                    letter: own ? meLetter : peerLetter
                                 )
                                 .id(msg.id)
                                 .padding(.horizontal, 10)
@@ -70,26 +90,19 @@ struct DMChatView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 10) {
-                    Group {
-                        if let url = friendAvatarURL {
-                            AsyncImage(url: url) { phase in
-                                if let image = phase.image {
-                                    image.resizable().scaledToFill()
-                                } else {
-                                    avatarHeader
-                                }
-                            }
-                        } else {
-                            avatarHeader
-                        }
-                    }
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
+                    DMCircleAvatar(url: peerAvatarURL, letter: peerLetter, size: 32)
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(friend.username)
+                        Text(friend.displayTitle)
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.white)
+                            .lineLimit(1)
+                        if friend.displayName != nil {
+                            Text("@\(friend.username)")
+                                .font(.system(size: 11))
+                                .foregroundColor(Cinema2026.secondary)
+                                .lineLimit(1)
+                        }
                         HStack(spacing: 4) {
                             Circle()
                                 .fill(friend.isOnline ? Cinema2026.accent : Cinema2026.tertiary)
@@ -125,17 +138,16 @@ struct DMChatView: View {
         .task {
             await dmService.loadHistory(
                 friendId: friend.id,
-                friendName: friend.username,
+                friendName: friend.displayTitle,
                 friendAvatarURL: friend.avatarURL,
                 quiet: false
             )
-            // Quiet poll while chat is open — new messages without re-enter
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard !Task.isCancelled else { break }
                 await dmService.loadHistory(
                     friendId: friend.id,
-                    friendName: friend.username,
+                    friendName: friend.displayTitle,
                     friendAvatarURL: friend.avatarURL,
                     quiet: true
                 )
@@ -151,17 +163,6 @@ struct DMChatView: View {
             }
         } else {
             proxy.scrollTo(lastID, anchor: .bottom)
-        }
-    }
-
-    private var avatarHeader: some View {
-        ZStack {
-            Circle()
-                .fill(LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            Text(friend.initials)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.white)
         }
     }
 
@@ -225,20 +226,56 @@ struct DMChatView: View {
     }
 }
 
+// MARK: - Circle avatar (photo or letter of THIS user only)
+
+private struct DMCircleAvatar: View {
+    let url: URL?
+    let letter: String
+    var size: CGFloat = 28
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        letterView
+                    }
+                }
+            } else {
+                letterView
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var letterView: some View {
+        ZStack {
+            Circle().fill(Cinema2026.accent.opacity(0.55))
+            Text(letter)
+                .font(.system(size: max(10, size * 0.38), weight: .bold))
+                .foregroundColor(.white)
+        }
+    }
+}
+
 // MARK: - DM Bubble (Telegram: own right / peer left)
 
 private struct DMBubble: View {
     let message: DirectMessage
     let isOwn: Bool
-    var peerAvatarURL: URL?
-    var peerInitials: String = "?"
+    var avatarURL: URL?
+    var letter: String = "?"
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isOwn {
                 Spacer(minLength: 48)
             } else {
-                peerAvatar
+                DMCircleAvatar(url: avatarURL, letter: letter, size: 28)
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 3) {
@@ -257,40 +294,13 @@ private struct DMBubble: View {
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: isOwn ? .trailing : .leading)
 
-            if !isOwn {
+            if isOwn {
+                DMCircleAvatar(url: avatarURL, letter: letter, size: 28)
+            } else {
                 Spacer(minLength: 48)
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
-    }
-
-    @ViewBuilder
-    private var peerAvatar: some View {
-        let size: CGFloat = 28
-        if let url = peerAvatarURL {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    avatarPlaceholder
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-        } else {
-            avatarPlaceholder
-                .frame(width: size, height: size)
-        }
-    }
-
-    private var avatarPlaceholder: some View {
-        ZStack {
-            Circle().fill(Cinema2026.accent.opacity(0.55))
-            Text(String(peerInitials.prefix(2)))
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.white)
-        }
     }
 }
 

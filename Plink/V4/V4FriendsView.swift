@@ -401,7 +401,7 @@ struct V4FriendsViewLive: View {
         HStack(spacing: 12) {
             Button { profileFriend = friend } label: {
                 V4Avatar(
-                    letter: String(friend.username.prefix(1)).uppercased(),
+                    letter: friend.initials,
                     theme: theme,
                     size: 44,
                     imageURL: PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
@@ -411,7 +411,7 @@ struct V4FriendsViewLive: View {
 
             Button { dmFriend = friend } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(friend.username)
+                    Text(friend.displayTitle)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(V4.ink)
                     HStack(spacing: 5) {

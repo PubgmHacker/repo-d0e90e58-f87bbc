@@ -39,9 +39,7 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
     }
 
     var initials: String {
-        let parts = senderName.split(separator: " ")
-        let letters = parts.compactMap { $0.first }.prefix(2)
-        return letters.map { String($0).uppercased() }.joined()
+        PlinkAvatarURL.letter(from: senderName)
     }
 
     static func == (lhs: DirectMessage, rhs: DirectMessage) -> Bool {

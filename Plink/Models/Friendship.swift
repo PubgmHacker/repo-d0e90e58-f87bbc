@@ -17,15 +17,25 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
     let avatarURL: String?
     let isOnline: Bool
     let friendsSince: Date
+    /// Optional Telegram-style display name (may be nil on older payloads).
+    var displayName: String? = nil
 
     /// Конвертация в UserPreview для UI-компонентов.
     var asUserPreview: UserPreview {
         UserPreview(id: id, username: username, avatarURL: avatarURL, isOnline: isOnline)
     }
 
-    /// Инициалы для аватара-заглушки.
+    /// Name shown in UI — displayName if set, else @username.
+    var displayTitle: String {
+        if let d = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
+            return d
+        }
+        return username
+    }
+
+    /// Single letter for avatar fallback — never uses current user.
     var initials: String {
-        String(username.prefix(2).uppercased())
+        PlinkAvatarURL.letter(from: displayTitle)
     }
 }
 

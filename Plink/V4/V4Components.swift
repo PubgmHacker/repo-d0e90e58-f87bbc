@@ -76,12 +76,18 @@ struct V4Avatar: View {
 enum PlinkAvatarURL {
     static let apiBase = "https://plink-backend-production-ef31.up.railway.app"
 
+    /// Always bind avatar to a concrete userId so one person's photo/letter
+    /// never leaks onto another friend's row or chat bubble.
     static func resolve(userId: String?, stored: String?, cacheBust: Bool = true) -> URL? {
-        var raw = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if raw.isEmpty, let userId, !userId.isEmpty {
+        var raw = ""
+        if let userId, !userId.isEmpty {
+            // Prefer canonical per-user endpoint (authoritative).
             raw = "\(apiBase)/api/users/\(userId)/avatar"
-        } else if raw.hasPrefix("/") {
-            raw = apiBase + raw
+        } else {
+            raw = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if raw.hasPrefix("/") {
+                raw = apiBase + raw
+            }
         }
         guard !raw.isEmpty, var components = URLComponents(string: raw) else { return nil }
         if cacheBust {
@@ -93,6 +99,14 @@ enum PlinkAvatarURL {
             components.queryItems = items
         }
         return components.url
+    }
+
+    /// Letter for placeholder: strip @, use first unicode scalar uppercased.
+    static func letter(from name: String?) -> String {
+        var t = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.hasPrefix("@") { t = String(t.dropFirst()) }
+        guard let ch = t.first else { return "?" }
+        return String(ch).uppercased()
     }
 }
 

@@ -168,7 +168,8 @@ final class FriendManager: ObservableObject {
                 username: request.fromUser.username,
                 avatarURL: request.fromUser.avatarURL,
                 isOnline: request.fromUser.isOnline,
-                friendsSince: Date()
+                friendsSince: Date(),
+                displayName: nil
             )
             if !friends.contains(where: { $0.id == newFriend.id }) {
                 friends.append(newFriend)
@@ -270,6 +271,7 @@ private struct FriendDTO: Decodable {
     let avatarURL: String?
     let isOnline: Bool?
     let friendsSince: Date?
+    let displayName: String?
 
     func toFriend() -> Friend {
         Friend(
@@ -277,7 +279,8 @@ private struct FriendDTO: Decodable {
             username: username,
             avatarURL: avatarURL,
             isOnline: isOnline ?? false,
-            friendsSince: friendsSince ?? Date()
+            friendsSince: friendsSince ?? Date(),
+            displayName: displayName
         )
     }
 }

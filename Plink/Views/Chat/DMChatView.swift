@@ -449,19 +449,20 @@ struct DMChatView: View {
         } message: {
             Text("История переписки с \(liveFriend.displayTitle) будет удалена. Это действие нельзя отменить.")
         }
-        .alert("Заблокировать \(liveFriend.displayTitle)?", isPresented: $confirmBlockUser) {
+        .alert("Внести в чёрный список?", isPresented: $confirmBlockUser) {
             Button("Заблокировать", role: .destructive) {
                 Task {
                     await blockManager.blockAndDeleteChat(
                         userId: liveFriend.id,
                         friend: liveFriend
                     )
+                    HapticManager.impact(.heavy)
                     await MainActor.run { dismiss() }
                 }
             }
             Button("Отмена", role: .cancel) {}
         } message: {
-            Text("Пользователь не сможет писать вам. Чат будет удалён, как в Telegram.")
+            Text("Точно хотите внести \(liveFriend.displayTitle) в чёрный список? Пользователь не сможет отправлять вам сообщения и приглашать в комнаты. Переписка будет удалена.")
         }
     }
 
@@ -908,10 +909,8 @@ private struct DMBubble: View {
                         }
                     }
                 }
-                .onLongPressGesture(minimumDuration: 0.35) {
-                    HapticManager.impact(.medium)
-                    onReact()
-                }
+                // Removed onLongPressGesture — conflicts with .contextMenu causing flicker.
+                // contextMenu already provides long-press behaviour.
 
                 // Reaction chips under bubble (Telegram)
                 if !message.reactions.isEmpty {
@@ -1096,16 +1095,26 @@ private struct VoiceNoteBubble: View {
         .padding(.horizontal, PlinkTelegramBubbleMetrics.padH)
         .padding(.vertical, PlinkTelegramBubbleMetrics.padV)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(isOwn
-                      ? Cinema2026.accent
-                      : Color(hex: "#2E333A"))
+            ZStack {
+                Color(hex: "#1A1C20")
+                if isOwn {
+                    LinearGradient(
+                        colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.92)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else {
+                    Color(hex: "#2E333A")
+                }
+            }
         )
+        .clipShape(V5BubbleShape(isOutgoing: isOwn, isLastInGroup: true))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.white.opacity(isOwn ? 0.20 : 0.14), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.40), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.20), radius: 1, y: 0.5)
     }
 }
 

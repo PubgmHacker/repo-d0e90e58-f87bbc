@@ -52,7 +52,7 @@ final class FriendManager: ObservableObject {
         if let idx = friends.firstIndex(where: { $0.id == friendId }) {
             let f = friends[idx]
             let last = max(f.lastSeenAt ?? .distantPast, date)
-            let online = Date().timeIntervalSince(last) < 10 * 60
+            let online = Date().timeIntervalSince(last) < 60
             // Never "revive" a tombstoned peer via local activity.
             if f.deleted {
                 objectWillChange.send()
@@ -89,7 +89,7 @@ final class FriendManager: ObservableObject {
         }()
         guard let best else { return friend }
         let age = Date().timeIntervalSince(best)
-        let online = age < 10 * 60 || friend.isOnline
+        let online = age < 60 || friend.isOnline
         return Friend(
             id: friend.id,
             username: friend.username,

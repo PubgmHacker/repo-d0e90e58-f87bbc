@@ -269,7 +269,11 @@ final class DMChatService: ObservableObject {
 
     func messages(for friendID: String) -> [DirectMessage] {
         let convID = conversationID(with: friendID)
-        return conversations[convID] ?? []
+        let msgs = conversations[convID] ?? []
+        // Filter out messages from blocked users (Telegram-style)
+        return msgs.filter { msg in
+            !UserBlockManager.shared.isBlocked(msg.senderID)
+        }
     }
 
     // MARK: - Delete chat (Telegram)

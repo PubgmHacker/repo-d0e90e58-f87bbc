@@ -70,8 +70,16 @@ enum FriendPresence {
         // Fresh last-seen wins over a sticky isOnline flag
         if let last = lastSeenAt {
             let sec = Date().timeIntervalSince(last)
-            if sec < 0 || sec < 90 { return "в сети" }
-            if isOnline && sec < 10 * 60 { return "в сети" }
+            if sec < 0 || sec < 15 { return "в сети" }
+            if isOnline && sec < 60 { return "в сети" }
+            // Telegram-style: seconds for very recent
+            if sec < 60 {
+                let s = max(1, Int(sec))
+                if s == 1 { return "был(а) 1 секунду назад" }
+                if s < 5 { return "был(а) \(s) секунды назад" }
+                if s < 20 { return "был(а) \(s) секунд назад" }
+                return "был(а) \(s) секунд назад"
+            }
             if sec < 3600 {
                 let m = max(1, Int(sec / 60))
                 if m == 1 { return "был(а) 1 минуту назад" }

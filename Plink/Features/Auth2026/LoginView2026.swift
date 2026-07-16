@@ -277,12 +277,12 @@ struct LoginView2026: View {
         do {
             let authService = AuthService.shared
             if isSignUp {
-                try await authService.signUp(
+                let _ = try await authService.signUp(
                     email: email, password: password,
                     username: username.isEmpty ? email.split(separator: "@").first.map(String.init) ?? "User" : username
                 )
             } else {
-                try await authService.signIn(email: email, password: password)
+                let _ = try await authService.signIn(email: email, password: password)
             }
             onAuthenticated()
         } catch {

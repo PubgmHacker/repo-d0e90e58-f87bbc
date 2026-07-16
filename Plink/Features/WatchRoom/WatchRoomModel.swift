@@ -174,7 +174,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     startAmbientPalettePolling()
                 }
             } catch {
-                lastError = "Видео: \(error.localizedDescription)"
+                let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                lastError = detail
+                // coordinator.lastError already set inside prepare(); UI reads that.
                 // Continue — still join room for chat/sync retry
             }
         } else {

@@ -179,28 +179,49 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         }
         web.load(URLRequest(url: wrapperURL))
 
-        // PATCH 03: 15s prepare timeout via task group race.
-        // First task: poll isReady every 80ms until true.
-        // Second task: 15s timeout throws loadingFailed.
-        // Whichever finishes first wins; the other is cancelled.
-        // (Was 8s — too tight for the backend /api/media/youtube-player wrapper
-        //  page + YouTube IFrame API script fetch on slow networks.)
+        // Wait for player ready:
+        //   A) bridge event "ready" → handleReady() sets isReady
+        //   B) JS fallback: window.__plinkIsReady() (backend v21+)
+        // Timeout 20s — IFrame API + first frame can be slow on cellular.
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { [weak self] in
-                // PATCH 22: guard let self to bind to strong local const,
-                // avoiding "Reference to captured var 'self'" Swift 6 error.
                 guard let self else { return }
+                var ticks = 0
                 while true {
-                    let notReady = await MainActor.run {
-                        self.isReady == false
+                    let ready = await MainActor.run { self.isReady }
+                    if ready { return }
+
+                    // Every ~400ms probe JS readiness in case webkit postMessage
+                    // was dropped or an older wrapper lacked the iOS bridge shape.
+                    ticks += 1
+                    if ticks % 5 == 0 {
+                        let jsReady = await self.evaluate(
+                            "(function(){try{return !!(window.__plinkIsReady&&window.__plinkIsReady());}catch(e){return false;}})()"
+                        )
+                        if let flag = jsReady as? Bool, flag {
+                            await MainActor.run { self.handleReady() }
+                            return
+                        }
+                        // Ensure control helpers exist even on older wrapper HTML
+                        _ = await self.evaluate("""
+                        (function(){
+                          if (typeof window.plinkPlay !== 'function' && typeof window.plinkCmd === 'function') {
+                            window.plinkPlay = function(){ window.plinkCmd('play'); return true; };
+                            window.plinkPause = function(){ window.plinkCmd('pause'); return true; };
+                            window.plinkSeek = function(s){ window.plinkCmd('seek',{seconds:s}); return true; };
+                            window.plinkSnapshot = function(){ return {time:0,duration:0}; };
+                          }
+                          return true;
+                        })()
+                        """)
                     }
-                    if !notReady { return }
+
                     try await Task.sleep(for: .milliseconds(80))
                 }
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(15))
-                throw ProviderError.loadingFailed("YouTube player timed out")
+                try await Task.sleep(for: .seconds(20))
+                throw ProviderError.loadingFailed("Таймаут YouTube-плеера — проверьте сеть")
             }
             _ = try await group.next()
             group.cancelAll()

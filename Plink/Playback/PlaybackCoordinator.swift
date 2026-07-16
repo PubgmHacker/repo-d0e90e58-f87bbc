@@ -87,10 +87,17 @@ public final class PlaybackCoordinator: AnyObject {
                 let vk = VKPlaybackController()
                 try await vk.prepare(source)
                 controller = vk
-            case .embed:
-                let embedded = EmbeddedPlaybackController()
-                try await embedded.prepare(source)
-                controller = embedded
+            case .embed(let url):
+                // Generic web embed is not the YouTube IFrame path.
+                // Prefer native only if it looks like a stream; otherwise fail clearly.
+                let s = url.absoluteString.lowercased()
+                if s.contains(".m3u8") || s.contains(".mp4") || s.hasSuffix(".mov") {
+                    let native = NativePlayerController()
+                    try await native.prepare(s.contains(".m3u8") ? .hls(url, headers: [:]) : .mp4(url, headers: [:]))
+                    controller = native
+                } else {
+                    throw ProviderError.loadingFailed("Этот источник пока нельзя воспроизвести в комнате")
+                }
             }
             currentController = controller
             currentSource = source

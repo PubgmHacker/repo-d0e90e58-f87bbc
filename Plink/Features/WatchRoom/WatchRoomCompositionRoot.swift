@@ -47,18 +47,20 @@ public enum WatchRoomCompositionRoot {
     /// Derive PlaybackSource from room.mediaItem
     private static func mediaSourceFromRoom(_ room: Room) -> PlaybackSource? {
         guard let mediaItem = room.mediaItem else { return nil }
-        // YouTube videoId → embedded player (App Store compliant)
-        if let videoId = mediaItem.videoId, !videoId.isEmpty {
-            return .youtube(videoId)
-        }
-        // PATCH 22: extract YouTube video ID from streamURL when videoId is nil.
-        // YouTube URLs: youtu.be/ID, youtube.com/watch?v=ID, youtube.com/embed/ID
-        if let ytId = extractYouTubeVideoId(from: mediaItem.streamURL) {
+
+        // Prefer explicit / extracted YouTube video id → official IFrame player
+        if let ytId = resolveYouTubeVideoId(from: mediaItem) {
             return .youtube(ytId)
         }
+
+        // Rutube embed / watch URL
+        if let rutubeId = extractRutubeVideoId(from: mediaItem.streamURL) {
+            return .rutube(rutubeId)
+        }
+
         // Direct stream URL → native AVPlayer
         let urlString = mediaItem.streamURL
-        if let url = URL(string: urlString) {
+        if let url = URL(string: urlString), url.scheme == "http" || url.scheme == "https" {
             if urlString.contains(".m3u8") {
                 return .hls(url, headers: [:])
             }
@@ -70,40 +72,88 @@ public enum WatchRoomCompositionRoot {
         return nil
     }
 
+    /// Resolve a valid 11-char YouTube id from mediaItem fields.
+    private static func resolveYouTubeVideoId(from mediaItem: MediaItem) -> String? {
+        if let raw = mediaItem.videoId?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            if isValidYouTubeVideoId(raw) { return raw }
+            if let fromField = extractYouTubeVideoId(from: raw) { return fromField }
+        }
+        if mediaItem.source == .youtube || mediaItem.streamURL.lowercased().contains("youtu") {
+            if let fromURL = extractYouTubeVideoId(from: mediaItem.streamURL) { return fromURL }
+            // Bare 11-char id stored as streamURL / id
+            let bare = mediaItem.streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isValidYouTubeVideoId(bare) { return bare }
+            let bareId = mediaItem.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isValidYouTubeVideoId(bareId) { return bareId }
+        }
+        return extractYouTubeVideoId(from: mediaItem.streamURL)
+    }
+
+    private static func isValidYouTubeVideoId(_ id: String) -> Bool {
+        guard id.count == 11 else { return false }
+        return id.allSatisfy { c in
+            c.isLetter || c.isNumber || c == "_" || c == "-"
+        }
+    }
+
     /// PATCH 22: extract 11-char YouTube video ID from various URL formats.
     /// - https://youtu.be/VIDEO_ID
     /// - https://www.youtube.com/watch?v=VIDEO_ID
     /// - https://www.youtube.com/embed/VIDEO_ID
     /// - https://youtube.com/shorts/VIDEO_ID
     private static func extractYouTubeVideoId(from url: String) -> String? {
-        let lower = url.lowercased()
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isValidYouTubeVideoId(trimmed) { return trimmed }
+
+        let lower = trimmed.lowercased()
         guard lower.contains("youtube.com") || lower.contains("youtu.be") else { return nil }
 
         // youtu.be/VIDEO_ID
         if lower.contains("youtu.be/") {
-            let parts = url.split(separator: "/")
+            let parts = trimmed.split(separator: "/")
             if let last = parts.last {
                 let id = String(last).split(separator: "?").first.map(String.init) ?? String(last)
-                if id.count == 11 { return id }
+                if isValidYouTubeVideoId(id) { return id }
             }
         }
 
-        // youtube.com/watch?v=VIDEO_ID
-        if let components = URLComponents(string: url) {
+        // youtube.com/watch?v=VIDEO_ID (also handles mobile / music hosts)
+        if let components = URLComponents(string: trimmed) {
             if let vParam = components.queryItems?.first(where: { $0.name == "v" })?.value {
-                if vParam.count == 11 { return vParam }
+                if isValidYouTubeVideoId(vParam) { return vParam }
             }
         }
 
-        // youtube.com/embed/VIDEO_ID or youtube.com/shorts/VIDEO_ID
-        if lower.contains("/embed/") || lower.contains("/shorts/") {
-            let parts = url.split(separator: "/")
-            if let last = parts.last {
-                let id = String(last).split(separator: "?").first.map(String.init) ?? String(last)
-                if id.count == 11 { return id }
+        // youtube.com/embed/VIDEO_ID or youtube.com/shorts/VIDEO_ID or /live/VIDEO_ID
+        for marker in ["/embed/", "/shorts/", "/live/", "/v/"] {
+            if let range = lower.range(of: marker) {
+                let after = trimmed[range.upperBound...]
+                let id = String(after.split(separator: "?").first ?? Substring(after))
+                    .split(separator: "/").first
+                    .map(String.init) ?? ""
+                if isValidYouTubeVideoId(id) { return id }
             }
         }
 
+        return nil
+    }
+
+    /// Rutube: https://rutube.ru/video/<32-hex>/ or /play/embed/<id>/
+    private static func extractRutubeVideoId(from url: String) -> String? {
+        let lower = url.lowercased()
+        guard lower.contains("rutube.ru") else { return nil }
+        let parts = url.split(separator: "/").map(String.init)
+        for (idx, part) in parts.enumerated() {
+            let clean = part.split(separator: "?").first.map(String.init) ?? part
+            // 32-char hex is the classic Rutube video id
+            if clean.count == 32, clean.allSatisfy({ $0.isHexDigit }) {
+                return clean
+            }
+            if part == "embed" || part == "video", idx + 1 < parts.count {
+                let next = parts[idx + 1].split(separator: "?").first.map(String.init) ?? parts[idx + 1]
+                if next.count >= 8 { return next }
+            }
+        }
         return nil
     }
 

@@ -64,7 +64,16 @@ public final class NativeHLSProvider: ProviderAdapter {
     }
 }
 
-public enum ProviderError: Error, Equatable {
+public enum ProviderError: Error, Equatable, LocalizedError {
     case unsupportedSource
     case loadingFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedSource:
+            return "Источник видео не поддерживается"
+        case .loadingFailed(let reason):
+            return reason
+        }
+    }
 }

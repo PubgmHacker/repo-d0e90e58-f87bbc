@@ -856,13 +856,37 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         rutube.openInExternalPlayer(from: topVC)
     }
 
+    private var didLeaveRoom = false
+
     func leaveRoom() {
+        guard !didLeaveRoom else {
+            wantsDismiss = true
+            return
+        }
+        didLeaveRoom = true
         wantsDismiss = true
         disconnect()
-        // REST leave (best-effort)
+        // REST leave — host leave or last person soft-ends room → history only
         if let roomId = roomId {
             Task {
                 try? await RoomService(api: APIClient.shared).leaveRoom(roomID: roomId)
+                // Local history mirror (server also writes WatchHistory)
+                if let mediaId = mediaId {
+                    let media = MediaItem(
+                        id: mediaId,
+                        title: "Комната",
+                        artist: nil,
+                        thumbnailURL: nil,
+                        streamURL: mediaId,
+                        duration: nil,
+                        mediaType: .video,
+                        source: .youtube,
+                        videoId: mediaId.count == 11 ? mediaId : nil
+                    )
+                    await MainActor.run {
+                        WatchHistoryManager.shared.recordWatch(mediaItem: media)
+                    }
+                }
             }
         }
     }

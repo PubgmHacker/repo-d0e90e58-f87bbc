@@ -27,12 +27,25 @@ final class RoomService: RoomServiceProtocol {
 
     func leaveRoom(roomID: String) async throws {
         try await api.requestNoBody("rooms/\(roomID)/leave", method: .post)
+        await MainActor.run {
+            NotificationCenter.default.post(name: .plinkRoomsDidChange, object: roomID)
+        }
+    }
+
+    /// Host soft-ends room (stays in history only).
+    func endRoom(roomID: String) async throws {
+        try await api.requestNoBody("rooms/\(roomID)/end", method: .post)
+        await MainActor.run {
+            NotificationCenter.default.post(name: .plinkRoomsDidChange, object: roomID)
+        }
     }
 
     // MARK: - Fetch Active Rooms
 
     func fetchActiveRooms() async throws -> [Room] {
-        try await api.request("rooms", method: .get)
+        let rooms: [Room] = try await api.request("rooms", method: .get)
+        // Client-side guard: never show empty / ended shells in "watching now"
+        return rooms.filter { $0.isActive && $0.participantCount > 0 }
     }
 
     // MARK: - Fetch Single Room
@@ -55,8 +68,20 @@ final class RoomService: RoomServiceProtocol {
 
     // MARK: - My Rooms
 
-    func fetchMyRooms() async throws -> [Room] {
-        try await api.request("rooms/mine")
+    /// - Parameter status: `active` | `history` | `all` (default).
+    func fetchMyRooms(status: String = "all") async throws -> [Room] {
+        let path = status == "all" ? "rooms/mine" : "rooms/mine?status=\(status)"
+        return try await api.request(path, method: .get)
+    }
+
+    /// Only rooms still joinable (live + people inside).
+    func fetchMyActiveRooms() async throws -> [Room] {
+        try await fetchMyRooms(status: "active")
+    }
+
+    /// Closed rooms for history UI.
+    func fetchMyRoomHistory() async throws -> [Room] {
+        try await fetchMyRooms(status: "history")
     }
 
     // MARK: - Start Stream (хост)

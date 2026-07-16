@@ -22,8 +22,18 @@ final class V4RoomsStore {
     func load() async {
         state = .loading
         do {
-            let active = try await roomService.fetchActiveRooms()
+            // Public live rooms only (backend + client filter empty/ended)
+            async let publicActive = roomService.fetchActiveRooms()
+            async let mineActive = roomService.fetchMyActiveRooms()
+            let pub = try await publicActive
+            let mine = (try? await mineActive) ?? []
+            // Merge by id — prefer fresher mine rows for host's own rooms
+            var byId: [String: Room] = [:]
+            for r in pub where r.isActive && r.participantCount > 0 { byId[r.id] = r }
+            for r in mine where r.isActive && r.participantCount > 0 { byId[r.id] = r }
+            let active = Array(byId.values).sorted { $0.createdAt > $1.createdAt }
             rooms = active
+            myRooms = mine
             state = active.isEmpty ? .empty : .loaded
         } catch is CancellationError {
             return
@@ -33,7 +43,13 @@ final class V4RoomsStore {
     }
 
     func loadMyRooms() async {
-        do { myRooms = try await roomService.fetchMyRooms() } catch {}
+        do {
+            myRooms = try await roomService.fetchMyActiveRooms()
+        } catch {}
+    }
+
+    func loadHistory() async -> [Room] {
+        (try? await roomService.fetchMyRoomHistory()) ?? []
     }
 
     func join(code: String, password: String? = nil) async throws -> Room {

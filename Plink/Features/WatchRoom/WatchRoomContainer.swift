@@ -13,6 +13,8 @@ struct WatchRoomContainer: View {
     @Environment(\.dismiss) private var dismiss
     @State private var resolved: SessionIdentity?
     @State private var resolveFailed = false
+    /// Ensures REST leave even if user dismisses cover without tapping X.
+    @State private var didSendLeave = false
 
     var body: some View {
         Group {
@@ -53,6 +55,15 @@ struct WatchRoomContainer: View {
         }
         .task {
             await hydrateSession()
+        }
+        .onDisappear {
+            // Safety net: soft-leave when fullScreenCover is torn down.
+            // leaveRoom is idempotent; model also calls it on X.
+            guard !didSendLeave else { return }
+            didSendLeave = true
+            Task {
+                try? await RoomService(api: APIClient.shared).leaveRoom(roomID: room.id)
+            }
         }
     }
 

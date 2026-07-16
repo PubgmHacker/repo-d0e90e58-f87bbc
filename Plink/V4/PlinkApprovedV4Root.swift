@@ -139,6 +139,12 @@ struct PlinkApprovedV4Root: View {
         .fullScreenCover(item: $roomToPresent) { room in
             WatchRoomContainer(room: room)
         }
+        .onChange(of: roomToPresent?.id) { _, newId in
+            // After room closes — re-sync active rooms (empty shells disappear)
+            if newId == nil {
+                Task { await roomsStore?.load() }
+            }
+        }
         // Trending / home cards post .plinkRoomCreated with a Room object — present WatchRoom
         .onReceive(NotificationCenter.default.publisher(for: .plinkRoomCreated)) { note in
             guard let room = note.object as? Room else { return }
@@ -146,6 +152,9 @@ struct PlinkApprovedV4Root: View {
             if roomToPresent?.id == room.id { return }
             HapticManager.roomJoined()
             roomToPresent = room
+            Task { await roomsStore?.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkRoomsDidChange)) { _ in
             Task { await roomsStore?.load() }
         }
     }

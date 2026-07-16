@@ -206,8 +206,12 @@ struct V4FriendsViewLive: View {
             guard phase == .active, isActive else { return }
             Task {
                 await store?.refreshQuietly()
+                await loadRecentRooms()
                 await dmService.refreshUnread()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkRoomsDidChange)) { _ in
+            Task { await loadRecentRooms() }
         }
         // Friends list (presence + avatars) while tab visible — fast
         .task(id: isActive) {
@@ -695,7 +699,11 @@ struct V4FriendsViewLive: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(V4.ink)
                         .lineLimit(1)
-                    Text("Код \(room.code) · \(room.participantCount) чел.")
+                    Text(
+                        room.isActive
+                            ? "LIVE · \(room.participantCount) чел. · \(room.code)"
+                            : "История · \(room.code)"
+                    )
                         .font(.system(size: 12))
                         .foregroundStyle(V4.muted)
                 }
@@ -718,7 +726,18 @@ struct V4FriendsViewLive: View {
         recentLoading = true
         defer { recentLoading = false }
         do {
-            recentRooms = try await RoomService(api: APIClient.shared).fetchMyRooms()
+            let svc = RoomService(api: APIClient.shared)
+            // Active first (can rejoin), then closed history for "recent"
+            let active = try await svc.fetchMyActiveRooms()
+            let history = (try? await svc.fetchMyRoomHistory()) ?? []
+            // Dedup: show live rooms first, then history (no double entries)
+            var seen = Set(active.map(\.id))
+            var merged = active
+            for r in history where !seen.contains(r.id) {
+                seen.insert(r.id)
+                merged.append(r)
+            }
+            recentRooms = Array(merged.prefix(20))
         } catch {
             // keep previous
         }

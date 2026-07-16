@@ -45,6 +45,8 @@ struct WatchHistoryItem: Codable, Identifiable, Sendable {
 @MainActor
 final class WatchHistoryManager: ObservableObject {
 
+    static let shared = WatchHistoryManager()
+
     @Published private(set) var history: [WatchHistoryItem] = []
 
     private let defaults = UserDefaults.standard

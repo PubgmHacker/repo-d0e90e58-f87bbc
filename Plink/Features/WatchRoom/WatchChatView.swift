@@ -1,32 +1,52 @@
-// Plink/Features/WatchRoom/WatchChatView.swift — PATCH 02 polish
-//
-// Professional design:
-//   - Living backdrop at 0.28 opacity (was 0.4) — readable but still alive
-//   - Bottom gradient overlay for composer legibility
-//   - Scroll-to-bottom button: 40pt circle with elevation (was pill)
-//   - Message spacing: 12pt (was 10pt)
-//   - Top padding: 8pt (new — gives breathing room)
-//   - LazyVStack alignment: .leading (kept)
-//
-// V5: WatchChatBubble inlined here (no separate file).
+// Plink/Features/WatchRoom/WatchChatView.swift — PATCH 02 polish + P0 report/block/kick
 
 import SwiftUI
 
 struct WatchChatView: View {
     let model: WatchRoomModel
     @State private var atBottom = true
+    @State private var reportTarget: ChatMessageInfo?
+    @State private var blockTarget: ChatMessageInfo?
+    @State private var kickTarget: ChatMessageInfo?
+    @State private var toast: String?
 
     var body: some View {
         ScrollViewReader { reader in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(model.chatMessages) { message in
+                    ForEach(model.chatMessages.filter { !UserBlockManager.shared.isBlocked($0.senderId) }) { message in
                         WatchChatBubbleInline(
                             message: message,
                             isOwn: message.senderId == model.currentUserId,
                             onRetry: { model.retryChatMessage(message) }
                         )
                         .id(message.id)
+                        .contextMenu {
+                            if message.senderId != model.currentUserId {
+                                Button {
+                                    reportTarget = message
+                                } label: {
+                                    Label("Пожаловаться", systemImage: "flag")
+                                }
+                                Button(role: .destructive) {
+                                    blockTarget = message
+                                } label: {
+                                    Label("Заблокировать", systemImage: "hand.raised")
+                                }
+                                if model.isHost {
+                                    Button(role: .destructive) {
+                                        kickTarget = message
+                                    } label: {
+                                        Label("Кикнуть", systemImage: "person.badge.minus")
+                                    }
+                                }
+                            }
+                            Button {
+                                UIPasteboard.general.string = message.text
+                            } label: {
+                                Label("Копировать", systemImage: "doc.on.doc")
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 14)
@@ -67,6 +87,149 @@ struct WatchChatView: View {
                     .padding(.trailing, 12)
                     .padding(.bottom, 12)
                     .accessibilityLabel("Scroll to latest message")
+                }
+            }
+            .overlay(alignment: .top) {
+                if let toast {
+                    Text(toast)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Cinema2026.surface.opacity(0.95), in: Capsule())
+                        .padding(.top, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .accessibilityAddTraits(.isStaticText)
+                }
+            }
+        }
+        .sheet(item: $reportTarget) { message in
+            ChatReportSheet(
+                senderName: message.senderName,
+                onSubmit: { reason in
+                    Task {
+                        do {
+                            try await UserBlockManager.shared.report(
+                                targetUserId: message.senderId,
+                                roomId: model.roomId,
+                                messageId: message.messageId,
+                                reason: reason
+                            )
+                            showToast("Жалоба отправлена")
+                        } catch {
+                            showToast("Не удалось отправить жалобу")
+                        }
+                        reportTarget = nil
+                    }
+                },
+                onCancel: { reportTarget = nil }
+            )
+            .presentationDetents([.medium])
+        }
+        .confirmationDialog(
+            "Заблокировать \(blockTarget?.senderName ?? "")?",
+            isPresented: Binding(
+                get: { blockTarget != nil },
+                set: { if !$0 { blockTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Заблокировать", role: .destructive) {
+                if let t = blockTarget {
+                    UserBlockManager.shared.blockUser(t.senderId)
+                    showToast("Пользователь заблокирован")
+                }
+                blockTarget = nil
+            }
+            Button("Отмена", role: .cancel) { blockTarget = nil }
+        } message: {
+            Text("Сообщения от этого пользователя будут скрыты.")
+        }
+        .confirmationDialog(
+            "Кикнуть \(kickTarget?.senderName ?? "")?",
+            isPresented: Binding(
+                get: { kickTarget != nil },
+                set: { if !$0 { kickTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Кикнуть", role: .destructive) {
+                if let t = kickTarget {
+                    Task {
+                        let ok = await model.kickParticipant(userId: t.senderId)
+                        showToast(ok ? "Участник удалён" : "Не удалось кикнуть")
+                    }
+                }
+                kickTarget = nil
+            }
+            Button("Отмена", role: .cancel) { kickTarget = nil }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation { toast = text }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation { toast = nil }
+        }
+    }
+}
+
+// MARK: - Report sheet
+
+private struct ChatReportSheet: View {
+    let senderName: String
+    let onSubmit: (ReportReason) -> Void
+    let onCancel: () -> Void
+    @State private var selected: ReportReason = .spam
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Жалоба на \(senderName)")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Cinema2026.text)
+                Text("Выберите причину. Модераторы рассмотрят обращение.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Cinema2026.secondary)
+
+                ForEach(ReportReason.allCases) { reason in
+                    Button {
+                        selected = reason
+                    } label: {
+                        HStack {
+                            Image(systemName: selected == reason ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selected == reason ? Cinema2026.accent : Cinema2026.secondary)
+                            Text(reason.rawValue)
+                                .foregroundStyle(Cinema2026.text)
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(Cinema2026.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(reason.rawValue)
+                }
+
+                Spacer()
+
+                Button {
+                    onSubmit(selected)
+                } label: {
+                    Text("Отправить жалобу")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Cinema2026.background)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            .background(Cinema2026.background.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена", action: onCancel)
                 }
             }
         }
@@ -133,6 +296,9 @@ private struct WatchChatBubbleInline: View {
             if !isOwn { Spacer(minLength: 56) }
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(isOwn ? "Вы" : message.senderName): \(message.text)")
+        .accessibilityHint(isOwn ? "" : "Удерживайте для жалобы или блокировки")
     }
 
     @ViewBuilder private var bubbleBackground: some View {
@@ -164,6 +330,7 @@ private struct ChatAvatarInline: View {
             .fill(Cinema2026.accent.opacity(0.25))
             .overlay(Text(initials).font(.system(size: 11, weight: .bold)).foregroundStyle(.white))
             .frame(width: 28, height: 28)
+            .accessibilityHidden(true)
     }
 }
 

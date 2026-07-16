@@ -13,6 +13,7 @@ struct DMChatView: View {
     let friend: Friend
     @State private var messageText = ""
     @State private var showEmojiPicker = false
+    @State private var showWatchTogether = false
     @FocusState private var isInputFocused: Bool
     /// 🔧 CHAR LIMIT: 150 chars max per DM — prevents spam
     private let charLimit = 150
@@ -95,6 +96,26 @@ struct DMChatView: View {
                     }
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showWatchTogether = true
+                } label: {
+                    Image(systemName: "play.rectangle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Cinema2026.accent)
+                }
+                .accessibilityLabel("Смотреть вместе")
+            }
+        }
+        .sheet(isPresented: $showWatchTogether) {
+            RoomCreationView { room in
+                showWatchTogether = false
+                // Notify friend in DM that a room was created
+                let code = room.code
+                let name = room.name
+                dmService.sendMessage("Мы создали комнату «\(name)» · код \(code). Смотрим вместе!", to: friend)
+            }
+            .environmentObject(APIClient.shared)
         }
         .preferredColorScheme(.dark)
         .task {

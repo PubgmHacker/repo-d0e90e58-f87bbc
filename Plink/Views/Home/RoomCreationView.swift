@@ -66,11 +66,11 @@ struct RoomCreationView: View {
                     step = .settings
                 }
             }
-            .alert("Синхронизация недоступна", isPresented: $showCinemaWarning) {
+            .alert("Требуется подписка", isPresented: $showCinemaWarning) {
                 Button("Понятно, продолжить") { step = .content }
                 Button("Отмена", role: .cancel) { }
             } message: {
-                Text("Для \(selectedService.title) синхронизация воспроизведения недоступна. Каждый участник заходит в свой аккаунт. Host говорит «play на 3-2-1».")
+                Text("\(selectedService.subscriptionDisclaimer) Гости смотрят синхронно через Plink — без своей подписки на сервис. Синхронизация play/pause может быть ограничена; host: «play на 3-2-1».")
             }
         }
     }
@@ -260,15 +260,17 @@ struct RoomCreationView: View {
                         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.divider, lineWidth: 0.5))
                 }
 
-                HStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .foregroundStyle(Cinema2026.amber)
-                    Text("Каждый участник заходит в свой аккаунт. Host: «play на 3-2-1».")
+                    Text(selectedService.subscriptionDisclaimer + " Гости видят экран host через sync. Host: «play на 3-2-1».")
                         .font(.caption)
                         .foregroundStyle(Cinema2026.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
                 .background(Cinema2026.amber.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel(selectedService.subscriptionDisclaimer)
             }
 
             // Custom URL / Browser

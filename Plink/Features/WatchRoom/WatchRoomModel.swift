@@ -426,6 +426,26 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     }
 
     // P1-54: retry a failed chat message
+    /// Host kicks a participant via REST (POST /api/rooms/:id/kick).
+    @discardableResult
+    public func kickParticipant(userId: String) async -> Bool {
+        guard isHost, userId != currentUserId else { return false }
+        struct Body: Encodable { let userId: String }
+        struct Resp: Decodable { let success: Bool? }
+        do {
+            let _: Resp = try await APIClient.shared.request(
+                "rooms/\(_roomId)/kick",
+                method: .post,
+                body: Body(userId: userId)
+            )
+            participants.removeAll { $0.userId == userId }
+            return true
+        } catch {
+            lastError = "Kick failed: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     public func retryChatMessage(_ message: ChatMessageInfo) {
         guard message.isFailed, let cmid = message.clientMessageId else { return }
         // Find and update the message back to pending

@@ -6,6 +6,66 @@ import PhotosUI
 import UIKit
 import Foundation
 
+/// Compact stats card matching V4 surfaces (no palette/theme redesign).
+struct V4MyStatsCard: View {
+    @State private var profile: UserSocialProfile?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Моя статистика")
+                .font(.system(size: 13.6, weight: .bold))
+                .foregroundStyle(V4.ink)
+
+            if let p = profile {
+                HStack(spacing: 8) {
+                    v4Stat("Часы", p.watchHoursText)
+                    v4Stat("Фильмы", "\(p.filmsWatched)")
+                    v4Stat("Друзья", "\(p.friendsCount)")
+                    v4Stat("Комнаты", "\(p.roomsCreated)")
+                }
+                if !p.badges.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(p.badges, id: \.self) { code in
+                                let b = ProfileBadge.from(code: code)
+                                Text(b?.title ?? code)
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(V4.ink)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(V4.surface)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(V4.line))
+                            }
+                        }
+                    }
+                    .accessibilityLabel("Достижения")
+                }
+            } else {
+                ProgressView().tint(V4.accent)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(V4.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(V4.line))
+        .task {
+            profile = try? await SocialProfileService.fetchMe()
+        }
+    }
+
+    private func v4Stat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 10)).foregroundStyle(V4.muted)
+            Text(value).font(.system(size: 14, weight: .bold)).foregroundStyle(V4.ink)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
+    }
+}
+
 struct V4ProfileViewLive: View {
     let theme: V4Theme
     var store: V4ProfileStore?
@@ -102,6 +162,11 @@ struct V4ProfileViewLive: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 80)
                 .padding(.bottom, 20)
+
+                // P1-3: own stats (hours / films / friends / rooms + badges)
+                V4MyStatsCard()
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 12)
 
                 groupTitle("Аккаунт")
                 VStack(spacing:0) {

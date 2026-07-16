@@ -83,8 +83,22 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
         }
     }
 
+    /// Host needs an active subscription on the service (Netflix/Disney + RU cinemas).
+    /// Plink does not provide content — host logs into their own account.
     var requiresSubscription: Bool {
-        group == .cinema
+        switch self {
+        case .netflix, .disney,
+             .kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Short App Store–safe disclaimer shown when host picks a subscription service.
+    @MainActor
+    var subscriptionDisclaimer: String {
+        "Требуется активная подписка \(title). Plink не предоставляет контент — вы входите в свой аккаунт."
     }
 
     // MARK: - Display

@@ -37,20 +37,26 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
         return title
     }
 
+    /// App Store builds must not play raw CDN extract URLs (Guideline 5.x / ToS).
+    /// DEBUG builds may still recognise googlevideo for internal QA.
+    var isBlockedInAppStoreBuild: Bool {
+        #if DEBUG
+        return false
+        #else
+        let lower = streamURL.lowercased()
+        return lower.contains("googlevideo.com")
+            || (lower.contains("youtube-stream") && lower.contains("/api/media/"))
+        #endif
+    }
+
     /// 🔧 FIX: Determines how this media should be played back.
-    /// - YouTube embed URLs (https://www.youtube.com/embed/...) are HTML pages,
-    ///   AVPlayer can't play them — must use WebView.
-    /// - Direct stream URLs (.mp4, .m3u8, HLS) can be played by AVPlayer.
-    /// - Cinema sites (kinopoisk, ivi, etc.) are HTML pages — WebView.
-    /// - Anything that doesn't look like a direct stream → WebView (safe default).
+    /// - YouTube embed URLs → WebView (official IFrame / player API).
+    /// - Direct stream URLs (.mp4, .m3u8, HLS) → AVPlayer.
+    /// - Cinema / OTT pages → WebView (host subscription).
+    /// - Default unknown HTML → WebView.
     ///
-    /// 🔧 v8 (July 2026): added googlevideo.com recognition — backend yt-dlp
-    /// extraction returns URLs like:
-    ///   https://rr3---sn-o097znsz.googlevideo.com/videoplayback?expire=...&mime=video%2Fmp4&...
-    /// These URLs don't end with .mp4 — they use query params (mime=video%2Fmp4)
-    /// to indicate the format. Previously, effectivePlaybackMode returned .webview
-    /// for these URLs → black screen (WKWebView can't render googlevideo directly).
-    /// Now: any URL on googlevideo.com domain is recognized as .directStream.
+    /// Release: googlevideo.com / legacy extract proxies are not treated as
+    /// playable streams (see `isBlockedInAppStoreBuild`).
     var effectivePlaybackMode: PlaybackMode {
         let lower = streamURL.lowercased()
 
@@ -64,27 +70,18 @@ struct MediaItem: Codable, Identifiable, Sendable, Equatable, Hashable {
             return .directStream
         }
 
-        // 🔧 v8: googlevideo.com direct stream URLs (from backend yt-dlp extraction).
-        // These are the actual YouTube video CDN URLs — direct mp4 streams.
-        // Format: https://rr3---sn-XXX.googlevideo.com/videoplayback?...&mime=video%2Fmp4&...
-        // Don't end with .mp4 — AVPlayer still plays them fine, we just need to
-        // recognize them as directStream (not webview).
+        #if DEBUG
+        // Internal QA only: direct CDN / proxy streams from extract experiments.
         if lower.contains("googlevideo.com/videoplayback") {
             return .directStream
         }
-
-        // 🔧 v9 (July 2026): backend streaming proxy URL.
-        // Format: https://plink-backend.../api/media/youtube-stream?id=VIDEO_ID
-        // This is our own backend endpoint that proxies the googlevideo stream.
-        // AVPlayer should treat it as a direct stream (NOT webview) so it uses
         if lower.contains("plink-backend") && lower.contains("youtube-stream") {
             return .directStream
         }
-
-        // 🔧 v9: any backend proxy URL (future-proof for other streaming endpoints)
         if lower.contains("/api/media/") && lower.contains("-stream") {
             return .directStream
         }
+        #endif
 
         // YouTube source — always WebView (embed URL or watch URL, both HTML)
         // NOTE: this check is now only hit if extraction FAILED and we fell back

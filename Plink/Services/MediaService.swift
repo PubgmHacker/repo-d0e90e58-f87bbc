@@ -1,26 +1,15 @@
 import Foundation
 
 // MARK: - Media Service
-/// Bridges the iOS client to the backend's YouTube extractor endpoint.
-/// Accepts a plain YouTube URL, calls POST /api/media/extract, and returns
-/// a direct stream URL (.mp4 / .m3u8) ready for AVPlayer.
+/// Metadata helper for YouTube links (title / thumb / duration).
 ///
-/// ┌──────────────────────────────────────────────────────┐
-/// │  iOS Client         Backend (yt-dlp)        YouTube   │
-/// │     │                    │                      │     │
-/// │     │── POST extract ───▶│                      │     │
-/// │     │   { url }          │── exec yt-dlp ─────▶│     │
-/// │     │                    │◀── stream URL ──────│     │
-/// │     │◀── { streamURL } ──│                      │     │
-/// │     │                    │                      │     │
-/// │     │── AVPlayer(url) ─────────────────────────────▶ │
-/// └──────────────────────────────────────────────────────┘
+/// **App Store path:** playback uses the official YouTube IFrame player
+/// (`/api/media/youtube-player` → WKWebView). This service must NOT be used
+/// to feed raw CDN (`googlevideo.com`) URLs into AVPlayer in Release builds.
 ///
-/// Error handling covers:
-/// - Network failures (retry with backoff)
-/// - Video unavailable / private / age-restricted
-/// - Rate limited by backend
-/// - Invalid response shape
+/// Legacy extract endpoints remain for DEBUG / internal QA only.
+/// Error handling covers network failures, private/unavailable videos, and
+/// rate limits.
 
 @MainActor
 final class MediaService {
@@ -38,7 +27,7 @@ final class MediaService {
     init(apiBaseURL: String = "https://plink-backend-production-ef31.up.railway.app/api") {
         self.apiBaseURL = URL(string: apiBaseURL)!
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 45   // yt-dlp can take a while
+        config.timeoutIntervalForRequest = 45
         config.timeoutIntervalForResource = 90
         config.waitsForConnectivity = true
         self.session = URLSession(configuration: config)
@@ -49,16 +38,15 @@ final class MediaService {
 
     // MARK: - Public API
 
-    /// Extract a direct stream URL from a YouTube link.
-    /// - Parameter youTubeURL: e.g. "https://youtube.com/watch?v=..." or
-    ///   "https://www.youtube.com/embed/VIDEO_ID"
-    /// - Returns: ExtractedMedia with a playable streamURL (.mp4 direct URL)
-    ///
-    /// 🔧 v44.2: backend endpoint is POST /api/media/extract-url (confirmed
-    /// in plink-backend/src/routes/media.ts line 230). Returns StreamInfo:
-    ///   {id, title, author, thumbnailURL, streamURL, duration, isLive, extractor}
-    /// v44.1 changed this to /extract which was WRONG — reverted.
+    /// Resolve media metadata for a YouTube URL.
+    /// Release builds reject googlevideo.com stream URLs (App Store policy).
     func extract(youTubeURL: String) async throws -> ExtractedMedia {
+        #if !DEBUG
+        // App Store: do not call legacy extract that returns CDN stream URLs.
+        // Callers should open the official embed player instead.
+        throw MediaError.blocked("Direct stream URLs not allowed in App Store build")
+        #endif
+
         // 0. Validate input (accept watch / youtu.be / embed / shorts URLs)
         guard isValidYouTubeURL(youTubeURL) else {
             throw MediaError.invalidURL
@@ -114,6 +102,11 @@ final class MediaService {
         guard let streamURL = URL(string: response.streamURL),
               !response.streamURL.isEmpty else {
             throw MediaError.invalidStreamURL
+        }
+
+        // Hard block: never hand googlevideo CDN URLs to the player in ship builds.
+        if response.streamURL.lowercased().contains("googlevideo.com") {
+            throw MediaError.blocked("Direct stream URLs not allowed in App Store build")
         }
 
         let media = ExtractedMedia(
@@ -299,6 +292,7 @@ enum MediaError: LocalizedError {
     case rateLimited
     case videoUnavailable(String)
     case serverError(Int, String?)
+    case blocked(String)
 
     var errorDescription: String? {
         switch self {
@@ -314,6 +308,8 @@ enum MediaError: LocalizedError {
             return "The extraction endpoint was not found."
         case .rateLimited:
             return "Too many requests. Please wait a moment and try again."
+        case .blocked(let detail):
+            return detail
         case .videoUnavailable(let detail):
             return detail
         case .serverError(let code, let msg):

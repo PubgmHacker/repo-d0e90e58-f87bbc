@@ -170,24 +170,33 @@ struct V4HomeViewLive: View {
                 .padding(.horizontal,19)
                 .padding(.bottom,18)
 
-                // Hero carousel — video promo banners first, then trending + promo cards
-                // (P0-1: wire existing HeroVideoBanner MP4s; keep V4Hero + promoBanner as-is)
-                TabView {
-                    // MP4 promo banners (Resources/Banners/*.mp4)
-                    HeroVideoBanner(banner: .watchTogether, height: 260)
-                        .padding(.horizontal, 13)
-                    HeroVideoBanner(banner: .aiCompanion, height: 260)
-                        .padding(.horizontal, 13)
-                    HeroVideoBanner(banner: .syncDevices, height: 260)
-                        .padding(.horizontal, 13)
+                // Hero: 3 promo video banners (always visible — poster/gradient fallback)
+                HeroVideoCarousel(
+                    height: 250,
+                    onWatchTogether: {
+                        HapticManager.impact(.medium)
+                        if let first = searchStore.trending.first {
+                            Task { await createRoomFromTrending(first) }
+                        } else {
+                            NotificationCenter.default.post(name: Notification.Name("plinkOpenCreateRoom"), object: nil)
+                        }
+                    },
+                    onJoinByCode: {
+                        HapticManager.selection()
+                        NotificationCenter.default.post(name: Notification.Name("plinkOpenJoinByCode"), object: nil)
+                    }
+                )
+                .padding(.bottom, 16)
 
-                    if !searchStore.trending.isEmpty {
+                // Trending heroes (below banners so promo never hidden)
+                if !searchStore.trending.isEmpty {
+                    TabView {
                         ForEach(searchStore.trending.prefix(5)) { item in
                             V4Hero(
                                 title: item.title,
                                 meta: "YouTube · \(item.subtitle)",
                                 button: "Смотреть вместе",
-                                height: 260,
+                                height: 220,
                                 theme: theme,
                                 action: {
                                     HapticManager.impact(.medium)
@@ -197,27 +206,11 @@ struct V4HomeViewLive: View {
                             )
                             .padding(.horizontal, 13)
                         }
-                        // Promotional banners
-                        promoBanner(
-                            title: "Смотрите вместе",
-                            subtitle: "Создай комнату и пригласи друзей смотреть кино синхронно",
-                            icon: "person.2.fill",
-                            action: { NotificationCenter.default.post(name: .plinkRoomCreated, object: nil) }
-                        )
-                        .padding(.horizontal, 13)
-                        promoBanner(
-                            title: "Plink+ премиум",
-                            subtitle: "Живые темы, анимированные эмодзи и эксклюзивные функции",
-                            icon: "crown.fill",
-                            isPremium: true,
-                            action: { /* TODO: open paywall */ }
-                        )
-                        .padding(.horizontal, 13)
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .automatic))
+                    .frame(height: 240)
+                    .padding(.bottom, 16)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-                .frame(height: 280)
-                .padding(.bottom, 20)
 
                 // "Популярное" — auto-scrolling carousel, bigger posters
                 if !searchStore.trending.isEmpty {

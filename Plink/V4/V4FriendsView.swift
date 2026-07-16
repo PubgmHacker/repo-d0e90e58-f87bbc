@@ -51,12 +51,33 @@ struct V4FriendsViewLive: View {
         NavigationStack {
             ScrollView(showsIndicators:false) {
                 VStack(spacing:0) {
-                    HStack(alignment:.top) { V4Heading(eyebrow:"ВМЕСТЕ ЛУЧШЕ",title:"Друзья"); Spacer(); V4RoundButton(symbol:"＋"){
-                        HapticManager.impact(.light)
-                        let username = AuthService.shared.currentUserValue?.username ?? ""
-                        UIPasteboard.general.string = "Добавь меня в Plink! Мой ник: \(username)"
-                    } }
-                        .padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
+                    HStack(alignment:.top) {
+                        V4Heading(eyebrow:"МЕССЕНДЖЕР",title:"Друзья и чаты")
+                        Spacer()
+                        V4RoundButton(symbol:"＋"){
+                            HapticManager.impact(.light)
+                            let username = AuthService.shared.currentUserValue?.username ?? ""
+                            UIPasteboard.general.string = "Добавь меня в Plink! Мой ник: \(username)"
+                        }
+                    }
+                    .padding(.horizontal,18).padding(.top,10).padding(.bottom,8)
+
+                    // Messenger hint
+                    HStack(spacing: 10) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .foregroundStyle(V4.accent)
+                        Text("Нажми на друга → личный чат. «Смотреть» → комната вместе.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(V4.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(V4.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line))
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 12)
 
                     if let s = store {
                         switch s.state {
@@ -79,7 +100,7 @@ struct V4FriendsViewLive: View {
                                         } label: {
                                             VStack(alignment:.leading,spacing:2) {
                                                 Text(friend.username).font(.system(size:13.6,weight:.bold)).foregroundStyle(V4.ink)
-                                                Text(friend.isOnline ? "В сети · написать" : "Не в сети · написать")
+                                                Text(friend.isOnline ? "В сети · открыть чат" : "Не в сети · открыть чат")
                                                     .font(.system(size:11.52)).foregroundStyle(V4.muted)
                                             }
                                         }
@@ -87,6 +108,20 @@ struct V4FriendsViewLive: View {
                                         .accessibilityLabel("Чат с \(friend.username)")
 
                                         Spacer()
+                                        Button {
+                                            dmFriend = friend
+                                        } label: {
+                                            Image(systemName: "message.fill")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .foregroundStyle(V4.ink)
+                                                .frame(width: 35, height: 35)
+                                                .background(V4.surface)
+                                                .clipShape(RoundedRectangle(cornerRadius: 11))
+                                                .overlay(RoundedRectangle(cornerRadius: 11).stroke(V4.line))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Написать \(friend.username)")
+
                                         Button{
                                             HapticManager.impact(.light)
                                             watchWithFriend = friend
@@ -102,9 +137,9 @@ struct V4FriendsViewLive: View {
                             }.padding(.horizontal,19)
                         case .empty:
                             VStack(spacing:12) {
-                                Image(systemName:"person.2").font(.largeTitle).foregroundStyle(V4.accent)
-                                Text("Друзей пока нет").font(.headline)
-                                Text("Пригласите друзей, чтобы смотреть вместе").font(.subheadline).foregroundStyle(V4.muted)
+                                Image(systemName:"bubble.left.and.bubble.right").font(.largeTitle).foregroundStyle(V4.accent)
+                                Text("Мессенджер пуст").font(.headline)
+                                Text("Добавьте друзей — здесь появятся личные чаты и «Смотреть вместе»").font(.subheadline).foregroundStyle(V4.muted).multilineTextAlignment(.center).padding(.horizontal, 24)
                             }.padding(.top,60)
                         case .failed(let error):
                             Text(error).font(.subheadline).foregroundStyle(V4.muted).padding(.top,60)

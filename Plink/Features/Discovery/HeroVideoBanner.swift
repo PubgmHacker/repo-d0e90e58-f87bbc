@@ -1,160 +1,223 @@
 //  HeroVideoBanner.swift
-//  Plink
-//
-//  Video banner component using 3 pre-loaded MP4 files.
-//  1:1 with reference videos from Grok Imagine.
-//
+//  Plink — looping muted video promo banners (3 assets).
 
 import SwiftUI
-import AVKit
-import Combine
+import AVFoundation
+import UIKit
 
 // MARK: - HeroVideoBanner
 
 /// Looping muted video banner for hero carousel.
-/// Usage:
-///   HeroVideoBanner(.watchTogether)
-///   HeroVideoBanner(.aiCompanion)
-///   HeroVideoBanner(.syncDevices)
+/// Falls back to catalog poster, then solid gradient — never blank.
 struct HeroVideoBanner: View {
     let banner: HeroBannerKind
-    var height: CGFloat = 480
+    var height: CGFloat = 260
     var showsOverlay: Bool = true
+    var onPrimary: (() -> Void)? = nil
+    var onSecondary: (() -> Void)? = nil
 
     @State private var player: AVPlayer?
-    @State private var observer: NSObjectProtocol?
+    @State private var loopObserver: NSObjectProtocol?
+    @State private var videoFailed = false
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            if let player {
-                VideoPlayer(player: player)
-                    .aspectRatio(16 / 9, contentMode: .fill)
-                    .frame(height: height)
-                    .clipped()
+            // Layer 1: always-visible gradient base (never blank screen)
+            LinearGradient(
+                colors: [
+                    banner.accentColor.opacity(0.55),
+                    Color(hex: 0x0E1113),
+                    Color(hex: 0x0A0D12),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Layer 2: poster from Assets (imageset name == asset base, not *_poster)
+            banner.posterImage
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .opacity(player == nil || videoFailed ? 1 : 0.15)
+
+            // Layer 3: video
+            if let player, !videoFailed {
+                LoopingPlayerView(player: player)
+                    .aspectRatio(contentMode: .fill)
                     .onAppear { player.play() }
-                    .onDisappear {
-                        player.pause()
-                        if let observer {
-                            NotificationCenter.default.removeObserver(observer)
-                        }
-                    }
-            } else {
-                // Fallback: poster image
-                banner.posterImage
-                    .resizable()
-                    .aspectRatio(16 / 9, contentMode: .fill)
-                    .frame(height: height)
-                    .clipped()
+                    .onDisappear { player.pause() }
             }
 
-            // Gradient overlay (top → bottom)
+            // Gradient for text legibility
             LinearGradient(
                 colors: [
                     .clear,
-                    Color(hex: 0x0E1113).opacity(0.4),
-                    Color(hex: 0x0E1113).opacity(0.95),
+                    Color(hex: 0x0E1113).opacity(0.35),
+                    Color(hex: 0x0E1113).opacity(0.92),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: height)
 
-            // Text overlay
             if showsOverlay {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(banner.title)
-                        .font(.system(size: 34, weight: .heavy))
-                        .tracking(-0.8)
+                        .font(.system(size: 28, weight: .heavy))
+                        .tracking(-0.6)
                         .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.6), radius: 8)
+                        .shadow(color: .black.opacity(0.55), radius: 6)
+                        .minimumScaleFactor(0.8)
+                        .lineLimit(2)
 
                     Text(banner.subtitle)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(banner.accentColor)
-                        .shadow(color: .black.opacity(0.6), radius: 4)
+                        .lineLimit(2)
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         Button {
-                            // TODO: open room creation
+                            onPrimary?()
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "play.fill")
                                 Text("Смотреть вместе")
                             }
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Color(hex: 0x0E1113))
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .background(
                                 LinearGradient(
                                     colors: [Color(hex: 0x2DE2E6), Color(hex: 0x26D9A4)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
-                                )
+                                ),
+                                in: Capsule()
                             )
-                            .clipShape(Capsule())
-                            .shadow(color: Color(hex: 0x2DE2E6).opacity(0.4), radius: 12)
                         }
+                        .buttonStyle(.plain)
 
                         Button {
-                            // TODO: open Plink+ paywall
+                            onSecondary?()
                         } label: {
                             Text(banner.cta2)
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 12)
-                                .background(Color.white.opacity(0.06))
-                                .overlay(
-                                    Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                )
-                                .clipShape(Capsule())
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.08), in: Capsule())
+                                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, 2)
                 }
-                .padding(28)
+                .padding(20)
             }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
         .onAppear { setupPlayer() }
+        .onDisappear { teardownPlayer() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(banner.title). \(banner.subtitle)")
     }
 
     private func setupPlayer() {
-        guard player == nil,
-              let url = Bundle.main.url(forResource: banner.assetName, withExtension: "mp4",
-                                         subdirectory: "Banners") ?? {
-                                             // Try Assets.xcassets fallback
-                                             Bundle.main.url(forResource: banner.assetName, withExtension: "mp4")
-                                         }()
-        else { return }
+        guard player == nil else { return }
+        guard let url = Self.resolveVideoURL(named: banner.assetName) else {
+            videoFailed = true
+            return
+        }
 
-        let p = AVPlayer(url: url)
+        let item = AVPlayerItem(url: url)
+        let p = AVPlayer(playerItem: item)
         p.actionAtItemEnd = .none
         p.isMuted = true
-        p.preventsDisplaySleepDuringVideoPlayback = false
+        p.automaticallyWaitsToMinimizeStalling = true
+        if #available(iOS 16.0, *) {
+            p.defaultRate = 1.0
+        }
 
-        // Loop forever
-        observer = NotificationCenter.default.addObserver(
+        loopObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
-            object: p.currentItem,
+            object: item,
+            queue: .main
+        ) { [weak p] _ in
+            p?.seek(to: .zero)
+            p?.play()
+        }
+
+        // If item fails, keep poster visible
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: item,
             queue: .main
         ) { _ in
-            p.seek(to: .zero)
-            p.play()
+            videoFailed = true
         }
 
         player = p
+        p.play()
+    }
+
+    private func teardownPlayer() {
+        player?.pause()
+        if let loopObserver {
+            NotificationCenter.default.removeObserver(loopObserver)
+        }
+        loopObserver = nil
+        player = nil
+    }
+
+    /// Bundle paths for folder-resource Banners + flat copy.
+    static func resolveVideoURL(named name: String) -> URL? {
+        let candidates: [URL?] = [
+            Bundle.main.url(forResource: name, withExtension: "mp4", subdirectory: "Banners"),
+            Bundle.main.url(forResource: name, withExtension: "mp4", subdirectory: "Resources/Banners"),
+            Bundle.main.url(forResource: name, withExtension: "mp4"),
+            Bundle.main.resourceURL?
+                .appendingPathComponent("Banners", isDirectory: true)
+                .appendingPathComponent("\(name).mp4"),
+        ]
+        return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+}
+
+// MARK: - AVPlayerLayer host (no system chrome — unlike VideoPlayer)
+
+private struct LoopingPlayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> PlayerUIView {
+        let v = PlayerUIView()
+        v.playerLayer.player = player
+        v.playerLayer.videoGravity = .resizeAspectFill
+        return v
+    }
+
+    func updateUIView(_ uiView: PlayerUIView, context: Context) {
+        uiView.playerLayer.player = player
+    }
+
+    final class PlayerUIView: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
     }
 }
 
 // MARK: - HeroBannerKind
 
-enum HeroBannerKind: CaseIterable {
+enum HeroBannerKind: CaseIterable, Identifiable {
     case watchTogether
     case aiCompanion
     case syncDevices
+
+    var id: String { assetName }
 
     var assetName: String {
         switch self {
@@ -174,9 +237,9 @@ enum HeroBannerKind: CaseIterable {
 
     var subtitle: String {
         switch self {
-        case .watchTogether: return "Watch together. Anywhere. Together."
+        case .watchTogether: return "Создай комнату и зови друзей"
         case .aiCompanion:   return "Умный помощник для совместного просмотра"
-        case .syncDevices:   return "Sync ±2s across iOS, Android, Mac, Windows"
+        case .syncDevices:   return "Sync ±2s · iOS, Android, Mac, Windows"
         }
     }
 
@@ -184,7 +247,7 @@ enum HeroBannerKind: CaseIterable {
         switch self {
         case .watchTogether: return "Войти по коду"
         case .aiCompanion:   return "Plink+"
-        case .syncDevices:   return "Скачать"
+        case .syncDevices:   return "Как это работает"
         }
     }
 
@@ -196,41 +259,63 @@ enum HeroBannerKind: CaseIterable {
         }
     }
 
+    /// Asset catalog imageset is named without `_poster` suffix.
     var posterImage: Image {
-        switch self {
-        case .watchTogether: return Image("hero_banner_watch_together_poster")
-        case .aiCompanion:   return Image("hero_banner_ai_companion_poster")
-        case .syncDevices:   return Image("hero_banner_sync_devices_poster")
-        }
+        Image(assetName)
     }
 }
 
 // MARK: - HeroVideoCarousel
 
-/// Auto-scrolling carousel of all 3 video banners.
 struct HeroVideoCarousel: View {
+    var height: CGFloat = 260
+    var onWatchTogether: (() -> Void)? = nil
+    var onJoinByCode: (() -> Void)? = nil
+
     @State private var currentIndex = 0
     @State private var timer: Timer?
 
-    private let banners: [HeroBannerKind] = HeroBannerKind.allCases
-    private let autoScrollInterval: TimeInterval = 6
+    private let banners = HeroBannerKind.allCases
+    private let autoScrollInterval: TimeInterval = 5.5
 
     var body: some View {
-        TabView(selection: $currentIndex) {
-            ForEach(Array(banners.enumerated()), id: \.0) { index, banner in
-                HeroVideoBanner(banner: banner)
+        VStack(spacing: 10) {
+            TabView(selection: $currentIndex) {
+                ForEach(Array(banners.enumerated()), id: \.offset) { index, banner in
+                    HeroVideoBanner(
+                        banner: banner,
+                        height: height,
+                        onPrimary: onWatchTogether,
+                        onSecondary: {
+                            if banner == .watchTogether { onJoinByCode?() }
+                            else { onWatchTogether?() }
+                        }
+                    )
+                    .padding(.horizontal, 13)
                     .tag(index)
+                }
             }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .frame(height: height + 8)
+
+            // Explicit page dots (in case page style hides them on dark bg)
+            HStack(spacing: 6) {
+                ForEach(0..<banners.count, id: \.self) { i in
+                    Circle()
+                        .fill(i == currentIndex ? Color(hex: 0x2DE2E6) : Color.white.opacity(0.25))
+                        .frame(width: i == currentIndex ? 8 : 6, height: i == currentIndex ? 8 : 6)
+                }
+            }
+            .accessibilityHidden(true)
         }
-        .tabViewStyle(.page(indexDisplayMode: .always))
-        .frame(height: 480)
         .onAppear { startAutoScroll() }
         .onDisappear { stopAutoScroll() }
     }
 
     private func startAutoScroll() {
+        stopAutoScroll()
         timer = Timer.scheduledTimer(withTimeInterval: autoScrollInterval, repeats: true) { _ in
-            withAnimation(.easeInOut(duration: 0.6)) {
+            withAnimation(.easeInOut(duration: 0.45)) {
                 currentIndex = (currentIndex + 1) % banners.count
             }
         }

@@ -7,60 +7,115 @@ import UIKit
 import Foundation
 
 /// Compact stats card matching V4 surfaces (no palette/theme redesign).
+/// Visible under avatar on **Профиль** tab — always shows numbers (0 if empty/API fail).
 struct V4MyStatsCard: View {
     @State private var profile: UserSocialProfile?
+    @State private var loadError: String?
+    @State private var isLoading = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Моя статистика")
-                .font(.system(size: 13.6, weight: .bold))
-                .foregroundStyle(V4.ink)
-
-            if let p = profile {
-                HStack(spacing: 8) {
-                    v4Stat("Часы", p.watchHoursText)
-                    v4Stat("Фильмы", "\(p.filmsWatched)")
-                    v4Stat("Друзья", "\(p.friendsCount)")
-                    v4Stat("Комнаты", "\(p.roomsCreated)")
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("МОЯ СТАТИСТИКА")
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(0.8)
+                        .foregroundStyle(V4.accent)
+                    Text("Активность в Plink")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(V4.ink)
                 }
-                if !p.badges.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(p.badges, id: \.self) { code in
-                                let b = ProfileBadge.from(code: code)
-                                Text(b?.title ?? code)
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(V4.ink)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(V4.surface)
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(V4.line))
-                            }
+                Spacer()
+                if isLoading {
+                    ProgressView().tint(V4.accent).scaleEffect(0.8)
+                } else {
+                    Button {
+                        Task { await reload() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(V4.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Обновить статистику")
+                }
+            }
+
+            let hours = profile?.watchHoursText ?? "0 мин"
+            let films = profile.map { "\($0.filmsWatched)" } ?? "0"
+            let friends = profile.map { "\($0.friendsCount)" } ?? "0"
+            let rooms = profile.map { "\($0.roomsCreated)" } ?? "0"
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                v4Stat("Часы в Plink", hours)
+                v4Stat("Фильмов", films)
+                v4Stat("Друзей", friends)
+                v4Stat("Комнат создано", rooms)
+            }
+
+            if let badges = profile?.badges, !badges.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(badges, id: \.self) { code in
+                            let b = ProfileBadge.from(code: code)
+                            Text(b?.title ?? code)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(V4.ink)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(V4.raised)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(V4.line))
                         }
                     }
-                    .accessibilityLabel("Достижения")
                 }
-            } else {
-                ProgressView().tint(V4.accent)
+                .accessibilityLabel("Достижения")
+            } else if !isLoading {
+                Text("Достижения появятся после просмотров и друзей")
+                    .font(.system(size: 11))
+                    .foregroundStyle(V4.muted)
+            }
+
+            if let loadError {
+                Text(loadError)
+                    .font(.system(size: 11))
+                    .foregroundStyle(V4.danger)
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(V4.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(V4.line))
-        .task {
-            profile = try? await SocialProfileService.fetchMe()
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(V4.accent.opacity(0.25), lineWidth: 1))
+        .task { await reload() }
+    }
+
+    private func reload() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            profile = try await SocialProfileService.fetchMe()
+            loadError = nil
+        } catch {
+            // Still show zeros so the block is never "missing"
+            loadError = "Не удалось обновить — показаны нули"
+            if profile == nil {
+                // Keep empty state numbers visible
+            }
         }
     }
 
     private func v4Stat(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 10)).foregroundStyle(V4.muted)
-            Text(value).font(.system(size: 14, weight: .bold)).foregroundStyle(V4.ink)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 11)).foregroundStyle(V4.muted)
+            Text(value).font(.system(size: 18, weight: .bold)).foregroundStyle(V4.ink)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(V4.raised.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(value)")
     }

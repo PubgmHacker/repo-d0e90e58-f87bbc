@@ -36,6 +36,7 @@ struct PlinkApprovedV4Root: View {
     @State private var profileStore: V4ProfileStore?
     @State private var showCreateRoom = false
     @State private var showJoinByCode = false
+    @State private var lastSharedRoomCode: String?
 
     var body: some View {
         ZStack(alignment:.bottom){
@@ -74,16 +75,26 @@ struct PlinkApprovedV4Root: View {
         .onReceive(NotificationCenter.default.publisher(for: .plinkLiveThemeChanged)) { n in
             if let i = n.object as? Int { liveThemeIndex = i; if let l = PlinkPlusLiveTheme.resolve(i) { theme = l.closestStandardTheme } }
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("plinkOpenCreateRoom"))) { _ in
+            showCreateRoom = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("plinkOpenJoinByCode"))) { _ in
+            showJoinByCode = true
+        }
         .sheet(isPresented: $showCreateRoom) {
             RoomCreationView(
                 onRoomCreated: { newRoom in
                     showCreateRoom = false
                     HapticManager.roomJoined()
-                    // Copy room code to clipboard for easy sharing
+                    // Copy room code + surface alert so host always sees 6-char code
                     UIPasteboard.general.string = "Код комнаты Plink: \(newRoom.code)"
-                    // P0.2b: room created → present WatchRoom directly
-                    roomToPresent = newRoom
+                    lastSharedRoomCode = newRoom.code
+                    // P0.2b: room created → present WatchRoom after host dismisses code alert
                     Task { await roomsStore?.load() }
+                    // Present room after brief moment so alert is readable
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        roomToPresent = newRoom
+                    }
                 }
             )
             .environmentObject(APIClient.shared)
@@ -98,6 +109,17 @@ struct PlinkApprovedV4Root: View {
             )
             .environmentObject(APIClient.shared)
             .preferredColorScheme(.dark)
+        }
+        .alert(
+            "Код комнаты",
+            isPresented: Binding(
+                get: { lastSharedRoomCode != nil },
+                set: { if !$0 { lastSharedRoomCode = nil } }
+            )
+        ) {
+            Button("Скопировано — ОК") { lastSharedRoomCode = nil }
+        } message: {
+            Text("Отправь другу код: \(lastSharedRoomCode ?? "")\n\nДруг: вкладка «Комнаты» → иконка «человек+» → ввести код.\nКод уже в буфере обмена.")
         }
         // P0.2b: single fullScreenCover for WatchRoom — handles both join and create
         .fullScreenCover(item: $roomToPresent) { room in

@@ -3,15 +3,12 @@ import type { FormEvent } from 'react';
 import { api, setToken } from '../lib/api';
 import type { User } from '../lib/types';
 import { PosterMosaic } from '../components/auth/PosterMosaic';
+import { LivingBackdrop } from '../components/cinema/LivingBackdrop';
 
 type Props = {
   onAuth: (user: User, token: string) => void;
 };
 
-/**
- * AuthPage — 1:1 with iOS CinematicAuthContainer.
- * Layout: PosterMosaic (left) + auth card (right, glassmorphism).
- */
 export function AuthPage({ onAuth }: Props) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -31,52 +28,26 @@ export function AuthPage({ onAuth }: Props) {
       setToken(res.token);
       onAuth(res.user, res.token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка авторизации');
+      setError(err instanceof Error ? err.message : 'Auth failed');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="auth-page">
-      <PosterMosaic />
+    <div className="auth-page cinematic-auth">
+      <div className="auth-banner-wrap">
+        <LivingBackdrop animateThemes />
+        <PosterMosaic />
+      </div>
       <div className="auth-form-panel">
         <div className="auth-card">
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <h1 style={{
-              fontSize: 40,
-              fontWeight: 800,
-              letterSpacing: '-0.03em',
-              margin: 0,
-              background: 'var(--gradient-bio)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
-            Plink
-            </h1>
-            <p style={{
-              margin: '4px 0 0',
-              color: 'var(--text-secondary)',
-              fontSize: 14,
-            }}>
-              Смотрите вместе. Где угодно. Вместе.
-            </p>
-          </div>
-
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: '0 0 8px' }}>
-            {mode === 'signin' ? 'С возвращением' : 'Создать аккаунт'}
-          </h1>
-          <p className="auth-sub">
-            {mode === 'signin'
-              ? 'Войдите, чтобы продолжить'
-              : 'Присоединяйся к Plink — синхронный просмотр с друзьями'}
-          </p>
-
+          <h1>{mode === 'signin' ? 'Welcome back' : 'Create account'}</h1>
+          <p className="auth-sub">Your stories. Your time. Your Plink.</p>
           <form onSubmit={handleSubmit}>
             {mode === 'signup' && (
               <>
-                <label htmlFor="username">ИМЯ ПОЛЬЗОВАТЕЛЯ</label>
+                <label htmlFor="username">Username</label>
                 <input
                   id="username"
                   placeholder="yourname"
@@ -85,11 +56,10 @@ export function AuthPage({ onAuth }: Props) {
                   required
                   minLength={5}
                   maxLength={32}
-                  autoComplete="username"
                 />
               </>
             )}
-            <label htmlFor="email">EMAIL</label>
+            <label htmlFor="email">Email</label>
             <input
               id="email"
               type="email"
@@ -99,7 +69,7 @@ export function AuthPage({ onAuth }: Props) {
               required
               autoComplete="email"
             />
-            <label htmlFor="password">ПАРОЛЬ</label>
+            <label htmlFor="password">Password</label>
             <input
               id="password"
               type="password"
@@ -108,20 +78,15 @@ export function AuthPage({ onAuth }: Props) {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             />
             {error && <p className="error banner">{error}</p>}
             <button type="submit" className="submit-btn" disabled={loading}>
-              {loading ? 'Подождите…' : mode === 'signin' ? 'Войти' : 'Создать аккаунт'}
+              {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Get started'}
             </button>
           </form>
-
-          <div className="auth-switch">
-            {mode === 'signin' ? 'Нет аккаунта?' : 'Уже есть аккаунт?'}
-            <button type="button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
-              {mode === 'signin' ? 'Создать' : 'Войти'}
-            </button>
-          </div>
+          <button className="link-btn" type="button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
+            {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
+          </button>
         </div>
       </div>
     </div>

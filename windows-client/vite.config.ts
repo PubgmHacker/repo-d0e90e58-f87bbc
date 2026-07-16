@@ -8,6 +8,13 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'https://plink-backend-production-ef31.up.railway.app',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
 })

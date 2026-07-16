@@ -1,109 +1,45 @@
-/* ════════════════════════════════════════════════════════════════════
-   Plink Desktop — Cinema2026 Design System (1:1 with iOS)
-   ════════════════════════════════════════════════════════════════════
-   Source: iOS Plink/Design/Cinematic/CompactPhoneMetrics.swift
-           + Plink/Extensions/Color+Theme.swift
-   ════════════════════════════════════════════════════════════════════ */
-
+/* Plink Desktop — Cinema2026 (iOS parity) */
 :root {
-  /* ═══ База (ОБСИДИАН — основной фон, как в iOS) ═══ */
-  --void:           #0E1113;  /* Cinema2026.background = rgb(14,17,19) */
-  --bg:             #0E1113;
-  --surface:        #171B1E;  /* Cinema2026.surface = rgb(23,27,30) */
-  --raised:         #22282A;  /* Cinema2026.raised = rgb(34,40,42) */
-  --divider:        #343A3B;  /* Cinema2026.divider = rgb(52,58,59) */
+  --void: #0e1113;
+  --bg: #0e1113;
+  --surface: #171b1e;
+  --raised: #222729;
+  --divider: #34393b;
+  --text: #eceae3;
+  --text-secondary: #a6acae;
+  --text-tertiary: #6e7578;
 
-  /* ═══ Текст ═══ */
-  --text:           #ECEBEA;  /* Cinema2026.text = rgb(236,235,234) */
-  --text-secondary: #A6ACAD;  /* Cinema2026.secondary = rgb(166,172,173) */
-  --text-tertiary:  #6E7578;
+  --accent: #5ab09b;
+  --accent-pressed: #488c7c;
+  --accent-bright: #5ab09b;
+  --amber: #d7a750;
+  --live: #5ab09b;
+  --danger: #d14b45;
 
-  /* ═══ Биолюминесценция (ЕДИНЫЙ спектр свечения — как в iOS) ═══ */
-  --accent:         #5AB09D;  /* Cinema2026.accent = rgb(90,176,157) */
-  --accent-bright:  #2DE2E6;  /* bio-cyan (iOS ravePrimary) */
-  --accent-deep:    #0EB5C9;  /* bio-teal (iOS raveSecondary) */
-  --accent-pressed: #488F7C;
-  --emerald:        #26D9A4;  /* bio-emerald (iOS raveGreen / live) */
-  --live:           #26D9A4;
+  --neon-red: #ff3c28;
+  --neon-red-glow: rgba(255, 60, 40, 0.55);
+  --neon-red-soft: rgba(255, 60, 40, 0.18);
 
-  /* ═══ Тёплые акценты (точечно — реакции, premium, friends) ═══ */
-  --amber:          #D7A750;  /* Cinema2026.amber (premium badges) */
-  --coral:          #FF6B6B;  /* bio-coral (reactions) */
-  --rose:           #FF8FAB;  /* bio-rose (profile, romance) */
-  --danger:         #D14B45;  /* Cinema2026.danger */
-  --plink:          #5AB09D;  /* unified — was purple, now matches accent */
+  --nav-accent: var(--accent);
+  --nav-accent-glow: rgba(90, 176, 155, 0.15);
 
-  /* ═══ Glassmorphism (КАК В iOS — 4% прозрачность) ═══ */
-  --glass:          rgba(255, 255, 255, 0.04);
-  --glass-border:   rgba(255, 255, 255, 0.08);
-  --glass-strong:   rgba(22, 27, 30, 0.82);
-  --glass-blur:     20px;
+  --gradient-accent: linear-gradient(135deg, #5ab09b 0%, #488c7c 100%);
+  --gradient-bio: linear-gradient(135deg, #5ab09b 0%, #488c7c 100%);
+  --gradient-hero: linear-gradient(180deg, transparent 30%, rgba(14, 17, 19, 0.6) 70%, #0e1113 100%);
 
-  /* ═══ Градиенты (1:1 из iOS Color+Theme.swift) ═══ */
-  --gradient-accent: linear-gradient(135deg, #5AB09D 0%, #488F7C 100%);
-  --gradient-bio:    linear-gradient(135deg, #2DE2E6 0%, #26D9A4 100%);
-  --gradient-hero:   linear-gradient(180deg, transparent 0%, rgba(14, 17, 19, 0.4) 45%, rgba(14, 17, 19, 0.95) 100%);
-  --gradient-premium: linear-gradient(135deg, #0EB5C9 0%, #0E1113 100%);
-  --gradient-reaction: linear-gradient(135deg, #FF6B6B 0%, #FFB454 100%);
-  --gradient-bg:     linear-gradient(180deg, #0E1113 0%, #0C1018 50%, #0E1113 100%);
-  --neon-ring:       linear-gradient(135deg, rgba(45,226,230,0.5) 0%, rgba(38,217,164,0.25) 100%);
-  --premium-ring:    linear-gradient(180deg, #2DE2E6 0%, #26D9A4 50%, #0EB5C9 100%);
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-strong: rgba(22, 27, 30, 0.82);
 
-  /* ═══ Glow эффекты (свечение как в iOS) ═══ */
-  --glow-cyan:    0 0 20px rgba(45, 226, 230, 0.4), 0 0 40px rgba(45, 226, 230, 0.2);
-  --glow-emerald: 0 0 20px rgba(38, 217, 164, 0.4), 0 0 40px rgba(38, 217, 164, 0.2);
-  --glow-amber:   0 0 20px rgba(215, 167, 80, 0.4);
-
-  /* ═══ Радиусы (из CompactPhoneMetrics) ═══ */
-  --radius-poster:  12px;
-  --radius-card:    13px;
+  --inset-x: 18px;
+  --section-gap: 18px;
+  --rail-gap: 8px;
+  --poster-w: 108px;
+  --landscape-w: 186px;
+  --landscape-h: 105px;
+  --titlebar-h: 52px;
+  --radius-poster: 9px;
   --radius-control: 14px;
-  --radius-panel:   20px;
-  --radius-pill:    999px;
-  --radius-bubble:  18px;
-
-  /* ═══ Layout (из iOS CompactPhoneMetrics) ═══ */
-  --sidebar-w:         220px;
-  --sidebar-collapsed: 72px;
-  --detail-w:          360px;
-  --titlebar-h:        52px;
-  --horizontal-inset:  14px;
-  --section-spacing:   18px;
-  --rail-spacing:      8px;
-  --poster-w:          200px;
-  --poster-aspect:     0.5625;  /* 16:9 */
-
-  /* ═══ Typography (SF Pro как в iOS Dynamic Type) ═══ */
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-          'Segoe UI Variable', system-ui, sans-serif;
-  --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
-
-  /* Размеры (iOS Dynamic Type scales) */
-  --text-large-title: 34px;
-  --text-title1:      28px;
-  --text-title2:      22px;
-  --text-title3:      20px;
-  --text-body:        17px;
-  --text-callout:     16px;
-  --text-subhead:     15px;
-  --text-footnote:    13px;
-  --text-caption:     12px;
-
-  /* ═══ Z-index layers ═══ */
-  --z-bg:        0;
-  --z-content:   1;
-  --z-popover:   100;
-  --z-modal:     200;
-  --z-tray:      300;
-
-  /* ═══ Animations (как в iOS timingCurve) ═══ */
-  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --duration-fast:   0.15s;
-  --duration-normal: 0.25s;
-  --duration-slow:   0.4s;
+  --radius-panel: 16px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable', system-ui, sans-serif;
 }
-
-/* ═══ ЕДИНЫЙ ДИЗАЙН ДЛЯ ВСЕХ ПЛАТФОРМ ═══
-   Больше никаких platform-mac / platform-win классов.
-   Mac и Windows выглядят одинаково — как iOS. */

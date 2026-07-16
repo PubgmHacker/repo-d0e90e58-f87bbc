@@ -258,6 +258,7 @@ public enum WatchRoomCompositionRoot {
 public enum FeatureFlags {
     private static let cacheKey = "plink.feature_flags_cache"
     private static let cacheTTL: TimeInterval = 300  // 5 minutes
+    private static let liveKitCacheKey = "plink.livekit_voice_enabled"
 
     /// P0-37: master switch for v2 realtime + playback path.
     /// P1-56: checks remote config first (cached), falls back to UserDefaults.
@@ -268,6 +269,39 @@ public enum FeatureFlags {
         }
         // P1-59: check cached remote config
         return true  // P1-56: temporarily forced TRUE for v2 testing
+    }
+
+    /// Voice/camera UI — only when LiveKit is configured in production.
+    /// Overridable via Info.plist ENABLE_LIVEKIT_VOICE or remote /api/rtc/status.
+    public static var liveKitVoiceEnabled: Bool {
+        if let flag = Bundle.main.object(forInfoDictionaryKey: "ENABLE_LIVEKIT_VOICE") {
+            if let b = flag as? Bool { return b }
+            if let n = flag as? NSNumber { return n.boolValue }
+            if let s = flag as? String {
+                return s.lowercased() == "true" || s == "1"
+            }
+        }
+        if let env = ProcessInfo.processInfo.environment["ENABLE_LIVEKIT_VOICE"] {
+            return env.lowercased() == "true" || env == "1"
+        }
+        if UserDefaults.standard.object(forKey: liveKitCacheKey) != nil {
+            return UserDefaults.standard.bool(forKey: liveKitCacheKey)
+        }
+        return cachedRemoteFlags["livekitVoice"] ?? false
+    }
+
+    /// Call on launch (or after login) to pick up LiveKit availability.
+    public static func refreshLiveKitAvailability(apiBaseURL: URL) async {
+        let url = apiBaseURL.appendingPathComponent("api/rtc/status")
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            let enabled = (json["livekitEnabled"] as? Bool) ?? false
+            UserDefaults.standard.set(enabled, forKey: liveKitCacheKey)
+        } catch {
+            // Keep previous cache / default false
+        }
     }
 
     /// P1-56: cached remote flags fetched from backend

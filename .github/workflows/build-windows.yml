@@ -4,11 +4,16 @@ on:
   push:
     tags:
       - 'windows-v*'
+      - 'desktop-v*'
   workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows-client
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,31 +24,26 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
-      - name: Setup Tauri CLI
-        run: cargo install tauri-cli --version "^2.0"
+      # Project uses Tauri 1.x (see package.json @tauri-apps/cli)
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^1.6" --locked
 
       - name: Install JS deps
-        working-directory: windows-client
         run: npm ci
 
-      - name: Build web assets
-        working-directory: windows-client
-        run: npm run build
+      - name: Build web + Tauri NSIS
+        run: npm run tauri:build
+        env:
+          CI: true
 
-      - name: Build .exe (when Tauri configured)
-        working-directory: windows-client
-        run: |
-          if [ -f src-tauri/Cargo.toml ]; then
-            npm run tauri build
-          else
-            echo "Tauri not initialized yet — run 'npm run tauri init' in windows-client first"
-            exit 1
-          fi
-        shell: bash
-
-      - name: Upload artifacts
+      - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
-          name: plink-windows-exe
-          path: windows-client/src-tauri/target/release/bundle/nsis/*.exe
+          name: plink-windows-x64
+          path: |
+            windows-client/src-tauri/target/release/bundle/nsis/*.exe
+            windows-client/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error

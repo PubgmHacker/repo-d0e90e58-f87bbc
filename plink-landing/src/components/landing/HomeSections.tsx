@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useI18n } from '@/components/I18nProvider';
 
 const platforms = [
-  { id: 'ios', icon: '📱', size: '16 MB', req: 'iOS 17+', href: '/downloads/Plink.ipa' },
+  { id: 'ios', icon: '📱', size: 'App Store', req: 'iOS 17+', href: 'https://apps.apple.com/app/plink-watch-together/id6750000001' },
   { id: 'android', icon: '🤖', size: '28 MB', req: 'Android 7.0+', href: '/downloads/app-debug.apk' },
   { id: 'windows', icon: '🪟', size: '2 MB', req: 'Win 10+', href: '/downloads/Plink-1.0.0-x64-setup.exe' },
   { id: 'mac', icon: '🍎', size: '5 MB', req: 'macOS 13+', href: '/downloads/Plink-1.0.0-arm64.dmg' },
@@ -210,23 +209,3 @@ export function TestimonialsSection() {
   );
 }
 
-export function CookieBanner() {
-  const { t } = useI18n();
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    if (!localStorage.getItem('plink-cookie-ok')) setVisible(true);
-  }, []);
-  if (!visible) return null;
-  return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-lg glass rounded-xl p-4 text-sm md:left-auto">
-      <p>{t.cookie}</p>
-      <button
-        type="button"
-        className="mt-3 rounded-lg bg-[var(--plink-accent)] px-4 py-1.5 text-xs font-semibold"
-        onClick={() => { localStorage.setItem('plink-cookie-ok', '1'); setVisible(false); }}
-      >
-        {t.accept}
-      </button>
-    </div>
-  );
-}

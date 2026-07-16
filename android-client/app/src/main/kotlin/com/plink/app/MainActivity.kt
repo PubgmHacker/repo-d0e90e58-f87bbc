@@ -21,7 +21,9 @@ import com.plink.app.ui.theme.PlinkTheme
 import com.plink.app.viewmodel.AppViewModelFactory
 import com.plink.app.viewmodel.AuthViewModel
 import com.plink.app.viewmodel.HomeViewModel
+import com.plink.app.viewmodel.ProfileViewModel
 import com.plink.app.viewmodel.ProfileViewModelFactory
+import com.plink.app.viewmodel.RoomViewModel
 import com.plink.app.viewmodel.RoomViewModelFactory
 
 class MainActivity : ComponentActivity() {
@@ -44,7 +46,7 @@ class MainActivity : ComponentActivity() {
 
 private sealed interface Screen {
     data object Home : Screen
-    data class Room(val room: Room) : Screen
+    data class RoomDetail(val room: Room) : Screen
     data class Profile(val user: User) : Screen
 }
 
@@ -70,17 +72,18 @@ private fun PlinkRoot(
             val homeViewModel: HomeViewModel = viewModel(factory = factory)
             HomeScreen(
                 viewModel = homeViewModel,
-                onOpenRoom = { room -> screen = Screen.Room(room) },
+                onOpenRoom = { room -> screen = Screen.RoomDetail(room) },
                 onOpenProfile = { screen = Screen.Profile(user) },
             )
         }
-        is Screen.Room -> {
-            val roomViewModel = viewModel(
+        is Screen.RoomDetail -> {
+            val roomViewModel: RoomViewModel = viewModel(
                 key = "room-${current.room.id}",
                 factory = RoomViewModelFactory(
                     api = container.api,
                     realtimeClient = container.createRealtimeClient(),
                     room = current.room,
+                    userId = user.id,
                 ),
             )
             RoomScreen(
@@ -93,7 +96,7 @@ private fun PlinkRoot(
             )
         }
         is Screen.Profile -> {
-            val profileViewModel = viewModel(
+            val profileViewModel: ProfileViewModel = viewModel(
                 factory = ProfileViewModelFactory(
                     api = container.api,
                     user = current.user,

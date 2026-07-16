@@ -4,19 +4,13 @@ export function Skeleton({ className = '' }: { className?: string }) {
 
 export function HomeSkeleton() {
   return (
-    <div className="pro-home skeleton-home">
-      <Skeleton className="sk-search" />
-      <Skeleton className="sk-hero" />
-      <div className="pro-columns">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="pro-column glass-panel">
-            <Skeleton className="sk-title" />
-            <div className="sk-grid">
-              {[0, 1, 2, 3].map((j) => (
-                <Skeleton key={j} className="sk-card" />
-              ))}
-            </div>
-          </div>
+    <div className="cinema-home skeleton-home">
+      <Skeleton className="sk-hero-netflix" />
+      <Skeleton className="sk-ai-card" />
+      <Skeleton className="sk-rail-title" />
+      <div className="sk-rail-row">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="sk-poster" />
         ))}
       </div>
     </div>

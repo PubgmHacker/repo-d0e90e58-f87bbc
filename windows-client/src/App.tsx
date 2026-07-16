@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, getToken, setToken } from './lib/api';
+import { api, getToken, setToken, youtubeMediaItem } from './lib/api';
+import { analytics } from './lib/analytics';
 import type { Room, User } from './lib/types';
 import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { RoomPage } from './pages/RoomPage';
 import { ProHomePage } from './pages/ProHomePage';
+import { RoomsPage } from './pages/RoomsPage';
+import { AIPage } from './pages/AIPage';
+import { FriendsPage } from './pages/FriendsPage';
 import { DesktopShell, type NavItem } from './components/desktop/DesktopShell';
-import { DetailPane, type DetailTarget } from './components/desktop/DetailPane';
-import { LivingBackground } from './components/desktop/LivingBackground';
 import { MiniPlayer } from './components/MiniPlayer';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { setupTrayListener } from './lib/tauri';
 import { UrlDropZone } from './components/UrlDropZone';
 import './App.css';
 
-type Screen = 'auth' | 'app' | 'room' | 'profile';
+type Screen = 'auth' | 'app' | 'room';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('auth');
@@ -22,19 +24,19 @@ export default function App() {
   const [room, setRoom] = useState<Room | null>(null);
   const [booting, setBooting] = useState(true);
   const [nav, setNav] = useState<NavItem>('home');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [detail, setDetail] = useState<DetailTarget>(null);
   const [joinPrompt, setJoinPrompt] = useState(false);
   const [miniPlayer, setMiniPlayer] = useState<{ title: string; url: string } | null>(null);
   const [status, setStatus] = useState('Ready');
 
   useEffect(() => {
+    analytics.appOpen();
     (async () => {
       if (!getToken()) { setBooting(false); return; }
       try {
         const me = await api.getMe();
         setUser(me);
         setScreen('app');
+        analytics.login();
       } catch {
         setToken(null);
       } finally {
@@ -47,11 +49,36 @@ export default function App() {
     setRoom(r);
     setScreen('room');
     setStatus(`Now Playing: ${r.name}`);
+    analytics.roomJoined();
+  }, []);
+
+  const quickCreateRoom = useCallback(async () => {
+    try {
+      const t = await api.getTrending();
+      const video = t.results?.[0];
+      if (!video) {
+        setJoinPrompt(true);
+        return;
+      }
+      const created = await api.createRoom(
+        video.title,
+        youtubeMediaItem(video.id, video.title, video.thumbnailURL),
+      );
+      analytics.roomCreated();
+      openRoom(await api.joinRoom(created.code));
+    } catch {
+      setJoinPrompt(true);
+    }
+  }, [openRoom]);
+
+  const handleNav = useCallback((item: NavItem) => {
+    setNav(item);
+    setScreen('app');
   }, []);
 
   const handlers = useMemo(() => ({
     onSearch: () => document.querySelector<HTMLInputElement>('.pro-search')?.focus(),
-    onNewRoom: () => setNav('home'),
+    onNewRoom: () => { setNav('home'); setScreen('app'); },
     onJoin: () => setJoinPrompt(true),
     onEscape: () => { setMiniPlayer(null); if (screen === 'room') { setRoom(null); setScreen('app'); } },
   }), [screen]);
@@ -72,57 +99,24 @@ export default function App() {
     return () => cleanup?.();
   }, []);
 
-  if (booting) {
-    return (
-      <>
-        <LivingBackground />
-        <div className="page center" style={{ position: 'relative', zIndex: 1 }}>
-          Loading Plink…
-        </div>
-      </>
-    );
-  }
+  if (booting) return <div className="page center">Loading Plink…</div>;
 
   if (screen === 'auth' || !user) {
     return (
-      <>
-        <LivingBackground />
-        <AuthPage
-          onAuth={(u) => {
-            setUser(u);
-            setScreen('app');
-          }}
-        />
-      </>
-    );
-  }
-
-  if (screen === 'profile' || nav === 'profile') {
-    return (
-      <>
-        <LivingBackground />
-        <DesktopShell
-          user={user}
-          nav="profile"
-          collapsed={sidebarCollapsed}
-          onNav={(n) => { if (n === 'home') setScreen('app'); else setNav(n); }}
-          onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
-          status={status}
-        >
-          <ProfilePage
-            user={user}
-            onUserUpdate={setUser}
-            onLogout={() => { setUser(null); setScreen('auth'); }}
-            onBack={() => { setNav('home'); setScreen('app'); }}
-          />
-        </DesktopShell>
-      </>
+      <AuthPage
+        onAuth={(u) => {
+          setUser(u);
+          setScreen('app');
+          setNav('home');
+          analytics.login();
+        }}
+      />
     );
   }
 
   if (screen === 'room' && room) {
     const embed = room.mediaItem?.videoId
-      ? `https://www.youtube.com/embed/${room.mediaItem.videoId}?autoplay=1`
+      ? `https://plink-backend-production-ef31.up.railway.app/api/media/youtube-player?id=${room.mediaItem.videoId}`
       : room.mediaItem?.streamURL ?? '';
 
     return (
@@ -145,64 +139,93 @@ export default function App() {
     );
   }
 
-  return (
-    <>
-      <LivingBackground />
-      <UrlDropZone onUrl={() => setJoinPrompt(true)}>
-        <DesktopShell
-          user={user}
-          nav={nav}
-          collapsed={sidebarCollapsed}
-          onNav={(n) => { if (n === 'profile') setScreen('profile'); else setNav(n); }}
-          onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
-          detail={<DetailPane target={detail} onJoinRoom={openRoom} />}
-          status={status}
-          onNewRoom={() => setNav('home')}
-          onJoinCode={() => setJoinPrompt(true)}
-        >
+  const currentUser = user;
+
+  function renderTab() {
+    switch (nav) {
+      case 'home':
+        return (
           <ProHomePage
             onOpenRoom={openRoom}
-            onHoverChange={setDetail}
             onJoinPrompt={() => setJoinPrompt(true)}
+            onOpenAI={() => setNav('ai')}
           />
-        </DesktopShell>
+        );
+      case 'rooms':
+        return <RoomsPage onOpenRoom={openRoom} onCreate={quickCreateRoom} />;
+      case 'ai':
+        return <AIPage onPickTrending={() => setNav('home')} />;
+      case 'friends':
+        return <FriendsPage />;
+      case 'settings':
+        return (
+          <ProfilePage
+            user={currentUser!}
+            onUserUpdate={setUser}
+            onLogout={() => { setUser(null); setScreen('auth'); setNav('home'); }}
+            onBack={() => setNav('home')}
+          />
+        );
+      default:
+        return null;
+    }
+  }
 
-        {joinPrompt && (
-          <div className="modal-overlay" role="dialog">
-            <div className="modal glass-panel">
-              <h3>Войти по коду</h3>
-              <JoinByCodeForm
-                onClose={() => setJoinPrompt(false)}
-                onJoined={(r) => { setJoinPrompt(false); openRoom(r); }}
-              />
-            </div>
+  return (
+    <UrlDropZone onUrl={() => setJoinPrompt(true)}>
+      <DesktopShell user={user} nav={nav} onNav={handleNav} status={status}>
+        {renderTab()}
+      </DesktopShell>
+
+      {joinPrompt && (
+        <div className="modal-overlay" role="dialog" onClick={() => setJoinPrompt(false)}>
+          <div className="modal glass-panel" onClick={(e) => e.stopPropagation()}>
+            <h3>Войти по коду</h3>
+            <JoinByCodeForm
+              onClose={() => setJoinPrompt(false)}
+              onJoined={(r) => { setJoinPrompt(false); openRoom(r); }}
+            />
           </div>
-        )}
-      </UrlDropZone>
-    </>
+        </div>
+      )}
+    </UrlDropZone>
   );
 }
 
 function JoinByCodeForm({ onClose, onJoined }: { onClose: () => void; onJoined: (r: Room) => void }) {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function submit() {
+    if (!code.trim()) return;
+    setLoading(true);
+    setErr('');
     try {
-      const room = await api.joinRoom(code.trim().toUpperCase());
-      onJoined(room);
+      const joined = await api.joinRoom(code.trim().toUpperCase());
+      onJoined(joined);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Join failed');
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
     <>
-      <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ABCD12" />
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        placeholder="ABCD12"
+        autoFocus
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
+      />
       {err && <p className="error">{err}</p>}
       <div className="modal-actions">
-        <button type="button" onClick={onClose}>Cancel</button>
-        <button type="button" className="pro-btn primary" onClick={submit}>Join</button>
+        <button type="button" onClick={onClose}>Отмена</button>
+        <button type="button" className="pro-btn primary" onClick={submit} disabled={loading}>
+          {loading ? 'Вход…' : 'Войти'}
+        </button>
       </div>
     </>
   );

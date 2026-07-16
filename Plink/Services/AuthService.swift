@@ -85,6 +85,7 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
             expiry: PremiumStatusManager.shared.subscriptionExpiry
         )
         await registerFCMIfPresent()
+        AnalyticsService.shared.login()
         return user
     }
 
@@ -115,6 +116,7 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
             expiry: PremiumStatusManager.shared.subscriptionExpiry
         )
         await registerFCMIfPresent()
+        AnalyticsService.shared.signUp()
         return user
     }
 

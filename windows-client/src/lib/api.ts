@@ -1,6 +1,9 @@
 import type { AuthResponse, ChatMessage, Friend, MediaItem, Room, TrendingVideo, User } from './types';
+import { isTauri } from './tauri';
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://plink-backend-production-ef31.up.railway.app/api';
+const REMOTE_API = 'https://plink-backend-production-ef31.up.railway.app/api';
+const API_BASE = import.meta.env.VITE_API_BASE
+  ?? (import.meta.env.DEV && !isTauri() ? '/api' : REMOTE_API);
 const TOKEN_KEY = 'plink_token';
 
 export function getToken(): string | null {
@@ -12,13 +15,53 @@ export function setToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-  auth = true,
-): Promise<T> {
+function buildHeaders(options: RequestInit, auth: boolean): Record<string, string> {
+  // Only set JSON content-type when there is a body — empty POST + application/json
+  // makes Fastify reject with FST_ERR_CTP_EMPTY_JSON_BODY (leave room, etc.).
+  const headers: Record<string, string> = {};
+  if (options.body != null) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (options.headers) {
+    const h = new Headers(options.headers);
+    h.forEach((v, k) => { headers[k] = v; });
+  }
+  if (auth) {
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+async function tauriHttp<T>(url: string, options: RequestInit, auth: boolean): Promise<T> {
+  const { fetch: tauriFetch, Body, ResponseType } = await import('@tauri-apps/api/http');
+  const method = (options.method ?? 'GET').toUpperCase();
+  const headers = buildHeaders(options, auth);
+
+  let body: ReturnType<typeof Body.json> | undefined;
+  if (options.body && typeof options.body === 'string') {
+    body = Body.json(JSON.parse(options.body));
+  }
+
+  const res = await tauriFetch<T>(url, {
+    method: method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    headers,
+    body,
+    responseType: ResponseType.JSON,
+  });
+
+  if (res.status >= 400) {
+    const errBody = (res.data ?? {}) as { error?: string };
+    throw new Error(errBody.error ?? `HTTP ${res.status}`);
+  }
+  return res.data as T;
+}
+
+async function browserFetch<T>(url: string, options: RequestInit, auth: boolean): Promise<T> {
   const headers = new Headers(options.headers);
-  headers.set('Content-Type', 'application/json');
+  if (options.body != null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (auth) {
     const token = getToken();
     if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -26,19 +69,32 @@ async function request<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    res = await fetch(url, { ...options, headers });
   } catch (err) {
     const hint = err instanceof TypeError
-      ? ' (сеть/CORS — обнови бэкенд и пересобери .app)'
+      ? ' (сеть/CORS — пересобери .app или обнови бэкенд)'
       : '';
     throw new Error(`Load failed${hint}`);
   }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `HTTP ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  auth = true,
+): Promise<T> {
+  const url = `${API_BASE}${path}`;
+  if (isTauri()) {
+    return tauriHttp<T>(url, options, auth);
+  }
+  return browserFetch<T>(url, options, auth);
 }
 
 export const api = {
@@ -61,7 +117,7 @@ export const api = {
   },
 
   getTrending() {
-    return request<{ results: TrendingVideo[] }>('/media/trending?maxResults=10', {}, false);
+    return request<{ results: TrendingVideo[] }>('/media/trending?maxResults=24', {}, false);
   },
 
   getRooms() {
@@ -88,7 +144,17 @@ export const api = {
   },
 
   leaveRoom(roomId: string) {
-    return request<{ ok: boolean }>(`/rooms/${roomId}/leave`, { method: 'POST' });
+    return request<{ success?: boolean; ok?: boolean }>(`/rooms/${roomId}/leave`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  aiChat(message: string) {
+    return request<{ message: string; proposedAction?: unknown }>('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
   },
 
   getParticipants(roomId: string) {
@@ -122,15 +188,4 @@ export const api = {
   },
 };
 
-export function youtubeMediaItem(videoId: string, title: string, thumbnailURL?: string): MediaItem {
-  const embed = `https://www.youtube.com/embed/${videoId}`;
-  return {
-    id: embed,
-    title,
-    thumbnailURL: thumbnailURL ?? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-    streamURL: embed,
-    mediaType: 'video',
-    source: 'youtube',
-    videoId,
-  };
-}
+export { youtubeMediaItem, parseMediaFromUrl, embedUrlForMedia } from './mediaUrl';

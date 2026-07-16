@@ -6,7 +6,7 @@ export default function FeaturesPage() {
   return (
     <>
       <Header />
-      <main className="pt-24">
+      <main className="subpage-main pt-24">
         <FeaturesSection />
       </main>
       <Footer />

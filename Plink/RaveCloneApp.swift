@@ -42,6 +42,11 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
         #if canImport(FirebaseCore)
         FirebaseApp.configure()
         #endif
+        AnalyticsService.shared.appOpen()
+        // Soft-detect LiveKit so mic UI can appear when ops enable keys
+        if let base = URL(string: "https://plink-backend-production-ef31.up.railway.app") {
+            Task { await FeatureFlags.refreshLiveKitAvailability(apiBaseURL: base) }
+        }
         return true
     }
 }

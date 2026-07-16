@@ -88,10 +88,21 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
         group == .cinema
     }
 
-    /// P0.5: Fallback for App Store review. If ENABLE_CINEMA=false, hide risky services.
+    /// P0.5 App Store safety: cinema (Netflix/Disney/etc.) OFF by default.
+    /// Enable only via Info.plist `ENABLE_CINEMA=true` / `1` / Bool true, or env.
     static var cinemaEnabled: Bool {
-        // In real, read from remote config or UserDefaults
-        return true // or ProcessInfo.processInfo.environment["ENABLE_CINEMA"] != "false"
+        if let flag = Bundle.main.object(forInfoDictionaryKey: "ENABLE_CINEMA") {
+            if let b = flag as? Bool { return b }
+            if let n = flag as? NSNumber { return n.boolValue }
+            if let s = flag as? String {
+                return s.lowercased() == "true" || s == "1"
+            }
+        }
+        if let env = ProcessInfo.processInfo.environment["ENABLE_CINEMA"] {
+            return env.lowercased() == "true" || env == "1"
+        }
+        // Default OFF — avoids App Store rejection for third-party cinema ToS.
+        return false
     }
 
     // MARK: - Display

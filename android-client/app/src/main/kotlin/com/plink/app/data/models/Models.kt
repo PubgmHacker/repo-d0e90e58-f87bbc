@@ -143,12 +143,12 @@ data class ApiError(
 )
 
 fun youtubeMediaItem(videoId: String, title: String, thumbnailURL: String? = null): MediaItem {
-    val embed = "https://www.youtube.com/embed/$videoId"
+    val hosted = "https://plink-backend-production-ef31.up.railway.app/api/media/youtube-player?id=$videoId"
     return MediaItem(
-        id = embed,
+        id = videoId,
         title = title,
         thumbnailURL = thumbnailURL ?: "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
-        streamURL = embed,
+        streamURL = hosted,
         mediaType = "video",
         source = "youtube",
         videoId = videoId,

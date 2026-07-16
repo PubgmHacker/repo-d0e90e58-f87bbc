@@ -108,3 +108,23 @@ export function IconPlay(p: IconProps) {
     </svg>
   );
 }
+
+export function IconSparkles(p: IconProps) {
+  const s = stroke(p);
+  return (
+    <svg {...s} viewBox="0 0 24 24">
+      <path d="M12 3l1.2 4.2L17.5 8 13.2 9.2 12 13.5 10.8 9.2 6.5 8l4.3-.8L12 3z" />
+      <path d="M5 14l.8 2.8L8.5 17l-2.7.5L5 20.3 3.2 17.5.5 17l2.7-.5L5 14z" />
+      <path d="M19 14l.8 2.8 2.7.5-2.7.5L19 20.3l-1.8-2.8-2.7-.5 2.7-.5L19 14z" />
+    </svg>
+  );
+}
+
+export function IconHeart(p: IconProps) {
+  const s = stroke(p);
+  return (
+    <svg {...s} viewBox="0 0 24 24">
+      <path d="M12 20.5 10.55 19.1C5.4 14.36 2 11.28 2 7.5 2 4.42 4.42 2 7.5 2c1.74 0 3.41.81 4.5 2.09C13.09 2.81 14.76 2 16.5 2 19.58 2 22 4.42 22 7.5c0 3.78-3.4 6.86-8.55 11.6L12 20.5z" />
+    </svg>
+  );
+}

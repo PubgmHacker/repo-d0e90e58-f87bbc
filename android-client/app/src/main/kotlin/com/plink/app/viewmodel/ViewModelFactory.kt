@@ -30,11 +30,12 @@ class RoomViewModelFactory(
     private val api: PlinkApi,
     private val realtimeClient: PlinkRealtimeClient,
     private val room: Room,
+    private val userId: String,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(RoomViewModel::class.java)) {
-            return RoomViewModel(api, realtimeClient, room) as T
+            return RoomViewModel(api, realtimeClient, room, userId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
     }

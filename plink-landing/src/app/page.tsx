@@ -1,29 +1,5 @@
-import { Header } from '@/components/landing/Header';
-import { Footer } from '@/components/landing/Footer';
-import {
-  HeroSection,
-  DownloadSection,
-  FeaturesSection,
-  HowItWorksSection,
-  ComparisonSection,
-  PlusSection,
-  TestimonialsSection,
-} from '@/components/landing/HomeSections';
+import { RaveLanding } from '@/components/landing/RaveLanding';
 
 export default function HomePage() {
-  return (
-    <>
-      <Header />
-      <main>
-        <HeroSection />
-        <DownloadSection />
-        <FeaturesSection />
-        <HowItWorksSection />
-        <ComparisonSection />
-        <PlusSection />
-        <TestimonialsSection />
-      </main>
-      <Footer />
-    </>
-  );
+  return <RaveLanding />;
 }

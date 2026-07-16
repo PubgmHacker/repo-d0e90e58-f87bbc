@@ -1,9 +1,9 @@
-// Plink/Features/Auth2026/AuthLaunchGate.swift — §9 Final Unified
-//
-// Launch gate: restoring → auth → onboarding → app.
-// Deep links survive auth + onboarding.
+// Plink/Features/Auth2026/AuthLaunchGate.swift — MVP: skip + notifications + deferred deep links
+// Functionality only — no design changes to splash/auth UI chrome.
 
 import SwiftUI
+import UserNotifications
+import UIKit
 
 enum LaunchDestination: Equatable {
     case restoringSession
@@ -16,6 +16,7 @@ struct AuthLaunchGate: View {
     @State private var destination: LaunchDestination = .restoringSession
     @State private var authRoute: AuthRoute = .login
     @State private var pendingURL: URL?
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     let dependencies: AppDependencies
     let onboardingStore: OnboardingStoring
@@ -34,29 +35,32 @@ struct AuthLaunchGate: View {
             case .onboarding:
                 OnboardingFlow(
                     onFinish: completeOnboarding,
-                    onSkip: nil
+                    onSkip: skipOnboarding
                 )
                 .transition(.opacity)
 
             case .app:
                 PlinkAppShell(dependencies: dependencies)
                     .transition(.opacity)
+                    .onAppear { flushPendingDeepLink() }
             }
         }
         .task { await restoreSession() }
         .animation(.easeOut(duration: 0.32), value: destination)
         .onReceive(NotificationCenter.default.publisher(for: .plinkSignedOut)) { _ in
-            // PATCH: immediately show login screen when user signs out
             withAnimation(.easeOut(duration: 0.3)) {
                 destination = .authentication
             }
         }
         .onOpenURL { url in
             if destination == .app {
-                // Forward to app shell
+                deepLinkRouter.handle(url)
             } else {
                 pendingURL = url
             }
+        }
+        .onChange(of: destination) { _, newValue in
+            if newValue == .app { flushPendingDeepLink() }
         }
     }
 
@@ -78,19 +82,15 @@ struct AuthLaunchGate: View {
 
     private func restoreSession() async {
         async let minimumSplash: Void = Task.sleep(for: .milliseconds(650))
-
-        // Check if we have a valid auth token + can fetch user
         let authService = dependencies.authService
         let token = authService.authToken
         _ = try? await minimumSplash
 
         if token != nil {
-            // Verify token is still valid by fetching current user
             let user = await authService.currentUser()
             if user != nil {
                 destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
             } else {
-                // Token expired — try refresh
                 let refreshed = await authService.getFreshToken()
                 if refreshed != nil {
                     destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
@@ -105,22 +105,44 @@ struct AuthLaunchGate: View {
 
     private func handleAuthenticated() {
         destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+        if destination == .app { flushPendingDeepLink() }
     }
 
     private func completeOnboarding() {
+        requestNotificationPermission()
         onboardingStore.markCompleted(version: OnboardingVersion.current)
         destination = .app
+        flushPendingDeepLink()
+    }
+
+    private func skipOnboarding() {
+        requestNotificationPermission()
+        onboardingStore.markCompleted(version: OnboardingVersion.current)
+        destination = .app
+        flushPendingDeepLink()
+    }
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            if granted {
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            }
+        }
+    }
+
+    private func flushPendingDeepLink() {
+        guard let url = pendingURL else { return }
+        pendingURL = nil
+        deepLinkRouter.handle(url)
     }
 }
-
-// MARK: - Auth route
 
 enum AuthRoute: Equatable {
     case login
     case registration
 }
-
-// MARK: - Splash
 
 struct CinematicSplashView: View {
     var body: some View {
@@ -139,12 +161,7 @@ struct CinematicSplashView: View {
     }
 }
 
-// MARK: - Auth notifications
 extension Notification.Name {
     static let plinkSignedOut = Notification.Name("plinkSignedOut")
-}
-
-// MARK: - Room Created Notification
-extension Notification.Name {
     static let plinkRoomCreated = Notification.Name("plinkRoomCreated")
 }

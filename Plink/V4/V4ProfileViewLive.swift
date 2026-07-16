@@ -1,0 +1,403 @@
+// Plink/V4/V4ProfileViewLive.swift — split from PlinkV4PixelPerfect (move-only, no logic change)
+// Source of truth: V4 design module. Do not change visuals.
+
+import SwiftUI
+import PhotosUI
+import UIKit
+import Foundation
+
+struct V4ProfileViewLive: View {
+    let theme: V4Theme
+    var store: V4ProfileStore?
+    @Binding var showAppearance: Bool
+    @State private var currentAvatarURL: URL?
+
+    @State private var showPersonalData = false
+    @State private var showPrivacy = false
+    @State private var showNotifications = false
+    @State private var showPlayback = false
+    @State private var showHelp = false
+    @State private var showBlocked = false
+    @State private var showDeleteAccount = false
+    @State private var showAdminPanel = false
+    @State private var showAvatarPicker = false
+    @State private var showPremium = false
+
+    private var isAdmin: Bool { store?.isAdmin == true }
+    private var avatarURL: URL? { currentAvatarURL ?? store?.avatarURL }
+
+    var body: some View {
+        ScrollView(showsIndicators:false) {
+            VStack(spacing:0) {
+                // ── Header: avatar + name + username + badges ──
+                HStack(spacing: 12) {
+                    Button { showAvatarPicker = true } label: {
+                        if let avatarURL {
+                            AsyncImage(url: avatarURL) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                V4Avatar(letter: String((store?.displayName.prefix(1) ?? "П")), theme: theme, size: 64, isPremium: store?.isPremium == true, isAdmin: isAdmin)
+                            }
+                            .frame(width: 64, height: 64)
+                            .clipShape(Circle())
+                        } else {
+                            V4Avatar(letter: String((store?.displayName.prefix(1) ?? "П")), theme: theme, size: 64, isPremium: store?.isPremium == true, isAdmin: isAdmin)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Сменить аватар")
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        // Name — admin gets red color
+                        Text(store?.displayName ?? "Загрузка…")
+                            .font(.system(size: 22, weight: .heavy))
+                            .foregroundStyle(isAdmin ? Color(red:1,green:0.3,blue:0.4) : V4.ink)
+
+                        if let username = store?.username, !username.isEmpty {
+                            Text("@\(username)")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(V4.muted)
+                        }
+                        // Email — show below username
+                        if let email = store?.email, !email.isEmpty {
+                            Text(email)
+                                .font(.system(size: 12))
+                                .foregroundStyle(V4.muted.opacity(0.7))
+                        }
+
+                        // Badges row
+                        HStack(spacing: 6) {
+                            if isAdmin {
+                                Text("АДМИН")
+                                    .font(.system(size: 10, weight: .black))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color(red:0.9,green:0.1,blue:0.2), in: Capsule())
+                            }
+                            if store?.isPremium == true {
+                                Text("PLINK+")
+                                    .font(.system(size: 10, weight: .black))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color(hex: "#A855F7"), in: Capsule())
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        showPersonalData = true
+                    } label: {
+                        Image(systemName:"pencil.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(V4.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Редактировать профиль")
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 80)
+                .padding(.bottom, 20)
+
+                groupTitle("Аккаунт")
+                VStack(spacing:0) {
+                    setting("person","Личные данные","›"){showPersonalData = true}
+                    setting("lock.shield","Приватность и безопасность","›"){showPrivacy = true}
+                }.groupStyle()
+
+                groupTitle("Подписка Плинк+")
+                VStack(spacing:0) {
+                    setting("crown.fill","Плинк+ премиум", store?.isPremium == true ? "Активен ›" : "Оформить ›"){showPremium = true}
+                }.groupStyle()
+
+                groupTitle("Приложение")
+                VStack(spacing:0) {
+                    let themeDisplayName = PlinkPlusLiveTheme.resolve(UserDefaults.standard.integer(forKey: "plink.liveTheme"))?.name ?? theme.name
+                    setting("circle.lefthalf.filled","Оформление", themeDisplayName + " ›"){showAppearance=true}
+                    setting("bell","Уведомления","›"){showNotifications = true}
+                    setting("play.fill","Воспроизведение","›"){showPlayback = true}
+                    setting("questionmark","Помощь","›"){showHelp = true}
+                }.groupStyle()
+
+                if isAdmin {
+                    groupTitle("Администрирование")
+                    VStack(spacing:0) {
+                        setting("shield.lefthalf.filled","Админ-панель","›"){showAdminPanel = true}
+                    }.groupStyle()
+                }
+
+                groupTitle("Безопасность")
+                VStack(spacing:0) {
+                    setting("nosign","Заблокированные","›"){showBlocked = true}
+                    setting("xmark","Удалить аккаунт","›",danger:true){showDeleteAccount = true}
+                    // Выйти — synchronous, guaranteed
+                    Button {
+                        AuthService.shared.signOutLocally()
+                    } label: {
+                        HStack(spacing:11) {
+                            Image(systemName: "arrow.right.square.fill").frame(width:30)
+                            Text("Выйти").font(.system(size:13.6,weight:.bold))
+                            Spacer()
+                            Text("›").font(.system(size:11.52)).foregroundStyle(V4.muted)
+                        }
+                        .foregroundStyle(V4.danger)
+                        .frame(minHeight:48)
+                        .overlay(alignment:.bottom){Rectangle().fill(V4.line).frame(height:1)}
+                    }
+                    .buttonStyle(.plain)
+                }.groupStyle()
+            }.padding(.bottom,92)
+        }.foregroundStyle(V4.ink)
+        .sheet(isPresented: $showPersonalData) {
+            NavigationStack { PersonalDataView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showPrivacy) {
+            NavigationStack { PrivacySecurityView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showNotifications) {
+            NavigationStack { NotificationsView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showPlayback) {
+            NavigationStack { PlaybackSettingsView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showHelp) {
+            NavigationStack { HelpView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showBlocked) {
+            NavigationStack { BlockedUsersView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showDeleteAccount) {
+            NavigationStack { DeleteAccountView() }.preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showAdminPanel) {
+            AdminRootView().preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showAvatarPicker) {
+            AvatarPickerSheet(store: store, onAvatarChanged: { url in
+                currentAvatarURL = url
+            }).preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showPremium) {
+            PaywallView(onPurchase: { showPremium = false }, onRestore: { showPremium = false }, onDismiss: { showPremium = false })
+                .preferredColorScheme(.dark)
+        }
+    }
+    private func groupTitle(_ s:String)->some View { Text(s.uppercased()).font(.system(size:10.56,weight:.heavy)).tracking(1.1616).foregroundStyle(V4.muted).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,19).padding(.vertical,9) }
+    private func setting(_ icon:String,_ title:String,_ trailing:String,danger:Bool=false,action:@escaping()->Void)->some View {
+        Button(action:action){ HStack(spacing:11){ Image(systemName:icon).frame(width:30); Text(title).font(.system(size:13.6,weight:.bold)); Spacer(); Text(trailing).font(.system(size:11.52)).foregroundStyle(V4.muted) }.foregroundStyle(danger ? V4.danger : V4.ink).frame(minHeight:48).overlay(alignment:.bottom){Rectangle().fill(V4.line).frame(height:1)} }
+    }
+}
+
+// MARK: - AvatarPickerSheet (P0.5: PhotosUI + color avatars)
+
+struct AvatarPickerSheet: View {
+    var store: V4ProfileStore?
+    var onAvatarChanged: ((URL) -> Void)? = nil
+    @Environment(\.dismiss) private var dismiss
+    @State private var uploading = false
+    @State private var uploadError: String?
+    @State private var photoItem: PhotosPickerItem?
+    @State private var previewImage: UIImage?
+    @State private var selectedDefault: String? = nil
+
+    private let defaultAvatars = ["avatar_default", "avatar_blue", "avatar_purple"]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Preview
+                if let previewImage {
+                    Image(uiImage: previewImage)
+                        .resizable().scaledToFill()
+                        .frame(width: 120, height: 120)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Cinema2026.accent, lineWidth: 3))
+                } else if let avatarURL = store?.avatarURL {
+                    AsyncImage(url: avatarURL) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Circle().fill(V4.surface).frame(width: 120, height: 120)
+                            .overlay(Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(V4.muted))
+                    }
+                    .frame(width: 120, height: 120)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Cinema2026.accent, lineWidth: 3))
+                } else {
+                    Circle().fill(V4.surface).frame(width: 120, height: 120)
+                        .overlay(Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(V4.muted))
+                        .overlay(Circle().stroke(Cinema2026.accent, lineWidth: 3))
+                }
+
+                // Default avatars — 3 JPG presets
+                Text("Стандартные").font(.system(size: 13, weight: .bold)).foregroundStyle(V4.muted)
+                HStack(spacing: 16) {
+                    ForEach(defaultAvatars, id: \.self) { name in
+                        Button {
+                            selectedDefault = name
+                            if let url = Bundle.main.url(forResource: name, withExtension: "jpg", subdirectory: "Avatars") ?? Bundle.main.url(forResource: name, withExtension: "jpg"),
+                               let data = try? Data(contentsOf: url),
+                               let img = UIImage(data: data) {
+                                previewImage = img
+                                Task { try? await uploadAvatar(img) }
+                            }
+                        } label: {
+                            if let url = Bundle.main.url(forResource: name, withExtension: "jpg", subdirectory: "Avatars") ?? Bundle.main.url(forResource: name, withExtension: "jpg"),
+                               let data = try? Data(contentsOf: url),
+                               let img = UIImage(data: data) {
+                                Image(uiImage: img)
+                                    .resizable().scaledToFill()
+                                    .frame(width: 64, height: 64)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(selectedDefault == name ? Cinema2026.accent : V4.line, lineWidth: selectedDefault == name ? 3 : 1))
+                            } else {
+                                Circle()
+                                    .fill(V4.surface)
+                                    .frame(width: 64, height: 64)
+                                    .overlay(Image(systemName: "person.fill").font(.system(size: 20)).foregroundStyle(V4.muted))
+                                    .overlay(Circle().stroke(selectedDefault == name ? Cinema2026.accent : V4.line, lineWidth: selectedDefault == name ? 3 : 1))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // Divider
+                Rectangle().fill(V4.line).frame(height: 0.5).padding(.horizontal, 24)
+
+                // PhotosPicker — gallery
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    HStack(spacing: 8) {
+                        if uploading {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "photo.on.rectangle")
+                        }
+                        Text(uploading ? "Загрузка…" : "Выбрать из галереи")
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Cinema2026.accent)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .padding(.horizontal, 24)
+                .disabled(uploading)
+                .onChange(of: photoItem) { _, newItem in
+                    Task { await loadPhoto(newItem) }
+                }
+
+                if let err = uploadError {
+                    Text(err).font(.caption).foregroundStyle(Cinema2026.danger).padding(.horizontal, 24)
+                }
+
+                Spacer()
+
+                Button("Готово") { dismiss() }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(Cinema2026.accent)
+                    .padding(.bottom, 24)
+            }
+            .padding(.top, 32)
+            .background(Cinema2026.background.ignoresSafeArea())
+            .navigationTitle("Аватар")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Закрыть") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        uploading = true
+        uploadError = nil
+        defer { uploading = false }
+        selectedDefault = nil
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                uploadError = "Не удалось загрузить фото"
+                return
+            }
+            guard let image = UIImage(data: data) else {
+                uploadError = "Неверный формат изображения"
+                return
+            }
+            let resized = resizeToSquare(image, size: 512)
+            previewImage = resized
+            try await uploadAvatar(resized)
+        } catch {
+            uploadError = "Ошибка: \(error.localizedDescription)"
+        }
+    }
+
+    private func resizeToSquare(_ image: UIImage, size: CGFloat) -> UIImage {
+        let originalSize = image.size
+        let shortest = min(originalSize.width, originalSize.height)
+        let offsetX = (originalSize.width - shortest) / 2
+        let offsetY = (originalSize.height - shortest) / 2
+        let cropRect = CGRect(x: offsetX, y: offsetY, width: shortest, height: shortest)
+        guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return image }
+        let cropped = UIImage(cgImage: cgImage)
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        return renderer.image { _ in
+            cropped.draw(in: CGRect(x: 0, y: 0, width: size, height: size))
+        }
+    }
+
+    private func uploadAvatar(_ image: UIImage) async throws {
+        guard let jpegData = image.jpegData(compressionQuality: 0.8) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        if jpegData.count > 2 * 1024 * 1024 {
+            uploadError = "Изображение слишком большое (макс 2MB)"
+            return
+        }
+        let base64 = jpegData.base64EncodedString()
+        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/me/avatar") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = KeychainHelper.read(for: "rave_auth_token") {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            uploadError = "Не авторизован. Войдите заново."
+            return
+        }
+        // Use image/jpeg (not image/jpg) — backend regex accepts both
+        let body: [String: Any] = ["avatar": "data:image/jpeg;base64,\(base64)"]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+            if let respBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let avatarURLString = respBody["avatarURL"] as? String,
+               let avatarURL = URL(string: avatarURLString) {
+                await MainActor.run {
+                    store?.updateAvatarURL(avatarURL)
+                    onAvatarChanged?(avatarURL)
+                }
+            }
+        } else if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            uploadError = "Сессия истекла. Войдите заново."
+        } else if let http = response as? HTTPURLResponse, http.statusCode == 500 {
+            // Try to parse error message from backend
+            if let respBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errMsg = respBody["error"] as? String {
+                uploadError = "Ошибка: \(errMsg)"
+            } else {
+                uploadError = "Ошибка сервера (500). Попробуйте позже."
+            }
+        } else {
+            uploadError = "Ошибка (\((response as? HTTPURLResponse)?.statusCode ?? 0))"
+        }
+    }
+}
+
+

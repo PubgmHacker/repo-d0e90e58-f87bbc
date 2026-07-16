@@ -52,7 +52,7 @@ final class DeepLinkRouter: ObservableObject {
         guard let first = segments.first else { return .none }
 
         switch first {
-        case "r":
+        case "r", "room":
             // /r/<code> или /r?code=<code>
             if segments.count >= 2 {
                 return .room(code: segments[1])

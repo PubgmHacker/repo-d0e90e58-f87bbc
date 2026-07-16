@@ -54,123 +54,140 @@ struct V4FriendsViewLive: View {
     private var requestBadge: Int { store?.requests.count ?? 0 }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Header
-                HStack(alignment: .top) {
-                    V4Heading(
-                        eyebrow: "ВМЕСТЕ",
-                        title: segmentTitle
-                    )
-                    Spacer()
-                    if segment == .chats || segment == .requests {
-                        Button {
-                            HapticManager.impact(.light)
-                            showAddFriend = true
-                        } label: {
-                            Image(systemName: "person.badge.plus")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundStyle(V4.accent)
-                                .frame(width: 40, height: 40)
-                                .background(V4.surface.opacity(0.85))
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(V4.line))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Добавить друга")
+        // NO NavigationStack here — it paints an opaque UIKit chrome that
+        // covers PlinkApprovedV4Root's living / live theme background.
+        // Home / Rooms / AI / Profile are also plain ScrollViews for this reason.
+        // DM / profile / add-friend open as sheets instead.
+        VStack(spacing: 0) {
+            HStack(alignment: .top) {
+                V4Heading(
+                    eyebrow: "ВМЕСТЕ",
+                    title: segmentTitle
+                )
+                Spacer()
+                if segment == .chats || segment == .requests {
+                    Button {
+                        HapticManager.impact(.light)
+                        showAddFriend = true
+                    } label: {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(V4.accent)
+                            .frame(width: 40, height: 40)
+                            .background(V4.surface.opacity(0.55))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(V4.line))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Добавить друга")
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+
+            segmentPicker
+                .padding(.horizontal, 16)
                 .padding(.bottom, 12)
 
-                // Segment control
-                segmentPicker
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-
-                // Content per section
-                ScrollView(showsIndicators: false) {
-                    Group {
-                        switch segment {
-                        case .chats:
-                            chatsSection
-                        case .requests:
-                            requestsSection
-                        case .recent:
-                            recentSection
-                        }
+            ScrollView(showsIndicators: false) {
+                Group {
+                    switch segment {
+                    case .chats:
+                        chatsSection
+                    case .requests:
+                        requestsSection
+                    case .recent:
+                        recentSection
                     }
-                    .padding(.bottom, 100)
                 }
-                .refreshable {
-                    await store?.load()
-                    if segment == .recent { await loadRecentRooms() }
-                }
+                .padding(.bottom, 100)
             }
-            .foregroundStyle(V4.ink)
-            .background(Color.clear)
-            .navigationDestination(item: $dmFriend) { friend in
-                DMChatView(friend: friend)
-                    .environmentObject(DMChatService(api: APIClient.shared))
-            }
-            .navigationDestination(item: $profileFriend) { friend in
-                FriendProfileView(userId: friend.id, usernameHint: friend.username) {
-                    watchWithFriend = friend
-                    showCreateRoom = true
-                }
-            }
-            .sheet(isPresented: $showCreateRoom) {
-                RoomCreationView { _ in showCreateRoom = false }
-                    .environmentObject(APIClient.shared)
-            }
-            .sheet(isPresented: $showAddFriend) {
-                if let store {
-                    AddFriendSheet(store: store) { message in
-                        toast = message
-                        Task { await store.load() }
-                        // After sending, show requests tab for awareness
-                        if message.lowercased().contains("заявк") {
-                            withAnimation { segment = .requests }
-                        }
-                    }
-                } else {
-                    Text("Загрузка…").padding()
-                }
-            }
-            .fullScreenCover(item: $roomToOpen) { room in
-                WatchRoomContainer(room: room)
-            }
-            .overlay(alignment: .top) {
-                if let toast {
-                    Text(toast)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(V4.surface.opacity(0.95), in: Capsule())
-                        .padding(.top, 8)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .onAppear {
-                            Task {
-                                try? await Task.sleep(nanoseconds: 2_200_000_000)
-                                withAnimation { self.toast = nil }
-                            }
-                        }
-                }
-            }
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .task {
+            .scrollContentBackground(.hidden)
+            .refreshable {
                 await store?.load()
-            }
-            .onChange(of: segment) { _, new in
-                if new == .recent {
-                    Task { await loadRecentRooms() }
-                }
+                if segment == .recent { await loadRecentRooms() }
             }
         }
-        .background(Color.clear)
-        .background(V4TransparentNavBackground())
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(V4.ink)
+        .background(Color.clear) // must stay clear so root theme shows through
+        .sheet(item: $dmFriend) { friend in
+            NavigationStack {
+                DMChatView(friend: friend)
+                    .environmentObject(DMChatService(api: APIClient.shared))
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Закрыть") { dmFriend = nil }
+                        }
+                    }
+            }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $profileFriend) { friend in
+            NavigationStack {
+                FriendProfileView(userId: friend.id, usernameHint: friend.username) {
+                    watchWithFriend = friend
+                    profileFriend = nil
+                    showCreateRoom = true
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Закрыть") { profileFriend = nil }
+                    }
+                }
+            }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showCreateRoom) {
+            RoomCreationView { _ in showCreateRoom = false }
+                .environmentObject(APIClient.shared)
+        }
+        .sheet(isPresented: $showAddFriend) {
+            if let store {
+                AddFriendSheet(store: store) { message in
+                    toast = message
+                    Task { await store.load() }
+                    if message.lowercased().contains("заявк") {
+                        withAnimation { segment = .requests }
+                    }
+                }
+            } else {
+                Text("Загрузка…").padding()
+            }
+        }
+        .fullScreenCover(item: $roomToOpen) { room in
+            WatchRoomContainer(room: room)
+        }
+        .overlay(alignment: .top) {
+            if let toast {
+                Text(toast)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(V4.surface.opacity(0.95), in: Capsule())
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onAppear {
+                        Task {
+                            try? await Task.sleep(nanoseconds: 2_200_000_000)
+                            withAnimation { self.toast = nil }
+                        }
+                    }
+            }
+        }
+        .task {
+            await store?.load()
+        }
+        .onChange(of: segment) { _, new in
+            if new == .recent {
+                Task { await loadRecentRooms() }
+            }
+        }
     }
 
     private var segmentTitle: String {
@@ -208,18 +225,18 @@ struct V4FriendsViewLive: View {
                                 .background(selected ? Color.white.opacity(0.9) : V4.accent.opacity(0.9), in: Capsule())
                         }
                     }
-                    .foregroundStyle(selected ? V4.accentInk : V4.ink.opacity(0.85))
+                    .foregroundStyle(selected ? V4.accentInk : V4.ink.opacity(0.9))
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
                     .background(
                         selected
-                            ? AnyShapeStyle(V4.accent)
-                            : AnyShapeStyle(V4.surface.opacity(0.75))
+                            ? AnyShapeStyle(V4.accent.opacity(0.95))
+                            : AnyShapeStyle(V4.surface.opacity(0.42))
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(selected ? Color.clear : V4.line, lineWidth: 1)
+                            .stroke(selected ? Color.clear : V4.line.opacity(0.7), lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
@@ -746,24 +763,4 @@ private struct AddFriendSheet: View {
     }
 }
 
-private struct V4TransparentNavBackground: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .clear
-        DispatchQueue.main.async {
-            var parent = view.superview
-            for _ in 0..<8 {
-                guard let p = parent else { break }
-                p.backgroundColor = .clear
-                if let nav = p as? UINavigationController {
-                    nav.view.backgroundColor = .clear
-                    nav.navigationBar.isTranslucent = true
-                }
-                parent = p.superview
-            }
-        }
-        return view
-    }
-    func updateUIView(_ uiView: UIView, context: Context) {}
-}
+

@@ -264,3 +264,144 @@ enum BubbleIndexTracker {
         return messages.count - 1 - idx
     }
 }
+
+// MARK: - User preference (Оформление → Бабл-стиль)
+
+enum PlinkBubbleStylePrefs {
+    static let storageKey = "plink.bubbleStyleID"
+
+    static var currentID: String {
+        UserDefaults.standard.string(forKey: storageKey)
+            ?? AppearanceCatalog.defaultBubbleStyleID
+    }
+
+    static func set(_ id: String) {
+        UserDefaults.standard.set(id, forKey: storageKey)
+        NotificationCenter.default.post(name: .plinkBubbleStyleChanged, object: id)
+    }
+
+    static var allStyles: [AppearanceDescriptor] {
+        AppearanceCatalog.bubbleStatic + AppearanceCatalog.bubbleAnimated
+    }
+}
+
+extension Notification.Name {
+    static let plinkBubbleStyleChanged = Notification.Name("plink.bubbleStyleChanged")
+}
+
+// MARK: - Shared bubble for DM + room chat
+
+/// Renders text in the selected bubble style (Оформление).
+/// Own messages use `styleID` (defaults to user preference); peer uses quiet surface.
+struct PlinkMessageBubble: View {
+    let text: String
+    let isOwn: Bool
+    var styleID: String? = nil
+    var fontSize: CGFloat = 15
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animatePulse = false
+    @State private var animateComet = false
+    @State private var animateSignal = false
+
+    private var resolvedID: String {
+        if isOwn {
+            return BubbleStyleRegistry.migrateLegacyID(styleID ?? PlinkBubbleStylePrefs.currentID)
+        }
+        return "bubble-quiet"
+    }
+
+    var body: some View {
+        let desc = BubbleStyleRegistry.safeDescriptor(id: resolvedID)
+        Text(text)
+            .font(.system(size: fontSize, weight: .regular))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(background(for: desc, isOwn: isOwn))
+            .overlay(overlay(for: desc))
+            .clipShape(V5BubbleShape(isOutgoing: isOwn))
+            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
+            .onAppear {
+                guard isOwn, !reduceMotion else { return }
+                trigger(for: desc.id)
+            }
+    }
+
+    @ViewBuilder
+    private func background(for desc: AppearanceDescriptor, isOwn: Bool) -> some View {
+        if !isOwn {
+            Color.white.opacity(0.10)
+        } else {
+            switch desc.id {
+            case "bubble-quiet":
+                Color.white.opacity(0.12)
+            case "bubble-accent":
+                LinearGradient(
+                    colors: desc.previewColors.map { Color(hex: $0) },
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            case "bubble-ink-flow":
+                LinearGradient(
+                    colors: desc.previewColors.map { Color(hex: $0) },
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            case "bubble-prism":
+                LinearGradient(
+                    colors: desc.previewColors.map { Color(hex: $0) },
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            case "bubble-pulse-ring", "bubble-comet", "bubble-signal":
+                LinearGradient(
+                    colors: [
+                        Color(hex: desc.previewColors.first ?? "#3FE8C8").opacity(0.85),
+                        Color(hex: desc.previewColors.last ?? "#00D4FF").opacity(0.75)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            default:
+                Cinema2026.accent.opacity(0.90)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func overlay(for desc: AppearanceDescriptor) -> some View {
+        switch desc.id {
+        case "bubble-pulse-ring":
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color(hex: desc.previewColors[0]), lineWidth: 1.5)
+                .opacity(animatePulse ? 1 : 0.35)
+                .scaleEffect(animatePulse ? 1.03 : 1)
+        case "bubble-comet":
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color(hex: desc.previewColors[0]).opacity(0.7), lineWidth: 1.2)
+        case "bubble-signal":
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color(hex: desc.previewColors[0]).opacity(animateSignal ? 0.9 : 0.35), lineWidth: 1.2)
+        case "bubble-ink-flow", "bubble-prism", "bubble-accent":
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        default:
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+        }
+    }
+
+    private func trigger(for id: String) {
+        switch id {
+        case "bubble-pulse-ring":
+            withAnimation(.easeOut(duration: 0.7)) { animatePulse = true }
+        case "bubble-comet":
+            withAnimation(.easeInOut(duration: 0.6)) { animateComet = true }
+        case "bubble-signal":
+            withAnimation(.easeOut(duration: 0.6)) { animateSignal = true }
+        default:
+            break
+        }
+    }
+}

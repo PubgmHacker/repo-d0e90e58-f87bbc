@@ -272,14 +272,12 @@ private struct WatchChatBubbleInline: View {
                     }
                 }
 
-                Text(message.text)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(isOwn ? .white : Cinema2026.text)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 9)
-                    .background(bubbleBackground)
-                    .clipShape(V5WatchBubbleShape(isOwn: isOwn))
-                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                PlinkMessageBubble(
+                    text: message.text,
+                    isOwn: isOwn,
+                    styleID: isOwn ? PlinkBubbleStylePrefs.currentID : nil,
+                    fontSize: 15
+                )
 
                 if message.isPending {
                     Text("Sending…")
@@ -304,14 +302,6 @@ private struct WatchChatBubbleInline: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isOwn ? "Вы" : message.senderName): \(message.text)")
         .accessibilityHint(isOwn ? "" : "Удерживайте для жалобы или блокировки")
-    }
-
-    @ViewBuilder private var bubbleBackground: some View {
-        if isOwn {
-            Cinema2026.outgoingBubble
-        } else {
-            Cinema2026.surface.opacity(0.92)
-        }
     }
 
     private var roleColor: Color {

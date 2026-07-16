@@ -286,13 +286,12 @@ private struct DMBubble: View {
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 3) {
-                Text(message.text)
-                    .font(.system(size: 16))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(isOwn ? Cinema2026.accent.opacity(0.92) : Color.white.opacity(0.10))
-                    .clipShape(ChatBubbleShapeDM(isOwn: isOwn))
+                PlinkMessageBubble(
+                    text: message.text,
+                    isOwn: isOwn,
+                    styleID: isOwn ? PlinkBubbleStylePrefs.currentID : nil,
+                    fontSize: 16
+                )
 
                 Text(message.timeString)
                     .font(.system(size: 11))

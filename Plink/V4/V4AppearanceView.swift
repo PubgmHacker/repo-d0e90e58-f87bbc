@@ -60,10 +60,12 @@ struct V4AppearanceView: View {
     @State private var livingMotion = PlinkAppearancePrefs.livingMotion
     @State private var highContrast = PlinkAppearancePrefs.highContrast
     @State private var showRoomThemes = false
+    @State private var selectedBubbleID = PlinkBubbleStylePrefs.currentID
     @State private var toast: String?
     @ObservedObject private var premium = PremiumStatusManager.shared
 
     private var plinkPlusActive: Bool { liveThemeIndex > 0 }
+    private var bubbleStyles: [AppearanceDescriptor] { PlinkBubbleStylePrefs.allStyles }
 
     var body: some View {
         ZStack {
@@ -129,6 +131,40 @@ struct V4AppearanceView: View {
                         }
                         .padding(.horizontal, 19)
                         .padding(.bottom, 15)
+                    }
+
+                    // ── Bubble styles ──
+                    V4Heading(
+                        eyebrow: "ЧАТ",
+                        title: "Бабл-стиль сообщений",
+                        subtitle: "Так выглядят твои сообщения в чате с другом и в комнате."
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 19)
+                    .padding(.top, 20)
+                    .padding(.bottom, 14)
+
+                    // Live preview
+                    HStack {
+                        Spacer(minLength: 40)
+                        PlinkMessageBubble(
+                            text: "Привет! Смотрим вместе 🎬",
+                            isOwn: true,
+                            styleID: selectedBubbleID,
+                            fontSize: 15
+                        )
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 12)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(bubbleStyles) { style in
+                                bubbleStyleCard(style)
+                            }
+                        }
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 18)
                     }
 
                     VStack(spacing: 0) {
@@ -206,6 +242,9 @@ struct V4AppearanceView: View {
                 selectedLiveTheme = i > 0 ? i : nil
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkBubbleStyleChanged)) { n in
+            if let id = n.object as? String { selectedBubbleID = id }
+        }
         .sheet(isPresented: $showRoomThemes) {
             RoomThemesSheet(
                 selected: premium.selectedRoomTheme,
@@ -225,6 +264,63 @@ struct V4AppearanceView: View {
         flashToast("Тема комнаты: \(theme.displayName)")
         showRoomThemes = false
         NotificationCenter.default.post(name: .plinkAppearancePrefsChanged, object: theme.rawValue)
+    }
+
+    private func selectBubbleStyle(_ style: AppearanceDescriptor) {
+        // Free styles always; premium styles usable in beta for everyone
+        selectedBubbleID = style.id
+        PlinkBubbleStylePrefs.set(style.id)
+        HapticManager.selection()
+        flashToast("Бабл: \(style.title)")
+    }
+
+    private func bubbleStyleCard(_ style: AppearanceDescriptor) -> some View {
+        let selected = selectedBubbleID == style.id
+        return Button {
+            selectBubbleStyle(style)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                // Mini bubble preview
+                Text("Aa")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        LinearGradient(
+                            colors: style.previewColors.map { Color(hex: $0) },
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                Text(style.title)
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(V4.ink)
+                    .lineLimit(1)
+                Text(style.subtitle)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(V4.muted)
+                    .lineLimit(2)
+                    .frame(height: 24, alignment: .top)
+
+                if style.premium {
+                    Text("Plink+")
+                        .font(.system(size: 8, weight: .heavy))
+                        .foregroundStyle(.yellow)
+                }
+            }
+            .padding(10)
+            .frame(width: 108, height: 130, alignment: .topLeading)
+            .background(V4.surface.opacity(0.55))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(selected ? V4.accent : V4.line, lineWidth: selected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func flashToast(_ text: String) {

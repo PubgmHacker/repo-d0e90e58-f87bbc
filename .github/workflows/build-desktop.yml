@@ -53,9 +53,10 @@ jobs:
 
       # Prefer local @tauri-apps/cli from package.json (no cargo install)
       - name: Build Tauri
+        shell: bash
         run: npx tauri build --target ${{ matrix.target }}
         env:
-          CI: true
+          CI: "true"
 
       - name: Upload Mac artifacts
         if: matrix.platform == 'macos-latest'

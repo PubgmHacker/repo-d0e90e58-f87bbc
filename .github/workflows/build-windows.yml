@@ -39,9 +39,10 @@ jobs:
         run: npm ci
 
       - name: Build NSIS installer
-        run: npm run tauri:build
+        shell: bash
+        run: npx tauri build
         env:
-          CI: true
+          CI: "true"
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

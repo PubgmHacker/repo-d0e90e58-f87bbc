@@ -11,8 +11,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "dmg:clean": "bash scripts/dmg-clean.sh",
-    "tauri:build": "npm run dmg:clean && CI=true tauri build",
-    "tauri:build:debug": "npm run dmg:clean && CI=true tauri build --debug"
+    "tauri:build": "npm run dmg:clean && tauri build",
+    "tauri:build:debug": "npm run dmg:clean && tauri build --debug"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.6.0",

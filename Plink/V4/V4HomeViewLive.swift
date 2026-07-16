@@ -170,25 +170,7 @@ struct V4HomeViewLive: View {
                 .padding(.horizontal,19)
                 .padding(.bottom,18)
 
-                // Hero: 3 promo video banners (always visible — poster/gradient fallback)
-                HeroVideoCarousel(
-                    height: 250,
-                    onWatchTogether: {
-                        HapticManager.impact(.medium)
-                        if let first = searchStore.trending.first {
-                            Task { await createRoomFromTrending(first) }
-                        } else {
-                            NotificationCenter.default.post(name: Notification.Name("plinkOpenCreateRoom"), object: nil)
-                        }
-                    },
-                    onJoinByCode: {
-                        HapticManager.selection()
-                        NotificationCenter.default.post(name: Notification.Name("plinkOpenJoinByCode"), object: nil)
-                    }
-                )
-                .padding(.bottom, 16)
-
-                // Trending heroes (below banners so promo never hidden)
+                // Hero — only live trending rooms/videos (no promo video banners)
                 if !searchStore.trending.isEmpty {
                     TabView {
                         ForEach(searchStore.trending.prefix(5)) { item in
@@ -196,7 +178,7 @@ struct V4HomeViewLive: View {
                                 title: item.title,
                                 meta: "YouTube · \(item.subtitle)",
                                 button: "Смотреть вместе",
-                                height: 220,
+                                height: 260,
                                 theme: theme,
                                 action: {
                                     HapticManager.impact(.medium)
@@ -207,9 +189,9 @@ struct V4HomeViewLive: View {
                             .padding(.horizontal, 13)
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .automatic))
-                    .frame(height: 240)
-                    .padding(.bottom, 16)
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .frame(height: 280)
+                    .padding(.bottom, 20)
                 }
 
                 // "Популярное" — auto-scrolling carousel, bigger posters

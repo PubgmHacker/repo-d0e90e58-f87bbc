@@ -48,6 +48,7 @@ struct V4FriendsViewLive: View {
     @State private var watchWithFriend: Friend?
 
     var body: some View {
+        // NavigationStack defaults to opaque chrome — clear it so living theme shows through
         NavigationStack {
             ScrollView(showsIndicators:false) {
                 VStack(spacing:0) {
@@ -73,7 +74,7 @@ struct V4FriendsViewLive: View {
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(V4.surface)
+                    .background(V4.surface.opacity(0.72))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line))
                     .padding(.horizontal, 18)
@@ -157,7 +158,10 @@ struct V4FriendsViewLive: View {
                         V4MediaCard(title:"Первый контакт",meta:"на неделе")
                     }.padding(.horizontal,19) }
                 }.padding(.bottom,92)
-            }.foregroundStyle(V4.ink)
+            }
+            .foregroundStyle(V4.ink)
+            .background(Color.clear)
+            .scrollContentBackground(.hidden)
             .navigationDestination(item: $dmFriend) { friend in
                 DMChatView(friend: friend)
                     .environmentObject(DMChatService(api: APIClient.shared))
@@ -174,8 +178,38 @@ struct V4FriendsViewLive: View {
                 }
                 .environmentObject(APIClient.shared)
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .background(Color.clear)
+        .background(V4TransparentNavBackground())
     }
+}
+
+/// Clears UIKit NavigationStack chrome so Plink living / live themes stay visible.
+private struct V4TransparentNavBackground: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        DispatchQueue.main.async {
+            var parent = view.superview
+            for _ in 0..<8 {
+                guard let p = parent else { break }
+                p.backgroundColor = .clear
+                if let nav = p as? UINavigationController {
+                    nav.view.backgroundColor = .clear
+                    nav.navigationBar.isTranslucent = true
+                }
+                if String(describing: type(of: p)).contains("Navigation") {
+                    p.backgroundColor = .clear
+                }
+                parent = p.superview
+            }
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
 

@@ -49,8 +49,7 @@ struct ProfileView: View {
                     // Header per spec: 80pt avatar with rotating ring, name 22pt, @ 14pt, email 12pt, badges under username
                     profileHeaderNew
 
-                    // P1-3: own watch stats + badges
-                    MyStatsSection()
+                    // Stats live in edit/personal profile sheet, not the settings list
 
                     // Grouped cards (RoundedRectangle 14pt)
                     VStack(spacing: 0) {

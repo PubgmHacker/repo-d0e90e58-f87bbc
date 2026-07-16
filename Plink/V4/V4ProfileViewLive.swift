@@ -218,11 +218,7 @@ struct V4ProfileViewLive: View {
                 .padding(.top, 80)
                 .padding(.bottom, 20)
 
-                // P1-3: own stats (hours / films / friends / rooms + badges)
-                V4MyStatsCard()
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 12)
-
+                // Stats live inside «Личные данные» / pencil — not on this settings list
                 groupTitle("Аккаунт")
                 VStack(spacing:0) {
                     setting("person","Личные данные","›"){showPersonalData = true}
@@ -273,7 +269,10 @@ struct V4ProfileViewLive: View {
             }.padding(.bottom,92)
         }.foregroundStyle(V4.ink)
         .sheet(isPresented: $showPersonalData) {
-            NavigationStack { PersonalDataView() }.preferredColorScheme(.dark)
+            NavigationStack {
+                PersonalDataView()
+            }
+            .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showPrivacy) {
             NavigationStack { PrivacySecurityView() }.preferredColorScheme(.dark)

@@ -20,45 +20,75 @@ internal struct PersonalDataView: View {
     init() {}
 
     var body: some View {
-        Form {
-            Section("Профиль") {
-                TextField("Никнейм", text: $nickname)
-                    .textInputAutocapitalization(.never)
-            }
-            Section("Email") {
-                HStack {
-                    Text(email)
-                    Spacer()
-                    if isEmailVerified {
-                        Label("Подтверждён", systemImage: "checkmark.seal.fill")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    } else {
-                        Button("Подтвердить") {}
-                            .font(.caption)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Statistics belong to the personal profile, not the settings list
+                V4MyStatsCard()
+                    .padding(.top, 4)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("ПРОФИЛЬ")
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(0.8)
+                        .foregroundStyle(V4.muted)
+
+                    TextField("Никнейм", text: $nickname)
+                        .textInputAutocapitalization(.never)
+                        .padding(14)
+                        .background(V4.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line))
+                        .foregroundStyle(V4.ink)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Email").font(.system(size: 11)).foregroundStyle(V4.muted)
+                            Text(email.isEmpty ? "—" : email)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(V4.ink)
+                        }
+                        Spacer()
+                        if isEmailVerified {
+                            Label("Подтверждён", systemImage: "checkmark.seal.fill")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
                     }
-                }
-                Button("Сменить email") {}
-            }
-            Section("Поддержка") {
-                HStack {
-                    Text("Account ID")
-                        .font(.subheadline)
-                    Spacer()
-                    Text(accountID)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.white.opacity(0.6))
-                    Button {
-                        UIPasteboard.general.string = accountID
-                        withAnimation { copied = true }
-                    } label: {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .padding(14)
+                    .background(V4.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line))
+
+                    HStack {
+                        Text("Account ID")
+                            .font(.subheadline)
+                            .foregroundStyle(V4.muted)
+                        Spacer()
+                        Text(accountID)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(V4.ink.opacity(0.7))
+                            .lineLimit(1)
+                        Button {
+                            UIPasteboard.general.string = accountID
+                            withAnimation { copied = true }
+                        } label: {
+                            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                                .foregroundStyle(V4.accent)
+                        }
+                        .buttonStyle(.plain)
                     }
+                    .padding(14)
+                    .background(V4.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line))
                 }
             }
+            .padding(18)
+            .padding(.bottom, 32)
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.black.opacity(0.95).ignoresSafeArea())
+        .background(V4.canvas.ignoresSafeArea())
+        .navigationTitle("Личные данные")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if let u = AuthService.shared.currentUserValue {
                 nickname = u.username

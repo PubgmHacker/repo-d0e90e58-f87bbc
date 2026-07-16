@@ -1,42 +1,70 @@
-# Plink MVP Status — 16 July 2026
+# Plink MVP Status — FINAL (16 July 2026)
 
-## Core loop: READY for closed beta
+## Verdict: **Closed-beta MVP READY**
 
-| Platform | Auth | Room | Chat | YouTube | Sync | Installer |
-|----------|------|------|------|---------|------|-----------|
-| **iOS** | ✅ | ✅ | ✅ | ✅ | ✅ | IPA on landing |
-| **Desktop Mac** | ✅ | ✅ | ✅ | ✅ hosted player | ✅ | **DMG rebuilt** |
-| **Desktop Win** | ✅ | ✅ | ✅ | ✅ | ✅ | EXE (old; rebuild on Windows CI) |
-| **Android** | ✅ | ✅ | ✅ | ✅ local bridge | ✅ | **APK updated** |
-| **Backend** | ✅ Railway | ✅ | ✅ | ✅ player | ✅ v2 | live |
+Core loop (auth → room → YouTube → chat → sync) works on **iOS + Android + Mac Desktop + Backend**.
 
-## Shipped this continuation
+| Platform | Auth | Room | Chat | YouTube | Sync | Build |
+|----------|------|------|------|---------|------|-------|
+| iOS | ✅ | ✅ | ✅ | ✅ | ✅ | IPA / Xcode |
+| Android | ✅ | ✅ | ✅ | ✅ bridge | ✅ | APK |
+| Mac Desktop | ✅ | ✅ | ✅ | ✅ | ✅ | **DMG rebuilt** |
+| Windows | ✅ code | ✅ | ✅ | ✅ | ✅ | CI workflow triggered |
+| Backend | ✅ | ✅ | ✅ | ✅ | ✅ v2 | Railway live |
 
-1. **macOS DMG rebuild** with player + sync + AI chat UI  
-   - `plink-landing/public/downloads/Plink-1.0.0-arm64.dmg`  
-   - `plink-landing/public/downloads/Plink.dmg`  
-   - App: `windows-client/src-tauri/target/release/bundle/macos/Plink.app`
-2. **Desktop AI page** — real `/ai/chat` (message compat), fallback UX
-3. **Rooms page** — join by code inline
-4. **Backend** empty JSON body → `{}` (leave room no longer 400)
-5. Voice still **hidden** until LiveKit (`FeatureFlags.liveKitVoiceEnabled`)
-6. Cinema services **OFF** by default (App Store)
+## Drift lab (production)
 
-## How to run MVP now
+```
+node scripts/drift-lab.mjs
+samples: 20/20
+median lag: 286 ms
+p95 lag:    303 ms
+→ PASS (median <500ms, p95 <1.5s)
+```
 
-| Client | Command / file |
-|--------|----------------|
-| Mac app | Open `Plink.dmg` or `Plink.app` from downloads / tauri bundle |
-| Web desktop | `cd windows-client && npm run dev` → localhost:5173 |
-| Android | Install `app-debug.apk` |
-| iOS | Existing IPA / Xcode |
+## Completed this sprint
 
-**Test path:** signup → create room from trending → 2nd device join by code → host play/pause/seek → chat.
+- [x] YouTube 153 fix (hosted player + Android local bridge)
+- [x] Desktop + Android playback sync (protocol v2)
+- [x] Mac DMG rebuild → `plink-landing/public/downloads/Plink.dmg`
+- [x] Android APK with sync
+- [x] Empty JSON body leave-room fix
+- [x] Desktop AI chat + join-by-code
+- [x] Cinema services OFF by default (App Store)
+- [x] Voice UI gated on LiveKit (`/api/rtc/status`)
+- [x] Analytics funnel (iOS Firebase + desktop hooks)
+- [x] Drift lab script PASS
+- [x] Windows/Mac CI workflows (dispatch)
+- [x] Docs: LiveKit, App Store, Beta launch
 
-## Remaining (post-MVP polish)
+## Ops remaining (need human keys / Apple account)
 
-- [ ] Windows `.exe` rebuild (needs Windows runner)
-- [ ] LiveKit keys → enable voice
-- [ ] TestFlight / closed beta 25 users
-- [ ] App Store screenshots + IAP products in ASC
-- [ ] Measure 3-device drift lab formally
+| Item | Owner | Notes |
+|------|-------|--------|
+| LiveKit cloud keys | Ops | `docs/LIVEKIT_SETUP.md` → enable mic |
+| App Store Connect products | Ops | `plink.plus.1m/3m/12m` |
+| Screenshots upload | Ops | `docs/APP_STORE_SUBMISSION.md` |
+| TestFlight invite 20–25 | Ops | `docs/BETA_LAUNCH.md` |
+| Windows EXE from CI | Auto | Actions run; download artifact → landing |
+| Sign Android release | Ops | Play Internal track |
+
+## Install now
+
+| File | Path |
+|------|------|
+| Mac | `plink-landing/public/downloads/Plink.dmg` |
+| Android | `plink-landing/public/downloads/app-debug.apk` |
+| Backend | `https://plink-backend-production-ef31.up.railway.app` |
+
+## Commands
+
+```bash
+# Drift lab
+cd Desktop/Grok && npm i ws && node scripts/drift-lab.mjs
+
+# Desktop web
+cd windows-client && npm run dev
+
+# Rebuild Mac
+cd windows-client && npm run tauri:build
+```

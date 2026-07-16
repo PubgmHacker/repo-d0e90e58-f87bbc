@@ -1,16 +1,10 @@
 import Foundation
 import Combine
 
-// MARK: - Friend Manager v2 (Real API)
-/// Менеджер друзей через реальный бэкенд Railway.
-/// Все методы делают HTTP-запросы к /api/friends/*.
-///
-/// 🔧 FIX C5: Now accepts an authenticated APIClient via init (was: own unauth client).
-/// 🔧 FIX M13: loadAll() no longer auto-fires in init — caller must trigger after auth.
+// MARK: - Friend Manager v3 (Real API + search/request/accept)
+/// HTTP → /api/friends/*
 @MainActor
 final class FriendManager: ObservableObject {
-
-    // MARK: - Published State
 
     @Published private(set) var friends: [Friend] = []
     @Published private(set) var incomingRequests: [FriendRequest] = []
@@ -18,19 +12,13 @@ final class FriendManager: ObservableObject {
     @Published private(set) var searchResults: [UserPreview] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-
-    // MARK: - Callbacks
+    @Published var lastSuccessMessage: String?
 
     var onIncomingRequest: ((FriendRequest) -> Void)?
     var onFriendAdded: ((Friend) -> Void)?
 
-    // MARK: - API
-
     private let api: APIClient
 
-    /// 🔧 FIX C5: Inject shared APIClient from RaveCloneApp
-    /// 🔧 FIX M13: Removed auto-loadAll() in init — caller (RaveCloneApp.checkAuth)
-    /// must call loadAll() explicitly after the auth token is propagated.
     init(api: APIClient) {
         self.api = api
     }
@@ -38,17 +26,15 @@ final class FriendManager: ObservableObject {
     // MARK: - Load All
 
     func loadAll() async {
-        await loadFriends()
-        await loadRequests()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadFriends() }
+            group.addTask { await self.loadIncomingRequests() }
+            group.addTask { await self.loadOutgoingRequests() }
+        }
     }
-
-    // MARK: - Load Friends (GET /api/friends)
 
     func loadFriends() async {
         guard api.authToken != nil else { return }
-        isLoading = true
-        defer { isLoading = false }
-
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
             friends = dtos.map { $0.toFriend() }
@@ -57,45 +43,111 @@ final class FriendManager: ObservableObject {
         }
     }
 
-    // MARK: - Load Requests (GET /api/friends/requests/incoming)
-
-    func loadRequests() async {
+    func loadIncomingRequests() async {
         guard api.authToken != nil else { return }
-        isLoading = true
-        defer { isLoading = false }
-
         do {
-            let dtos: [FriendRequestDTO] = try await api.request("friends/requests/incoming")
+            let dtos: [IncomingRequestDTO] = try await api.request("friends/requests/incoming")
             incomingRequests = dtos.map { $0.toFriendRequest() }
         } catch {
-            print("[Friends] loadRequests error: \(error.localizedDescription)")
+            print("[Friends] loadIncoming error: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Send Request (POST /api/friends/request)
-
-    func sendRequest(to userId: String, username: String) async {
-        struct Body: Encodable { let friendId: String }
-
+    func loadOutgoingRequests() async {
+        guard api.authToken != nil else { return }
         do {
-            let _: FriendRequestDTO = try await api.request("friends/request", method: .post, body: Body(friendId: userId))
-            // Обновляем список после отправки
-            await loadRequests()
+            let dtos: [OutgoingRequestDTO] = try await api.request("friends/requests/outgoing")
+            outgoingRequests = dtos.map { $0.toFriendRequest() }
         } catch {
-            errorMessage = error.localizedDescription
-            print("[Friends] sendRequest error: \(error.localizedDescription)")
+            // Older backends without outgoing endpoint — keep local list
+            print("[Friends] loadOutgoing error: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Accept Request (PUT /api/friends/requests/:id)
+    /// Alias used by older call sites
+    func loadRequests() async {
+        await loadIncomingRequests()
+        await loadOutgoingRequests()
+    }
+
+    // MARK: - Send Request
+
+    @discardableResult
+    func sendRequest(to userId: String, username: String) async -> Bool {
+        struct Body: Encodable { let friendId: String }
+        do {
+            let resp: SendRequestResponse = try await api.request(
+                "friends/request",
+                method: .post,
+                body: Body(friendId: userId)
+            )
+            if resp.autoAccepted == true {
+                lastSuccessMessage = "\(username) теперь у вас в друзьях"
+                await loadAll()
+                return true
+            }
+            lastSuccessMessage = "Заявка отправлена \(username)"
+            // Optimistic outgoing
+            let preview = UserPreview(id: userId, username: username, avatarURL: nil, isOnline: false)
+            let me = UserPreview(id: "me", username: "me", avatarURL: nil, isOnline: true)
+            let req = FriendRequest(
+                id: resp.id ?? UUID().uuidString,
+                fromUser: me,
+                toUser: preview,
+                status: .pending,
+                createdAt: Date()
+            )
+            if !outgoingRequests.contains(where: { $0.toUser.id == userId }) {
+                outgoingRequests.insert(req, at: 0)
+            }
+            await loadOutgoingRequests()
+            return true
+        } catch {
+            errorMessage = friendlyError(error)
+            print("[Friends] sendRequest error: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Search by @username and send in one step
+    @discardableResult
+    func sendRequestByUsername(_ username: String) async -> Bool {
+        let clean = username.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
+        guard !clean.isEmpty else {
+            errorMessage = "Введите @username"
+            return false
+        }
+        struct Body: Encodable { let username: String }
+        do {
+            let resp: SendRequestResponse = try await api.request(
+                "friends/request",
+                method: .post,
+                body: Body(username: clean)
+            )
+            if resp.autoAccepted == true {
+                lastSuccessMessage = "@\(clean) теперь у вас в друзьях"
+            } else {
+                lastSuccessMessage = "Заявка отправлена @\(clean)"
+            }
+            await loadAll()
+            return true
+        } catch {
+            errorMessage = friendlyError(error)
+            return false
+        }
+    }
+
+    // MARK: - Accept / Decline
 
     func acceptRequest(_ request: FriendRequest) async {
         struct Body: Encodable { let status: String }
-
         do {
-            let _: SuccessDTO = try await api.request("friends/requests/\(request.id)", method: .put, body: Body(status: "accepted"))
+            let _: SuccessDTO = try await api.request(
+                "friends/requests/\(request.id)",
+                method: .put,
+                body: Body(status: "accepted")
+            )
             incomingRequests.removeAll { $0.id == request.id }
-
             let newFriend = Friend(
                 id: request.fromUser.id,
                 username: request.fromUser.username,
@@ -103,48 +155,42 @@ final class FriendManager: ObservableObject {
                 isOnline: request.fromUser.isOnline,
                 friendsSince: Date()
             )
-            friends.append(newFriend)
+            if !friends.contains(where: { $0.id == newFriend.id }) {
+                friends.append(newFriend)
+            }
             onFriendAdded?(newFriend)
+            lastSuccessMessage = "\(request.fromUser.username) добавлен в друзья"
+            await loadFriends()
         } catch {
-            errorMessage = error.localizedDescription
-            print("[Friends] acceptRequest error: \(error.localizedDescription)")
+            errorMessage = friendlyError(error)
         }
     }
-
-    // MARK: - Decline Request (PUT /api/friends/requests/:id)
 
     func declineRequest(_ request: FriendRequest) async {
         struct Body: Encodable { let status: String }
-
         do {
-            let _: SuccessDTO = try await api.request("friends/requests/\(request.id)", method: .put, body: Body(status: "rejected"))
+            let _: SuccessDTO = try await api.request(
+                "friends/requests/\(request.id)",
+                method: .put,
+                body: Body(status: "rejected")
+            )
             incomingRequests.removeAll { $0.id == request.id }
+            lastSuccessMessage = "Заявка отклонена"
         } catch {
-            errorMessage = error.localizedDescription
-            print("[Friends] declineRequest error: \(error.localizedDescription)")
+            errorMessage = friendlyError(error)
         }
     }
-
-    // MARK: - Remove Friend (DELETE /api/friends/:friendId)
 
     func removeFriend(_ friend: Friend) async {
         do {
             try await api.requestNoBody("friends/\(friend.id)", method: .delete)
             friends.removeAll { $0.id == friend.id }
         } catch {
-            errorMessage = error.localizedDescription
-            print("[Friends] removeFriend error: \(error.localizedDescription)")
+            errorMessage = friendlyError(error)
         }
     }
 
-    // MARK: - Search (GET /api/friends/search?q=)
-    /// 🔧 Supports search by:
-    ///   - Username (e.g. "alex")
-    ///   - User ID (full UUID, e.g. "a1b2c3d4-e5f6-...")
-    ///   - Short ID (e.g. "#ef1234567890" or "ef1234567890")
-    ///   - Nickname/display name
-    /// The server's /api/friends/search endpoint should handle all these cases.
-    /// If the user typed a "#", we strip it before sending to the server.
+    // MARK: - Search
 
     func searchUsers(query: String) async {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -152,33 +198,22 @@ final class FriendManager: ObservableObject {
             searchResults = []
             return
         }
-
         guard api.authToken != nil else {
             searchResults = []
             return
         }
-
-        // 🔧 Strip leading "#" if user typed a short ID like "#ef1234567890"
-        let cleanedQuery = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
-
+        let cleanedQuery = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
         isLoading = true
         defer { isLoading = false }
-
         do {
-            // 🔧 Pass the cleaned query to the server. The server should:
-            //   1. Match by exact ID (if cleanedQuery is a valid UUID)
-            //   2. Match by short ID suffix (if cleanedQuery is 8+ chars)
-            //   3. Match by username (case-insensitive LIKE)
-            //   4. Match by display name (case-insensitive LIKE)
             let dtos: [UserPreviewDTO] = try await api.request("friends/search", query: ["q": cleanedQuery])
             searchResults = dtos.map { $0.toUserPreview() }
         } catch {
             print("[Friends] search error: \(error.localizedDescription)")
             searchResults = []
+            errorMessage = friendlyError(error)
         }
     }
-
-    // MARK: - Helpers
 
     func isFriend(_ userId: String) -> Bool {
         friends.contains { $0.id == userId }
@@ -188,21 +223,37 @@ final class FriendManager: ObservableObject {
         outgoingRequests.contains { $0.toUser.id == userId }
     }
 
-    // MARK: - Invite Link
-
     func generateInviteLink(userId: String) -> URL {
         URL(string: "\(ShareManager.shareBaseURL)/u/\(userId)")!
     }
+
+    private func friendlyError(_ error: Error) -> String {
+        if let api = error as? APIError {
+            switch api {
+            case .conflict(let message):
+                if message.lowercased().contains("already") { return "Уже друзья или заявка отправлена" }
+                return message
+            case .notFound:
+                return "Пользователь не найден"
+            case .serverError(_, let message):
+                return message ?? "Ошибка сервера"
+            case .unauthorized:
+                return "Войдите в аккаунт"
+            default:
+                return error.localizedDescription
+            }
+        }
+        return error.localizedDescription
+    }
 }
 
-// MARK: - DTO Models (server response)
+// MARK: - DTOs
 
 private struct FriendDTO: Decodable {
     let id: String
     let username: String
     let avatarURL: String?
     let isOnline: Bool?
-    let lastSeen: Date?
     let friendsSince: Date?
 
     func toFriend() -> Friend {
@@ -216,7 +267,7 @@ private struct FriendDTO: Decodable {
     }
 }
 
-private struct FriendRequestDTO: Decodable {
+private struct IncomingRequestDTO: Decodable {
     let id: String
     let fromUser: UserPreviewDTO
     let status: String
@@ -233,15 +284,41 @@ private struct FriendRequestDTO: Decodable {
     }
 }
 
+private struct OutgoingRequestDTO: Decodable {
+    let id: String
+    let toUser: UserPreviewDTO
+    let status: String
+    let createdAt: Date?
+
+    func toFriendRequest() -> FriendRequest {
+        FriendRequest(
+            id: id,
+            fromUser: UserPreview(id: "me", username: "me", avatarURL: nil, isOnline: true),
+            toUser: toUser.toUserPreview(),
+            status: .pending,
+            createdAt: createdAt ?? Date()
+        )
+    }
+}
+
 private struct UserPreviewDTO: Decodable {
     let id: String
     let username: String
     let avatarURL: String?
     let isOnline: Bool?
+    let displayName: String?
 
     func toUserPreview() -> UserPreview {
         UserPreview(id: id, username: username, avatarURL: avatarURL, isOnline: isOnline ?? false)
     }
+}
+
+private struct SendRequestResponse: Decodable {
+    let success: Bool?
+    let id: String?
+    let status: String?
+    let friendId: String?
+    let autoAccepted: Bool?
 }
 
 private struct SuccessDTO: Decodable {

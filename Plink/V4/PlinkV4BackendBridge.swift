@@ -134,7 +134,9 @@ final class V4FriendsStore {
     private(set) var state: LoadState = .idle
     private(set) var friends: [Friend] = []
     private(set) var requests: [FriendRequest] = []
-    private let friendManager: FriendManager
+    private(set) var outgoing: [FriendRequest] = []
+    /// Exposed for Add Friend sheet (search / send)
+    let friendManager: FriendManager
 
     init(friendManager: FriendManager) { self.friendManager = friendManager }
 
@@ -143,15 +145,22 @@ final class V4FriendsStore {
         await friendManager.loadAll()
         friends = friendManager.friends
         requests = friendManager.incomingRequests
-        state = friends.isEmpty && requests.isEmpty ? .empty : .loaded
+        outgoing = friendManager.outgoingRequests
+        state = friends.isEmpty && requests.isEmpty && outgoing.isEmpty ? .empty : .loaded
     }
 
     func invite(userID: String, username: String) async {
-        await friendManager.sendRequest(to: userID, username: username)
+        _ = await friendManager.sendRequest(to: userID, username: username)
+        await load()
     }
 
     func accept(_ request: FriendRequest) async {
         await friendManager.acceptRequest(request)
+        await load()
+    }
+
+    func decline(_ request: FriendRequest) async {
+        await friendManager.declineRequest(request)
         await load()
     }
 }

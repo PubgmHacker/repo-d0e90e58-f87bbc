@@ -68,8 +68,12 @@ final class RoomService: RoomServiceProtocol {
 
     // MARK: - My Rooms
 
-    /// - Parameter status: `active` | `history` | `all` (default).
-    func fetchMyRooms(status: String = "all") async throws -> [Room] {
+    func fetchMyRooms() async throws -> [Room] {
+        try await fetchMyRooms(status: "all")
+    }
+
+    /// - Parameter status: `active` | `history` | `all`.
+    func fetchMyRooms(status: String) async throws -> [Room] {
         let path = status == "all" ? "rooms/mine" : "rooms/mine?status=\(status)"
         return try await api.request(path, method: .get)
     }

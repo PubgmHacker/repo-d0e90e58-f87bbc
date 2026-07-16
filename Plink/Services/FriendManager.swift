@@ -26,18 +26,33 @@ final class FriendManager: ObservableObject {
     // MARK: - Load All
 
     func loadAll() async {
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.loadFriends() }
-            group.addTask { await self.loadIncomingRequests() }
-            group.addTask { await self.loadOutgoingRequests() }
+        ensureToken()
+        // Sequential on MainActor — avoid racing @Published arrays
+        await loadFriends()
+        await loadIncomingRequests()
+        await loadOutgoingRequests()
+        // Drop outgoing that are now friends (accepted on the other device)
+        let friendIds = Set(friends.map(\.id))
+        outgoingRequests.removeAll { friendIds.contains($0.toUser.id) }
+    }
+
+    private func ensureToken() {
+        if api.authToken == nil {
+            api.authToken = KeychainHelper.read(for: "rave_auth_token")
+                ?? AuthService.shared.authToken
         }
     }
 
     func loadFriends() async {
-        guard api.authToken != nil else { return }
+        ensureToken()
+        guard api.authToken != nil else {
+            print("[Friends] loadFriends: no auth token")
+            return
+        }
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
             friends = dtos.map { $0.toFriend() }
+            print("[Friends] loaded \(friends.count) friends")
         } catch {
             print("[Friends] loadFriends error: \(error.localizedDescription)")
         }

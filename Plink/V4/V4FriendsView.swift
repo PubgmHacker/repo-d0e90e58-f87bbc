@@ -24,6 +24,8 @@ struct V4FriendsView: View {
 struct V4FriendsViewLive: View {
     let theme: V4Theme
     var store: V4FriendsStore?
+    /// When false (other tab), pause polling. Root passes tab == friends.
+    var isActive: Bool = true
     @State private var dmFriend: Friend?
     @State private var profileFriend: Friend?
     @State private var showCreateRoom = false
@@ -34,6 +36,7 @@ struct V4FriendsViewLive: View {
     @State private var recentRooms: [Room] = []
     @State private var recentLoading = false
     @State private var roomToOpen: Room?
+    @Environment(\.scenePhase) private var scenePhase
 
     private var requestBadge: Int { store?.requests.count ?? 0 }
 
@@ -136,6 +139,27 @@ struct V4FriendsViewLive: View {
         .task {
             await store?.load()
             await loadRecentRooms()
+        }
+        // Tabs stay mounted (opacity switch) — re-fetch when this tab is shown
+        .onChange(of: isActive) { _, active in
+            guard active else { return }
+            Task {
+                await store?.refreshQuietly()
+                await loadRecentRooms()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, isActive else { return }
+            Task { await store?.refreshQuietly() }
+        }
+        // Poll while friends tab is open so accept on other phone appears
+        .task(id: isActive) {
+            guard isActive else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 8_000_000_000) // 8s
+                guard !Task.isCancelled, isActive else { break }
+                await store?.refreshQuietly()
+            }
         }
     }
 

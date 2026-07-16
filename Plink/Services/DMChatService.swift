@@ -32,7 +32,14 @@ final class DMChatService: ObservableObject {
     // MARK: - Load History (GET /api/messages/dm/:friendId)
 
     func loadHistory(friendId: String, friendName: String) async {
-        guard api.authToken != nil else { return }
+        if api.authToken == nil {
+            api.authToken = KeychainHelper.read(for: "rave_auth_token")
+                ?? AuthService.shared.authToken
+        }
+        guard api.authToken != nil else {
+            print("[DM] loadHistory: no token")
+            return
+        }
         let convID = conversationID(with: friendId)
         isLoading = true
         defer { isLoading = false }
@@ -54,6 +61,7 @@ final class DMChatService: ObservableObject {
                 )
             }
             conversations[convID] = messages
+            print("[DM] history \(messages.count) msgs with \(friendId)")
         } catch {
             print("[DM] loadHistory error: \(error.localizedDescription)")
         }
@@ -94,9 +102,33 @@ final class DMChatService: ObservableObject {
 
         // Реальная отправка
         struct Body: Encodable { let receiverId: String; let content: String }
+        if api.authToken == nil {
+            api.authToken = KeychainHelper.read(for: "rave_auth_token")
+                ?? AuthService.shared.authToken
+        }
         Task {
             do {
-                let _: DMMessageDTO = try await api.request("messages/dm", method: .post, body: Body(receiverId: friend.id, content: trimmed))
+                let saved: DMMessageDTO = try await api.request(
+                    "messages/dm",
+                    method: .post,
+                    body: Body(receiverId: friend.id, content: trimmed)
+                )
+                // Replace optimistic id with server id if possible
+                if let idx = conversations[convID]?.firstIndex(where: { $0.id == message.id }) {
+                    var list = conversations[convID] ?? []
+                    list[idx] = DirectMessage(
+                        id: saved.id,
+                        conversationID: convID,
+                        senderID: saved.senderID,
+                        recipientID: saved.receiverID,
+                        senderName: "You",
+                        text: saved.content,
+                        timestamp: saved.createdAt,
+                        isRead: false,
+                        senderAvatarURL: nil
+                    )
+                    conversations[convID] = list
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 print("[DM] sendMessage error: \(error.localizedDescription)")

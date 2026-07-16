@@ -120,6 +120,12 @@ struct DMChatView: View {
         .preferredColorScheme(.dark)
         .task {
             await dmService.loadHistory(friendId: friend.id, friendName: friend.username)
+            // Poll so messages from the other phone appear without push/WS
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { break }
+                await dmService.loadHistory(friendId: friend.id, friendName: friend.username)
+            }
         }
     }
 

@@ -59,7 +59,7 @@ struct PlinkApprovedV4Root: View {
                     .opacity(tab == 1 ? 1 : 0).allowsHitTesting(tab == 1)
                 V4AIViewLive(theme:theme, store:aiStore)
                     .opacity(tab == 2 ? 1 : 0).allowsHitTesting(tab == 2)
-                V4FriendsViewLive(theme:theme, store:friendsStore)
+                V4FriendsViewLive(theme:theme, store:friendsStore, isActive: tab == 3)
                     .opacity(tab == 3 ? 1 : 0).allowsHitTesting(tab == 3)
                 V4ProfileViewLive(theme:theme, store:profileStore, showAppearance:$appearance)
                     .opacity(tab == 4 ? 1 : 0).allowsHitTesting(tab == 4)

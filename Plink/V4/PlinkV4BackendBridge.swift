@@ -131,7 +131,9 @@ struct V4SearchResult: Identifiable, Hashable, Sendable {
 @MainActor
 @Observable
 final class V4FriendsStore {
-    enum LoadState: Sendable { case idle, loading, loaded, empty, failed(String) }
+    enum LoadState: Sendable, Equatable {
+        case idle, loading, loaded, empty, failed(String)
+    }
     private(set) var state: LoadState = .idle
     private(set) var friends: [Friend] = []
     private(set) var requests: [FriendRequest] = []
@@ -147,6 +149,18 @@ final class V4FriendsStore {
         friends = friendManager.friends
         requests = friendManager.incomingRequests
         outgoing = friendManager.outgoingRequests
+        // Chats section should show "loaded" whenever we have friends,
+        // even if requests are empty (sender after accept on other phone).
+        state = friends.isEmpty && requests.isEmpty && outgoing.isEmpty ? .empty : .loaded
+    }
+
+    /// Quiet refresh without full-screen loading spinner (poll / tab focus).
+    func refreshQuietly() async {
+        await friendManager.loadAll()
+        friends = friendManager.friends
+        requests = friendManager.incomingRequests
+        outgoing = friendManager.outgoingRequests
+        if case .loading = state { return }
         state = friends.isEmpty && requests.isEmpty && outgoing.isEmpty ? .empty : .loaded
     }
 

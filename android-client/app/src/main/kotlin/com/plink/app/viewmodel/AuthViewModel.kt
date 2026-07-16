@@ -2,6 +2,7 @@ package com.plink.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.plink.app.data.Analytics
 import com.plink.app.data.api.PlinkApi
 import com.plink.app.data.models.SignInRequest
 import com.plink.app.data.models.SignUpRequest
@@ -28,6 +29,7 @@ class AuthViewModel(
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     init {
+        Analytics.appOpen()
         restoreSession()
     }
 
@@ -51,6 +53,7 @@ class AuthViewModel(
             try {
                 val response = api.signIn(SignInRequest(email.trim(), password))
                 tokenStore.setToken(response.token)
+                Analytics.login()
                 _state.value = AuthUiState(user = response.user)
             } catch (e: Exception) {
                 _state.value = AuthUiState(error = parseError(e))
@@ -70,6 +73,7 @@ class AuthViewModel(
                     ),
                 )
                 tokenStore.setToken(response.token)
+                Analytics.signUp()
                 _state.value = AuthUiState(user = response.user)
             } catch (e: Exception) {
                 _state.value = AuthUiState(error = parseError(e))

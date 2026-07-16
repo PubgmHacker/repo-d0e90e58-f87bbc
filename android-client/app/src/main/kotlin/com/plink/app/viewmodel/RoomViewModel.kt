@@ -2,6 +2,7 @@ package com.plink.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.plink.app.data.Analytics
 import com.plink.app.data.api.PlinkApi
 import com.plink.app.data.models.ChatMessage
 import com.plink.app.data.models.JoinRoomRequest
@@ -275,6 +276,7 @@ class RoomViewModel(
         val text = _state.value.draft.trim()
         if (text.isBlank()) return
         realtimeClient.sendChat(text)
+        Analytics.messageSent()
         _state.update { it.copy(draft = "") }
     }
 
@@ -282,6 +284,7 @@ class RoomViewModel(
         hostPushJob?.cancel()
         viewModelScope.launch {
             runCatching { api.leaveRoom(_state.value.room.id) }
+            Analytics.roomLeft()
             realtimeClient.disconnect()
         }
     }

@@ -2,6 +2,7 @@ package com.plink.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.plink.app.data.Analytics
 import com.plink.app.data.api.PlinkApi
 import com.plink.app.data.models.CreateRoomRequest
 import com.plink.app.data.models.JoinRoomRequest
@@ -69,6 +70,8 @@ class HomeViewModel(
                     ),
                 )
                 val joined = api.joinRoom(JoinRoomRequest(room.code))
+                Analytics.roomCreated()
+                Analytics.roomJoined()
                 _state.value = _state.value.copy(actionLoading = false)
                 onSuccess(joined)
             } catch (e: Exception) {
@@ -87,6 +90,7 @@ class HomeViewModel(
             _state.value = _state.value.copy(actionLoading = true, error = null)
             try {
                 val room = api.joinRoom(JoinRoomRequest(code))
+                Analytics.roomJoined()
                 _state.value = _state.value.copy(actionLoading = false)
                 onSuccess(room)
             } catch (e: Exception) {

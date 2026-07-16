@@ -1,4 +1,4 @@
-// Plink/V4/V4FriendsView.swift — friends list + server-backed add/accept flow
+// Plink/V4/V4FriendsView.swift — segmented: Чаты | Заявки | Недавние
 
 import SwiftUI
 import PhotosUI
@@ -12,43 +12,58 @@ struct V4FriendsView: View {
             VStack(spacing:0) {
                 HStack(alignment:.top) { V4Heading(eyebrow:"ВМЕСТЕ ЛУЧШЕ",title:"Друзья"); Spacer(); V4RoundButton(symbol:"＋") }
                     .padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
-                VStack(spacing:0) {
-                    friend("А","Алина","смотрит Afterglow","Войти")
-                    friend("М","Миша","готов смотреть","Позвать")
-                }.padding(.horizontal,19)
             }.padding(.bottom,92)
         }.foregroundStyle(V4.ink)
     }
-    private func friend(_ letter:String,_ name:String,_ status:String,_ action:String)->some View {
-        HStack(spacing:11) {
-            V4Avatar(letter:letter,theme:theme,size:39)
-            VStack(alignment:.leading,spacing:2) { Text(name).font(.system(size:13.6,weight:.bold)); Text(status).font(.system(size:11.52)).foregroundStyle(V4.muted) }
-            Spacer()
-            Button(action){}.font(.system(size:11.52)).foregroundStyle(V4.ink).padding(.horizontal,10).frame(height:35)
-                .background(V4.surface).clipShape(RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(V4.line))
-        }.frame(minHeight:61).overlay(alignment:.bottom){ Rectangle().fill(V4.line).frame(height:1) }
+}
+
+// MARK: - Segment
+
+private enum FriendsSegment: String, CaseIterable, Identifiable {
+    case chats = "Чаты"
+    case requests = "Заявки"
+    case recent = "Недавние"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .chats: return "bubble.left.and.bubble.right.fill"
+        case .requests: return "person.badge.clock.fill"
+        case .recent: return "clock.arrow.circlepath"
+        }
     }
 }
 
-// MARK: - Live friends (server-synced)
+// MARK: - Live friends (server-synced, tabbed)
 
 struct V4FriendsViewLive: View {
     let theme: V4Theme
     var store: V4FriendsStore?
+    @State private var segment: FriendsSegment = .chats
     @State private var dmFriend: Friend?
     @State private var profileFriend: Friend?
     @State private var showCreateRoom = false
     @State private var watchWithFriend: Friend?
     @State private var showAddFriend = false
     @State private var toast: String?
+    @State private var recentRooms: [Room] = []
+    @State private var recentLoading = false
+    @State private var roomToOpen: Room?
+
+    private var requestBadge: Int { store?.requests.count ?? 0 }
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators:false) {
-                VStack(spacing:0) {
-                    HStack(alignment:.top) {
-                        V4Heading(eyebrow:"МЕССЕНДЖЕР",title:"Друзья и чаты")
-                        Spacer()
+            VStack(spacing: 0) {
+                // Header
+                HStack(alignment: .top) {
+                    V4Heading(
+                        eyebrow: "ВМЕСТЕ",
+                        title: segmentTitle
+                    )
+                    Spacer()
+                    if segment == .chats || segment == .requests {
                         Button {
                             HapticManager.impact(.light)
                             showAddFriend = true
@@ -64,124 +79,37 @@ struct V4FriendsViewLive: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Добавить друга")
                     }
-                    .padding(.horizontal,18).padding(.top,10).padding(.bottom,8)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
 
-                    HStack(spacing: 10) {
-                        Image(systemName: "person.badge.plus")
-                            .foregroundStyle(V4.accent)
-                        Text("«+» — найти по @username и отправить заявку. Входящие заявки — принять или отклонить.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(V4.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(V4.surface.opacity(0.72))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line))
-                    .padding(.horizontal, 18)
+                // Segment control
+                segmentPicker
+                    .padding(.horizontal, 16)
                     .padding(.bottom, 12)
 
-                    // ── Incoming friend requests ──
-                    if let s = store, !s.requests.isEmpty {
-                        sectionTitle("Входящие заявки", badge: s.requests.count)
-                        VStack(spacing: 0) {
-                            ForEach(s.requests) { req in
-                                incomingRow(req, store: s)
-                            }
+                // Content per section
+                ScrollView(showsIndicators: false) {
+                    Group {
+                        switch segment {
+                        case .chats:
+                            chatsSection
+                        case .requests:
+                            requestsSection
+                        case .recent:
+                            recentSection
                         }
-                        .padding(.horizontal, 19)
-                        .padding(.bottom, 16)
                     }
-
-                    // ── Outgoing (pending) ──
-                    if let s = store, !s.outgoing.isEmpty {
-                        sectionTitle("Отправленные", badge: nil)
-                        VStack(spacing: 0) {
-                            ForEach(s.outgoing) { req in
-                                HStack(spacing: 11) {
-                                    V4Avatar(letter: String(req.toUser.username.prefix(1)), theme: theme, size: 39)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(req.toUser.username)
-                                            .font(.system(size: 13.6, weight: .bold))
-                                        Text("Ожидает ответа")
-                                            .font(.system(size: 11.52))
-                                            .foregroundStyle(V4.muted)
-                                    }
-                                    Spacer()
-                                    Text("⏳")
-                                        .font(.system(size: 14))
-                                }
-                                .frame(minHeight: 56)
-                                .overlay(alignment: .bottom) { Rectangle().fill(V4.line).frame(height: 1) }
-                            }
-                        }
-                        .padding(.horizontal, 19)
-                        .padding(.bottom, 16)
-                    }
-
-                    // ── Friends list ──
-                    if let s = store {
-                        switch s.state {
-                        case .loading:
-                            ProgressView().tint(V4.accent).padding(.top, 40)
-                        case .loaded, .empty:
-                            if s.friends.isEmpty && s.requests.isEmpty {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "person.2")
-                                        .font(.largeTitle)
-                                        .foregroundStyle(V4.accent)
-                                    Text("Друзей пока нет")
-                                        .font(.headline)
-                                    Text("Нажми «+» и найди друга по @username")
-                                        .font(.subheadline)
-                                        .foregroundStyle(V4.muted)
-                                        .multilineTextAlignment(.center)
-                                    Button {
-                                        showAddFriend = true
-                                    } label: {
-                                        Text("Добавить друга")
-                                            .font(.system(size: 15, weight: .semibold))
-                                            .foregroundStyle(V4.accentInk)
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 12)
-                                            .background(V4.accent, in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .padding(.top, 4)
-                                }
-                                .padding(.top, 40)
-                                .padding(.horizontal, 24)
-                            } else if !s.friends.isEmpty {
-                                sectionTitle("Друзья", badge: s.friends.count)
-                                VStack(spacing: 0) {
-                                    ForEach(s.friends) { friend in
-                                        friendRow(friend)
-                                    }
-                                }
-                                .padding(.horizontal, 19)
-                            }
-                        case .failed(let error):
-                            Text(error)
-                                .font(.subheadline)
-                                .foregroundStyle(V4.muted)
-                                .padding(.top, 40)
-                        case .idle:
-                            Color.clear.frame(height: 40)
-                        }
-                    } else {
-                        ProgressView().tint(V4.accent).padding(.top, 40)
-                    }
-
-                    Color.clear.frame(height: 92)
+                    .padding(.bottom, 100)
+                }
+                .refreshable {
+                    await store?.load()
+                    if segment == .recent { await loadRecentRooms() }
                 }
             }
             .foregroundStyle(V4.ink)
             .background(Color.clear)
-            .scrollContentBackground(.hidden)
-            .refreshable {
-                await store?.load()
-            }
             .navigationDestination(item: $dmFriend) { friend in
                 DMChatView(friend: friend)
                     .environmentObject(DMChatService(api: APIClient.shared))
@@ -201,10 +129,17 @@ struct V4FriendsViewLive: View {
                     AddFriendSheet(store: store) { message in
                         toast = message
                         Task { await store.load() }
+                        // After sending, show requests tab for awareness
+                        if message.lowercased().contains("заявк") {
+                            withAnimation { segment = .requests }
+                        }
                     }
                 } else {
                     Text("Загрузка…").padding()
                 }
+            }
+            .fullScreenCover(item: $roomToOpen) { room in
+                WatchRoomContainer(room: room)
             }
             .overlay(alignment: .top) {
                 if let toast {
@@ -228,30 +163,344 @@ struct V4FriendsViewLive: View {
             .task {
                 await store?.load()
             }
+            .onChange(of: segment) { _, new in
+                if new == .recent {
+                    Task { await loadRecentRooms() }
+                }
+            }
         }
         .background(Color.clear)
         .background(V4TransparentNavBackground())
     }
 
-    // MARK: - Rows
-
-    private func sectionTitle(_ title: String, badge: Int?) -> some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 16, weight: .bold))
-            if let badge, badge > 0 {
-                Text("\(badge)")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(V4.accentInk)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(V4.accent, in: Capsule())
-            }
-            Spacer()
+    private var segmentTitle: String {
+        switch segment {
+        case .chats: return "Чаты"
+        case .requests: return "Заявки"
+        case .recent: return "Недавние"
         }
-        .padding(.horizontal, 19)
-        .padding(.bottom, 8)
-        .padding(.top, 4)
+    }
+
+    // MARK: - Segment picker
+
+    private var segmentPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(FriendsSegment.allCases) { seg in
+                let selected = segment == seg
+                let badge = seg == .requests ? requestBadge : 0
+                Button {
+                    HapticManager.selection()
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        segment = seg
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: seg.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(seg.rawValue)
+                            .font(.system(size: 13, weight: .semibold))
+                        if badge > 0 {
+                            Text("\(badge)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(selected ? V4.accentInk : .white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(selected ? Color.white.opacity(0.9) : V4.accent.opacity(0.9), in: Capsule())
+                        }
+                    }
+                    .foregroundStyle(selected ? V4.accentInk : V4.ink.opacity(0.85))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(
+                        selected
+                            ? AnyShapeStyle(V4.accent)
+                            : AnyShapeStyle(V4.surface.opacity(0.75))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(selected ? Color.clear : V4.line, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(seg.rawValue)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+    }
+
+    // MARK: - Чаты
+
+    @ViewBuilder
+    private var chatsSection: some View {
+        if let s = store {
+            switch s.state {
+            case .loading:
+                ProgressView().tint(V4.accent).padding(.top, 50)
+            case .failed(let err):
+                emptyBlock(icon: "wifi.exclamationmark", title: "Ошибка", subtitle: err)
+            case .idle:
+                Color.clear.frame(height: 40)
+            case .loaded, .empty:
+                if s.friends.isEmpty {
+                    emptyBlock(
+                        icon: "bubble.left.and.bubble.right",
+                        title: "Пока нет чатов",
+                        subtitle: "Добавь друга — здесь появятся личные сообщения",
+                        cta: "Добавить друга"
+                    ) { showAddFriend = true }
+                } else {
+                    Text("Личные сообщения")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(V4.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 6)
+
+                    VStack(spacing: 0) {
+                        ForEach(s.friends) { friend in
+                            friendChatRow(friend)
+                        }
+                    }
+                    .padding(.horizontal, 19)
+                }
+            }
+        } else {
+            ProgressView().tint(V4.accent).padding(.top, 50)
+        }
+    }
+
+    // MARK: - Заявки
+
+    @ViewBuilder
+    private var requestsSection: some View {
+        if let s = store {
+            if s.requests.isEmpty && s.outgoing.isEmpty {
+                emptyBlock(
+                    icon: "person.badge.clock",
+                    title: "Нет заявок",
+                    subtitle: "Входящие и отправленные запросы на дружбу появятся здесь",
+                    cta: "Найти друга"
+                ) { showAddFriend = true }
+            } else {
+                if !s.requests.isEmpty {
+                    Text("ВХОДЯЩИЕ")
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(0.8)
+                        .foregroundStyle(V4.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 8)
+
+                    VStack(spacing: 0) {
+                        ForEach(s.requests) { req in
+                            incomingRow(req, store: s)
+                        }
+                    }
+                    .padding(.horizontal, 19)
+                    .padding(.bottom, 20)
+                }
+
+                if !s.outgoing.isEmpty {
+                    Text("ОТПРАВЛЕННЫЕ")
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(0.8)
+                        .foregroundStyle(V4.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 8)
+
+                    VStack(spacing: 0) {
+                        ForEach(s.outgoing) { req in
+                            HStack(spacing: 11) {
+                                V4Avatar(letter: String(req.toUser.username.prefix(1)), theme: theme, size: 39)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(req.toUser.username)
+                                        .font(.system(size: 13.6, weight: .bold))
+                                    Text("Ожидает ответа")
+                                        .font(.system(size: 11.52))
+                                        .foregroundStyle(V4.muted)
+                                }
+                                Spacer()
+                                Text("Ожидание")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(V4.amber)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 30)
+                                    .background(V4.amber.opacity(0.12), in: Capsule())
+                            }
+                            .frame(minHeight: 56)
+                            .overlay(alignment: .bottom) { Rectangle().fill(V4.line).frame(height: 1) }
+                        }
+                    }
+                    .padding(.horizontal, 19)
+                }
+            }
+        } else {
+            ProgressView().tint(V4.accent).padding(.top, 50)
+        }
+    }
+
+    // MARK: - Недавние
+
+    @ViewBuilder
+    private var recentSection: some View {
+        if recentLoading && recentRooms.isEmpty {
+            ProgressView().tint(V4.accent).padding(.top, 50)
+        } else if recentRooms.isEmpty {
+            emptyBlock(
+                icon: "clock.arrow.circlepath",
+                title: "Нет недавних комнат",
+                subtitle: "Комнаты, где ты был хостом, появятся здесь",
+                cta: "Создать комнату"
+            ) {
+                showCreateRoom = true
+            }
+        } else {
+            Text("Твои комнаты")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(V4.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 19)
+                .padding(.bottom, 8)
+
+            VStack(spacing: 0) {
+                ForEach(recentRooms) { room in
+                    Button {
+                        HapticManager.impact(.light)
+                        roomToOpen = room
+                    } label: {
+                        HStack(spacing: 12) {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(V4.surface)
+                                .frame(width: 48, height: 48)
+                                .overlay(
+                                    Image(systemName: "play.rectangle.fill")
+                                        .foregroundStyle(V4.accent)
+                                )
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(room.name)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(V4.ink)
+                                    .lineLimit(1)
+                                Text("Код \(room.code) · \(room.participantCount) чел.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(V4.muted)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(V4.muted)
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .bottom) { Rectangle().fill(V4.line).frame(height: 1) }
+                }
+            }
+            .padding(.horizontal, 19)
+        }
+    }
+
+    private func loadRecentRooms() async {
+        recentLoading = true
+        defer { recentLoading = false }
+        do {
+            let rooms = try await RoomService(api: APIClient.shared).fetchMyRooms()
+            recentRooms = rooms
+        } catch {
+            // keep previous list
+        }
+    }
+
+    // MARK: - Shared UI
+
+    private func emptyBlock(
+        icon: String,
+        title: String,
+        subtitle: String,
+        cta: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 36))
+                .foregroundStyle(V4.accent)
+            Text(title)
+                .font(.headline)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(V4.muted)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+            if let cta, let action {
+                Button(action: action) {
+                    Text(cta)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(V4.accentInk)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(V4.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 48)
+    }
+
+    private func friendChatRow(_ friend: Friend) -> some View {
+        HStack(spacing: 11) {
+            Button { profileFriend = friend } label: {
+                V4Avatar(letter: String(friend.username.prefix(1)), theme: theme, size: 42)
+            }
+            .buttonStyle(.plain)
+
+            Button { dmFriend = friend } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(friend.username)
+                        .font(.system(size: 14.5, weight: .bold))
+                        .foregroundStyle(V4.ink)
+                    Text(friend.isOnline ? "В сети" : "Не в сети")
+                        .font(.system(size: 12))
+                        .foregroundStyle(friend.isOnline ? V4.accent : V4.muted)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button { dmFriend = friend } label: {
+                Image(systemName: "message.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(V4.ink)
+                    .frame(width: 38, height: 38)
+                    .background(V4.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(V4.line))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Чат")
+
+            Button {
+                HapticManager.impact(.light)
+                watchWithFriend = friend
+                showCreateRoom = true
+            } label: {
+                Text("Смотреть")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(V4.ink)
+                    .padding(.horizontal, 10)
+                    .frame(height: 38)
+                    .background(V4.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(V4.line))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(minHeight: 64)
+        .overlay(alignment: .bottom) { Rectangle().fill(V4.line).frame(height: 1) }
     }
 
     private func incomingRow(_ req: FriendRequest, store: V4FriendsStore) -> some View {
@@ -270,6 +519,7 @@ struct V4FriendsViewLive: View {
                 Task {
                     await store.accept(req)
                     toast = "\(req.fromUser.username) в друзьях"
+                    withAnimation { segment = .chats }
                 }
             } label: {
                 Text("Принять")
@@ -301,61 +551,10 @@ struct V4FriendsViewLive: View {
         }
         .frame(minHeight: 64)
         .overlay(alignment: .bottom) { Rectangle().fill(V4.line).frame(height: 1) }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Заявка от \(req.fromUser.username)")
-    }
-
-    private func friendRow(_ friend: Friend) -> some View {
-        HStack(spacing: 11) {
-            Button { profileFriend = friend } label: {
-                V4Avatar(letter: String(friend.username.prefix(1)), theme: theme, size: 39)
-            }
-            .buttonStyle(.plain)
-
-            Button { dmFriend = friend } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(friend.username).font(.system(size: 13.6, weight: .bold)).foregroundStyle(V4.ink)
-                    Text(friend.isOnline ? "В сети · открыть чат" : "Не в сети · открыть чат")
-                        .font(.system(size: 11.52)).foregroundStyle(V4.muted)
-                }
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Button { dmFriend = friend } label: {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(V4.ink)
-                    .frame(width: 35, height: 35)
-                    .background(V4.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 11))
-                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(V4.line))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                HapticManager.impact(.light)
-                watchWithFriend = friend
-                showCreateRoom = true
-            } label: {
-                Text("Смотреть")
-                    .font(.system(size: 11.52))
-                    .foregroundStyle(V4.ink)
-                    .padding(.horizontal, 10)
-                    .frame(height: 35)
-            }
-            .buttonStyle(.plain)
-            .background(V4.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 11))
-            .overlay(RoundedRectangle(cornerRadius: 11).stroke(V4.line))
-        }
-        .frame(minHeight: 61)
-        .overlay(alignment: .bottom) { Rectangle().fill(V4.line).frame(height: 1) }
     }
 }
 
-// MARK: - Add Friend Sheet (search + send request via API)
+// MARK: - Add Friend Sheet
 
 private struct AddFriendSheet: View {
     let store: V4FriendsStore
@@ -373,7 +572,6 @@ private struct AddFriendSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Direct @username send
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Добавить по @username")
                         .font(.system(size: 13, weight: .bold))
@@ -395,8 +593,7 @@ private struct AddFriendSheet: View {
                             Task { await sendByUsername() }
                         } label: {
                             if isSending {
-                                ProgressView().tint(V4.accentInk)
-                                    .frame(width: 48, height: 48)
+                                ProgressView().tint(V4.accentInk).frame(width: 48, height: 48)
                             } else {
                                 Image(systemName: "paperplane.fill")
                                     .font(.system(size: 16, weight: .semibold))
@@ -407,10 +604,9 @@ private struct AddFriendSheet: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isSending || directUsername.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .accessibilityLabel("Отправить заявку")
                     }
 
-                    Text("Друг получит заявку и сможет принять или отклонить.")
+                    Text("Друг получит заявку во вкладке «Заявки».")
                         .font(.system(size: 12))
                         .foregroundStyle(V4.muted)
                 }
@@ -418,7 +614,6 @@ private struct AddFriendSheet: View {
 
                 Divider().overlay(V4.line)
 
-                // Search
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Или найти")
                         .font(.system(size: 13, weight: .bold))
@@ -477,13 +672,9 @@ private struct AddFriendSheet: View {
                                     }
                                     Spacer()
                                     if manager.isFriend(user.id) {
-                                        Text("Друг")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(V4.muted)
+                                        Text("Друг").font(.system(size: 12, weight: .semibold)).foregroundStyle(V4.muted)
                                     } else if manager.hasOutgoingRequest(to: user.id) {
-                                        Text("Отправлено")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(V4.amber)
+                                        Text("Отправлено").font(.system(size: 12, weight: .semibold)).foregroundStyle(V4.amber)
                                     } else {
                                         Button {
                                             Task { await sendToUser(user) }
@@ -504,7 +695,6 @@ private struct AddFriendSheet: View {
                                     Rectangle().fill(V4.line).frame(height: 1).padding(.leading, 70)
                                 }
                             }
-
                             if manager.searchResults.isEmpty && !query.isEmpty && !manager.isLoading {
                                 Text("Никого не нашли")
                                     .font(.subheadline)
@@ -525,9 +715,6 @@ private struct AddFriendSheet: View {
                     Button("Закрыть") { dismiss() }
                 }
             }
-            .onAppear {
-                manager.errorMessage = nil
-            }
         }
         .preferredColorScheme(.dark)
     }
@@ -538,8 +725,7 @@ private struct AddFriendSheet: View {
         defer { isSending = false }
         let ok = await manager.sendRequestByUsername(directUsername)
         if ok {
-            let msg = manager.lastSuccessMessage ?? "Заявка отправлена"
-            onDone(msg)
+            onDone(manager.lastSuccessMessage ?? "Заявка отправлена")
             dismiss()
         } else {
             localError = manager.errorMessage ?? "Не удалось отправить"
@@ -552,9 +738,7 @@ private struct AddFriendSheet: View {
         defer { isSending = false }
         let ok = await manager.sendRequest(to: user.id, username: user.username)
         if ok {
-            let msg = manager.lastSuccessMessage ?? "Заявка отправлена"
-            onDone(msg)
-            // keep sheet open so user can add more; refresh search state
+            onDone(manager.lastSuccessMessage ?? "Заявка отправлена")
             await manager.searchUsers(query: query)
         } else {
             localError = manager.errorMessage ?? "Не удалось отправить"
@@ -562,7 +746,6 @@ private struct AddFriendSheet: View {
     }
 }
 
-/// Clears UIKit NavigationStack chrome so Plink living / live themes stay visible.
 private struct V4TransparentNavBackground: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
@@ -577,14 +760,10 @@ private struct V4TransparentNavBackground: UIViewRepresentable {
                     nav.view.backgroundColor = .clear
                     nav.navigationBar.isTranslucent = true
                 }
-                if String(describing: type(of: p)).contains("Navigation") {
-                    p.backgroundColor = .clear
-                }
                 parent = p.superview
             }
         }
         return view
     }
-
     func updateUIView(_ uiView: UIView, context: Context) {}
 }

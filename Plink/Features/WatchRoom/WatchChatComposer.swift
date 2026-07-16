@@ -13,7 +13,9 @@ struct WatchChatComposer: View {
     @State private var showPacksPopover = false
 
     private var canSend: Bool {
-        state.canSend(connected: model.connectionState == .connected)
+        // Connected or still negotiating — allow optimistic send
+        let online = model.connectionState == .connected || model.connectionState.isTransient
+        return state.canSend(connected: online)
     }
 
     private var hasPremium: Bool {
@@ -65,7 +67,11 @@ struct WatchChatComposer: View {
                         }
                     },
                     onPremiumUpsell: {
-                        showEmojiPanel = false
+                        // Don't silently close — switch to free pack so user can still pick
+                        if let freeIdx = emojiPacks.firstIndex(where: { !$0.isPremium }) {
+                            currentPackIndex = freeIdx
+                        }
+                        HapticManager.impact(.light)
                     },
                     onSwitchPack: { index in
                         currentPackIndex = index
@@ -75,29 +81,10 @@ struct WatchChatComposer: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        showEmojiPanel.toggle()
-                    }
-                } label: {
-                    Image(systemName: showEmojiPanel ? "keyboard" : "face.smiling")
-                        .font(.system(size: 17))
-                        .foregroundStyle(Cinema2026.secondary)
-                        .frame(width: 40, height: 40)
-                        .background(Cinema2026.raised, in: Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
-                }
-                .accessibilityLabel("Emoji")
-                .onLongPressGesture {
-                    showPacksPopover = true
-                }
-                .popover(isPresented: $showPacksPopover) {
-                    PacksPopover(packs: emojiPacks, currentIndex: $currentPackIndex, hasPremium: hasPremium, onDismiss: { showPacksPopover = false })
-                }
-
+            // Telegram-style: [ field ………………… ] [😊] [↑]
+            HStack(alignment: .bottom, spacing: 8) {
                 VStack(spacing: 4) {
-                    TextField("Message…", text: $state.text, axis: .vertical)
+                    TextField("Сообщение…", text: $state.text, axis: .vertical)
                         .lineLimit(1...4)
                         .font(.system(size: 15))
                         .foregroundStyle(Cinema2026.text)
@@ -112,12 +99,17 @@ struct WatchChatComposer: View {
                                     lineWidth: state.isOverLength ? 1 : 0.5
                                 )
                         )
+                        .onTapGesture {
+                            if showEmojiPanel {
+                                withAnimation(.easeOut(duration: 0.2)) { showEmojiPanel = false }
+                            }
+                        }
 
                     if state.isOverLength {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 9))
-                            Text("\(state.trimmedText.count)/\(ChatComposerState.maxLength) — too long")
+                            Text("\(state.trimmedText.count)/\(ChatComposerState.maxLength)")
                                 .font(.system(size: 10, weight: .medium))
                         }
                         .foregroundStyle(Cinema2026.danger)
@@ -126,26 +118,54 @@ struct WatchChatComposer: View {
                     }
                 }
 
+                // Emoji — right side next to send (Telegram)
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        showEmojiPanel.toggle()
+                    }
+                    HapticManager.impact(.light)
+                } label: {
+                    Image(systemName: showEmojiPanel ? "keyboard" : "face.smiling.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(showEmojiPanel ? Cinema2026.accent : Cinema2026.secondary)
+                        .frame(width: 40, height: 40)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Эмодзи")
+                .onLongPressGesture {
+                    showPacksPopover = true
+                }
+                .popover(isPresented: $showPacksPopover) {
+                    PacksPopover(
+                        packs: emojiPacks,
+                        currentIndex: $currentPackIndex,
+                        hasPremium: hasPremium,
+                        onDismiss: { showPacksPopover = false }
+                    )
+                }
+
                 Button {
                     let value = state.trimmedText
-                    guard state.canSend(connected: model.connectionState == .connected) else { return }
+                    guard !value.isEmpty, !state.isOverLength else { return }
                     model.sendChat(text: value)
                     state.clearAfterSend()
+                    showEmojiPanel = false
+                    HapticManager.impact(.light)
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .background(
-                            canSend
+                            (!state.trimmedText.isEmpty && !state.isOverLength)
                                 ? AnyShapeStyle(Cinema2026.accentAction)
                                 : AnyShapeStyle(Cinema2026.raised),
                             in: Circle()
                         )
                         .overlay(Circle().stroke(.white.opacity(0.05), lineWidth: 0.5))
                 }
-                .disabled(!canSend || state.isOverLength)
-                .accessibilityLabel("Send")
+                .disabled(state.trimmedText.isEmpty || state.isOverLength)
+                .accessibilityLabel("Отправить")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)

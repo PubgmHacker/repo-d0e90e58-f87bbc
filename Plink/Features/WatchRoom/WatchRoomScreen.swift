@@ -111,6 +111,25 @@ struct WatchRoomScreen: View {
                 ui.chatDrawerVisible = true
             }
         }
+        // Permanent close — always hit-testable (not only when chrome is visible)
+        .overlay(alignment: .topLeading) {
+            Button {
+                model.leaveRoom()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 14)
+            .padding(.top, 10)
+            .zIndex(500)
+            .accessibilityLabel("Выйти из комнаты")
+        }
         .task { await model.connect() }
         .onDisappear {
             // PATCH: do NOT disconnect here — onDisappear fires on rotation
@@ -122,10 +141,12 @@ struct WatchRoomScreen: View {
             }
         }
         .onChange(of: model.connectionState) { _, newState in
-            // PATCH 26: auto-dismiss when disconnected (after leaveRoom)
-            if newState == .idle {
+            if newState == .idle && model.wantsDismiss {
                 dismiss()
             }
+        }
+        .onChange(of: model.wantsDismiss) { _, wants in
+            if wants { dismiss() }
         }
         .onTapGesture {
             guard !ui.chatPresented else { return }

@@ -138,42 +138,50 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // MARK: - Lifecycle
 
+    /// Set true by leaveRoom so the view can dismiss even if connection never reached .connected.
+    public private(set) var wantsDismiss: Bool = false
+
     public func connect() async {
+        wantsDismiss = false
+        connectionState = .connecting
+
+        // Show local user immediately (never "0 in room" while WS is negotiating)
+        if !participants.contains(where: { $0.userId == currentUserId }) {
+            participants.insert(
+                ParticipantInfo(userId: currentUserId, username: currentUsername, isLocal: true),
+                at: 0
+            )
+        }
+
         // P0-31: subscribe to stateChanges stream
         startStateChangesSubscription()
 
-        // P0-29: prepare media, then wire proxy.target to real controller
+        // Media prepare must NOT block realtime — chat/presence work even if player fails
         if let source = mediaSource {
             do {
                 try await coordinator.prepare(source)
-                // P0-29/P0-53: wire proxy to the now-prepared real controller
                 playbackProxy.attachTarget(coordinator.currentController)
 
-                // Multi-device: YouTube chrome play/pause/seek → sync.command (host only)
                 if let embedded = coordinator.currentController as? EmbeddedPlaybackController {
                     embedded.onUserPlaybackChange = { [weak self] playing, position in
                         self?.publishHostPlaybackState(playing: playing, positionSeconds: position)
                     }
                 }
 
-                // PATCH 14: attach native player to AmbientVideoSampler.
-                // Only native HLS/MP4 sources have an AVPlayer — YouTube
-                // and Rutube use WKWebView, so sampler falls back to
-                // default palette (no sampling).
                 if let player = coordinator.nativePlayer {
                     await ambientSampler.attach(player: player)
                     await ambientSampler.startSampling()
                     startAmbientPalettePolling()
                 }
             } catch {
-                lastError = "Media prepare failed: \(error.localizedDescription)"
-                connectionState = .failed(reason: "Media prepare failed")
-                return
+                lastError = "Видео: \(error.localizedDescription)"
+                // Continue — still join room for chat/sync retry
             }
+        } else {
+            lastError = "Нет медиа в комнате"
         }
-        realtimeClient.connect(roomId: _roomId)
 
-        // PATCH 14: start polling danmaku engine for snapshot.
+        realtimeClient.connect(roomId: _roomId)
         startDanmakuPolling()
     }
 
@@ -846,7 +854,16 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         rutube.openInExternalPlayer(from: topVC)
     }
 
-    func leaveRoom() { disconnect() }
+    func leaveRoom() {
+        wantsDismiss = true
+        disconnect()
+        // REST leave (best-effort)
+        if let roomId = roomId {
+            Task {
+                try? await RoomService(api: APIClient.shared).leaveRoom(roomID: roomId)
+            }
+        }
+    }
     func openPlayerSettings() {}
     func startPiP() {}
     func enterFullscreen() {

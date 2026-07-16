@@ -544,30 +544,71 @@ struct V4HomeViewLive: View {
     /// Create room from a trending video — posts .plinkRoomCreated so
     /// PlinkApprovedV4Root picks it up and presents WatchRoom.
     private func createRoomFromTrending(_ item: V4SearchResult) async {
-        guard KeychainHelper.read(for: "rave_auth_token") != nil else { return }
+        // Ensure API client has token (Keychain alone is not enough for RoomService)
+        if APIClient.shared.authToken == nil {
+            APIClient.shared.authToken = KeychainHelper.read(for: "rave_auth_token")
+        }
+        guard APIClient.shared.authToken != nil else {
+            await MainActor.run {
+                HapticManager.errorOccurred()
+            }
+            return
+        }
+
         let videoId = item.id
+        // Prefer watch URL — backend + client both extract videoId reliably
+        let streamURL = "https://www.youtube.com/watch?v=\(videoId)"
         let mediaItem = MediaItem(
-            id: "https://www.youtube.com/embed/\(videoId)",
-            title: item.title, artist: nil,
+            id: videoId,
+            title: item.title,
+            artist: nil,
             thumbnailURL: item.artworkURL?.absoluteString,
-            streamURL: "https://www.youtube.com/embed/\(videoId)",
-            duration: nil, mediaType: .video, source: .youtube, videoId: videoId
+            streamURL: streamURL,
+            duration: nil,
+            mediaType: .video,
+            source: .youtube,
+            videoId: videoId
         )
         let request = CreateRoomRequest(
-            name: item.title, maxParticipants: 4, mediaItem: mediaItem,
-            privacy: .publicRoom, password: nil,
+            name: String(item.title.prefix(80)),
+            maxParticipants: 10,
+            mediaItem: mediaItem,
+            privacy: .publicRoom,
+            password: nil,
             hostName: AuthService.shared.currentUserValue?.username
         )
         do {
-            let api = APIClient.shared
-            let room = try await RoomService(api: api).createRoom(request)
+            var room = try await RoomService(api: APIClient.shared).createRoom(request)
+            // If server stripped mediaItem, keep the local one for playback
+            if room.mediaItem == nil {
+                room = Room(
+                    id: room.id,
+                    name: room.name,
+                    hostID: room.hostID,
+                    hostName: room.hostName,
+                    code: room.code,
+                    participants: room.participants,
+                    mediaItem: mediaItem,
+                    isActive: room.isActive,
+                    maxParticipants: room.maxParticipants,
+                    hostIsPremium: room.hostIsPremium,
+                    createdAt: room.createdAt,
+                    privacy: room.privacy,
+                    password: room.password
+                )
+            }
             await MainActor.run {
                 HapticManager.roomJoined()
                 PlinkAppDelegate.requestNotificationPermission()
                 UIPasteboard.general.string = "Код комнаты Plink: \(room.code)"
                 NotificationCenter.default.post(name: .plinkRoomCreated, object: room)
             }
-        } catch {}
+        } catch {
+            await MainActor.run {
+                HapticManager.errorOccurred()
+                print("[Home] createRoomFromTrending failed: \(error)")
+            }
+        }
     }
 }
 

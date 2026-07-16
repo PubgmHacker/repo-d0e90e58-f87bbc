@@ -280,28 +280,46 @@ struct V4ProfileViewLive: View {
             }.padding(.bottom,92)
         }.foregroundStyle(V4.ink)
         .sheet(isPresented: $showPersonalData) {
-            NavigationStack {
-                PersonalDataView()
-            }
-            .preferredColorScheme(.dark)
+            NavigationStack { PersonalDataView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showPrivacy) {
-            NavigationStack { PrivacySecurityView() }.preferredColorScheme(.dark)
+            NavigationStack { PrivacySecurityView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showNotifications) {
-            NavigationStack { NotificationsView() }.preferredColorScheme(.dark)
+            NavigationStack { NotificationsView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showPlayback) {
-            NavigationStack { PlaybackSettingsView() }.preferredColorScheme(.dark)
+            NavigationStack { PlaybackSettingsView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showHelp) {
-            NavigationStack { HelpView() }.preferredColorScheme(.dark)
+            NavigationStack { HelpView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showBlocked) {
-            NavigationStack { BlockedUsersView() }.preferredColorScheme(.dark)
+            NavigationStack { BlockedUsersView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showDeleteAccount) {
-            NavigationStack { DeleteAccountView() }.preferredColorScheme(.dark)
+            NavigationStack { DeleteAccountView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showAdminPanel) {
             AdminRootView().preferredColorScheme(.dark)
@@ -313,6 +331,8 @@ struct V4ProfileViewLive: View {
         }
         .sheet(isPresented: $showPremium) {
             PaywallView(onPurchase: { showPremium = false }, onRestore: { showPremium = false }, onDismiss: { showPremium = false })
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
                 .preferredColorScheme(.dark)
         }
     }

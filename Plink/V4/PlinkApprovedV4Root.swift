@@ -276,12 +276,16 @@ struct PlinkApprovedV4Root: View {
             // Mark self online so friends list shows real presence
             PresenceHeartbeat.start()
             await PresenceHeartbeat.ping()
+            // Instant unread badges app-wide
+            DMChatService.shared.startUnreadPolling()
+            await DMChatService.shared.refreshUnread()
         }
 
         await roomsStore?.load()
         await searchStore.loadTrending()
         await friendsStore?.load()
         await profileStore?.load()
+        PlinkAvatarURL.bumpSessionBust()
     }
 }
 

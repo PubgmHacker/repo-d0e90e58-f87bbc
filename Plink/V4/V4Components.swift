@@ -76,6 +76,17 @@ struct V4Avatar: View {
 enum PlinkAvatarURL {
     static let apiBase = "https://plink-backend-production-ef31.up.railway.app"
 
+    /// Bumped when friends list / profiles reload so AsyncImage refetches immediately.
+    static var sessionBust: Int {
+        get { UserDefaults.standard.integer(forKey: "plink.avatarSessionBust") }
+        set { UserDefaults.standard.set(newValue, forKey: "plink.avatarSessionBust") }
+    }
+
+    static func bumpSessionBust() {
+        sessionBust &+= 1
+        NotificationCenter.default.post(name: .plinkAvatarsDidChange, object: sessionBust)
+    }
+
     /// Always bind avatar to a concrete userId so one person's photo/letter
     /// never leaks onto another friend's row or chat bubble.
     static func resolve(userId: String?, stored: String?, cacheBust: Bool = true) -> URL? {
@@ -91,11 +102,12 @@ enum PlinkAvatarURL {
         }
         guard !raw.isEmpty, var components = URLComponents(string: raw) else { return nil }
         if cacheBust {
-            // 5-minute buckets so re-upload becomes visible without infinite cache miss
-            let bucket = Int(Date().timeIntervalSince1970 / 300)
+            // Short time bucket (10s) + session bust for near-instant avatar updates
+            let bucket = Int(Date().timeIntervalSince1970 / 10)
             var items = components.queryItems ?? []
-            items.removeAll { $0.name == "v" }
+            items.removeAll { $0.name == "v" || $0.name == "b" }
             items.append(URLQueryItem(name: "v", value: "\(bucket)"))
+            items.append(URLQueryItem(name: "b", value: "\(sessionBust)"))
             components.queryItems = items
         }
         return components.url
@@ -108,6 +120,10 @@ enum PlinkAvatarURL {
         guard let ch = t.first else { return "?" }
         return String(ch).uppercased()
     }
+}
+
+extension Notification.Name {
+    static let plinkAvatarsDidChange = Notification.Name("plink.avatarsDidChange")
 }
 
 struct V4RoundButton: View {

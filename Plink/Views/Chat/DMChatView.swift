@@ -13,6 +13,8 @@ struct DMChatView: View {
     private let charLimit = 280
     @State private var lastSendTime: Date = .distantPast
 
+    @State private var avatarBust = PlinkAvatarURL.sessionBust
+
     private var peerAvatarURL: URL? {
         PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
     }
@@ -99,6 +101,7 @@ struct DMChatView: View {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 10) {
                     DMCircleAvatar(url: peerAvatarURL, letter: peerLetter, size: 32)
+                        .id("dm-header-av-\(friend.id)-\(avatarBust)")
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(friend.displayTitle)
@@ -146,9 +149,14 @@ struct DMChatView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             dmService.chatDidOpen(friendId: friend.id)
+            // Instant unread clear when entering chat
+            Task { await dmService.refreshUnread() }
         }
         .onDisappear {
             dmService.chatDidClose(friendId: friend.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkAvatarsDidChange)) { n in
+            avatarBust = (n.object as? Int) ?? PlinkAvatarURL.sessionBust
         }
         .task {
             dmService.chatDidOpen(friendId: friend.id)
@@ -158,8 +166,9 @@ struct DMChatView: View {
                 friendAvatarURL: friend.avatarURL,
                 quiet: false
             )
+            // Faster history refresh while chat is open (new messages)
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2s
                 guard !Task.isCancelled else { break }
                 await dmService.loadHistory(
                     friendId: friend.id,

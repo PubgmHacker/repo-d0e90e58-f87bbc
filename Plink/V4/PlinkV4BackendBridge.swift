@@ -367,6 +367,8 @@ final class V4ProfileStore {
         defaults.set(displayName, forKey: "plink_current_display_name")
         defaults.set(user.role ?? "USER", forKey: "plink_current_user_role")
         defaults.set(user.id, forKey: "plink_current_user_id")
+        // Force friend-list / chat avatars to refetch after profile avatar change
+        PlinkAvatarURL.bumpSessionBust()
     }
 
     func selectTheme(_ theme: V4Theme) {

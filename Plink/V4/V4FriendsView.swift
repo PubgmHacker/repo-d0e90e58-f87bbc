@@ -40,6 +40,8 @@ struct V4FriendsViewLive: View {
     /// Shared so unread badges survive sheet open/close.
     @ObservedObject private var dmService = DMChatService.shared
     @ObservedObject private var inviteService = RoomInviteService.shared
+    /// Forces avatar AsyncImage reload when session bust changes
+    @State private var avatarBust = PlinkAvatarURL.sessionBust
 
     private var requestBadge: Int { store?.requests.count ?? 0 }
 
@@ -207,26 +209,40 @@ struct V4FriendsViewLive: View {
                 await dmService.refreshUnread()
             }
         }
-        // Friends list refresh only while tab visible
+        // Friends list (presence + avatars) while tab visible — fast
         .task(id: isActive) {
             guard isActive else { return }
+            await store?.refreshQuietly()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
                 guard !Task.isCancelled, isActive else { break }
                 await store?.refreshQuietly()
             }
         }
-        // Unread DMs + room invites: poll even when another tab is open
+        // Unread DMs: 1s global poll for instant badges
         .task {
-            await dmService.refreshUnread()
+            dmService.startUnreadPolling()
             await inviteService.refreshFromServer()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000) // 4s
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard !Task.isCancelled else { break }
                 if scenePhase == .active {
-                    await dmService.refreshUnread()
                     await inviteService.refreshFromServer()
                 }
+            }
+        }
+        .onAppear {
+            dmService.startUnreadPolling()
+            Task {
+                await dmService.refreshUnread()
+                await store?.refreshQuietly()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkAvatarsDidChange)) { n in
+            if let b = n.object as? Int {
+                avatarBust = b
+            } else {
+                avatarBust = PlinkAvatarURL.sessionBust
             }
         }
     }
@@ -555,6 +571,7 @@ struct V4FriendsViewLive: View {
                         size: 44,
                         imageURL: PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
                     )
+                    .id("avatar-\(friend.id)-\(avatarBust)")
                     // Unread dot on avatar (Telegram-style)
                     if unread > 0 {
                         Circle()

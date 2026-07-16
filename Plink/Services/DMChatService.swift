@@ -23,9 +23,28 @@ final class DMChatService: ObservableObject {
     private(set) var openFriendId: String?
 
     private let api: APIClient
+    private var unreadPollTask: Task<Void, Never>?
 
     init(api: APIClient) {
         self.api = api
+    }
+
+    /// Start aggressive background unread polling (≈1s) for instant badges.
+    func startUnreadPolling() {
+        guard unreadPollTask == nil else { return }
+        unreadPollTask = Task { [weak self] in
+            await self?.refreshUnread()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
+                guard !Task.isCancelled else { break }
+                await self?.refreshUnread()
+            }
+        }
+    }
+
+    func stopUnreadPolling() {
+        unreadPollTask?.cancel()
+        unreadPollTask = nil
     }
 
     var currentUserId: String? {
@@ -52,10 +71,11 @@ final class DMChatService: ObservableObject {
 
     func chatDidOpen(friendId: String) {
         openFriendId = friendId
-        // Optimistic clear
+        // Instant badge clear — don't wait for next poll
         if unreadByFriend[friendId] != nil {
-            unreadByFriend[friendId] = 0
-            unreadByFriend = unreadByFriend.filter { $0.value > 0 }
+            var next = unreadByFriend
+            next.removeValue(forKey: friendId)
+            unreadByFriend = next
         }
     }
 
@@ -74,23 +94,23 @@ final class DMChatService: ObservableObject {
         do {
             let items: [UnreadDTO] = try await api.request("messages/unread")
             var counts: [String: Int] = [:]
-            var previews: [String: String] = [:]
+            var previews: [String: String] = lastPreviewByFriend
             for item in items {
                 if openFriendId == item.friendId {
-                    counts[item.friendId] = 0
-                } else {
+                    // Open chat — treat as read optimistically
+                    continue
+                } else if item.unreadCount > 0 {
                     counts[item.friendId] = item.unreadCount
                 }
                 if let p = item.lastPreview, !p.isEmpty {
                     previews[item.friendId] = p
                 }
             }
-            unreadByFriend = counts.filter { $0.value > 0 }
-            // Keep previews for friends with unread; merge
-            for (k, v) in previews {
-                lastPreviewByFriend[k] = v
+            // Only publish if changed — but always update when counts differ for snappy UI
+            if counts != unreadByFriend {
+                unreadByFriend = counts
             }
-            print("[DM] unread total=\(totalUnread) friends=\(unreadByFriend.count)")
+            lastPreviewByFriend = previews
         } catch {
             print("[DM] refreshUnread error: \(error.localizedDescription)")
         }

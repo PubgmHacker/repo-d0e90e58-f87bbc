@@ -52,6 +52,8 @@ final class FriendManager: ObservableObject {
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
             friends = dtos.map { $0.toFriend() }
+            // Bust avatar URL cache so new photos appear immediately in list/chat
+            PlinkAvatarURL.bumpSessionBust()
             print("[Friends] loaded \(friends.count) friends")
         } catch {
             print("[Friends] loadFriends error: \(error.localizedDescription)")

@@ -10,7 +10,7 @@ struct DMChatView: View {
     @State private var showEmojiPicker = false
     @State private var showWatchTogether = false
     @FocusState private var isInputFocused: Bool
-    private let charLimit = 150
+    private let charLimit = 280
     @State private var lastSendTime: Date = .distantPast
 
     private var peerAvatarURL: URL? {

@@ -268,19 +268,179 @@ extension View {
 
 // MARK: - LivingHomeStateOverlay
 
-// MARK: - EmojiPickerGrid (used by DMChatView)
+// MARK: - EmojiPickerGrid (DM chat — free unicode + Plink+ packs)
 struct EmojiPickerGrid: View {
     @Binding var chatText: String
-    private let columns = Array(repeating: GridItem(.flexible()), count: 6)
-    private let emojis: [String] = ["😀","😂","😍","🥰","😘","🤗","🤔","🤩","🥳","😭","😱","🤯","👍","👎","👏","🙌","🤝","💪","❤️","🔥","✨","🎉","💯","⚡","🌟","💎","👑","🚀","🌈","🎬"]
+    @ObservedObject private var premium = PremiumStatusManager.shared
+    @State private var packIndex = 0
+    @State private var upsell: String?
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    private var packs: [EmojiPack] { PlinkEmojiCatalog.dmAllPacks }
+    private var current: EmojiPack {
+        guard packIndex >= 0, packIndex < packs.count else { return packs[0] }
+        return packs[packIndex]
+    }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(emojis, id: \.self) { emoji in
-                Button { chatText += emoji; HapticManager.impact(.light) } label: {
-                    Text(emoji).font(.system(size: 28)).frame(width: 44, height: 44)
-                }.buttonStyle(.plain).accessibilityLabel("Emoji \(emoji)")
+        VStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(packs.enumerated()), id: \.element.id) { index, pack in
+                        let locked = pack.isPremium && !premium.isPremium
+                        Button {
+                            if locked {
+                                upsell = "«\(pack.name)» — только Plink+"
+                                HapticManager.errorOccurred()
+                            } else {
+                                packIndex = index
+                                upsell = nil
+                                HapticManager.selection()
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                if pack.isPremium {
+                                    Image(systemName: locked ? "lock.fill" : "crown.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                }
+                                Text(pack.name)
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundStyle(packIndex == index ? Cinema2026.background : Cinema2026.text)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                packIndex == index ? Cinema2026.accent : Cinema2026.raised.opacity(0.9),
+                                in: Capsule()
+                            )
+                            .opacity(locked ? 0.55 : 1)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
-        }.padding(12).background(Cinema2026.surface.opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
+
+            if let upsell {
+                Text(upsell)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Cinema2026.amber)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 6) {
+                    ForEach(current.emojis, id: \.self) { token in
+                        Button { pick(token) } label: {
+                            Group {
+                                if PlinkEmojiCatalog.usesCustomArt(current.name) || token.hasPrefix("emoji_") {
+                                    EmojiAssetImage(name: token, pack: current.name)
+                                        .frame(width: 32, height: 32)
+                                } else {
+                                    Text(token).font(.system(size: 26))
+                                }
+                            }
+                            .frame(width: 40, height: 40)
+                            .opacity(current.isPremium && !premium.isPremium ? 0.4 : 1)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Emoji \(token)")
+                    }
+                }
+            }
+            .frame(maxHeight: 180)
+        }
+        .padding(12)
+        .background(Cinema2026.surface.opacity(0.97), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func pick(_ token: String) {
+        if current.isPremium && !premium.isPremium {
+            upsell = "Эмодзи Plink+ — оформите подписку"
+            HapticManager.errorOccurred()
+            return
+        }
+        if PlinkEmojiCatalog.usesCustomArt(current.name) || token.hasPrefix("emoji_") {
+            chatText += PlinkEmojiCatalog.encodeToken(pack: current.name, name: token)
+        } else {
+            chatText += token
+        }
+        HapticManager.impact(.light)
+        AnalyticsService.shared.emojiUsed(current.isPremium ? "plink_plus" : "free")
+    }
+}
+
+// MARK: - Rich message (unicode + :pack/name: custom emojis)
+
+struct MessageRichText: View {
+    let text: String
+    var fontSize: CGFloat = 16
+
+    var body: some View {
+        let parts = PlinkEmojiCatalog.splitMessage(text)
+        if parts.count == 1, case .custom(let pack, let name) = parts[0] {
+            EmojiAssetImage(name: name, pack: pack)
+                .frame(width: 72, height: 72)
+        } else {
+            PlinkEmojiFlow(spacing: 2) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                    switch part {
+                    case .text(let s):
+                        Text(s)
+                            .font(.system(size: fontSize))
+                            .foregroundStyle(.white)
+                    case .custom(let pack, let name):
+                        EmojiAssetImage(name: name, pack: pack)
+                            .frame(width: fontSize + 10, height: fontSize + 10)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Simple wrap layout for mixed text + custom emoji.
+struct PlinkEmojiFlow<Content: View>: View {
+    var spacing: CGFloat = 4
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        PlinkEmojiFlowLayout(spacing: spacing) { content }
+    }
+}
+
+private struct PlinkEmojiFlowLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxW = proposal.width ?? 280
+        var x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0, h: CGFloat = 0
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x + size.width > maxW, x > 0 {
+                y += rowH + spacing
+                x = 0
+                rowH = 0
+            }
+            x += size.width + spacing
+            rowH = max(rowH, size.height)
+            h = max(h, y + rowH)
+        }
+        return CGSize(width: maxW, height: max(h, rowH))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowH: CGFloat = 0
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                y += rowH + spacing
+                x = bounds.minX
+                rowH = 0
+            }
+            s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowH = max(rowH, size.height)
+        }
     }
 }
 

@@ -320,9 +320,7 @@ struct PlinkMessageBubble: View {
     }
 
     var body: some View {
-        Text(text)
-            .font(.system(size: fontSize, weight: .regular))
-            .foregroundStyle(.white)
+        MessageRichText(text: text, fontSize: fontSize)
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
             .background(bubbleFill)

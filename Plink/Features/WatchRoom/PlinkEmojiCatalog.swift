@@ -118,6 +118,83 @@ enum PlinkEmojiCatalog {
 
     /// Whether a pack uses custom PNG art (vs SF Symbol renders)
     static func usesCustomArt(_ packName: String) -> Bool {
-        return ["Cute Faces", "Pepe", "Stickers", "Cats", "Le Pepe"].contains(packName)
+        return ["Cute Faces", "Pepe", "Stickers", "Cats", "Le Pepe", "Plink+", "Fun", "Reactions"].contains(packName)
+            && packName != "Базовые" && packName != "Кино"
+    }
+
+    // MARK: - DM packs (unicode free + Plink+ art)
+
+    /// Free unicode set for friend chat
+    static let freeUnicodePack = EmojiPack(
+        name: "Базовые",
+        emojis: [
+            "😀", "😂", "😍", "🥰", "😘", "🤗", "🤔", "🤩", "🥳", "😭",
+            "😱", "🤯", "👍", "👎", "👏", "🙌", "🤝", "💪", "❤️", "🔥",
+            "✨", "🎉", "💯", "⚡", "🌟", "💎", "👑", "🚀", "🌈", "🎬",
+            "😎", "🥺", "😅", "🤣", "😈", "👻", "💀", "🫡", "😴", "🤮",
+        ],
+        isPremium: false
+    )
+
+    /// Free cinema-ish unicode
+    static let cinemaUnicodePack = EmojiPack(
+        name: "Кино",
+        emojis: ["🎬", "🍿", "🎥", "📽️", "🎞️", "🎫", "🏆", "🎭", "📺", "🎧", "🎤", "🎶"],
+        isPremium: false
+    )
+
+    /// All packs shown in friend DM emoji picker
+    static var dmAllPacks: [EmojiPack] {
+        [freeUnicodePack, cinemaUnicodePack] + allPacks
+    }
+
+    // Token format in messages: :pack/name:
+    // Example: :Plink+/emoji_neon_laugh:  or  :Pepe/830563-pepe:
+    static func encodeToken(pack: String, name: String) -> String {
+        let p = pack.replacingOccurrences(of: ":", with: "")
+        let n = name.replacingOccurrences(of: ":", with: "")
+        return ":\(p)/\(n):"
+    }
+
+    static func isCustomArtToken(_ s: String) -> Bool {
+        s.hasPrefix(":") && s.hasSuffix(":") && s.contains("/")
+    }
+
+    enum MessagePart: Equatable {
+        case text(String)
+        case custom(pack: String, name: String)
+    }
+
+    /// Split message into plain text and custom emoji tokens.
+    static func splitMessage(_ text: String) -> [MessagePart] {
+        // Pattern: :Pack Name/emoji-id:
+        guard let regex = try? NSRegularExpression(
+            pattern: #":([^:/]+)/([^:]+):"#,
+            options: []
+        ) else {
+            return [.text(text)]
+        }
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        let matches = regex.matches(in: text, options: [], range: full)
+        guard !matches.isEmpty else { return [.text(text)] }
+
+        var parts: [MessagePart] = []
+        var cursor = 0
+        for m in matches {
+            if m.range.location > cursor {
+                let t = ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor))
+                if !t.isEmpty { parts.append(.text(t)) }
+            }
+            let pack = ns.substring(with: m.range(at: 1))
+            let name = ns.substring(with: m.range(at: 2))
+            parts.append(.custom(pack: pack, name: name))
+            cursor = m.range.location + m.range.length
+        }
+        if cursor < ns.length {
+            let t = ns.substring(from: cursor)
+            if !t.isEmpty { parts.append(.text(t)) }
+        }
+        return parts.isEmpty ? [.text(text)] : parts
     }
 }

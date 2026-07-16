@@ -649,7 +649,30 @@ struct RoomCreationView: View {
         )
 
         do {
-            let room = try await RoomService(api: apiClient).createRoom(request)
+            var room = try await RoomService(api: apiClient).createRoom(request)
+            // Ensure host is joined (presence / participant count) even if
+            // older backends omitted RoomParticipant on create.
+            if let joined = try? await RoomService(api: apiClient).joinRoom(code: room.code) {
+                room = joined
+            }
+            // Keep client-side media if server stripped it
+            if room.mediaItem == nil {
+                room = Room(
+                    id: room.id,
+                    name: room.name,
+                    hostID: room.hostID,
+                    hostName: room.hostName,
+                    code: room.code,
+                    participants: room.participants,
+                    mediaItem: mediaItem,
+                    isActive: room.isActive,
+                    maxParticipants: room.maxParticipants,
+                    hostIsPremium: room.hostIsPremium,
+                    createdAt: room.createdAt,
+                    privacy: room.privacy,
+                    password: room.password
+                )
+            }
             onRoomCreated(room)
             dismiss()
         } catch {
@@ -658,13 +681,58 @@ struct RoomCreationView: View {
                 || msg.lowercased().contains("401")
                 || msg.localizedCaseInsensitiveContains("вход") {
                 errorMessage = "Сессия истекла. Закройте приложение и войдите снова."
-            } else if msg.contains("FREE_TIER") || msg.localizedCaseInsensitiveContains("1 active room") || msg.localizedCaseInsensitiveContains("free tier") {
-                errorMessage = "Уже есть активная комната. Закройте её (выйти из комнаты) и создайте новую — на free-тарифе 1 комната."
+            } else if msg.contains("FREE_TIER")
+                || msg.localizedCaseInsensitiveContains("1 active room")
+                || msg.localizedCaseInsensitiveContains("free tier")
+                || msg.contains("403") {
+                // Retry once: end own active rooms then create again
+                if await endMyActiveRooms() {
+                    do {
+                        var room = try await RoomService(api: apiClient).createRoom(request)
+                        if let joined = try? await RoomService(api: apiClient).joinRoom(code: room.code) {
+                            room = joined
+                        }
+                        if room.mediaItem == nil {
+                            room = Room(
+                                id: room.id, name: room.name, hostID: room.hostID,
+                                hostName: room.hostName, code: room.code,
+                                participants: room.participants, mediaItem: mediaItem,
+                                isActive: room.isActive, maxParticipants: room.maxParticipants,
+                                hostIsPremium: room.hostIsPremium, createdAt: room.createdAt,
+                                privacy: room.privacy, password: room.password
+                            )
+                        }
+                        onRoomCreated(room)
+                        dismiss()
+                        return
+                    } catch {
+                        errorMessage = "Не удалось создать комнату. Попробуйте ещё раз."
+                    }
+                } else {
+                    errorMessage = "Уже есть активная комната. Закройте её и создайте новую."
+                }
             } else {
                 errorMessage = "Не удалось создать комнату: \(msg)"
             }
             step = .settings
             print("[RoomCreate] failed: \(msg)")
+        }
+    }
+
+    /// Close free-tier leftover rooms so a new create can succeed.
+    private func endMyActiveRooms() async -> Bool {
+        do {
+            let mine = try await RoomService(api: apiClient).fetchMyRooms()
+            let active = mine.filter(\.isActive)
+            guard !active.isEmpty else { return true }
+            for room in active {
+                try? await RoomService(api: apiClient).leaveRoom(roomID: room.id)
+                try? await RoomService(api: apiClient).deleteRoom(roomID: room.id)
+            }
+            return true
+        } catch {
+            print("[RoomCreate] endMyActiveRooms: \(error.localizedDescription)")
+            return false
         }
     }
 

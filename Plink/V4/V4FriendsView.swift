@@ -101,8 +101,14 @@ struct V4FriendsViewLive: View {
         .sheet(isPresented: $showAddFriend) {
             if let store {
                 AddFriendSheet(store: store) { message in
-                    toast = message
-                    Task { await store.load() }
+                    // Delay slightly so toast appears after sheet dismisses
+                    Task { @MainActor in
+                        await store.load()
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            toast = message
+                        }
+                    }
                 }
             } else {
                 Text("Загрузка…").padding()
@@ -111,7 +117,9 @@ struct V4FriendsViewLive: View {
         .sheet(isPresented: $showRequests) {
             if let store {
                 FriendRequestsSheet(theme: theme, store: store) { message in
-                    toast = message
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        toast = message
+                    }
                 }
             }
         }
@@ -126,16 +134,19 @@ struct V4FriendsViewLive: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .background(V4.surface.opacity(0.95), in: Capsule())
-                    .padding(.top, 8)
+                    .padding(.top, 12)
+                    .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
                     .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(999)
                     .onAppear {
                         Task {
-                            try? await Task.sleep(nanoseconds: 2_200_000_000)
+                            try? await Task.sleep(nanoseconds: 2_400_000_000)
                             withAnimation { self.toast = nil }
                         }
                     }
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: toast)
         .task {
             await store?.load()
             await loadRecentRooms()
@@ -833,6 +844,7 @@ private struct AddFriendSheet: View {
         defer { isSending = false }
         let ok = await manager.sendRequestByUsername(directUsername)
         if ok {
+            // Sheet dismisses so parent top toast is visible
             onDone(manager.lastSuccessMessage ?? "Заявка отправлена")
             dismiss()
         } else {
@@ -847,7 +859,7 @@ private struct AddFriendSheet: View {
         let ok = await manager.sendRequest(to: user.id, username: user.username)
         if ok {
             onDone(manager.lastSuccessMessage ?? "Заявка отправлена")
-            await manager.searchUsers(query: query)
+            dismiss()
         } else {
             localError = manager.errorMessage ?? "Не удалось отправить"
         }

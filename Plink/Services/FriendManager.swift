@@ -101,7 +101,7 @@ final class FriendManager: ObservableObject {
                 await loadAll()
                 return true
             }
-            lastSuccessMessage = "Заявка отправлена \(username)"
+            lastSuccessMessage = "Заявка отправлена"
             // Optimistic outgoing
             let preview = UserPreview(id: userId, username: username, avatarURL: nil, isOnline: false)
             let me = UserPreview(id: "me", username: "me", avatarURL: nil, isOnline: true)
@@ -142,7 +142,7 @@ final class FriendManager: ObservableObject {
             if resp.autoAccepted == true {
                 lastSuccessMessage = "@\(clean) теперь у вас в друзьях"
             } else {
-                lastSuccessMessage = "Заявка отправлена @\(clean)"
+                lastSuccessMessage = "Заявка отправлена"
             }
             await loadAll()
             return true

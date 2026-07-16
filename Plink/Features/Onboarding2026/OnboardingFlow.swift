@@ -1,7 +1,5 @@
-// Plink/Features/Onboarding2026/OnboardingFlow.swift — §9 Final Unified
-//
-// Three-page onboarding: value → services → room.
-// No paywall or permissions inside onboarding.
+// Plink/Features/Onboarding2026/OnboardingFlow.swift — 4-step MVP onboarding
+// Cinema2026 chrome only; no V4 home redesign.
 
 import SwiftUI
 
@@ -17,17 +15,21 @@ struct OnboardingFlow: View {
     let onSkip: (() -> Void)?
 
     @State private var selection = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let pages: [OnboardingPageModel] = [
-        .init(id: "together", symbol: "person.3.fill",
-              title: "Кино становится ближе",
-              body: "Создавайте комнаты и смотрите синхронно с друзьями."),
-        .init(id: "services", symbol: "rectangle.stack.fill",
-              title: "Выберите, где смотреть",
-              body: "Сначала создайте комнату, затем выберите сервис и контент."),
-        .init(id: "room", symbol: "bubble.left.and.bubble.right.fill",
-              title: "Всё важное рядом",
-              body: "Участники, чат и точная синхронизация остаются вокруг видео."),
+        .init(id: "sync", symbol: "play.circle.fill",
+              title: "Смотрите вместе",
+              body: "YouTube, VK, Rutube — синхронно с друзьями. Медиана ~300 мс."),
+        .init(id: "ai", symbol: "sparkles",
+              title: "AI Companion",
+              body: "Подскажет, что включить, и поможет создать комнату."),
+        .init(id: "themes", symbol: "moon.stars.fill",
+              title: "Живые темы",
+              body: "Aurora, Cosmos, Verdant, Magma — атмосфера комнаты в Plink+."),
+        .init(id: "cross", symbol: "iphone.gen3",
+              title: "Все экраны",
+              body: "iOS, Android, Mac, Windows — один код комнаты на всех."),
     ]
 
     var body: some View {
@@ -36,13 +38,13 @@ struct OnboardingFlow: View {
             CompactLivingBackdrop(primary: Cinema2026.accent, secondary: Cinema2026.amber)
 
             VStack(spacing: 0) {
-                // Skip button (only on non-last pages, if onSkip provided)
                 if let onSkip, selection < pages.count - 1 {
                     HStack {
                         Spacer()
                         Button("Пропустить", action: onSkip)
                             .font(.caption)
                             .foregroundStyle(Cinema2026.secondary)
+                            .accessibilityLabel("Пропустить онбординг")
                     }
                     .padding(.horizontal, 20)
                     .frame(height: 48)
@@ -50,7 +52,6 @@ struct OnboardingFlow: View {
                     Color.clear.frame(height: 48)
                 }
 
-                // Page content
                 TabView(selection: $selection) {
                     ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
                         OnboardingPage(page: page).tag(index)
@@ -58,7 +59,6 @@ struct OnboardingFlow: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
-                // Progress dots
                 HStack(spacing: 7) {
                     ForEach(pages.indices, id: \.self) { index in
                         Capsule()
@@ -66,11 +66,13 @@ struct OnboardingFlow: View {
                             .frame(width: index == selection ? 22 : 7, height: 7)
                     }
                 }
+                .accessibilityLabel("Шаг \(selection + 1) из \(pages.count)")
 
-                // CTA
                 Button(selection == pages.count - 1 ? "Начать" : "Далее") {
                     if selection == pages.count - 1 {
                         onFinish()
+                    } else if reduceMotion {
+                        selection += 1
                     } else {
                         withAnimation(.easeOut(duration: 0.3)) { selection += 1 }
                     }
@@ -83,6 +85,7 @@ struct OnboardingFlow: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
                 .padding(.bottom, 22)
+                .accessibilityLabel(selection == pages.count - 1 ? "Начать" : "Далее")
             }
         }
     }
@@ -94,21 +97,18 @@ struct OnboardingPage: View {
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
-
             Image(systemName: page.symbol)
                 .font(.system(size: 64))
                 .foregroundStyle(Cinema2026.accent)
-
+                .accessibilityHidden(true)
             Text(page.title)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Cinema2026.text)
                 .multilineTextAlignment(.center)
-
             Text(page.body)
                 .font(.system(size: 15))
                 .foregroundStyle(Cinema2026.secondary)
                 .multilineTextAlignment(.center)
-
             Spacer()
             Spacer()
         }

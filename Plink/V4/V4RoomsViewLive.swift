@@ -46,12 +46,15 @@ struct V4RoomsViewLive: View {
                         HapticManager.selection()
                         joinByCode?()
                     } label: {
-                        Image(systemName:"person.badge.plus")
-                            .font(.system(size: 22, weight: .semibold))
+                        // Join-by-code — NOT person.badge.plus (that’s “add friend”)
+                        Image(systemName: "ticket.fill")
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(V4.accent)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Войти по коду")
+                    .accessibilityLabel("Войти по коду комнаты")
                     .padding(.trailing, 8)
                     Button {
                         HapticManager.selection()

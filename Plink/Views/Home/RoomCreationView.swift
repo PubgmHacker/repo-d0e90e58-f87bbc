@@ -519,6 +519,21 @@ struct RoomCreationView: View {
         step = .creating
         defer { isCreating = false }
 
+        // Ensure JWT is on the API client used by this sheet (shared or injected)
+        AuthService.shared.rebindSessionFromStorage()
+        if apiClient.authToken == nil {
+            apiClient.authToken = AuthService.shared.authToken
+                ?? KeychainHelper.read(for: "rave_auth_token")
+        }
+        if APIClient.shared.authToken == nil {
+            APIClient.shared.authToken = apiClient.authToken
+        }
+        guard apiClient.authToken != nil else {
+            errorMessage = "Сессия истекла. Выйдите и войдите снова."
+            step = .settings
+            return
+        }
+
         // Build MediaItem based on service
         let mediaItem: MediaItem
         let streamURL: String
@@ -528,8 +543,8 @@ struct RoomCreationView: View {
         switch selectedService {
         case .youtube:
             let vid = mediaVideoId ?? extractYouTubeId(from: mediaURL) ?? mediaURL
-            // For YouTube: streamURL is the embed URL, videoId is the 11-char ID
-            streamURL = "https://www.youtube.com/embed/\(vid)"
+            // Prefer watch URL — more reliable for id extract + backend
+            streamURL = "https://www.youtube.com/watch?v=\(vid)"
             videoId = vid
             source = .youtube
         case .vk:
@@ -567,13 +582,16 @@ struct RoomCreationView: View {
             videoId: videoId
         )
 
+        let hostName = AuthService.shared.currentUserValue?.username
+            ?? UserDefaults.standard.string(forKey: "plink_current_username")
+
         let request = CreateRoomRequest(
             name: roomName.isEmpty ? "Комната" : roomName,
             maxParticipants: maxParticipants,
             mediaItem: mediaItem,
             privacy: privacy,
             password: nil,
-            hostName: AuthService.shared.currentUserValue?.username
+            hostName: hostName
         )
 
         do {
@@ -581,7 +599,14 @@ struct RoomCreationView: View {
             onRoomCreated(room)
             dismiss()
         } catch {
-            errorMessage = "Не удалось создать комнату: \(error.localizedDescription)"
+            let msg = error.localizedDescription
+            if msg.lowercased().contains("unauthorized")
+                || msg.lowercased().contains("401")
+                || msg.localizedCaseInsensitiveContains("вход") {
+                errorMessage = "Сессия истекла. Закройте приложение и войдите снова."
+            } else {
+                errorMessage = "Не удалось создать комнату: \(msg)"
+            }
             step = .settings
         }
     }

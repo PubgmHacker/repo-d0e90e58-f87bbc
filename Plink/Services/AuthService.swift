@@ -36,19 +36,40 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
 
     init(api: APIClient) {
         self.api = api
+        restoreSessionFromStorage()
+        api.authToken = authToken
+    }
 
-        // 🔧 FIX H14: Synchronous restore — AuthService is now @MainActor,
-        // so currentUser is populated before RaveCloneApp.checkAuth reads it.
-        // No more login-screen flash on cold launch with valid session.
+    /// Decode cached user with ISO8601 — default JSONDecoder fails on
+    /// `createdAt` written by cacheUser, leaving currentUser=nil while JWT still works.
+    private static func decodeCachedUser(_ data: Data) -> User? {
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            let withFrac = ISO8601DateFormatter()
+            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = withFrac.date(from: str) { return d }
+            let plain = ISO8601DateFormatter()
+            if let d = plain.date(from: str) { return d }
+            return Date()
+        }
+        if let user = try? dec.decode(User.self, from: data) { return user }
+        // Last resort: ignore dates
+        let fallback = JSONDecoder()
+        return try? fallback.decode(User.self, from: data)
+    }
+
+    /// Reload token + user from Keychain / UserDefaults into this instance.
+    func restoreSessionFromStorage() {
         if let data = defaults.data(forKey: Keys.savedUser),
-           let user = try? JSONDecoder().decode(User.self, from: data) {
+           let user = Self.decodeCachedUser(data) {
             self.currentUser = user
-            // Ensure lightweight id key exists for DM isOwn / chat side
             defaults.set(user.id, forKey: "plink_current_user_id")
             defaults.set(user.username, forKey: "plink_current_username")
+            defaults.set(user.displayName ?? user.username, forKey: "plink_current_display_name")
         }
 
-        // 🔧 FIX C2: Read JWT + expiry + refresh token from Keychain (not UserDefaults)
         self.authToken = KeychainHelper.read(for: Keys.authToken)
         if let expiryStr = KeychainHelper.read(for: Keys.tokenExpiry),
            let expiry = TimeInterval(expiryStr) {
@@ -56,8 +77,12 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
         }
         self.refreshToken = KeychainHelper.read(for: Keys.refreshToken)
         self.fcmToken = defaults.string(forKey: Keys.fcmToken)
-
         api.authToken = authToken
+    }
+
+    /// Public rebind used by WatchRoom / room create when shared session looks empty.
+    func rebindSessionFromStorage() {
+        restoreSessionFromStorage()
     }
 
     // MARK: - Sign In (реальный запрос к серверу)

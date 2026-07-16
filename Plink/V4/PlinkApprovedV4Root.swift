@@ -237,9 +237,16 @@ struct PlinkApprovedV4Root: View {
 
     private func bootstrap() async {
         let api = APIClient.shared
+        // Hydrate shared session first — fixes empty currentUser after ISO8601 cache
+        AuthService.shared.rebindSessionFromStorage()
+        if api.authToken == nil {
+            api.authToken = AuthService.shared.authToken
+                ?? KeychainHelper.read(for: "rave_auth_token")
+        }
         let rs = RoomService(api: api)
         let fm = FriendManager(api: api)
-        let as_ = AuthService(api: api)
+        // Always use shared AuthService so profile + WatchRoom share identity
+        let as_ = AuthService.shared
         roomsStore = V4RoomsStore(roomService: rs)
         friendsStore = V4FriendsStore(friendManager: fm)
         profileStore = V4ProfileStore(authService: as_)

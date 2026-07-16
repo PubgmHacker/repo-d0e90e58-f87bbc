@@ -261,6 +261,20 @@ struct PlinkApprovedV4Root: View {
         friendsStore = V4FriendsStore(friendManager: fm)
         profileStore = V4ProfileStore(authService: as_)
 
+        // Server is authority for isPremium + ADMIN role (e.g. koslakandrej@gmail.com)
+        if api.authToken != nil {
+            do {
+                let user = try await as_.fetchCurrentUser()
+                PremiumStatusManager.shared.syncFromServer(
+                    isPremium: user.isPremium,
+                    expiry: nil
+                )
+                profileStore?.applyUser(user)
+            } catch {
+                print("[bootstrap] fetchCurrentUser: \(error.localizedDescription)")
+            }
+        }
+
         await roomsStore?.load()
         await searchStore.loadTrending()
         await friendsStore?.load()

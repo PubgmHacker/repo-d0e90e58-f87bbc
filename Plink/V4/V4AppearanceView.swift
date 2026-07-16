@@ -259,6 +259,11 @@ struct V4AppearanceView: View {
     }
 
     private func applyRoomTheme(_ theme: RoomTheme) {
+        if !PremiumStatusManager.isFreeRoomTheme(theme) && !premium.isPremium {
+            flashToast("«\(theme.displayName)» — только Plink+")
+            HapticManager.errorOccurred()
+            return
+        }
         premium.setRoomTheme(theme)
         HapticManager.selection()
         flashToast("Тема комнаты: \(theme.displayName)")
@@ -267,7 +272,11 @@ struct V4AppearanceView: View {
     }
 
     private func selectBubbleStyle(_ style: AppearanceDescriptor) {
-        // Free styles always; premium styles usable in beta for everyone
+        if style.premium && !premium.isPremium {
+            flashToast("Бабл «\(style.title)» — только Plink+")
+            HapticManager.errorOccurred()
+            return
+        }
         selectedBubbleID = style.id
         PlinkBubbleStylePrefs.set(style.id)
         HapticManager.selection()
@@ -276,6 +285,7 @@ struct V4AppearanceView: View {
 
     private func bubbleStyleCard(_ style: AppearanceDescriptor) -> some View {
         let selected = selectedBubbleID == style.id
+        let locked = style.premium && !premium.isPremium
         return Button {
             selectBubbleStyle(style)
         } label: {
@@ -294,6 +304,7 @@ struct V4AppearanceView: View {
                         )
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .opacity(locked ? 0.45 : 1)
 
                 Text(style.title)
                     .font(.system(size: 11, weight: .heavy))
@@ -306,9 +317,11 @@ struct V4AppearanceView: View {
                     .frame(height: 24, alignment: .top)
 
                 if style.premium {
-                    Text("Plink+")
-                        .font(.system(size: 8, weight: .heavy))
-                        .foregroundStyle(.yellow)
+                    HStack(spacing: 2) {
+                        if locked { Image(systemName: "lock.fill").font(.system(size: 7)) }
+                        Text("Plink+").font(.system(size: 8, weight: .heavy))
+                    }
+                    .foregroundStyle(.yellow)
                 }
             }
             .padding(10)
@@ -364,7 +377,13 @@ struct V4AppearanceView: View {
     private func liveThemeCard(_ live: PlinkPlusLiveTheme) -> some View {
         let index = live.rawValue
         let (bg, c1, c2, c3) = live.colors
+        let locked = !premium.isPremium
         return Button {
+            if locked {
+                flashToast("Анимированные темы — только Plink+")
+                HapticManager.errorOccurred()
+                return
+            }
             selectedLiveTheme = index
             HapticManager.selection()
             UserDefaults.standard.set(index, forKey: "plink.liveTheme")
@@ -408,6 +427,7 @@ struct V4AppearanceView: View {
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(selectedLiveTheme == index ? V4.ink : V4.line, lineWidth: selectedLiveTheme == index ? 2 : 1)
             )
+            .opacity(locked ? 0.55 : 1)
         }
     }
 
@@ -476,6 +496,7 @@ private struct RoomThemesSheet: View {
                         .padding(.horizontal, 4)
 
                     ForEach(RoomTheme.allCases) { theme in
+                        let locked = !PremiumStatusManager.isFreeRoomTheme(theme) && !isPremium
                         Button {
                             onSelect(theme)
                         } label: {
@@ -487,17 +508,21 @@ private struct RoomThemesSheet: View {
                                         RoundedRectangle(cornerRadius: 10)
                                             .stroke(V4.line, lineWidth: 1)
                                     )
+                                    .opacity(locked ? 0.45 : 1)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(theme.displayName)
                                         .font(.system(size: 15, weight: .semibold))
                                         .foregroundStyle(V4.ink)
-                                    Text(theme == .default ? "Базовый" : "Пресет комнаты")
+                                    Text(theme == .default ? "Базовый · бесплатно" : (locked ? "Только Plink+" : "Пресет комнаты"))
                                         .font(.system(size: 12))
                                         .foregroundStyle(V4.muted)
                                 }
                                 Spacer()
-                                if selected == theme {
+                                if locked {
+                                    Image(systemName: "lock.fill")
+                                        .foregroundStyle(.yellow)
+                                } else if selected == theme {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundStyle(V4.accent)
                                 }

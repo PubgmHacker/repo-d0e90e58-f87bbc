@@ -354,12 +354,19 @@ final class V4ProfileStore {
         username = user.username
         email = user.email
         isPremium = user.isPremium
-        isAdmin = (user.role == "ADMIN" || user.role == "FOUNDER")
+        isAdmin = user.isAdmin
+        // Authoritative premium from server (clears sticky local Plink+ on free devices)
+        PremiumStatusManager.shared.syncFromServer(
+            isPremium: user.isPremium,
+            expiry: user.isPremium ? premiumUntil : nil
+        )
         if let raw = user.avatarURL, !raw.isEmpty {
             avatarURL = Self.cacheBustedURL(from: raw)
             defaults.set(avatarURL?.absoluteString, forKey: "plink_user_avatar_url")
         }
         defaults.set(displayName, forKey: "plink_current_display_name")
+        defaults.set(user.role ?? "USER", forKey: "plink_current_user_role")
+        defaults.set(user.id, forKey: "plink_current_user_id")
     }
 
     func selectTheme(_ theme: V4Theme) {

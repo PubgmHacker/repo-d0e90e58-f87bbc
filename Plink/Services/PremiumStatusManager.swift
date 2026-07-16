@@ -115,10 +115,22 @@ final class PremiumStatusManager: ObservableObject {
     }
 
     func setRoomTheme(_ theme: RoomTheme) {
-        // Persist always so «Оформление → Темы комнат» works for all users.
-        // Premium gate can re-apply later for exclusive themes if needed.
+        // Free: only default room theme. Plink+ unlocks the rest.
+        if theme != .default && !isPremium {
+            return
+        }
         selectedRoomTheme = theme
         defaults.set(theme.rawValue, forKey: roomThemeKey)
+    }
+
+    /// True if this bubble style id is free for everyone.
+    static func isFreeBubbleStyle(_ id: String) -> Bool {
+        id == "bubble-quiet" || id == "bubble-accent" || id == "default"
+    }
+
+    /// True if this room theme is free.
+    static func isFreeRoomTheme(_ theme: RoomTheme) -> Bool {
+        theme == .default
     }
 
     // MARK: - Persistence
@@ -135,8 +147,16 @@ final class PremiumStatusManager: ObservableObject {
     private var serverConfirmed = false
 
     private func loadPersistedState() {
-        isPremium = defaults.bool(forKey: premiumKey)
+        // C9: local UserDefaults is NOT authority. Always start free until
+        // server (syncFromServer) or StoreKit confirms purchase. Prevents
+        // sticky "Plink+ active" after testing / stale flags on other devices.
+        let cachedPremium = defaults.bool(forKey: premiumKey)
+        isPremium = false
         subscriptionExpiry = defaults.object(forKey: expiryKey) as? Date
+        serverConfirmed = false
+        if cachedPremium {
+            print("[Premium] ignored stale local premium flag until server/StoreKit confirms")
+        }
 
         if let nickRaw = defaults.string(forKey: nickStyleKey),
            let style = NickStyle(rawValue: nickRaw) {
@@ -149,6 +169,23 @@ final class PremiumStatusManager: ObservableObject {
         if let themeRaw = defaults.string(forKey: roomThemeKey),
            let theme = RoomTheme(rawValue: themeRaw) {
             selectedRoomTheme = theme
+        }
+
+        // Clamp premium-only cosmetics while free
+        if !isPremium {
+            if selectedRoomTheme != .default {
+                selectedRoomTheme = .default
+                defaults.set(RoomTheme.default.rawValue, forKey: roomThemeKey)
+            }
+            let bubble = UserDefaults.standard.string(forKey: "plink.bubbleStyleID") ?? "bubble-quiet"
+            if !Self.isFreeBubbleStyle(bubble) {
+                UserDefaults.standard.set("bubble-quiet", forKey: "plink.bubbleStyleID")
+            }
+            // Clear Plink+ live theme overlay
+            if UserDefaults.standard.integer(forKey: "plink.liveTheme") > 0 {
+                UserDefaults.standard.set(0, forKey: "plink.liveTheme")
+                NotificationCenter.default.post(name: .plinkLiveThemeChanged, object: 0)
+            }
         }
 
         // Проверка истечения подписки

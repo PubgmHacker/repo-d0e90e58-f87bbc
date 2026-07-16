@@ -54,6 +54,14 @@ struct PlayerStage: View {
 
                 PlayerTopChrome(model: model, variant: variant)
                     .transition(.opacity.combined(with: .move(edge: .top)))
+
+                // Host sync control — ensures multi-device play/pause even when
+                // YouTube chrome events are missed (MVP reliability).
+                if model.isHost {
+                    PlayerCenterControl(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.opacity)
+                }
             }
         }
         .clipped()

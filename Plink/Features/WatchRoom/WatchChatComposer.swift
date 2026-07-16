@@ -29,13 +29,40 @@ struct WatchChatComposer: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Quick reactions (multi-device floating reactions)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(ReactionPalette.free, id: \.self) { emoji in
+                        Button {
+                            model.sendReaction(emoji: emoji, hasPremium: hasPremium)
+                            HapticManager.impact(.light)
+                        } label: {
+                            Text(emoji)
+                                .font(.system(size: 22))
+                                .frame(width: 40, height: 36)
+                                .background(Cinema2026.raised, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reaction \(emoji)")
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+
             // PATCH 26: inline emoji panel (Telegram-style)
             if showEmojiPanel {
                 EmojiInlinePanel(
                     pack: currentPack,
                     hasPremium: hasPremium,
                     onPick: { emoji in
-                        state.insertAtCursor(emoji)
+                        // Empty field + pick → live reaction; otherwise insert into message
+                        if state.trimmedText.isEmpty {
+                            model.sendReaction(emoji: emoji, hasPremium: hasPremium)
+                            HapticManager.impact(.light)
+                        } else {
+                            state.insertAtCursor(emoji)
+                        }
                     },
                     onPremiumUpsell: {
                         showEmojiPanel = false

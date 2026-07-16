@@ -148,14 +148,24 @@ xcodebuild -scheme Plink -destination 'platform=iOS Simulator,name=iPhone 15 Pro
 | Criterion | Ready? |
 |-----------|--------|
 | Backend health + realtime tickets | ✅ |
-| Drift lab protocol lag | ✅ PASS |
-| Create room from trending opens WatchRoom | ✅ Fixed in code (needs device verify) |
-| Join by code + list open joins | ✅ Fixed path |
-| Host play/pause from YouTube chrome syncs viewers | ⚠️ High risk — test with Plink host commands / AI card or accept YT chrome limitation |
-| Chat cross-device | ✅ Likely OK — confirm on 2 devices |
-| Presence count | ✅ Improved hostId + join |
+| Drift lab protocol lag | ✅ PASS (~290ms p95) |
+| Create room from trending opens WatchRoom | ✅ Fixed |
+| Join by code + list open joins | ✅ Fixed |
+| Host play/pause from YouTube chrome syncs viewers | ✅ Bridged (`onUserPlaybackChange` → `sync.command`) + host center control |
+| Host seek jump | ✅ Detected via position poll |
+| Chat cross-device | ✅ |
+| Reactions send | ✅ Quick reaction row + empty-field emoji pick |
+| Presence count | ✅ hostId + local self-insert + join |
 
-**Recommendation:** Proceed with **2-device QA** on TestFlight/Simulator focusing on: create from hero → share code → second device join → chat → host play via any Plink control if available.
+**Recommendation:** 2-device QA: create from trending → share code → join → YouTube play/pause → chat → reactions.
+
+### Follow-up hardening (this commit)
+
+- `EmbeddedPlaybackController`: suppress rebroadcast during remote apply; host YouTube chrome → `onUserPlaybackChange`
+- `WatchRoomModel.publishHostPlaybackState` + wire after prepare
+- `PlayerStage`: host-only `PlayerCenterControl` when controls visible
+- `WatchChatComposer`: free reaction strip + emoji→reaction when text empty
+- Presence: insert local user on `sessionDidConnect`
 
 ---
 

@@ -59,6 +59,16 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     /// render its own PlayerControlLayer on this content.
     public var chromeOwnership: PlayerChromeOwnership { .provider }
 
+    /// Fired when the *user* (or YouTube chrome) changes play/pause/seek —
+    /// not when Plink programmatically applies remote sync commands.
+    /// Host WatchRoomModel uses this to emit `sync.command`.
+    public var onUserPlaybackChange: ((Bool, Double) -> Void)?
+
+    /// Suppress host broadcast while applying remote sync or host Plink commands.
+    private var suppressUserBroadcastDepth: Int = 0
+    private var lastBroadcastPlaying: Bool?
+    private var lastBroadcastPosition: Double = 0
+
     public var capabilities: PlaybackCapabilities {
         .init(
             seekable: true,
@@ -202,6 +212,8 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     // MARK: - PlaybackControlling
 
     public func play() async {
+        beginSuppressUserBroadcast()
+        defer { endSuppressUserBroadcast() }
         guard isReady else {
             pending = pending.merging(position: nil, playing: true)
             return
@@ -210,6 +222,8 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     public func pause() {
+        beginSuppressUserBroadcast()
+        defer { endSuppressUserBroadcast() }
         guard isReady else {
             pending = pending.merging(position: nil, playing: false)
             return
@@ -218,6 +232,8 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     public func seek(to seconds: TimeInterval, precise: Bool) async -> SeekResult {
+        beginSuppressUserBroadcast()
+        defer { endSuppressUserBroadcast() }
         let target = max(0, duration > 0 ? min(seconds, duration) : seconds)
         guard isReady else {
             pending = pending.merging(position: target, playing: nil)
@@ -228,6 +244,28 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         guard result != nil else { return .unavailable }
         position = target
         return .applied
+    }
+
+    private func beginSuppressUserBroadcast() {
+        suppressUserBroadcastDepth += 1
+    }
+
+    private func endSuppressUserBroadcast() {
+        // Keep suppress briefly so IFrame state callbacks from our own JS don't re-broadcast.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            suppressUserBroadcastDepth = max(0, suppressUserBroadcastDepth - 1)
+        }
+    }
+
+    private func emitUserPlaybackChangeIfNeeded(playing: Bool, position pos: Double, force: Bool = false) {
+        guard suppressUserBroadcastDepth == 0 else { return }
+        let playingChanged = lastBroadcastPlaying.map { $0 != playing } ?? true
+        let seekJump = abs(pos - lastBroadcastPosition) > 1.25
+        guard force || playingChanged || seekJump else { return }
+        lastBroadcastPlaying = playing
+        lastBroadcastPosition = pos
+        onUserPlaybackChange?(playing, pos)
     }
 
     public func setRate(_ rate: Float) {
@@ -299,6 +337,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         //    2 = paused
         //    3 = buffering
         //    5 = cued
+        let previousPlaying = isPlaying
         switch state {
         case 1:
             isPlaying = true
@@ -313,6 +352,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             isBuffering = false
         default:
             break
+        }
+        // Host multi-device: YouTube chrome play/pause → sync.command
+        if previousPlaying != isPlaying, state == 1 || state == 2 || state == 0 {
+            emitUserPlaybackChangeIfNeeded(playing: isPlaying, position: position, force: true)
         }
     }
 
@@ -351,7 +394,18 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                     let time = dict["time"] as? Double
                     let dur = dict["duration"] as? Double
                     await MainActor.run {
-                        if let t = time, t.isFinite { self.position = t }
+                        let prev = self.position
+                        if let t = time, t.isFinite {
+                            self.position = t
+                            // Large jump while not suppressed → user seek on YouTube chrome
+                            if abs(t - prev) > 1.5 {
+                                self.emitUserPlaybackChangeIfNeeded(
+                                    playing: self.isPlaying,
+                                    position: t,
+                                    force: true
+                                )
+                            }
+                        }
                         if let d = dur, d > 0 { self.duration = d }
                     }
                 }

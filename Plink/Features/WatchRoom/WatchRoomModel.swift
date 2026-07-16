@@ -149,6 +149,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 // P0-29/P0-53: wire proxy to the now-prepared real controller
                 playbackProxy.attachTarget(coordinator.currentController)
 
+                // Multi-device: YouTube chrome play/pause/seek → sync.command (host only)
+                if let embedded = coordinator.currentController as? EmbeddedPlaybackController {
+                    embedded.onUserPlaybackChange = { [weak self] playing, position in
+                        self?.publishHostPlaybackState(playing: playing, positionSeconds: position)
+                    }
+                }
+
                 // PATCH 14: attach native player to AmbientVideoSampler.
                 // Only native HLS/MP4 sources have an AVPlayer — YouTube
                 // and Rutube use WKWebView, so sampler falls back to
@@ -511,10 +518,32 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         self.role = role
         self.isHost = (role == .host)
         connectionState = .connected
+        // Avoid "0 in room" flash — ensure local user is listed immediately
+        if !participants.contains(where: { $0.userId == currentUserId }) {
+            participants.insert(
+                ParticipantInfo(userId: currentUserId, username: currentUsername, isLocal: true),
+                at: 0
+            )
+        }
         // P0-35: request chat catch-up after reconnect
         Task { await fetchChatCatchup() }
         // P0-36: request presence snapshot
         Task { await fetchPresenceSnapshot() }
+    }
+
+    /// Broadcast host playback state without re-applying local player (avoids feedback loops).
+    public func publishHostPlaybackState(playing: Bool, positionSeconds: Double) {
+        guard isHost else { return }
+        let positionMs = Int64(max(0, positionSeconds) * 1000)
+        let actionId = UUID().uuidString
+        realtimeClient.send(.syncCommand(.init(
+            roomId: _roomId,
+            actionId: actionId,
+            mediaId: mediaId,
+            positionMs: positionMs,
+            playing: playing
+        )))
+        scheduleActionTimeout(actionId)
     }
 
     public func handleOtherMessage(_ message: RealtimeServerMessage) {

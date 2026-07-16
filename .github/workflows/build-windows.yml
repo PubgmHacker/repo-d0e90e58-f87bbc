@@ -21,25 +21,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: windows-client/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      # Project uses Tauri 1.x (see package.json @tauri-apps/cli)
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^1.6" --locked
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows-client/src-tauri -> target
 
+      # Use project-local @tauri-apps/cli (1.x) — do NOT cargo install (too slow / stuck)
       - name: Install JS deps
         run: npm ci
 
-      - name: Build web + Tauri NSIS
+      - name: Build NSIS installer
         run: npm run tauri:build
         env:
           CI: true
 
-      - name: Upload NSIS installer
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: plink-windows-x64

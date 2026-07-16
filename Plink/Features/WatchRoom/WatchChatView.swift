@@ -54,8 +54,13 @@ struct WatchChatView: View {
             }
             .scrollIndicators(.hidden)
             .background(
-                Cinema2026.background.ignoresSafeArea()
-                    .opacity(0.28)
+                ZStack {
+                    // Room theme from Оформление → Темы комнат
+                    PremiumStatusManager.shared.selectedRoomTheme.chatBackground
+                        .opacity(0.92)
+                    Cinema2026.background.opacity(0.18)
+                }
+                .ignoresSafeArea()
             )
             .onChange(of: model.chatMessages.count) { _, _ in
                 guard atBottom, let last = model.chatMessages.last else { return }

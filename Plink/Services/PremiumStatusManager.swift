@@ -115,7 +115,8 @@ final class PremiumStatusManager: ObservableObject {
     }
 
     func setRoomTheme(_ theme: RoomTheme) {
-        guard isPremium else { return }
+        // Persist always so «Оформление → Темы комнат» works for all users.
+        // Premium gate can re-apply later for exclusive themes if needed.
         selectedRoomTheme = theme
         defaults.set(theme.rawValue, forKey: roomThemeKey)
     }

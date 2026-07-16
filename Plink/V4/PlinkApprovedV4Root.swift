@@ -23,6 +23,7 @@ struct PlinkApprovedV4Root: View {
     @State private var theme:V4Theme = .electric
     @State private var appearance=false
     @State private var liveThemeIndex: Int = UserDefaults.standard.integer(forKey: "plink.liveTheme")
+    @State private var highContrast: Bool = PlinkAppearancePrefs.highContrast
 
     // P0.2b: Unified WatchRoom presentation — single coordinator, single fullScreenCover
     @State private var roomCoordinator = RoomPresentationCoordinator()
@@ -51,6 +52,12 @@ struct PlinkApprovedV4Root: View {
                 V4LivingBackground(theme:theme)
                     .id("bg-standard")
             }
+            // High-contrast overlay (Оформление → Больше контраста)
+            if highContrast {
+                Color.black.opacity(0.32)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
             Group {
                 // ZStack with opacity — keeps all tabs alive, no recreation lag
                 V4HomeViewLive(theme:theme, searchStore:searchStore, roomsStore:roomsStore, openRoom:{ openFirstRoom() }, liveThemeIndex:liveThemeIndex)
@@ -78,6 +85,9 @@ struct PlinkApprovedV4Root: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .plinkLiveThemeChanged)) { n in
             if let i = n.object as? Int { liveThemeIndex = i; if let l = PlinkPlusLiveTheme.resolve(i) { theme = l.closestStandardTheme } }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkAppearancePrefsChanged)) { _ in
+            highContrast = PlinkAppearancePrefs.highContrast
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("plinkOpenCreateRoom"))) { _ in
             showCreateRoom = true

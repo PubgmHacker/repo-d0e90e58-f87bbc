@@ -1,12 +1,53 @@
-// Plink/V4/V4AppearanceView.swift — split from PlinkV4PixelPerfect (move-only, no logic change)
-// Source of truth: V4 design module. Do not change visuals.
+// Plink/V4/V4AppearanceView.swift — live appearance controls
 
 import SwiftUI
 import PhotosUI
 import UIKit
 import Foundation
 
-extension View { func groupStyle()->some View { self.padding(.horizontal,13).background(V4.searchBG).clipShape(RoundedRectangle(cornerRadius:20)).overlay(RoundedRectangle(cornerRadius:20).stroke(V4.line)).padding(.horizontal,19).padding(.bottom,18) } }
+extension View {
+    func groupStyle() -> some View {
+        self
+            .padding(.horizontal, 13)
+            .background(V4.searchBG)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(V4.line))
+            .padding(.horizontal, 19)
+            .padding(.bottom, 18)
+    }
+}
+
+// MARK: - Shared prefs (UserDefaults-backed)
+
+enum PlinkAppearancePrefs {
+    static let livingMotionKey = "plink.livingMotion"
+    static let highContrastKey = "plink.highContrast"
+
+    static var livingMotion: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: livingMotionKey) == nil { return true }
+            return UserDefaults.standard.bool(forKey: livingMotionKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: livingMotionKey)
+            NotificationCenter.default.post(name: .plinkAppearancePrefsChanged, object: nil)
+        }
+    }
+
+    static var highContrast: Bool {
+        get { UserDefaults.standard.bool(forKey: highContrastKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: highContrastKey)
+            NotificationCenter.default.post(name: .plinkAppearancePrefsChanged, object: nil)
+        }
+    }
+}
+
+extension Notification.Name {
+    static let plinkAppearancePrefsChanged = Notification.Name("plink.appearancePrefsChanged")
+}
+
+// MARK: - Appearance screen
 
 struct V4AppearanceView: View {
     @Binding var theme: V4Theme
@@ -16,54 +57,214 @@ struct V4AppearanceView: View {
         return idx > 0 ? idx : nil
     }()
     @State private var liveThemeIndex: Int = UserDefaults.standard.integer(forKey: "plink.liveTheme")
+    @State private var livingMotion = PlinkAppearancePrefs.livingMotion
+    @State private var highContrast = PlinkAppearancePrefs.highContrast
+    @State private var showRoomThemes = false
+    @State private var toast: String?
+    @ObservedObject private var premium = PremiumStatusManager.shared
+
     private var plinkPlusActive: Bool { liveThemeIndex > 0 }
 
     var body: some View {
         ZStack {
-            // Mirror root background logic
             if let live = PlinkPlusLiveTheme.resolve(liveThemeIndex) {
                 if let vn = live.videoFileName {
                     MetalVideoBackground(videoName: vn, opacity: 0.45, overlayColor: .black, overlayOpacity: 0.55)
-                } else { PlinkPlusStaticGradient(theme: live) }
-            } else { V4LivingBackground(theme:theme) }
-            ScrollView(showsIndicators:false) { VStack(spacing:0) {
-                HStack { V4RoundButton(symbol:"‹"){presented=false}; Spacer(); Text("Оформление").font(.system(size:16,weight:.bold)); Spacer(); Color.clear.frame(width:43,height:43) }.padding(.horizontal,18).padding(.top,10).padding(.bottom,16)
-                V4Heading(eyebrow:"СТАНДАРТНЫЕ",title:"Живая тема",subtitle:"Одна палитра, разные композиции во всём приложении.")
-                    .frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,19).padding(.bottom,18)
-                ScrollView(.horizontal,showsIndicators:false) { HStack(spacing:10){ ForEach(V4Theme.allCases){ item in themeCard(item) } }.padding(.horizontal,19).padding(.bottom,15) }
+                } else {
+                    PlinkPlusStaticGradient(theme: live)
+                }
+            } else {
+                V4LivingBackground(theme: theme)
+            }
 
-                // Plink+ animated themes
-                V4Heading(eyebrow:"PLINK+",title:"Анимированные темы",subtitle:"Живые видео-фоны. Только для Plink+.")
-                    .frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,19).padding(.top,20).padding(.bottom,18)
-                ScrollView(.horizontal,showsIndicators:false) { HStack(spacing:10) {
-                    ForEach(PlinkPlusLiveTheme.allCases) { live in liveThemeCard(live) }
-                }.padding(.horizontal,19).padding(.bottom,15) }
+            // High-contrast veil for readability
+            if highContrast {
+                Color.black.opacity(0.35).ignoresSafeArea().allowsHitTesting(false)
+            }
 
-                VStack(spacing:0) {
-                    toggleRow("Живое движение","Следует системным настройкам",true)
-                    toggleRow("Больше контраста","Усиливает подложки текста",false)
-                    toggleRow("Темы комнат","Сохранённые пресеты",false)
-                }.groupStyle()
-            }}.foregroundStyle(V4.ink)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    HStack {
+                        V4RoundButton(symbol: "‹") { presented = false }
+                        Spacer()
+                        Text("Оформление")
+                            .font(.system(size: 16, weight: .bold))
+                        Spacer()
+                        Color.clear.frame(width: 43, height: 43)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .padding(.bottom, 16)
+
+                    V4Heading(
+                        eyebrow: "СТАНДАРТНЫЕ",
+                        title: "Живая тема",
+                        subtitle: "Одна палитра, разные композиции во всём приложении."
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 19)
+                    .padding(.bottom, 18)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(V4Theme.allCases) { item in themeCard(item) }
+                        }
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 15)
+                    }
+
+                    V4Heading(
+                        eyebrow: "PLINK+",
+                        title: "Анимированные темы",
+                        subtitle: "Живые видео-фоны. Только для Plink+."
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 19)
+                    .padding(.top, 20)
+                    .padding(.bottom, 18)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(PlinkPlusLiveTheme.allCases) { live in liveThemeCard(live) }
+                        }
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 15)
+                    }
+
+                    VStack(spacing: 0) {
+                        interactiveToggle(
+                            title: "Живое движение",
+                            detail: "Анимация фона (учитывает «Уменьшить движение»)",
+                            isOn: $livingMotion
+                        ) { on in
+                            PlinkAppearancePrefs.livingMotion = on
+                            HapticManager.selection()
+                            flashToast(on ? "Живое движение вкл." : "Живое движение выкл.")
+                        }
+
+                        interactiveToggle(
+                            title: "Больше контраста",
+                            detail: "Усиливает подложки текста и читаемость",
+                            isOn: $highContrast
+                        ) { on in
+                            PlinkAppearancePrefs.highContrast = on
+                            HapticManager.selection()
+                            flashToast(on ? "Контраст усилен" : "Контраст обычный")
+                        }
+
+                        Button {
+                            HapticManager.impact(.light)
+                            showRoomThemes = true
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Темы комнат")
+                                        .font(.system(size: 13.6, weight: .bold))
+                                        .foregroundStyle(V4.ink)
+                                    Text(premium.selectedRoomTheme.displayName + " · пресеты фона чата")
+                                        .font(.system(size: 11.2))
+                                        .foregroundStyle(V4.muted)
+                                }
+                                Spacer()
+                                Text("›")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(V4.muted)
+                            }
+                            .frame(minHeight: 58)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(V4.line).frame(height: 1)
+                        }
+                    }
+                    .groupStyle()
+
+                    Spacer(minLength: 40)
+                }
+            }
+            .foregroundStyle(V4.ink)
+
+            if let toast {
+                VStack {
+                    Text(toast)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(V4.surface.opacity(0.95), in: Capsule())
+                        .padding(.top, 56)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(40)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .plinkLiveThemeChanged)) { n in
-            if let i = n.object as? Int { liveThemeIndex = i; selectedLiveTheme = i > 0 ? i : nil }
+            if let i = n.object as? Int {
+                liveThemeIndex = i
+                selectedLiveTheme = i > 0 ? i : nil
+            }
+        }
+        .sheet(isPresented: $showRoomThemes) {
+            RoomThemesSheet(
+                selected: premium.selectedRoomTheme,
+                isPremium: premium.isPremium || premium.canCustomizeRoomTheme
+            ) { theme in
+                applyRoomTheme(theme)
+            }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
-    private func themeCard(_ item:V4Theme)->some View {
-        let(c0,c1,c2,_)=item.colors
+
+    private func applyRoomTheme(_ theme: RoomTheme) {
+        premium.setRoomTheme(theme)
+        HapticManager.selection()
+        flashToast("Тема комнаты: \(theme.displayName)")
+        showRoomThemes = false
+        NotificationCenter.default.post(name: .plinkAppearancePrefsChanged, object: theme.rawValue)
+    }
+
+    private func flashToast(_ text: String) {
+        withAnimation {
+            toast = text
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            await MainActor.run {
+                withAnimation { toast = nil }
+            }
+        }
+    }
+
+    private func themeCard(_ item: V4Theme) -> some View {
+        let (c0, c1, c2, _) = item.colors
         let isSelected = (theme == item) && !plinkPlusActive
-        return Button(action:{
-            theme=item
+        return Button(action: {
+            theme = item
             UserDefaults.standard.set(0, forKey: "plink.liveTheme")
             selectedLiveTheme = nil
             NotificationCenter.default.post(name: .plinkLiveThemeChanged, object: 0)
-        }){
-            ZStack(alignment:.bottomLeading){
-                c0; RadialGradient(colors:[c1,.clear],center:UnitPoint(x:0.25,y:0.22),startRadius:0,endRadius:75); RadialGradient(colors:[c2,.clear],center:UnitPoint(x:0.78,y:0.75),startRadius:0,endRadius:80); Text(item.name).font(.system(size:10.72,weight:.heavy)).padding(9)
-            }.frame(width:112,height:150).clipShape(RoundedRectangle(cornerRadius:20)).overlay(RoundedRectangle(cornerRadius:20).stroke(isSelected ? V4.ink : V4.line,lineWidth:isSelected ? 2:1))
+        }) {
+            ZStack(alignment: .bottomLeading) {
+                c0
+                RadialGradient(colors: [c1, .clear], center: UnitPoint(x: 0.25, y: 0.22), startRadius: 0, endRadius: 75)
+                RadialGradient(colors: [c2, .clear], center: UnitPoint(x: 0.78, y: 0.75), startRadius: 0, endRadius: 80)
+                Text(item.name)
+                    .font(.system(size: 10.72, weight: .heavy))
+                    .padding(9)
+            }
+            .frame(width: 112, height: 150)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(isSelected ? V4.ink : V4.line, lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
+
     private func liveThemeCard(_ live: PlinkPlusLiveTheme) -> some View {
         let index = live.rawValue
         let (bg, c1, c2, c3) = live.colors
@@ -74,26 +275,156 @@ struct V4AppearanceView: View {
             theme = live.closestStandardTheme
             NotificationCenter.default.post(name: .plinkLiveThemeChanged, object: index)
         } label: {
-            ZStack(alignment:.bottomLeading) {
+            ZStack(alignment: .bottomLeading) {
                 if let vn = live.videoFileName,
                    let url = Bundle.main.url(forResource: "\(vn)_preview", withExtension: "png", subdirectory: "LiveThemes"),
                    let data = try? Data(contentsOf: url),
                    let preview = UIImage(data: data) {
                     Image(uiImage: preview).resizable().scaledToFill()
                 } else {
-                    ZStack { bg; RadialGradient(colors:[c1,.clear],center:UnitPoint(x:0.25,y:0.22),startRadius:0,endRadius:75); RadialGradient(colors:[c2,.clear],center:UnitPoint(x:0.78,y:0.75),startRadius:0,endRadius:80); RadialGradient(colors:[c3,.clear],center:UnitPoint(x:0.5,y:0.5),startRadius:0,endRadius:60) }
+                    ZStack {
+                        bg
+                        RadialGradient(colors: [c1, .clear], center: UnitPoint(x: 0.25, y: 0.22), startRadius: 0, endRadius: 75)
+                        RadialGradient(colors: [c2, .clear], center: UnitPoint(x: 0.78, y: 0.75), startRadius: 0, endRadius: 80)
+                        RadialGradient(colors: [c3, .clear], center: UnitPoint(x: 0.5, y: 0.5), startRadius: 0, endRadius: 60)
+                    }
                 }
-                Text(live.name).font(.system(size:10.72,weight:.heavy)).foregroundStyle(.white).padding(9)
+                Text(live.name)
+                    .font(.system(size: 10.72, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(9)
                 VStack {
-                    HStack(spacing:2) { Image(systemName:"lock.fill").font(.system(size:8,weight:.bold)); Text("Plink+").font(.system(size:8,weight:.heavy)) }
-                        .foregroundStyle(.yellow).padding(.horizontal,5).padding(.vertical,2).background(.black.opacity(0.5),in:Capsule()).padding(6)
+                    HStack(spacing: 2) {
+                        Image(systemName: "lock.fill").font(.system(size: 8, weight: .bold))
+                        Text("Plink+").font(.system(size: 8, weight: .heavy))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.black.opacity(0.5), in: Capsule())
+                    .padding(6)
                     Spacer()
                 }
-            }.frame(width:112,height:150).clipShape(RoundedRectangle(cornerRadius:20)).overlay(RoundedRectangle(cornerRadius:20).stroke(selectedLiveTheme == index ? V4.ink : V4.line,lineWidth:selectedLiveTheme == index ? 2:1))
+            }
+            .frame(width: 112, height: 150)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(selectedLiveTheme == index ? V4.ink : V4.line, lineWidth: selectedLiveTheme == index ? 2 : 1)
+            )
         }
     }
-    private func toggleRow(_ title:String,_ detail:String,_ on:Bool)->some View { HStack { VStack(alignment:.leading){Text(title).font(.system(size:13.6,weight:.bold));Text(detail).font(.system(size:11.2)).foregroundStyle(V4.muted)};Spacer(); if on { Capsule().fill(V4.accent).frame(width:48,height:29).overlay(Circle().fill(V4.ink).frame(width:23,height:23).offset(x:9.5)) } else { Text("›") } }.frame(minHeight:58).overlay(alignment:.bottom){Rectangle().fill(V4.line).frame(height:1)} }
+
+    private func interactiveToggle(
+        title: String,
+        detail: String,
+        isOn: Binding<Bool>,
+        onChange: @escaping (Bool) -> Void
+    ) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+            onChange(isOn.wrappedValue)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13.6, weight: .bold))
+                        .foregroundStyle(V4.ink)
+                    Text(detail)
+                        .font(.system(size: 11.2))
+                        .foregroundStyle(V4.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                // Custom switch
+                ZStack(alignment: isOn.wrappedValue ? .trailing : .leading) {
+                    Capsule()
+                        .fill(isOn.wrappedValue ? V4.accent : V4.raised)
+                        .frame(width: 48, height: 29)
+                    Circle()
+                        .fill(V4.ink)
+                        .frame(width: 23, height: 23)
+                        .padding(3)
+                }
+                .animation(.spring(response: 0.28, dampingFraction: 0.8), value: isOn.wrappedValue)
+            }
+            .frame(minHeight: 58)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(V4.line).frame(height: 1)
+        }
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn.wrappedValue ? "Вкл" : "Выкл")
+        .accessibilityAddTraits(.isButton)
+    }
 }
 
+// MARK: - Room themes sheet
 
+private struct RoomThemesSheet: View {
+    let selected: RoomTheme
+    let isPremium: Bool
+    var onSelect: (RoomTheme) -> Void
+    @Environment(\.dismiss) private var dismiss
 
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 10) {
+                    Text("Фон чата в комнате просмотра")
+                        .font(.system(size: 13))
+                        .foregroundStyle(V4.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+
+                    ForEach(RoomTheme.allCases) { theme in
+                        Button {
+                            onSelect(theme)
+                        } label: {
+                            HStack(spacing: 12) {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(theme.chatBackground)
+                                    .frame(width: 56, height: 40)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(V4.line, lineWidth: 1)
+                                    )
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(theme.displayName)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(V4.ink)
+                                    Text(theme == .default ? "Базовый" : "Пресет комнаты")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(V4.muted)
+                                }
+                                Spacer()
+                                if selected == theme {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(V4.accent)
+                                }
+                            }
+                            .padding(12)
+                            .background(
+                                (selected == theme ? V4.accent.opacity(0.12) : V4.surface.opacity(0.5)),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(18)
+            }
+            .background(V4.canvas.ignoresSafeArea())
+            .navigationTitle("Темы комнат")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Закрыть") { dismiss() }
+                }
+            }
+        }
+    }
+}

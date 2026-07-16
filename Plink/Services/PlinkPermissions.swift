@@ -136,7 +136,7 @@ enum PlinkPermissions {
         if #available(iOS 17.0, *) {
             return AVAudioApplication.shared.recordPermission == .granted
         }
-        return AVAudioSession.sharedInstance().recordPermission == .granted
+        return AVAudioSession.sharedInstance().recordPermission == .granted // deprecated fallback for iOS < 17
     }
 
     /// Request mic once — first voice note or room voice toggle. Shows system dialog.

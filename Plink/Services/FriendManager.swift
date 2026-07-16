@@ -404,7 +404,7 @@ final class FriendManager: ObservableObject {
             case .notFound:
                 return "Пользователь не найден"
             case .serverError(_, let message):
-                return message ?? "Ошибка сервера"
+                return message
             case .unauthorized:
                 return "Войдите в аккаунт"
             default:

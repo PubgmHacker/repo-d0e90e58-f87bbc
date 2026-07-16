@@ -42,12 +42,41 @@ public final class EmbedPlaybackController: PlaybackControlling {
     public init() {}
 
     public func prepare(_ source: PlaybackSource) async throws {
-        guard case .embed(let url) = source else {
+        let playerURL: URL
+
+        switch source {
+        case .embed(let url):
+            // Cinema service URL — load directly
+            playerURL = url
+
+        case .youtube(let videoId):
+            // YouTube — load backend-hosted player page (avoids error 153)
+            let baseURL = "https://plink-backend-production-ef31.up.railway.app"
+            guard let url = URL(string: "\(baseURL)/api/media/youtube-player?id=\(videoId)") else {
+                throw ProviderError.unsupportedSource
+            }
+            playerURL = url
+
+        case .rutube(let videoId):
+            // Rutube — load embed page
+            guard let url = URL(string: "https://rutube.ru/play/embed/\(videoId)") else {
+                throw ProviderError.unsupportedSource
+            }
+            playerURL = url
+
+        case .vk(let videoId):
+            // VK Video — load embed page
+            guard let url = URL(string: "https://vk.com/video_ext.php?\(videoId)") else {
+                throw ProviderError.unsupportedSource
+            }
+            playerURL = url
+
+        default:
             throw ProviderError.unsupportedSource
         }
 
         teardown()
-        self.sourceURL = url
+        self.sourceURL = playerURL
         isReady = false
         lastError = nil
 
@@ -58,23 +87,53 @@ public final class EmbedPlaybackController: PlaybackControlling {
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
         web.backgroundColor = .black
-        web.scrollView.isScrollEnabled = true   // allow scrolling on cinema pages
+        web.scrollView.isScrollEnabled = false  // YouTube player doesn't need scroll
         web.translatesAutoresizingMaskIntoConstraints = false
 
-        // Basic UA to reduce bot detection on some sites
+        // Desktop UA for YouTube IFrame API compatibility
         web.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
         webView = web
         embeddedView = web
 
-        web.load(URLRequest(url: url))
+        web.load(URLRequest(url: playerURL))
 
         // Give the page a chance to render the player
-        try? await Task.sleep(for: .seconds(2.5))
+        try? await Task.sleep(for: .seconds(2))
 
-        await injectControlBridge()
+        // For YouTube: inject postMessage bridge for play/pause/seek
+        if case .youtube = source {
+            await injectYouTubeBridge()
+        } else {
+            await injectControlBridge()
+        }
         isReady = true
         startPolling()
+    }
+
+    /// YouTube-specific control bridge via postMessage
+    private func injectYouTubeBridge() async {
+        guard let web = webView else { return }
+        let bridge = """
+        window.addEventListener('message', function(e) {
+            try {
+                var cmd = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+                if (cmd.event === 'plink-yt') {
+                    window.webkit.messageHandlers.plinkYT && window.webkit.messageHandlers.plinkYT.postMessage(cmd);
+                }
+            } catch(err) {}
+        });
+        // Also poll player state
+        setInterval(function() {
+            try {
+                var iframe = document.querySelector('iframe');
+                if (iframe && iframe.contentWindow) {
+                    iframe.contentWindow.postMessage(JSON.stringify({event: 'listening', id: 'plink'}), '*');
+                }
+            } catch(err) {}
+        }, 1000);
+        """
+        _ = try? await web.evaluateJavaScript(bridge)
     }
 
     public func play() async {

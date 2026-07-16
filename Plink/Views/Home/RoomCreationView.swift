@@ -8,6 +8,8 @@ struct RoomCreationView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var apiClient: APIClient
     var onRoomCreated: (Room) -> Void
+    /// When set (Friends → «Смотреть»), prefill name and show invite hint.
+    var inviteFriend: Friend? = nil
 
     @State private var step: Step = .service
     @State private var selectedService: VideoService = .youtube
@@ -322,6 +324,16 @@ struct RoomCreationView: View {
                 if mediaTitle.isEmpty {
                     mediaTitle = selectedService.title
                 }
+                // Auto room name so Create isn't stuck disabled
+                if roomName.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if let friend = inviteFriend {
+                        roomName = "С \(friend.displayTitle)"
+                    } else if !mediaTitle.isEmpty {
+                        roomName = String(mediaTitle.prefix(40))
+                    } else {
+                        roomName = selectedService.title
+                    }
+                }
                 step = .settings
             } label: {
                 Text("Продолжить")
@@ -423,6 +435,19 @@ struct RoomCreationView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.divider, lineWidth: 0.5))
             }
 
+            if let friend = inviteFriend {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.badge.plus")
+                        .foregroundStyle(Cinema2026.accent)
+                    Text("После создания \(friend.displayTitle) получит приглашение в чат")
+                        .font(.caption)
+                        .foregroundStyle(Cinema2026.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(Cinema2026.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            }
+
             // Privacy
             VStack(alignment: .leading, spacing: 8) {
                 Text("Приватность")
@@ -461,22 +486,33 @@ struct RoomCreationView: View {
                     .background(Cinema2026.danger.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            // Create button
+            // Create button — always enabled (empty name → auto default)
             Button {
                 Task { await createRoom() }
             } label: {
                 HStack {
                     if isCreating { ProgressView().tint(Cinema2026.background) }
-                    Text("Создать комнату")
+                    Text(inviteFriend == nil ? "Создать комнату" : "Создать и пригласить")
                 }
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Cinema2026.background)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(roomName.isEmpty ? Cinema2026.surface : Cinema2026.accent, in: RoundedRectangle(cornerRadius: 16))
+                .background(isCreating ? Cinema2026.surface : Cinema2026.accent, in: RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(.plain)
-            .disabled(roomName.isEmpty || isCreating)
+            .disabled(isCreating)
+            .onAppear {
+                if roomName.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if let friend = inviteFriend {
+                        roomName = "С \(friend.displayTitle)"
+                    } else if !mediaTitle.isEmpty {
+                        roomName = String(mediaTitle.prefix(40))
+                    } else {
+                        roomName = selectedService.title
+                    }
+                }
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
@@ -552,7 +588,7 @@ struct RoomCreationView: View {
             videoId = nil
             source = .url
         case .rutube:
-            streamURL = mediaURL
+            streamURL = mediaURL.trimmingCharacters(in: .whitespacesAndNewlines)
             videoId = nil
             source = .url
         case .customURL:
@@ -585,8 +621,26 @@ struct RoomCreationView: View {
         let hostName = AuthService.shared.currentUserValue?.username
             ?? UserDefaults.standard.string(forKey: "plink_current_username")
 
+        // Guard empty URL for link-based services
+        if selectedService == .rutube || selectedService == .vk || selectedService == .customURL || selectedService == .browser {
+            let trimmed = mediaURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || !trimmed.lowercased().hasPrefix("http") {
+                errorMessage = "Вставьте корректную ссылку (https://…)"
+                step = .content
+                return
+            }
+        }
+
+        let finalName: String = {
+            let t = roomName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { return t }
+            if let friend = inviteFriend { return "С \(friend.displayTitle)" }
+            if !mediaTitle.isEmpty { return String(mediaTitle.prefix(40)) }
+            return selectedService.title
+        }()
+
         let request = CreateRoomRequest(
-            name: roomName.isEmpty ? "Комната" : roomName,
+            name: finalName,
             maxParticipants: maxParticipants,
             mediaItem: mediaItem,
             privacy: privacy,
@@ -604,10 +658,13 @@ struct RoomCreationView: View {
                 || msg.lowercased().contains("401")
                 || msg.localizedCaseInsensitiveContains("вход") {
                 errorMessage = "Сессия истекла. Закройте приложение и войдите снова."
+            } else if msg.contains("FREE_TIER") || msg.localizedCaseInsensitiveContains("1 active room") || msg.localizedCaseInsensitiveContains("free tier") {
+                errorMessage = "Уже есть активная комната. Закройте её (выйти из комнаты) и создайте новую — на free-тарифе 1 комната."
             } else {
                 errorMessage = "Не удалось создать комнату: \(msg)"
             }
             step = .settings
+            print("[RoomCreate] failed: \(msg)")
         }
     }
 

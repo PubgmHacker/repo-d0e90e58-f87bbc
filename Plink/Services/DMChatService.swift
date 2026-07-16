@@ -151,8 +151,10 @@ final class DMChatService: ObservableObject {
     // MARK: - Send
 
     func sendMessage(_ text: String, to friend: Friend) {
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        // Allow room-invite payloads (up to 280 server-side)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let payload = String(trimmed.prefix(280))
 
         let convID = conversationID(with: friend.id)
         let me = currentUserId ?? "me"
@@ -163,7 +165,7 @@ final class DMChatService: ObservableObject {
             senderID: me,
             recipientID: friend.id,
             senderName: "You",
-            text: trimmed,
+            text: payload,
             timestamp: Date(),
             isRead: false,
             senderAvatarURL: nil
@@ -172,7 +174,7 @@ final class DMChatService: ObservableObject {
         if conversations[convID] == nil { conversations[convID] = [] }
         conversations[convID]?.append(message)
         historyEpoch &+= 1
-        lastPreviewByFriend[friend.id] = trimmed
+        lastPreviewByFriend[friend.id] = payload
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
         struct Body: Encodable { let receiverId: String; let content: String }
@@ -182,7 +184,7 @@ final class DMChatService: ObservableObject {
                 let saved: DMMessageDTO = try await api.request(
                     "messages/dm",
                     method: .post,
-                    body: Body(receiverId: friend.id, content: trimmed)
+                    body: Body(receiverId: friend.id, content: payload)
                 )
                 if let idx = conversations[convID]?.firstIndex(where: { $0.id == message.id }) {
                     var list = conversations[convID] ?? []

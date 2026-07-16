@@ -39,6 +39,7 @@ struct V4FriendsViewLive: View {
     @Environment(\.scenePhase) private var scenePhase
     /// Shared so unread badges survive sheet open/close.
     @ObservedObject private var dmService = DMChatService.shared
+    @ObservedObject private var inviteService = RoomInviteService.shared
 
     private var requestBadge: Int { store?.requests.count ?? 0 }
 
@@ -52,6 +53,9 @@ struct V4FriendsViewLive: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 28) {
+                    if !inviteService.pendingInvites.isEmpty {
+                        roomInvitesBlock
+                    }
                     chatsBlock
                     recentBlock
                 }
@@ -98,9 +102,39 @@ struct V4FriendsViewLive: View {
             .preferredColorScheme(.dark)
             .presentationDetents([.large])
         }
-        .sheet(isPresented: $showCreateRoom) {
-            RoomCreationView { _ in showCreateRoom = false }
-                .environmentObject(APIClient.shared)
+        .sheet(isPresented: $showCreateRoom, onDismiss: {
+            // Keep watchWithFriend until create finishes if still creating; clear if cancelled
+            if roomToOpen == nil { watchWithFriend = nil }
+        }) {
+            RoomCreationView(
+                onRoomCreated: { room in
+                    let friend = watchWithFriend
+                    showCreateRoom = false
+                    Task {
+                        if let friend {
+                            await RoomInviteService.shared.sendInvite(
+                                to: friend,
+                                room: room,
+                                mediaTitle: room.mediaItem?.title
+                            )
+                        }
+                        await MainActor.run {
+                            HapticManager.roomJoined()
+                            UIPasteboard.general.string = "Код комнаты Plink: \(room.code)"
+                            roomToOpen = room
+                            if friend != nil {
+                                toast = "Комната создана · приглашение отправлено"
+                            } else {
+                                toast = "Комната создана · код \(room.code)"
+                            }
+                            watchWithFriend = nil
+                        }
+                    }
+                },
+                inviteFriend: watchWithFriend
+            )
+            .environmentObject(APIClient.shared)
+            .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showAddFriend) {
             if let store {
@@ -155,6 +189,7 @@ struct V4FriendsViewLive: View {
             await store?.load()
             await loadRecentRooms()
             await dmService.refreshUnread()
+            await inviteService.refreshFromServer()
         }
         // Tabs stay mounted (opacity switch) — re-fetch when this tab is shown
         .onChange(of: isActive) { _, active in
@@ -181,16 +216,106 @@ struct V4FriendsViewLive: View {
                 await store?.refreshQuietly()
             }
         }
-        // Unread DM badges: poll even when another tab is open (view stays mounted)
+        // Unread DMs + room invites: poll even when another tab is open
         .task {
             await dmService.refreshUnread()
+            await inviteService.refreshFromServer()
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 4_000_000_000) // 4s
                 guard !Task.isCancelled else { break }
                 if scenePhase == .active {
                     await dmService.refreshUnread()
+                    await inviteService.refreshFromServer()
                 }
             }
+        }
+    }
+
+    // MARK: - Incoming room invites
+
+    @ViewBuilder
+    private var roomInvitesBlock: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Приглашения смотреть",
+                icon: "envelope.open.fill",
+                count: inviteService.pendingInvites.count,
+                actionTitle: nil,
+                action: nil
+            )
+            sectionCard {
+                ForEach(inviteService.pendingInvites) { invite in
+                    roomInviteRow(invite)
+                }
+            }
+        }
+        .padding(.horizontal, 0)
+    }
+
+    private func roomInviteRow(_ invite: RoomInvite) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                V4Avatar(
+                    letter: PlinkAvatarURL.letter(from: invite.fromUsername),
+                    theme: theme,
+                    size: 44,
+                    imageURL: PlinkAvatarURL.resolve(userId: invite.fromUserID, stored: invite.fromAvatarURL)
+                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(invite.fromUsername)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(V4.ink)
+                    Text("Приглашает в «\(invite.roomName)»")
+                        .font(.system(size: 13))
+                        .foregroundStyle(V4.muted)
+                        .lineLimit(2)
+                    Text("Код \(invite.roomCode)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(V4.accent)
+                }
+                Spacer(minLength: 4)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    Task {
+                        if let room = await inviteService.acceptInvite(invite) {
+                            await MainActor.run {
+                                roomToOpen = room
+                                toast = "Вы в комнате «\(room.name)»"
+                            }
+                        } else {
+                            await MainActor.run {
+                                toast = "Не удалось войти. Комната могла закрыться."
+                            }
+                        }
+                    }
+                } label: {
+                    Text("Принять")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(V4.accentInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .background(V4.accent, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    inviteService.declineInvite(invite)
+                } label: {
+                    Text("Отклонить")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(V4.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .background(V4.raised.opacity(0.8), in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(V4.line.opacity(0.55)).frame(height: 1)
         }
     }
 

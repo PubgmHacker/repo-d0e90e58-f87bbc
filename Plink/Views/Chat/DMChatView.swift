@@ -135,7 +135,14 @@ struct DMChatView: View {
             .environmentObject(APIClient.shared)
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            dmService.chatDidOpen(friendId: friend.id)
+        }
+        .onDisappear {
+            dmService.chatDidClose(friendId: friend.id)
+        }
         .task {
+            dmService.chatDidOpen(friendId: friend.id)
             await dmService.loadHistory(
                 friendId: friend.id,
                 friendName: friend.displayTitle,

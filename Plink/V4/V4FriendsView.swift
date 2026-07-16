@@ -37,6 +37,8 @@ struct V4FriendsViewLive: View {
     @State private var recentLoading = false
     @State private var roomToOpen: Room?
     @Environment(\.scenePhase) private var scenePhase
+    /// Shared so unread badges survive sheet open/close.
+    @ObservedObject private var dmService = DMChatService.shared
 
     private var requestBadge: Int { store?.requests.count ?? 0 }
 
@@ -64,10 +66,12 @@ struct V4FriendsViewLive: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(V4.ink)
         .background(Color.clear)
-        .sheet(item: $dmFriend) { friend in
+        .sheet(item: $dmFriend, onDismiss: {
+            Task { await dmService.refreshUnread() }
+        }) { friend in
             NavigationStack {
                 DMChatView(friend: friend)
-                    .environmentObject(DMChatService(api: APIClient.shared))
+                    .environmentObject(dmService)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Закрыть") { dmFriend = nil }
@@ -150,6 +154,7 @@ struct V4FriendsViewLive: View {
         .task {
             await store?.load()
             await loadRecentRooms()
+            await dmService.refreshUnread()
         }
         // Tabs stay mounted (opacity switch) — re-fetch when this tab is shown
         .onChange(of: isActive) { _, active in
@@ -157,19 +162,34 @@ struct V4FriendsViewLive: View {
             Task {
                 await store?.refreshQuietly()
                 await loadRecentRooms()
+                await dmService.refreshUnread()
             }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, isActive else { return }
-            Task { await store?.refreshQuietly() }
+            Task {
+                await store?.refreshQuietly()
+                await dmService.refreshUnread()
+            }
         }
-        // Poll while friends tab is open so accept on other phone appears
+        // Friends list refresh only while tab visible
         .task(id: isActive) {
             guard isActive else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 8_000_000_000) // 8s
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
                 guard !Task.isCancelled, isActive else { break }
                 await store?.refreshQuietly()
+            }
+        }
+        // Unread DM badges: poll even when another tab is open (view stays mounted)
+        .task {
+            await dmService.refreshUnread()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 4_000_000_000) // 4s
+                guard !Task.isCancelled else { break }
+                if scenePhase == .active {
+                    await dmService.refreshUnread()
+                }
             }
         }
     }
@@ -398,29 +418,57 @@ struct V4FriendsViewLive: View {
     // MARK: - Rows
 
     private func friendChatRow(_ friend: Friend) -> some View {
-        HStack(spacing: 12) {
+        let unread = dmService.unreadCount(for: friend.id)
+        let preview = dmService.lastPreviewByFriend[friend.id]
+
+        return HStack(spacing: 12) {
             Button { profileFriend = friend } label: {
-                V4Avatar(
-                    letter: friend.initials,
-                    theme: theme,
-                    size: 44,
-                    imageURL: PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
-                )
+                ZStack(alignment: .topTrailing) {
+                    V4Avatar(
+                        letter: friend.initials,
+                        theme: theme,
+                        size: 44,
+                        imageURL: PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
+                    )
+                    // Unread dot on avatar (Telegram-style)
+                    if unread > 0 {
+                        Circle()
+                            .fill(V4.accent)
+                            .frame(width: 12, height: 12)
+                            .overlay(Circle().stroke(V4.canvas, lineWidth: 2))
+                            .offset(x: 2, y: -2)
+                    }
+                }
             }
             .buttonStyle(.plain)
 
             Button { dmFriend = friend } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(friend.displayTitle)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(V4.ink)
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(friend.isOnline ? Color(red: 0.3, green: 0.9, blue: 0.55) : V4.muted.opacity(0.5))
-                            .frame(width: 7, height: 7)
-                        Text(friend.isOnline ? "В сети · написать" : "Не в сети · написать")
-                            .font(.system(size: 12))
-                            .foregroundStyle(V4.muted)
+                    HStack(spacing: 6) {
+                        Text(friend.displayTitle)
+                            .font(.system(size: 15, weight: unread > 0 ? .heavy : .bold))
+                            .foregroundStyle(V4.ink)
+                            .lineLimit(1)
+                        if unread > 0 {
+                            Text("· новое")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(V4.accent)
+                        }
+                    }
+                    if let preview, unread > 0 {
+                        Text(preview)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(V4.ink.opacity(0.85))
+                            .lineLimit(1)
+                    } else {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(friend.isOnline ? Color(red: 0.3, green: 0.9, blue: 0.55) : V4.muted.opacity(0.5))
+                                .frame(width: 7, height: 7)
+                            Text(friend.isOnline ? "В сети · написать" : "Не в сети · написать")
+                                .font(.system(size: 12))
+                                .foregroundStyle(V4.muted)
+                        }
                     }
                 }
             }
@@ -429,13 +477,31 @@ struct V4FriendsViewLive: View {
             Spacer(minLength: 6)
 
             Button { dmFriend = friend } label: {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(V4.ink)
-                    .frame(width: 38, height: 38)
-                    .background(V4.raised.opacity(0.7))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(V4.line.opacity(0.7)))
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: unread > 0 ? "message.fill" : "message.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(unread > 0 ? V4.accentInk : V4.ink)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            (unread > 0 ? V4.accent.opacity(0.95) : V4.raised.opacity(0.7)),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(unread > 0 ? V4.accent.opacity(0.3) : V4.line.opacity(0.7))
+                        )
+
+                    if unread > 0 {
+                        Text(unread > 9 ? "9+" : "\(unread)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.red, in: Capsule())
+                            .offset(x: 6, y: -6)
+                            .accessibilityLabel("\(unread) непрочитанных")
+                    }
+                }
             }
             .buttonStyle(.plain)
 
@@ -455,6 +521,7 @@ struct V4FriendsViewLive: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+        .background(unread > 0 ? V4.accent.opacity(0.06) : Color.clear)
         .overlay(alignment: .bottom) {
             Rectangle().fill(V4.line.opacity(0.55)).frame(height: 1).padding(.leading, 70)
         }

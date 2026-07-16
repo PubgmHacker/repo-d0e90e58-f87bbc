@@ -65,7 +65,11 @@ struct PlinkApprovedV4Root: View {
                     .opacity(tab == 4 ? 1 : 0).allowsHitTesting(tab == 4)
             }
             .animation(.easeInOut(duration: 0.15), value: tab)
-            PlinkLiquidTabBar(selection:$tab, theme:theme)
+            PlinkLiquidTabBar(
+                selection: $tab,
+                theme: theme,
+                friendsUnread: DMChatService.shared.totalUnread
+            )
             if appearance { V4AppearanceView(theme:$theme,presented:$appearance).zIndex(25).transition(.opacity) }
         }.preferredColorScheme(.dark).tint(V4.accent)
         .task {
@@ -252,6 +256,9 @@ struct PlinkApprovedV4Root: View {
 struct PlinkLiquidTabBar: View {
     @Binding var selection: Int
     var theme: V4Theme = .electric
+    /// Unread DMs — red badge on «Друзья» tab when user is not in that chat.
+    var friendsUnread: Int = 0
+    @ObservedObject private var dmService = DMChatService.shared
     @Namespace private var selectionNS
     private var activeSecondary: Color { let (_, c1, _, _) = theme.colors; return c1 }
 
@@ -262,6 +269,8 @@ struct PlinkLiquidTabBar: View {
         ("person.2.fill", "Друзья"),
         ("person.crop.circle.fill", "Профиль")
     ]
+
+    private var friendsBadge: Int { max(friendsUnread, dmService.totalUnread) }
 
     var body: some View {
         content
@@ -289,8 +298,20 @@ struct PlinkLiquidTabBar: View {
                     }
                 } label: {
                     VStack(spacing: 3) {
-                        Image(systemName: items[index].0)
-                            .font(.system(size: 18, weight: .semibold))
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: items[index].0)
+                                .font(.system(size: 18, weight: .semibold))
+                            // Tab 3 = Друзья — unread DM badge
+                            if index == 3, friendsBadge > 0 {
+                                Text(friendsBadge > 9 ? "9+" : "\(friendsBadge)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.red, in: Capsule())
+                                    .offset(x: 10, y: -6)
+                            }
+                        }
                         Text(items[index].1)
                             .font(.system(size: 9.5, weight: .semibold))
                             .lineLimit(1)

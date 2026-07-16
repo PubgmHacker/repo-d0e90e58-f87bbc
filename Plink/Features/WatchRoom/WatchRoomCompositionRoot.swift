@@ -34,7 +34,8 @@ public enum WatchRoomCompositionRoot {
                 mediaId: mediaId,
                 apiBaseURL: apiBaseURL,
                 wsBaseURL: wsBaseURL,
-                authToken: authToken
+                authToken: authToken,
+                hostId: room.hostID
             )
             return AnyView(WatchRoomScreen(model: model))
         } else {
@@ -122,7 +123,8 @@ public enum WatchRoomCompositionRoot {
         mediaId: String?,
         apiBaseURL: URL,
         wsBaseURL: URL,
-        authToken: String
+        authToken: String,
+        hostId: String? = nil
     ) -> WatchRoomModel {
         let catchupClient = RESTChatCatchupClient(
             baseURL: apiBaseURL,
@@ -145,7 +147,8 @@ public enum WatchRoomCompositionRoot {
             ticketProvider: ticketProvider,
             mediaSource: mediaSource,
             mediaId: mediaId,
-            chatCatchupClient: catchupClient
+            chatCatchupClient: catchupClient,
+            roomHostId: hostId
         )
     }
 

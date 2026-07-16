@@ -733,15 +733,34 @@ struct PlinkApprovedV4Root: View {
         .fullScreenCover(item: $roomToPresent) { room in
             WatchRoomContainer(room: room)
         }
+        // Trending / home cards post .plinkRoomCreated with a Room object — present WatchRoom
+        .onReceive(NotificationCenter.default.publisher(for: .plinkRoomCreated)) { note in
+            guard let room = note.object as? Room else { return }
+            // Avoid re-present churn if already showing the same room
+            if roomToPresent?.id == room.id { return }
+            HapticManager.roomJoined()
+            roomToPresent = room
+            Task { await roomsStore?.load() }
+        }
     }
 
-    /// Open the first available room from the rooms store (used by Home/Rooms tab).
+    /// Open a room from the rooms store (join first so presence/sync work multi-device).
     private func openFirstRoom() {
         guard let rs = roomsStore else { return }
-        if let hero = rs.heroRoom {
-            roomToPresent = hero
-        } else if let first = rs.railRooms.first {
-            roomToPresent = first
+        let candidate = rs.heroRoom ?? rs.railRooms.first
+        guard let room = candidate else { return }
+        Task {
+            do {
+                let joined = try await RoomService(api: APIClient.shared).joinRoom(code: room.code)
+                await MainActor.run {
+                    roomToPresent = joined
+                }
+            } catch {
+                // Fall back to presenting list snapshot if already a member / network blip
+                await MainActor.run {
+                    roomToPresent = room
+                }
+            }
         }
     }
 
@@ -812,7 +831,10 @@ struct PlinkApprovedV4Root: View {
                 HapticManager.roomJoined()
                 PlinkAppDelegate.requestNotificationPermission()
                 UIPasteboard.general.string = "Код комнаты Plink: \(room.code)"
+                // Present WatchRoom (also mirrored via .plinkRoomCreated for home subviews)
+                roomToPresent = room
                 NotificationCenter.default.post(name: .plinkRoomCreated, object: room)
+                Task { await roomsStore?.load() }
             }
         } catch {}
     }
@@ -1069,9 +1091,18 @@ struct V4HomeViewLive: View {
                 .padding(.horizontal,19)
                 .padding(.bottom,18)
 
-                // Hero carousel — 3-5 trending videos as swipeable hero cards
-                if !searchStore.trending.isEmpty {
-                    TabView {
+                // Hero carousel — video promo banners first, then trending + promo cards
+                // (P0-1: wire existing HeroVideoBanner MP4s; keep V4Hero + promoBanner as-is)
+                TabView {
+                    // MP4 promo banners (Resources/Banners/*.mp4)
+                    HeroVideoBanner(banner: .watchTogether, height: 260)
+                        .padding(.horizontal, 13)
+                    HeroVideoBanner(banner: .aiCompanion, height: 260)
+                        .padding(.horizontal, 13)
+                    HeroVideoBanner(banner: .syncDevices, height: 260)
+                        .padding(.horizontal, 13)
+
+                    if !searchStore.trending.isEmpty {
                         ForEach(searchStore.trending.prefix(5)) { item in
                             V4Hero(
                                 title: item.title,
@@ -1104,13 +1135,10 @@ struct V4HomeViewLive: View {
                         )
                         .padding(.horizontal, 13)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .always))
-                    .frame(height: 280)
-                    .padding(.bottom, 20)
-                } else {
-                    RoundedRectangle(cornerRadius: 26).fill(V4.cardBG).frame(height: 260).padding(.horizontal,13).padding(.bottom,20)
-                        .overlay { ProgressView().tint(V4.accent) }
                 }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .frame(height: 280)
+                .padding(.bottom, 20)
 
                 // "Популярное" — auto-scrolling carousel, bigger posters
                 if !searchStore.trending.isEmpty {

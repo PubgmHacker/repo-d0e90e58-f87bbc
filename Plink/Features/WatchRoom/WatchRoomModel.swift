@@ -80,6 +80,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // P0-35: REST client for chat catch-up
     private let chatCatchupClient: ChatCatchupClient?
+    /// Host user id from Room model (presence highlight).
+    private let roomHostId: String?
 
     // P0-5: init — class is @MainActor, init inherits isolation.
     // Default params use nil-coalescing inside body to avoid @MainActor
@@ -94,7 +96,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         mediaId: String? = nil,
         chatCatchupClient: ChatCatchupClient? = nil,
         clock: ClockSynchronizer? = nil,
-        coordinator: PlaybackCoordinator? = nil
+        coordinator: PlaybackCoordinator? = nil,
+        roomHostId: String? = nil
     ) {
         self._roomId = roomId
         self.currentUserId = currentUserId
@@ -102,6 +105,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         self.mediaSource = mediaSource
         self.mediaId = mediaId
         self.chatCatchupClient = chatCatchupClient
+        self.roomHostId = roomHostId
         let resolvedClock = clock ?? ClockSynchronizer()
         self.clock = resolvedClock
         self.coordinator = coordinator ?? PlaybackCoordinator()
@@ -738,7 +742,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     var bufferedFraction: Double { 0 }
     var qualityLabel: String { coordinator.capabilities.supportsPiP ? "HD" : "SD" }
-    var hostId: String? { nil }
+    var hostId: String? { roomHostId }
     var activeSpeakerName: String? { nil }
     var microphoneState: MicrophoneUIState { .off }
     var cameraState: CameraUIState { .off }

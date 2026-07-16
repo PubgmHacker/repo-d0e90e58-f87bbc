@@ -1,37 +1,41 @@
 import Foundation
 import Combine
 
-// MARK: - DM Chat Service v2 (Real API)
+// MARK: - DM Chat Service v3 (Real API + live poll)
 /// Личные сообщения через реальный бэкенд.
 /// Отправка: POST /api/messages/dm
 /// История: GET /api/messages/dm/:friendId
-///
-/// 🔧 FIX C4: Now accepts an authenticated APIClient via init (was: own unauth client).
-/// 🔧 FIX C11: isOwnMessage compares against real currentUserId (was: "current_user").
 @MainActor
 final class DMChatService: ObservableObject {
 
     @Published private(set) var conversations: [String: [DirectMessage]] = [:]
     @Published private(set) var lastMessages: [Conversation] = []
+    /// Bumps on every successful history load so SwiftUI re-renders even if count is stable.
+    @Published private(set) var historyEpoch: Int = 0
     @Published var isLoading = false
     @Published var errorMessage: String?
 
     private let api: APIClient
 
-    /// 🔧 FIX C4: Inject shared APIClient from RaveCloneApp
     init(api: APIClient) {
         self.api = api
     }
 
-    private var currentUserId: String? {
-        // Получаем ID текущего юзера из сохранённого профиля (non-secret)
-        UserDefaults.standard.data(forKey: "rave_saved_user")
+    /// Prefer lightweight UserDefaults key (always written on login), then AuthService, then full user blob.
+    var currentUserId: String? {
+        if let id = UserDefaults.standard.string(forKey: "plink_current_user_id"), !id.isEmpty {
+            return id
+        }
+        if let id = AuthService.shared.currentUserValue?.id, !id.isEmpty {
+            return id
+        }
+        return UserDefaults.standard.data(forKey: "rave_saved_user")
             .flatMap { try? JSONDecoder().decode(User.self, from: $0) }?.id
     }
 
     // MARK: - Load History (GET /api/messages/dm/:friendId)
 
-    func loadHistory(friendId: String, friendName: String) async {
+    func loadHistory(friendId: String, friendName: String, friendAvatarURL: String? = nil, quiet: Bool = false) async {
         if api.authToken == nil {
             api.authToken = KeychainHelper.read(for: "rave_auth_token")
                 ?? AuthService.shared.authToken
@@ -41,27 +45,32 @@ final class DMChatService: ObservableObject {
             return
         }
         let convID = conversationID(with: friendId)
-        isLoading = true
-        defer { isLoading = false }
+        if !quiet {
+            isLoading = true
+        }
+        defer { if !quiet { isLoading = false } }
 
         do {
             let dtos: [DMMessageDTO] = try await api.request("messages/dm/\(friendId)")
-            let me = currentUserId ?? "me"
-            let messages = dtos.map { dto in
-                DirectMessage(
+            let me = currentUserId ?? ""
+            let messages = dtos.map { dto -> DirectMessage in
+                let isOwn = !me.isEmpty && dto.senderID == me
+                return DirectMessage(
                     id: dto.id,
                     conversationID: convID,
                     senderID: dto.senderID,
                     recipientID: dto.receiverID,
-                    senderName: dto.senderID == me ? "You" : friendName,
+                    senderName: isOwn ? "You" : friendName,
                     text: dto.content,
                     timestamp: dto.createdAt,
                     isRead: dto.receiverID == me,
-                    senderAvatarURL: nil
+                    senderAvatarURL: isOwn ? nil : friendAvatarURL
                 )
             }
+            // Always replace + bump epoch so open chat reflects new remote messages
             conversations[convID] = messages
-            print("[DM] history \(messages.count) msgs with \(friendId)")
+            historyEpoch &+= 1
+            print("[DM] history \(messages.count) msgs with \(friendId) epoch=\(historyEpoch)")
         } catch {
             print("[DM] loadHistory error: \(error.localizedDescription)")
         }
@@ -83,7 +92,6 @@ final class DMChatService: ObservableObject {
         let convID = conversationID(with: friend.id)
         let me = currentUserId ?? "me"
 
-        // Оптимистичное обновление UI
         let message = DirectMessage(
             id: UUID().uuidString,
             conversationID: convID,
@@ -98,9 +106,9 @@ final class DMChatService: ObservableObject {
 
         if conversations[convID] == nil { conversations[convID] = [] }
         conversations[convID]?.append(message)
+        historyEpoch &+= 1
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
-        // Реальная отправка
         struct Body: Encodable { let receiverId: String; let content: String }
         if api.authToken == nil {
             api.authToken = KeychainHelper.read(for: "rave_auth_token")
@@ -113,7 +121,6 @@ final class DMChatService: ObservableObject {
                     method: .post,
                     body: Body(receiverId: friend.id, content: trimmed)
                 )
-                // Replace optimistic id with server id if possible
                 if let idx = conversations[convID]?.firstIndex(where: { $0.id == message.id }) {
                     var list = conversations[convID] ?? []
                     list[idx] = DirectMessage(
@@ -128,7 +135,15 @@ final class DMChatService: ObservableObject {
                         senderAvatarURL: nil
                     )
                     conversations[convID] = list
+                    historyEpoch &+= 1
                 }
+                // Pull full history so both sides stay aligned
+                await loadHistory(
+                    friendId: friend.id,
+                    friendName: friend.username,
+                    friendAvatarURL: friend.avatarURL,
+                    quiet: true
+                )
             } catch {
                 errorMessage = error.localizedDescription
                 print("[DM] sendMessage error: \(error.localizedDescription)")
@@ -141,7 +156,9 @@ final class DMChatService: ObservableObject {
     func receiveMessage(_ message: DirectMessage, from friend: Friend) {
         let convID = conversationID(with: friend.id)
         if conversations[convID] == nil { conversations[convID] = [] }
+        if conversations[convID]?.contains(where: { $0.id == message.id }) == true { return }
         conversations[convID]?.append(message)
+        historyEpoch &+= 1
         updateLastMessage(conversationID: convID, friend: friend, message: message)
     }
 
@@ -174,4 +191,29 @@ private struct DMMessageDTO: Decodable {
     let receiverID: String
     let content: String
     let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, content, createdAt
+        case senderID
+        case receiverID
+        case senderId
+        case receiverId
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        content = try c.decode(String.self, forKey: .content)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        if let s = try c.decodeIfPresent(String.self, forKey: .senderID) {
+            senderID = s
+        } else {
+            senderID = try c.decode(String.self, forKey: .senderId)
+        }
+        if let r = try c.decodeIfPresent(String.self, forKey: .receiverID) {
+            receiverID = r
+        } else {
+            receiverID = try c.decode(String.self, forKey: .receiverId)
+        }
+    }
 }

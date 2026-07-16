@@ -16,9 +16,12 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
         timestamp.formatted(.dateTime.hour().minute())
     }
 
-    /// 🔧 FIX C11: Compare against the REAL current user id (was: "current_user").
-    /// Reads the saved user profile from UserDefaults (non-secret profile data).
+    /// Own vs other — prefer lightweight id key (always set on login).
+    /// Uses only UserDefaults so this stays nonisolated / Sendable-safe.
     var isOwnMessage: Bool {
+        if let id = UserDefaults.standard.string(forKey: "plink_current_user_id"), !id.isEmpty {
+            return senderID == id
+        }
         guard let data = UserDefaults.standard.data(forKey: "rave_saved_user"),
               let user = try? JSONDecoder().decode(User.self, from: data) else {
             return false

@@ -43,6 +43,9 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
         if let data = defaults.data(forKey: Keys.savedUser),
            let user = try? JSONDecoder().decode(User.self, from: data) {
             self.currentUser = user
+            // Ensure lightweight id key exists for DM isOwn / chat side
+            defaults.set(user.id, forKey: "plink_current_user_id")
+            defaults.set(user.username, forKey: "plink_current_username")
         }
 
         // 🔧 FIX C2: Read JWT + expiry + refresh token from Keychain (not UserDefaults)

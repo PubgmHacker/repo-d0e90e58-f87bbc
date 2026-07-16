@@ -400,7 +400,12 @@ struct V4FriendsViewLive: View {
     private func friendChatRow(_ friend: Friend) -> some View {
         HStack(spacing: 12) {
             Button { profileFriend = friend } label: {
-                V4Avatar(letter: String(friend.username.prefix(1)), theme: theme, size: 44)
+                V4Avatar(
+                    letter: String(friend.username.prefix(1)).uppercased(),
+                    theme: theme,
+                    size: 44,
+                    imageURL: PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
+                )
             }
             .buttonStyle(.plain)
 
@@ -773,14 +778,31 @@ private struct AddFriendSheet: View {
                         LazyVStack(spacing: 0) {
                             ForEach(manager.searchResults) { user in
                                 HStack(spacing: 12) {
-                                    Circle()
-                                        .fill(V4.accent.opacity(0.25))
-                                        .frame(width: 40, height: 40)
-                                        .overlay(
-                                            Text(String(user.username.prefix(1)).uppercased())
-                                                .font(.system(size: 15, weight: .bold))
-                                                .foregroundStyle(.white)
-                                        )
+                                    Group {
+                                        if let url = PlinkAvatarURL.resolve(userId: user.id, stored: user.avatarURL) {
+                                            AsyncImage(url: url) { phase in
+                                                if let img = phase.image {
+                                                    img.resizable().scaledToFill()
+                                                } else {
+                                                    Circle().fill(V4.accent.opacity(0.25))
+                                                        .overlay(
+                                                            Text(String(user.username.prefix(1)).uppercased())
+                                                                .font(.system(size: 15, weight: .bold))
+                                                                .foregroundStyle(.white)
+                                                        )
+                                                }
+                                            }
+                                        } else {
+                                            Circle().fill(V4.accent.opacity(0.25))
+                                                .overlay(
+                                                    Text(String(user.username.prefix(1)).uppercased())
+                                                        .font(.system(size: 15, weight: .bold))
+                                                        .foregroundStyle(.white)
+                                                )
+                                        }
+                                    }
+                                    .frame(width: 40, height: 40)
+                                    .clipShape(Circle())
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(user.username)
                                             .font(.system(size: 15, weight: .semibold))

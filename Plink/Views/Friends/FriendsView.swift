@@ -315,27 +315,29 @@ private struct FriendRow: View {
 
     @ViewBuilder
     private func avatar(_ friend: Friend) -> some View {
-        if let urlStr = friend.avatarURL, let url = URL(string: urlStr) {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    fallback
+        Group {
+            if let url = PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        fallback
+                    }
                 }
+            } else {
+                fallback
             }
-            .frame(width: 44, height: 44)
-            .clipShape(Circle())
-        } else {
-            fallback.frame(width: 44, height: 44)
         }
+        .frame(width: 44, height: 44)
+        .clipShape(Circle())
     }
 
     private var fallback: some View {
         Text(friend.initials)
             .font(.headline)
             .foregroundColor(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.ravePrimary)
-            .clipShape(Circle())
     }
 }
 

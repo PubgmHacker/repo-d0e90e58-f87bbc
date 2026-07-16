@@ -12,18 +12,27 @@ struct V4Avatar: View {
     var size: CGFloat = 43
     var isPremium: Bool = false
     var isAdmin: Bool = false
+    /// Optional remote photo — falls back to letter gradient when missing/failed.
+    var imageURL: URL? = nil
     @State private var ringRotation: Double = 0
     var body: some View {
         let (_, c1, c2, _) = theme.colors
         ZStack {
-            Circle()
-                .fill(LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: size, height: size)
-            Text(letter)
-                .font(.system(size: size == 43 ? 16 : 14, weight: .black))
-                .foregroundStyle(V4.ink)
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        letterFallback(c1: c1, c2: c2)
+                    }
+                }
+            } else {
+                letterFallback(c1: c1, c2: c2)
+            }
         }
         .frame(width: size, height: size)
+        .clipShape(Circle())
         .overlay {
             if isAdmin {
                 // Admin: rotating crimson ring — tight on the circle edge
@@ -50,6 +59,40 @@ struct V4Avatar: View {
             }
             // No ring for regular users — clean circle
         }
+    }
+
+    private func letterFallback(c1: Color, c2: Color) -> some View {
+        ZStack {
+            Circle()
+                .fill(LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing))
+            Text(letter)
+                .font(.system(size: size == 43 ? 16 : 14, weight: .black))
+                .foregroundStyle(V4.ink)
+        }
+    }
+}
+
+/// Resolves avatar URL from stored field or always-available `/users/:id/avatar` endpoint.
+enum PlinkAvatarURL {
+    static let apiBase = "https://plink-backend-production-ef31.up.railway.app"
+
+    static func resolve(userId: String?, stored: String?, cacheBust: Bool = true) -> URL? {
+        var raw = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if raw.isEmpty, let userId, !userId.isEmpty {
+            raw = "\(apiBase)/api/users/\(userId)/avatar"
+        } else if raw.hasPrefix("/") {
+            raw = apiBase + raw
+        }
+        guard !raw.isEmpty, var components = URLComponents(string: raw) else { return nil }
+        if cacheBust {
+            // 5-minute buckets so re-upload becomes visible without infinite cache miss
+            let bucket = Int(Date().timeIntervalSince1970 / 300)
+            var items = components.queryItems ?? []
+            items.removeAll { $0.name == "v" }
+            items.append(URLQueryItem(name: "v", value: "\(bucket)"))
+            components.queryItems = items
+        }
+        return components.url
     }
 }
 

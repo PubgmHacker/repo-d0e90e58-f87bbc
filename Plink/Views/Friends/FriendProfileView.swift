@@ -44,14 +44,24 @@ struct FriendProfileView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Circle()
-                .fill(Cinema2026.accent.opacity(0.25))
-                .frame(width: 64, height: 64)
-                .overlay(
-                    Text(String((profile?.username ?? usernameHint).prefix(1)).uppercased())
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
-                )
+            Group {
+                if let url = PlinkAvatarURL.resolve(userId: userId, stored: profile?.avatarURL) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        default:
+                            avatarLetter
+                        }
+                    }
+                } else {
+                    avatarLetter
+                }
+            }
+            .frame(width: 64, height: 64)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Cinema2026.accent.opacity(0.4), lineWidth: 2))
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(profile?.displayTitle ?? usernameHint)
                     .font(.system(size: 20, weight: .bold))
@@ -70,6 +80,15 @@ struct FriendProfileView: View {
             Spacer()
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var avatarLetter: some View {
+        ZStack {
+            Circle().fill(Cinema2026.accent.opacity(0.25))
+            Text(String((profile?.username ?? usernameHint).prefix(1)).uppercased())
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+        }
     }
 
     private var statsGrid: some View {

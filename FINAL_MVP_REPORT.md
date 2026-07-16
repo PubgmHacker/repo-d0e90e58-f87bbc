@@ -16,9 +16,9 @@
 | Friend profiles + stats? | ✅ | `GET /api/users/:id/profile` + FriendProfileView + badges |
 | Own profile stats? | ✅ | `GET /api/users/me/profile` + V4MyStatsCard / MyStatsSection |
 | Legacy code removed? | ⚠️ soft | `legacyStreamRelay` gated off by default + SOFT-RETIRED banner; MediaService extract disabled in Release |
-| AI confirm-action? | ⚠️ env | Client UI wired (V4 AI + AIActionCard); set `AI_ACTIONS_ENABLED=true` on Railway |
+| AI confirm-action? | ✅ | Client UI wired; Railway `AI_ACTIONS_ENABLED=true` set |
 | VoiceOver / Dynamic Type? | ✅ partial | a11y labels on chat report flow, DM watch button, friends actions, stats cards |
-| **Score** | **8.7/10** | Remaining: live 2-phone pass, Railway AI flag, hard-delete legacy after ASC |
+| **Score** | **9.0/10** | Remaining: live 2-phone human QA + ASC demo account |
 
 ---
 
@@ -73,13 +73,17 @@
 ### Cleanup / Polish
 - [x] Legacy soft-retired  
 - [x] Partial VoiceOver labels  
-- [ ] `AI_ACTIONS_ENABLED=true` on Railway (ops)  
+- [x] `AI_ACTIONS_ENABLED=true` on Railway  
+
+### Commits
+- iOS: `f9c7a7e` on main  
+- Backend: `cc1ade4` on main  
 
 ---
 
 ## Ops follow-ups
 
-1. Railway: `AI_ACTIONS_ENABLED=true` (restart service)  
+1. ~~Railway: `AI_ACTIONS_ENABLED=true`~~ done  
 2. Create ASC demo account + put credentials in Review Notes  
 3. Run `docs/MULTI_DEVICE_QA.md` on two phones  
 4. After ASC approval cycle: delete `legacyStreamRelay.ts`  

@@ -3,6 +3,7 @@
 // NO placeholders, NO fake data.
 
 import SwiftUI
+import UIKit
 import Observation
 
 // MARK: - V4 Rooms Store (P0.2)
@@ -290,12 +291,19 @@ final class V4ProfileStore {
     private(set) var username: String = ""
     private(set) var email: String = ""
     private(set) var avatarURL: URL?
+    /// Instant local preview (survives dismiss before AsyncImage refetch)
+    private(set) var localAvatarImage: UIImage?
     private(set) var isPremium: Bool = false
     private(set) var premiumUntil: Date?
     private(set) var isAdmin: Bool = false
     private(set) var selectedTheme: V4Theme = .electric
     private let authService: AuthService
     private let defaults = UserDefaults.standard
+
+    private var avatarFileURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("plink_avatar.jpg")
+    }
 
     init(authService: AuthService) {
         self.authService = authService
@@ -306,14 +314,36 @@ final class V4ProfileStore {
     }
 
     func load() async {
-        let user = await authService.currentUser()
-        if let user {
+        // Prefer server user; keep local image if server URL missing
+        do {
+            let user = try await authService.fetchCurrentUser()
             displayName = user.displayName ?? user.username
             username = user.username
             email = user.email
-            avatarURL = user.avatarURL.flatMap(URL.init(string:))
             isPremium = user.isPremium
             isAdmin = (user.role == "ADMIN" || user.role == "FOUNDER")
+            if let raw = user.avatarURL, !raw.isEmpty {
+                // Cache-bust so AsyncImage doesn't show stale bytes for same path
+                avatarURL = Self.cacheBustedURL(from: raw)
+                defaults.set(avatarURL?.absoluteString, forKey: "plink_user_avatar_url")
+            }
+            authService.updateCachedUser(user)
+        } catch {
+            let user = await authService.currentUser()
+            if let user {
+                displayName = user.displayName ?? user.username
+                username = user.username
+                email = user.email
+                isPremium = user.isPremium
+                isAdmin = (user.role == "ADMIN" || user.role == "FOUNDER")
+                if let raw = user.avatarURL, !raw.isEmpty {
+                    avatarURL = Self.cacheBustedURL(from: raw)
+                }
+            }
+        }
+        // Always try disk for instant paint
+        if localAvatarImage == nil {
+            loadLocalAvatarFile()
         }
     }
 
@@ -322,17 +352,59 @@ final class V4ProfileStore {
         defaults.set(theme.rawValue, forKey: "v4_theme")
     }
 
-    /// Update avatarURL after upload (called by AvatarPickerSheet).
-    func updateAvatarURL(_ url: URL) {
-        self.avatarURL = url
-        // Persist to UserDefaults so it survives reloads
-        defaults.set(url.absoluteString, forKey: "plink_user_avatar_url")
+    /// Apply avatar (local image always; server URL when available).
+    func applyAvatar(image: UIImage, serverURL: URL?) {
+        self.localAvatarImage = image
+        if let data = image.jpegData(compressionQuality: 0.85) {
+            try? data.write(to: avatarFileURL, options: .atomic)
+        }
+        var urlString: String?
+        if let serverURL, serverURL.scheme == "http" || serverURL.scheme == "https" {
+            let busted = Self.cacheBustedURL(from: serverURL.absoluteString) ?? serverURL
+            self.avatarURL = busted
+            urlString = busted.absoluteString
+            defaults.set(urlString, forKey: "plink_user_avatar_url")
+        }
+        if let u = authService.currentUserValue {
+            let updated = User(
+                id: u.id,
+                username: u.username,
+                email: u.email,
+                avatarURL: urlString ?? u.avatarURL,
+                avatarData: u.avatarData,
+                displayName: u.displayName,
+                coverURL: u.coverURL,
+                isOnline: u.isOnline,
+                isPremium: u.isPremium,
+                role: u.role,
+                createdAt: u.createdAt
+            )
+            authService.updateCachedUser(updated)
+        }
+        NotificationCenter.default.post(name: ProfileViewModel.avatarChangedNotification, object: nil)
     }
 
-    /// Load saved avatar from UserDefaults (called on init)
     func loadSavedAvatar() {
         if let saved = defaults.string(forKey: "plink_user_avatar_url") {
             self.avatarURL = URL(string: saved)
         }
+        loadLocalAvatarFile()
+    }
+
+    private func loadLocalAvatarFile() {
+        if FileManager.default.fileExists(atPath: avatarFileURL.path),
+           let data = try? Data(contentsOf: avatarFileURL),
+           let img = UIImage(data: data) {
+            localAvatarImage = img
+        }
+    }
+
+    static func cacheBustedURL(from raw: String) -> URL? {
+        guard var components = URLComponents(string: raw) else { return URL(string: raw) }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "t" || $0.name == "v" }
+        items.append(URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970))))
+        components.queryItems = items
+        return components.url
     }
 }

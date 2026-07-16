@@ -147,17 +147,28 @@ struct V4ProfileViewLive: View {
                 // ── Header: avatar + name + username + badges ──
                 HStack(spacing: 12) {
                     Button { showAvatarPicker = true } label: {
-                        if let avatarURL {
-                            AsyncImage(url: avatarURL) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
+                        Group {
+                            // Prefer local JPEG (instant + survives cache bugs)
+                            if let local = store?.localAvatarImage {
+                                Image(uiImage: local)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else if let avatarURL {
+                                AsyncImage(url: avatarURL) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFill()
+                                    default:
+                                        V4Avatar(letter: String((store?.displayName.prefix(1) ?? "П")), theme: theme, size: 64, isPremium: store?.isPremium == true, isAdmin: isAdmin)
+                                    }
+                                }
+                            } else {
                                 V4Avatar(letter: String((store?.displayName.prefix(1) ?? "П")), theme: theme, size: 64, isPremium: store?.isPremium == true, isAdmin: isAdmin)
                             }
-                            .frame(width: 64, height: 64)
-                            .clipShape(Circle())
-                        } else {
-                            V4Avatar(letter: String((store?.displayName.prefix(1) ?? "П")), theme: theme, size: 64, isPremium: store?.isPremium == true, isAdmin: isAdmin)
                         }
+                        .frame(width: 64, height: 64)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(V4.accent.opacity(0.5), lineWidth: 2))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Сменить аватар")
@@ -311,7 +322,7 @@ struct V4ProfileViewLive: View {
     }
 }
 
-// MARK: - AvatarPickerSheet (P0.5: PhotosUI + color avatars)
+// MARK: - AvatarPickerSheet (PhotosUI + server upload + local persist)
 
 struct AvatarPickerSheet: View {
     var store: V4ProfileStore?
@@ -319,9 +330,11 @@ struct AvatarPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var uploading = false
     @State private var uploadError: String?
+    @State private var uploadOK = false
     @State private var photoItem: PhotosPickerItem?
     @State private var previewImage: UIImage?
     @State private var selectedDefault: String? = nil
+    @State private var pendingImage: UIImage?
 
     private let defaultAvatars = ["avatar_default", "avatar_blue", "avatar_purple"]
 
@@ -329,65 +342,59 @@ struct AvatarPickerSheet: View {
         NavigationStack {
             VStack(spacing: 24) {
                 // Preview
-                if let previewImage {
-                    Image(uiImage: previewImage)
-                        .resizable().scaledToFill()
-                        .frame(width: 120, height: 120)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Cinema2026.accent, lineWidth: 3))
-                } else if let avatarURL = store?.avatarURL {
-                    AsyncImage(url: avatarURL) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Circle().fill(V4.surface).frame(width: 120, height: 120)
+                Group {
+                    if let previewImage {
+                        Image(uiImage: previewImage)
+                            .resizable().scaledToFill()
+                    } else if let local = store?.localAvatarImage {
+                        Image(uiImage: local)
+                            .resizable().scaledToFill()
+                    } else if let avatarURL = store?.avatarURL {
+                        AsyncImage(url: avatarURL) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Circle().fill(V4.surface)
+                                .overlay(Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(V4.muted))
+                        }
+                    } else {
+                        Circle().fill(V4.surface)
                             .overlay(Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(V4.muted))
                     }
-                    .frame(width: 120, height: 120)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Cinema2026.accent, lineWidth: 3))
-                } else {
-                    Circle().fill(V4.surface).frame(width: 120, height: 120)
-                        .overlay(Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(V4.muted))
-                        .overlay(Circle().stroke(Cinema2026.accent, lineWidth: 3))
+                }
+                .frame(width: 120, height: 120)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(uploadOK ? Color.green : Cinema2026.accent, lineWidth: 3))
+
+                if uploadOK {
+                    Label("Сохранено на сервере", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.green)
                 }
 
-                // Default avatars — 3 JPG presets
                 Text("Стандартные").font(.system(size: 13, weight: .bold)).foregroundStyle(V4.muted)
                 HStack(spacing: 16) {
                     ForEach(defaultAvatars, id: \.self) { name in
                         Button {
                             selectedDefault = name
-                            if let url = Bundle.main.url(forResource: name, withExtension: "jpg", subdirectory: "Avatars") ?? Bundle.main.url(forResource: name, withExtension: "jpg"),
+                            if let url = Bundle.main.url(forResource: name, withExtension: "jpg", subdirectory: "Avatars")
+                                ?? Bundle.main.url(forResource: name, withExtension: "jpg"),
                                let data = try? Data(contentsOf: url),
                                let img = UIImage(data: data) {
                                 previewImage = img
-                                Task { try? await uploadAvatar(img) }
+                                pendingImage = img
+                                uploadOK = false
+                                Task { await saveAndUpload(img) }
                             }
                         } label: {
-                            if let url = Bundle.main.url(forResource: name, withExtension: "jpg", subdirectory: "Avatars") ?? Bundle.main.url(forResource: name, withExtension: "jpg"),
-                               let data = try? Data(contentsOf: url),
-                               let img = UIImage(data: data) {
-                                Image(uiImage: img)
-                                    .resizable().scaledToFill()
-                                    .frame(width: 64, height: 64)
-                                    .clipShape(Circle())
-                                    .overlay(Circle().stroke(selectedDefault == name ? Cinema2026.accent : V4.line, lineWidth: selectedDefault == name ? 3 : 1))
-                            } else {
-                                Circle()
-                                    .fill(V4.surface)
-                                    .frame(width: 64, height: 64)
-                                    .overlay(Image(systemName: "person.fill").font(.system(size: 20)).foregroundStyle(V4.muted))
-                                    .overlay(Circle().stroke(selectedDefault == name ? Cinema2026.accent : V4.line, lineWidth: selectedDefault == name ? 3 : 1))
-                            }
+                            presetThumb(name: name)
                         }
                         .buttonStyle(.plain)
+                        .disabled(uploading)
                     }
                 }
 
-                // Divider
                 Rectangle().fill(V4.line).frame(height: 0.5).padding(.horizontal, 24)
 
-                // PhotosPicker — gallery
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     HStack(spacing: 8) {
                         if uploading {
@@ -395,7 +402,7 @@ struct AvatarPickerSheet: View {
                         } else {
                             Image(systemName: "photo.on.rectangle")
                         }
-                        Text(uploading ? "Загрузка…" : "Выбрать из галереи")
+                        Text(uploading ? "Сохраняем…" : "Выбрать из галереи")
                     }
                     .font(.system(size: 16, weight: .semibold))
                     .frame(maxWidth: .infinity)
@@ -411,15 +418,29 @@ struct AvatarPickerSheet: View {
                 }
 
                 if let err = uploadError {
-                    Text(err).font(.caption).foregroundStyle(Cinema2026.danger).padding(.horizontal, 24)
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(Cinema2026.danger)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
                 }
 
                 Spacer()
 
-                Button("Готово") { dismiss() }
-                    .font(.subheadline.bold())
-                    .foregroundStyle(Cinema2026.accent)
-                    .padding(.bottom, 24)
+                Button {
+                    Task { await doneTapped() }
+                } label: {
+                    Text(uploading ? "Сохраняем…" : "Готово")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Cinema2026.background)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(uploading)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
             .padding(.top, 32)
             .background(Cinema2026.background.ignoresSafeArea())
@@ -433,10 +454,40 @@ struct AvatarPickerSheet: View {
         }
     }
 
+    @ViewBuilder
+    private func presetThumb(name: String) -> some View {
+        if let url = Bundle.main.url(forResource: name, withExtension: "jpg", subdirectory: "Avatars")
+            ?? Bundle.main.url(forResource: name, withExtension: "jpg"),
+           let data = try? Data(contentsOf: url),
+           let img = UIImage(data: data) {
+            Image(uiImage: img)
+                .resizable().scaledToFill()
+                .frame(width: 64, height: 64)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(selectedDefault == name ? Cinema2026.accent : V4.line, lineWidth: selectedDefault == name ? 3 : 1))
+        } else {
+            Circle()
+                .fill(V4.surface)
+                .frame(width: 64, height: 64)
+                .overlay(Image(systemName: "person.fill").font(.system(size: 20)).foregroundStyle(V4.muted))
+        }
+    }
+
+    private func doneTapped() async {
+        // If user picked something but upload not finished / failed — retry then close
+        if let pending = pendingImage, !uploadOK {
+            await saveAndUpload(pending)
+            if uploadOK { dismiss() }
+            return
+        }
+        dismiss()
+    }
+
     private func loadPhoto(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         uploading = true
         uploadError = nil
+        uploadOK = false
         defer { uploading = false }
         selectedDefault = nil
         do {
@@ -450,7 +501,8 @@ struct AvatarPickerSheet: View {
             }
             let resized = resizeToSquare(image, size: 512)
             previewImage = resized
-            try await uploadAvatar(resized)
+            pendingImage = resized
+            await saveAndUpload(resized)
         } catch {
             uploadError = "Ошибка: \(error.localizedDescription)"
         }
@@ -463,58 +515,80 @@ struct AvatarPickerSheet: View {
         let offsetY = (originalSize.height - shortest) / 2
         let cropRect = CGRect(x: offsetX, y: offsetY, width: shortest, height: shortest)
         guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return image }
-        let cropped = UIImage(cgImage: cgImage)
+        let cropped = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
         return renderer.image { _ in
             cropped.draw(in: CGRect(x: 0, y: 0, width: size, height: size))
         }
     }
 
-    private func uploadAvatar(_ image: UIImage) async throws {
-        guard let jpegData = image.jpegData(compressionQuality: 0.8) else {
-            throw URLError(.cannotDecodeContentData)
+    /// Compress + POST /users/me/avatar + local persist via store.applyAvatar
+    private func saveAndUpload(_ image: UIImage) async {
+        uploading = true
+        uploadError = nil
+        defer { uploading = false }
+
+        // Always keep local copy first so "Готово" never loses the photo
+        var quality: CGFloat = 0.82
+        var jpegData = image.jpegData(compressionQuality: quality)
+        while let d = jpegData, d.count > 1_800_000, quality > 0.35 {
+            quality -= 0.1
+            jpegData = image.jpegData(compressionQuality: quality)
         }
-        if jpegData.count > 2 * 1024 * 1024 {
-            uploadError = "Изображение слишком большое (макс 2MB)"
+        guard let jpegData else {
+            uploadError = "Не удалось обработать изображение"
             return
         }
+
         let base64 = jpegData.base64EncodedString()
         guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/me/avatar") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 60
         if let token = KeychainHelper.read(for: "rave_auth_token") {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         } else {
             uploadError = "Не авторизован. Войдите заново."
+            store?.applyAvatar(image: image, serverURL: nil)
             return
         }
-        // Use image/jpeg (not image/jpg) — backend regex accepts both
-        let body: [String: Any] = ["avatar": "data:image/jpeg;base64,\(base64)"]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-            if let respBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let avatarURLString = respBody["avatarURL"] as? String,
-               let avatarURL = URL(string: avatarURLString) {
-                await MainActor.run {
-                    store?.updateAvatarURL(avatarURL)
-                    onAvatarChanged?(avatarURL)
+        let body: [String: Any] = ["avatar": "data:image/jpeg;base64,\(base64)"]
+        do {
+            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await URLSession.shared.data(for: req)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if code == 200 {
+                var serverURL: URL?
+                if let respBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let avatarURLString = respBody["avatarURL"] as? String {
+                    serverURL = URL(string: avatarURLString)
                 }
-            }
-        } else if let http = response as? HTTPURLResponse, http.statusCode == 401 {
-            uploadError = "Сессия истекла. Войдите заново."
-        } else if let http = response as? HTTPURLResponse, http.statusCode == 500 {
-            // Try to parse error message from backend
-            if let respBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let errMsg = respBody["error"] as? String {
-                uploadError = "Ошибка: \(errMsg)"
+                if serverURL == nil, let uid = AuthService.shared.currentUserValue?.id {
+                    serverURL = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/\(uid)/avatar")
+                }
+                await MainActor.run {
+                    store?.applyAvatar(image: image, serverURL: serverURL)
+                    if let busted = store?.avatarURL {
+                        onAvatarChanged?(busted)
+                    }
+                    uploadOK = true
+                    pendingImage = nil
+                }
+            } else if code == 401 {
+                uploadError = "Сессия истекла. Войдите заново."
+                store?.applyAvatar(image: image, serverURL: nil)
+            } else if code == 413 {
+                uploadError = "Фото слишком большое. Выберите другое."
             } else {
-                uploadError = "Ошибка сервера (500). Попробуйте позже."
+                let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+                uploadError = msg ?? "Ошибка сервера (\(code))"
+                store?.applyAvatar(image: image, serverURL: nil)
             }
-        } else {
-            uploadError = "Ошибка (\((response as? HTTPURLResponse)?.statusCode ?? 0))"
+        } catch {
+            uploadError = "Сеть: \(error.localizedDescription)"
+            store?.applyAvatar(image: image, serverURL: nil)
         }
     }
 }

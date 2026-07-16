@@ -273,6 +273,9 @@ struct PlinkApprovedV4Root: View {
             } catch {
                 print("[bootstrap] fetchCurrentUser: \(error.localizedDescription)")
             }
+            // Mark self online so friends list shows real presence
+            PresenceHeartbeat.start()
+            await PresenceHeartbeat.ping()
         }
 
         await roomsStore?.load()

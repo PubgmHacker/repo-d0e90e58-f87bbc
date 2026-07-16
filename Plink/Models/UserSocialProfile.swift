@@ -8,6 +8,7 @@ struct UserSocialProfile: Codable, Identifiable, Sendable, Equatable {
     let avatarURL: String?
     let coverURL: String?
     let isOnline: Bool?
+    let lastSeenAt: Date?
     let isPremium: Bool?
     let friendsCount: Int
     let roomsCreated: Int
@@ -18,6 +19,10 @@ struct UserSocialProfile: Codable, Identifiable, Sendable, Equatable {
     let joinedAt: Date?
 
     var displayTitle: String { displayName ?? username }
+
+    var presenceText: String {
+        FriendPresence.displayText(isOnline: isOnline == true, lastSeenAt: lastSeenAt)
+    }
 
     var watchHoursText: String {
         let hours = watchTimeMinutes / 60

@@ -590,9 +590,10 @@ struct V4FriendsViewLive: View {
                             Circle()
                                 .fill(friend.isOnline ? Color(red: 0.3, green: 0.9, blue: 0.55) : V4.muted.opacity(0.5))
                                 .frame(width: 7, height: 7)
-                            Text(friend.isOnline ? "В сети · написать" : "Не в сети · написать")
-                                .font(.system(size: 12))
-                                .foregroundStyle(V4.muted)
+                            Text(friend.presenceText)
+                                .font(.system(size: 12, weight: friend.isOnline ? .semibold : .regular))
+                                .foregroundStyle(friend.isOnline ? Color(red: 0.3, green: 0.9, blue: 0.55) : V4.muted)
+                                .lineLimit(1)
                         }
                     }
                 }

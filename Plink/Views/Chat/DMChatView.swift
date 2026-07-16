@@ -115,9 +115,10 @@ struct DMChatView: View {
                             Circle()
                                 .fill(friend.isOnline ? Cinema2026.accent : Cinema2026.tertiary)
                                 .frame(width: 6, height: 6)
-                            Text(friend.isOnline ? "в сети" : "не в сети")
-                                .font(.system(size: 12))
-                                .foregroundColor(Cinema2026.secondary)
+                            Text(friend.presenceText)
+                                .font(.system(size: 12, weight: friend.isOnline ? .semibold : .regular))
+                                .foregroundColor(friend.isOnline ? Cinema2026.accent : Cinema2026.secondary)
+                                .lineLimit(1)
                         }
                     }
                 }

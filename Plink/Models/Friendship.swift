@@ -19,6 +19,8 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
     let friendsSince: Date
     /// Optional Telegram-style display name (may be nil on older payloads).
     var displayName: String? = nil
+    /// ISO last-seen from server (nil if unknown).
+    var lastSeenAt: Date? = nil
 
     /// Конвертация в UserPreview для UI-компонентов.
     var asUserPreview: UserPreview {
@@ -36,6 +38,36 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
     /// Single letter for avatar fallback — never uses current user.
     var initials: String {
         PlinkAvatarURL.letter(from: displayTitle)
+    }
+
+    /// «В сети» / «Был(а) N мин. назад» / «Не в сети»
+    var presenceText: String {
+        FriendPresence.displayText(isOnline: isOnline, lastSeenAt: lastSeenAt)
+    }
+}
+
+// MARK: - Presence copy (RU, Telegram-style)
+
+enum FriendPresence {
+    static func displayText(isOnline: Bool, lastSeenAt: Date?) -> String {
+        if isOnline { return "В сети" }
+        guard let last = lastSeenAt else { return "Не в сети" }
+        let sec = Date().timeIntervalSince(last)
+        if sec < 0 { return "В сети" }
+        if sec < 60 { return "Был(а) только что" }
+        if sec < 3600 {
+            let m = max(1, Int(sec / 60))
+            return "Был(а) \(m) мин. назад"
+        }
+        if sec < 86_400 {
+            let h = max(1, Int(sec / 3600))
+            return "Был(а) \(h) ч. назад"
+        }
+        let d = max(1, Int(sec / 86_400))
+        if d < 30 {
+            return "Был(а) \(d) дн. назад"
+        }
+        return "Был(а) давно"
     }
 }
 

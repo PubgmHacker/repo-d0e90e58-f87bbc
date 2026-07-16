@@ -71,10 +71,10 @@ struct FriendProfileView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Cinema2026.secondary)
                 }
-                if profile?.isOnline == true {
-                    Text("в сети")
+                if let p = profile {
+                    Text(p.presenceText)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Cinema2026.accent)
+                        .foregroundStyle(p.isOnline == true ? Cinema2026.accent : Cinema2026.secondary)
                 }
             }
             Spacer()

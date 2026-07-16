@@ -260,14 +260,19 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
     // MARK: - Private
 
     private func cacheUser(_ user: User) {
-        if let data = try? JSONEncoder().encode(user) {
+        // ISO8601 so re-decode after relaunch works with User.createdAt
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        if let data = try? enc.encode(user) {
             defaults.set(data, forKey: Keys.savedUser)
         }
         currentUser = user
         // 🔧 Pack v3: Сохраняем user data для чата (определение "моё/чужое" + админ)
         defaults.set(user.id, forKey: "plink_current_user_id")
         defaults.set(user.username, forKey: "plink_current_username")
+        defaults.set(user.displayName ?? user.username, forKey: "plink_current_display_name")
         defaults.set(user.role ?? "USER", forKey: "plink_current_user_role")
+        NotificationCenter.default.post(name: .plinkProfileDidUpdate, object: user)
     }
 
     // 🔧 Pack v3: Fetch fresh user from server

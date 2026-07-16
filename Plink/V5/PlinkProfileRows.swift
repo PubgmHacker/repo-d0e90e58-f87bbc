@@ -410,17 +410,45 @@ internal struct PersonalDataView: View {
     private func save() async {
         saving = true
         defer { saving = false }
+
+        // Ensure API client has JWT (PersonalData may open without EnvironmentObject)
+        if APIClient.shared.authToken == nil {
+            APIClient.shared.authToken = KeychainHelper.read(for: "rave_auth_token")
+                ?? AuthService.shared.authToken
+        }
+        guard APIClient.shared.authToken != nil else {
+            saveMessage = "Не авторизован — войдите снова"
+            return
+        }
+
+        let nameToSave = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usernameToSave = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+
         do {
+            // Only send displayName if set; username only if changed & non-empty
+            let current = AuthService.shared.currentUserValue
+            let usernameArg: String? = {
+                guard !usernameToSave.isEmpty else { return nil }
+                if usernameToSave == current?.username { return nil }
+                return usernameToSave
+            }()
+
             let user = try await AuthService.shared.updateProfile(
-                username: nickname.isEmpty ? nil : nickname,
+                username: usernameArg,
                 avatarURL: nil,
-                displayName: displayName.isEmpty ? nil : displayName,
+                displayName: nameToSave, // empty string clears on backend
                 coverURL: nil
             )
             AuthService.shared.updateCachedUser(user)
+            // Reflect saved values in the form
+            displayName = user.displayName ?? user.username
+            nickname = user.username
             saveMessage = "Сохранено"
+            HapticManager.impact(.medium)
         } catch {
             saveMessage = "Не удалось сохранить: \(error.localizedDescription)"
+            HapticManager.errorOccurred()
         }
     }
 }

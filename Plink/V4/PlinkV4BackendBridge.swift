@@ -321,34 +321,31 @@ final class V4ProfileStore {
         // Prefer server user; keep local image if server URL missing
         do {
             let user = try await authService.fetchCurrentUser()
-            displayName = user.displayName ?? user.username
-            username = user.username
-            email = user.email
-            isPremium = user.isPremium
-            isAdmin = (user.role == "ADMIN" || user.role == "FOUNDER")
-            if let raw = user.avatarURL, !raw.isEmpty {
-                // Cache-bust so AsyncImage doesn't show stale bytes for same path
-                avatarURL = Self.cacheBustedURL(from: raw)
-                defaults.set(avatarURL?.absoluteString, forKey: "plink_user_avatar_url")
-            }
+            applyUser(user)
             authService.updateCachedUser(user)
         } catch {
-            let user = await authService.currentUser()
-            if let user {
-                displayName = user.displayName ?? user.username
-                username = user.username
-                email = user.email
-                isPremium = user.isPremium
-                isAdmin = (user.role == "ADMIN" || user.role == "FOUNDER")
-                if let raw = user.avatarURL, !raw.isEmpty {
-                    avatarURL = Self.cacheBustedURL(from: raw)
-                }
+            if let user = await authService.currentUser() {
+                applyUser(user)
             }
         }
         // Always try disk for instant paint
         if localAvatarImage == nil {
             loadLocalAvatarFile()
         }
+    }
+
+    /// Apply user fields to the profile tab (after save or notification).
+    func applyUser(_ user: User) {
+        displayName = (user.displayName?.isEmpty == false) ? user.displayName! : user.username
+        username = user.username
+        email = user.email
+        isPremium = user.isPremium
+        isAdmin = (user.role == "ADMIN" || user.role == "FOUNDER")
+        if let raw = user.avatarURL, !raw.isEmpty {
+            avatarURL = Self.cacheBustedURL(from: raw)
+            defaults.set(avatarURL?.absoluteString, forKey: "plink_user_avatar_url")
+        }
+        defaults.set(displayName, forKey: "plink_current_display_name")
     }
 
     func selectTheme(_ theme: V4Theme) {

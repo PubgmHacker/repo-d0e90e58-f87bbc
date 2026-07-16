@@ -279,11 +279,21 @@ struct V4ProfileViewLive: View {
                 }.groupStyle()
             }.padding(.bottom,92)
         }.foregroundStyle(V4.ink)
-        .sheet(isPresented: $showPersonalData) {
+        .sheet(isPresented: $showPersonalData, onDismiss: {
+            // Reload name/avatar after «Личные данные» save
+            Task { await store?.load() }
+        }) {
             NavigationStack { PersonalDataView() }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(.dark)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkProfileDidUpdate)) { note in
+            if let user = note.object as? User {
+                store?.applyUser(user)
+            } else {
+                Task { await store?.load() }
+            }
         }
         .sheet(isPresented: $showPrivacy) {
             NavigationStack { PrivacySecurityView() }

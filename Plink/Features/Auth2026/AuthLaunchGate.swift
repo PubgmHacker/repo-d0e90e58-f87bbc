@@ -164,4 +164,5 @@ struct CinematicSplashView: View {
 extension Notification.Name {
     static let plinkSignedOut = Notification.Name("plinkSignedOut")
     static let plinkRoomCreated = Notification.Name("plinkRoomCreated")
+    static let plinkProfileDidUpdate = Notification.Name("plinkProfileDidUpdate")
 }

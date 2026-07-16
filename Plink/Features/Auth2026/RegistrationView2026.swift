@@ -103,14 +103,20 @@ struct RegistrationView2026: View {
                             HStack {
                                 if isLoading { ProgressView().tint(Cinema2026.background) }
                                 Text("Создать аккаунт")
+                                    .font(.system(size: 16, weight: .semibold))
                             }
+                            .foregroundStyle(Cinema2026.background)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: CompactPhoneMetrics.primaryButtonHeight)
+                            .background(
+                                (canRegister && !isLoading) ? Cinema2026.accent : Cinema2026.accent.opacity(0.4),
+                                in: RoundedRectangle(cornerRadius: 14)
+                            )
                         }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Cinema2026.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: CompactPhoneMetrics.primaryButtonHeight)
-                        .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 14))
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                         .disabled(!canRegister || isLoading)
+                        .accessibilityLabel("Создать аккаунт")
 
                         HStack(spacing: 4) {
                             Text("Уже есть аккаунт?")
@@ -142,16 +148,47 @@ struct RegistrationView2026: View {
     private func register() async {
         isLoading = true
         errorMessage = nil
-        do {
-            let authService = AuthService(api: apiClient)
-            _ = try await authService.signUp(email: email, password: password, username: username)
-            if let token = authService.authToken {
-                KeychainHelper.save(token, for: "rave_auth_token")
-            }
-            onRegistered()
-        } catch {
-            errorMessage = "Ошибка регистрации. Попробуйте другой username или email."
+        defer { isLoading = false }
+
+        // Always use shared AuthService so session is visible app-wide
+        let authService = AuthService.shared
+        // Prefer EnvironmentObject client if token plumbing differs
+        if APIClient.shared.authToken == nil {
+            // leave nil until signup returns token
         }
-        isLoading = false
+
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard canRegister else {
+            errorMessage = "Заполни все поля и прими условия"
+            return
+        }
+
+        do {
+            _ = try await authService.signUp(
+                email: cleanEmail,
+                password: password,
+                username: cleanUsername.isEmpty ? cleanEmail.split(separator: "@").first.map(String.init) ?? "user" : cleanUsername
+            )
+            // Save display name after signup (optional, best-effort)
+            if !cleanName.isEmpty {
+                _ = try? await authService.updateProfile(displayName: cleanName)
+            }
+            if let token = authService.authToken {
+                APIClient.shared.authToken = token
+            }
+            HapticManager.impact(.medium)
+            await MainActor.run {
+                onRegistered()
+            }
+        } catch {
+            errorMessage = error.localizedDescription.isEmpty
+                ? "Ошибка регистрации. Попробуйте другой username или email."
+                : error.localizedDescription
+            HapticManager.errorOccurred()
+        }
     }
 }

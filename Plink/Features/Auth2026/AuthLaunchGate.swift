@@ -34,10 +34,20 @@ struct AuthLaunchGate: View {
 
             case .onboarding:
                 OnboardingFlow(
-                    onFinish: completeOnboarding,
-                    onSkip: skipOnboarding
+                    onFinish: {
+                        // Capture via MainActor so @State destination always updates
+                        Task { @MainActor in
+                            completeOnboarding()
+                        }
+                    },
+                    onSkip: {
+                        Task { @MainActor in
+                            skipOnboarding()
+                        }
+                    }
                 )
                 .transition(.opacity)
+                .zIndex(2)
 
             case .app:
                 PlinkAppShell(dependencies: dependencies)
@@ -104,21 +114,35 @@ struct AuthLaunchGate: View {
     }
 
     private func handleAuthenticated() {
-        destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
-        if destination == .app { flushPendingDeepLink() }
+        // Sync shared API client token for the whole app
+        if APIClient.shared.authToken == nil {
+            APIClient.shared.authToken = AuthService.shared.authToken
+                ?? KeychainHelper.read(for: "rave_auth_token")
+        }
+        let next: LaunchDestination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+        withAnimation(.easeOut(duration: 0.32)) {
+            destination = next
+        }
+        if next == .app { flushPendingDeepLink() }
     }
 
+    @MainActor
     private func completeOnboarding() {
         requestNotificationPermission()
         onboardingStore.markCompleted(version: OnboardingVersion.current)
-        destination = .app
+        withAnimation(.easeOut(duration: 0.32)) {
+            destination = .app
+        }
         flushPendingDeepLink()
     }
 
+    @MainActor
     private func skipOnboarding() {
         requestNotificationPermission()
         onboardingStore.markCompleted(version: OnboardingVersion.current)
-        destination = .app
+        withAnimation(.easeOut(duration: 0.32)) {
+            destination = .app
+        }
         flushPendingDeepLink()
     }
 

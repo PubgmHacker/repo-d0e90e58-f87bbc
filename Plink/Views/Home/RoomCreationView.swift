@@ -66,11 +66,11 @@ struct RoomCreationView: View {
                     step = .settings
                 }
             }
-            .alert("Требуется подписка", isPresented: $showCinemaWarning) {
+            .alert("Подписка host", isPresented: $showCinemaWarning) {
                 Button("Понятно, продолжить") { step = .content }
                 Button("Отмена", role: .cancel) { }
             } message: {
-                Text("\(selectedService.subscriptionDisclaimer) Гости смотрят синхронно через Plink — без своей подписки на сервис. Синхронизация play/pause может быть ограничена; host: «play на 3-2-1».")
+                Text("\(selectedService.subscriptionDisclaimer) Гости смотрят вместе через sync в Plink — своя подписка на сервис им не нужна.")
             }
         }
     }
@@ -118,18 +118,28 @@ struct RoomCreationView: View {
                 .font(.largeTitle.bold())
                 .foregroundStyle(Cinema2026.text)
 
+            Text("ПРЯМОЙ SYNC")
+                .font(.caption2.bold())
+                .tracking(1.1)
+                .foregroundStyle(Cinema2026.secondary)
+
             ForEach(syncableServices, id: \.self) { svc in
-                serviceCard(svc, syncable: true)
+                serviceCard(svc, kind: .direct)
             }
 
-            Text("СВОЙ АККАУНТ — БЕЗ СИНХРОНИЗАЦИИ")
+            // OTT / cinemas: host subscription — guests still sync via Plink (product strategy)
+            Text("КИНОТЕАТРЫ · ПОДПИСКА HOST")
                 .font(.caption2.bold())
                 .tracking(1.1)
                 .foregroundStyle(Cinema2026.secondary)
                 .padding(.top, 8)
 
+            Text("Host входит в свой аккаунт. Гости смотрят синхронно в Plink.")
+                .font(.system(size: 12))
+                .foregroundStyle(Cinema2026.secondary.opacity(0.9))
+
             ForEach(cinemaServices, id: \.self) { svc in
-                serviceCard(svc, syncable: false)
+                serviceCard(svc, kind: .subscription)
             }
 
             Text("ДРУГОЕ")
@@ -139,7 +149,7 @@ struct RoomCreationView: View {
                 .padding(.top, 8)
 
             ForEach(otherServices, id: \.self) { svc in
-                serviceCard(svc, syncable: true)
+                serviceCard(svc, kind: .other)
             }
         }
         .padding(.horizontal, 20)
@@ -159,13 +169,19 @@ struct RoomCreationView: View {
         [.customURL, .browser]
     }
 
-    private func serviceCard(_ svc: VideoService, syncable: Bool) -> some View {
+    private enum ServiceCardKind {
+        case direct        // YouTube / VK / Rutube
+        case subscription  // Netflix / RU cinemas — host sub, guests sync
+        case other
+    }
+
+    private func serviceCard(_ svc: VideoService, kind: ServiceCardKind) -> some View {
         Button {
             selectedService = svc
-            if syncable {
-                step = .content
-            } else {
+            if kind == .subscription {
                 showCinemaWarning = true
+            } else {
+                step = .content
             }
         } label: {
             HStack(spacing: 14) {
@@ -180,13 +196,20 @@ struct RoomCreationView: View {
                         Text(svc.title)
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(Cinema2026.text)
-                        if !syncable {
-                            Text("без sync")
+                        if kind == .subscription {
+                            Text("подписка host")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Cinema2026.amber)
+                                .foregroundStyle(Cinema2026.accent)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Cinema2026.amber.opacity(0.15), in: Capsule())
+                                .background(Cinema2026.accent.opacity(0.15), in: Capsule())
+                        } else if kind == .direct {
+                            Text("sync")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(Color(hex: 0x26D9A4))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color(hex: 0x26D9A4).opacity(0.15), in: Capsule())
                         }
                     }
                     Text(svc.subtitle)
@@ -263,7 +286,7 @@ struct RoomCreationView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .foregroundStyle(Cinema2026.amber)
-                    Text(selectedService.subscriptionDisclaimer + " Гости видят экран host через sync. Host: «play на 3-2-1».")
+                    Text(selectedService.subscriptionDisclaimer + " Гости смотрят синхронно через Plink.")
                         .font(.caption)
                         .foregroundStyle(Cinema2026.secondary)
                         .fixedSize(horizontal: false, vertical: true)

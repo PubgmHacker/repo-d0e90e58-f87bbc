@@ -22,9 +22,24 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
     var bubbleStyle: String?
     /// Telegram-style reaction chips.
     var reactions: [DMReactionChip]
+    /// Friend voice note attachment.
+    var mediaType: String?
+    var mediaDurationSec: Double?
+    var hasMedia: Bool
 
     var timeString: String {
         timestamp.formatted(.dateTime.hour().minute())
+    }
+
+    /// True when this row is a real (or legacy placeholder) voice note.
+    var isVoiceNote: Bool {
+        if mediaType == "voice" || hasMedia { return true }
+        return PlinkVoiceWire.decode(text).isVoice
+    }
+
+    var voiceDurationSec: TimeInterval? {
+        if let d = mediaDurationSec, d > 0 { return d }
+        return PlinkVoiceWire.decode(text).durationSec
     }
 
     init(
@@ -38,7 +53,10 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
         isRead: Bool,
         senderAvatarURL: String? = nil,
         bubbleStyle: String? = nil,
-        reactions: [DMReactionChip] = []
+        reactions: [DMReactionChip] = [],
+        mediaType: String? = nil,
+        mediaDurationSec: Double? = nil,
+        hasMedia: Bool = false
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -51,6 +69,9 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
         self.senderAvatarURL = senderAvatarURL
         self.bubbleStyle = bubbleStyle
         self.reactions = reactions
+        self.mediaType = mediaType
+        self.mediaDurationSec = mediaDurationSec
+        self.hasMedia = hasMedia
     }
 
     /// Own vs other — prefer lightweight id key (always set on login).
@@ -93,6 +114,9 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
             && lhs.reactions == rhs.reactions
             && lhs.bubbleStyle == rhs.bubbleStyle
             && lhs.isRead == rhs.isRead
+            && lhs.mediaType == rhs.mediaType
+            && lhs.mediaDurationSec == rhs.mediaDurationSec
+            && lhs.hasMedia == rhs.hasMedia
     }
 
     func hash(into hasher: inout Hasher) {

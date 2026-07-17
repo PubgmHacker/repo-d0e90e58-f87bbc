@@ -186,18 +186,24 @@ final class DMChatService: ObservableObject {
                 } else {
                     readFlag = dto.isRead ?? true
                 }
+                let voiceMeta = PlinkVoiceWire.decode(decoded.text)
+                let isVoice = dto.mediaType == "voice" || (dto.hasMedia == true) || voiceMeta.isVoice
+                let displayText = voiceMeta.isVoice ? voiceMeta.displayText : decoded.text
                 return DirectMessage(
                     id: dto.id,
                     conversationID: convID,
                     senderID: dto.senderID,
                     recipientID: dto.receiverID,
                     senderName: isOwn ? "You" : friendName,
-                    text: decoded.text,
+                    text: displayText,
                     timestamp: dto.createdAt,
                     isRead: readFlag,
                     senderAvatarURL: isOwn ? nil : friendAvatarURL,
                     bubbleStyle: decoded.styleID,
-                    reactions: chips
+                    reactions: chips,
+                    mediaType: isVoice ? "voice" : dto.mediaType,
+                    mediaDurationSec: dto.mediaDurationSec ?? voiceMeta.durationSec,
+                    hasMedia: isVoice || (dto.hasMedia == true)
                 )
             }
             // Merge server history with any newer local-only optimistic messages
@@ -247,6 +253,104 @@ final class DMChatService: ObservableObject {
     func messages(for friendID: String) -> [DirectMessage] {
         let convID = conversationID(with: friendID)
         return conversations[convID] ?? []
+    }
+
+    // MARK: - Send voice note (real audio)
+
+    /// Upload recorded AAC/m4a and create a DM voice note.
+    /// - Parameters:
+    ///   - dataURL: `data:audio/mp4;base64,...`
+    ///   - durationSec: measured recording length
+    func sendVoiceNote(dataURL: String, durationSec: TimeInterval, to friend: Friend) {
+        ensureToken()
+        let me = currentUserId
+            ?? UserDefaults.standard.string(forKey: "plink_current_user_id")
+            ?? "me"
+        if me != "me", UserDefaults.standard.string(forKey: "plink_current_user_id") == nil {
+            UserDefaults.standard.set(me, forKey: "plink_current_user_id")
+        }
+
+        let convID = conversationID(with: friend.id)
+        let localID = UUID().uuidString
+        let styleID = PlinkBubbleStylePrefs.currentID
+        let dur = max(0.5, min(60, durationSec))
+        let voiceBody = PlinkVoiceWire.encode(durationSec: dur)
+        let wireContent = PlinkBubbleWire.encode(text: voiceBody, styleID: styleID)
+        let preview = PlinkVoiceWire.decode(voiceBody).displayText
+
+        let message = DirectMessage(
+            id: localID,
+            conversationID: convID,
+            senderID: me,
+            recipientID: friend.id,
+            senderName: "You",
+            text: preview,
+            timestamp: Date(),
+            isRead: false,
+            senderAvatarURL: nil,
+            bubbleStyle: styleID,
+            reactions: [],
+            mediaType: "voice",
+            mediaDurationSec: dur,
+            hasMedia: true
+        )
+
+        var list = conversations[convID] ?? []
+        list.append(message)
+        conversations[convID] = list
+        historyEpoch &+= 1
+        lastPreviewByFriend[friend.id] = "🎤 Голосовое сообщение"
+        touchActivity(friendId: friend.id, at: message.timestamp, preview: "🎤 Голосовое сообщение")
+        updateLastMessage(conversationID: convID, friend: friend, message: message)
+
+        struct Body: Encodable {
+            let receiverId: String
+            let audioData: String
+            let durationSec: Double
+            let content: String
+        }
+
+        Task { @MainActor in
+            do {
+                let saved: DMMessageDTO = try await api.request(
+                    "messages/dm/voice",
+                    method: .post,
+                    body: Body(
+                        receiverId: friend.id,
+                        audioData: dataURL,
+                        durationSec: dur,
+                        content: wireContent
+                    )
+                )
+                if var cur = conversations[convID],
+                   let idx = cur.firstIndex(where: { $0.id == localID }) {
+                    let decoded = PlinkBubbleWire.decode(saved.content.isEmpty ? wireContent : saved.content)
+                    let voiceMeta = PlinkVoiceWire.decode(decoded.text)
+                    cur[idx] = DirectMessage(
+                        id: saved.id,
+                        conversationID: convID,
+                        senderID: saved.senderID.isEmpty ? me : saved.senderID,
+                        recipientID: saved.receiverID.isEmpty ? friend.id : saved.receiverID,
+                        senderName: "You",
+                        text: voiceMeta.isVoice ? voiceMeta.displayText : (decoded.text.isEmpty ? preview : decoded.text),
+                        timestamp: saved.createdAt,
+                        isRead: false,
+                        senderAvatarURL: nil,
+                        bubbleStyle: decoded.styleID ?? styleID,
+                        reactions: [],
+                        mediaType: saved.mediaType ?? "voice",
+                        mediaDurationSec: saved.mediaDurationSec ?? dur,
+                        hasMedia: saved.hasMedia ?? true
+                    )
+                    conversations[convID] = cur
+                    historyEpoch &+= 1
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                print("[DM] sendVoiceNote error: \(error.localizedDescription)")
+                // Keep optimistic row so the user sees the attempt
+            }
+        }
     }
 
     // MARK: - Send
@@ -487,11 +591,15 @@ private struct DMMessageDTO: Decodable {
     let createdAt: Date
     let isRead: Bool?
     let reactions: [ReactionDTO]?
+    let mediaType: String?
+    let mediaDurationSec: Double?
+    let hasMedia: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, content, createdAt, isRead, reactions
         case senderID, receiverID
         case senderId, receiverId
+        case mediaType, mediaDurationSec, hasMedia
     }
 
     init(from decoder: Decoder) throws {
@@ -501,6 +609,9 @@ private struct DMMessageDTO: Decodable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead)
         reactions = try c.decodeIfPresent([ReactionDTO].self, forKey: .reactions)
+        mediaType = try c.decodeIfPresent(String.self, forKey: .mediaType)
+        mediaDurationSec = try c.decodeIfPresent(Double.self, forKey: .mediaDurationSec)
+        hasMedia = try c.decodeIfPresent(Bool.self, forKey: .hasMedia)
         if let s = try c.decodeIfPresent(String.self, forKey: .senderID) {
             senderID = s
         } else {

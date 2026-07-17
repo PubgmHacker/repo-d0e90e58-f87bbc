@@ -15,7 +15,9 @@ struct DMChatView: View {
     private let charLimit = 280
     @State private var lastSendTime: Date = .distantPast
     @State private var wallpaper = PlinkChatWallpaperPrefs.current
-    @State private var isRecordingVoice = false
+    @State private var voiceRecorder = VoiceNoteRecorder()
+    @State private var voiceError: String?
+    @State private var voiceStartInFlight = false
 
     private var peerAvatarURL: URL? {
         // Stable URL — no cache-bust flicker in chat
@@ -289,17 +291,8 @@ struct DMChatView: View {
                     }
                 }
 
-            // Free voice note (hold to record — MVP: quick voice placeholder send)
-            Button {
-                sendVoiceNotePlaceholder()
-            } label: {
-                Image(systemName: isRecordingVoice ? "waveform.circle.fill" : "mic.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(isRecordingVoice ? Cinema2026.accent : Color.white.opacity(0.65))
-                    .frame(width: 36, height: 36)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Голосовое сообщение")
+            // Free friend voice note — hold to record, release to send
+            voiceMicButton
 
             Button(action: sendAction) {
                 Image(systemName: "arrow.up")
@@ -331,17 +324,103 @@ struct DMChatView: View {
         }
     }
 
-    private func sendVoiceNotePlaceholder() {
-        // Free voice notes in friend chat — short text token until full recorder ships
-        HapticManager.impact(.medium)
-        isRecordingVoice = true
-        Task {
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            await MainActor.run {
-                isRecordingVoice = false
-                dmService.sendMessage("🎤 Голосовое · 0:\(String(format: "%02d", Int.random(in: 3...15)))", to: friend)
+    private var voiceMicButton: some View {
+        Image(systemName: voiceRecorder.isRecording ? "waveform.circle.fill" : "mic.fill")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(voiceRecorder.isRecording ? Cinema2026.accent : Color.white.opacity(0.65))
+            .frame(width: 36, height: 36)
+            .scaleEffect(voiceRecorder.isRecording ? 1.12 + CGFloat(voiceRecorder.peakLevel) * 0.2 : 1)
+            .animation(.easeOut(duration: 0.08), value: voiceRecorder.peakLevel)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if voiceRecorder.isRecording {
+                            // Auto-send at max duration
+                            if voiceRecorder.durationSec >= VoiceNoteRecorder.maxDuration {
+                                finishVoiceRecording(send: true)
+                            }
+                            return
+                        }
+                        guard !voiceStartInFlight else { return }
+                        voiceStartInFlight = true
+                        Task {
+                            HapticManager.impact(.medium)
+                            let ok = await voiceRecorder.start()
+                            voiceStartInFlight = false
+                            if !ok {
+                                if case .failed(let m) = voiceRecorder.state {
+                                    voiceError = m
+                                } else {
+                                    voiceError = "Нет доступа к микрофону"
+                                }
+                            }
+                        }
+                    }
+                    .onEnded { value in
+                        voiceStartInFlight = false
+                        // Swipe up ≈ cancel (Telegram-like)
+                        if value.translation.height < -50 {
+                            finishVoiceRecording(send: false)
+                        } else {
+                            finishVoiceRecording(send: true)
+                        }
+                    }
+            )
+            .accessibilityLabel("Удерживайте для голосового")
+            .overlay(alignment: .top) {
+                if voiceRecorder.isRecording {
+                    Text(PlinkVoiceWire.formatDuration(voiceRecorder.durationSec))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Cinema2026.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.black.opacity(0.55)))
+                        .offset(y: -28)
+                        .transition(.opacity)
+                }
             }
+            .alert("Голосовое", isPresented: Binding(
+                get: { voiceError != nil },
+                set: { if !$0 { voiceError = nil } }
+            )) {
+                Button("OK", role: .cancel) { voiceError = nil }
+            } message: {
+                Text(voiceError ?? "")
+            }
+    }
+
+    private func finishVoiceRecording(send: Bool) {
+        guard voiceRecorder.isRecording || {
+            if case .encoding = voiceRecorder.state { return true }
+            return false
+        }() else {
+            // Permission failed mid-gesture
+            if case .failed(let m) = voiceRecorder.state {
+                voiceError = m
+            }
+            voiceRecorder.cancel()
+            return
         }
+
+        if !send {
+            voiceRecorder.cancel()
+            HapticManager.impact(.light)
+            return
+        }
+
+        guard let exported = voiceRecorder.stopAndExport() else {
+            if case .failed(let m) = voiceRecorder.state {
+                voiceError = m
+            }
+            return
+        }
+        HapticManager.impact(.medium)
+        dmService.sendVoiceNote(
+            dataURL: exported.dataURL,
+            durationSec: exported.duration,
+            to: friend
+        )
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
@@ -474,23 +553,34 @@ private struct DMBubble: View {
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-                PlinkMessageBubble(
-                    text: message.text,
-                    isOwn: isOwn,
-                    styleID: message.bubbleStyle,
-                    fontSize: 16,
-                    isLastInGroup: cluster.isLastInGroup
-                )
+                Group {
+                    if message.isVoiceNote {
+                        VoiceNoteBubble(
+                            message: message,
+                            isOwn: isOwn
+                        )
+                    } else {
+                        PlinkMessageBubble(
+                            text: message.text,
+                            isOwn: isOwn,
+                            styleID: message.bubbleStyle,
+                            fontSize: 16,
+                            isLastInGroup: cluster.isLastInGroup
+                        )
+                    }
+                }
                 .contextMenu {
                     Button {
                         onReact()
                     } label: {
                         Label("Реакция", systemImage: "face.smiling")
                     }
-                    Button {
-                        UIPasteboard.general.string = message.text
-                    } label: {
-                        Label("Копировать", systemImage: "doc.on.doc")
+                    if !message.isVoiceNote {
+                        Button {
+                            UIPasteboard.general.string = message.text
+                        } label: {
+                            Label("Копировать", systemImage: "doc.on.doc")
+                        }
                     }
                 }
                 .onLongPressGesture(minimumDuration: 0.35) {
@@ -574,6 +664,99 @@ private struct DMBubble: View {
         } else {
             Color.clear.frame(width: avatarSize, height: avatarSize)
         }
+    }
+}
+
+// MARK: - Voice note bubble (play real audio)
+
+private struct VoiceNoteBubble: View {
+    let message: DirectMessage
+    let isOwn: Bool
+    @State private var player = VoiceNotePlayer.shared
+
+    private var durationLabel: String {
+        if let d = message.voiceDurationSec {
+            return PlinkVoiceWire.formatDuration(d)
+        }
+        return "0:00"
+    }
+
+    private var isThisPlaying: Bool {
+        player.playingMessageId == message.id
+    }
+
+    private var canPlay: Bool {
+        message.hasMedia || message.mediaType == "voice"
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                guard canPlay else { return }
+                HapticManager.impact(.light)
+                player.toggle(messageId: message.id)
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(isOwn ? Color.black.opacity(0.22) : Cinema2026.accent.opacity(0.85))
+                        .frame(width: 40, height: 40)
+                    if player.isLoading && isThisPlaying {
+                        ProgressView()
+                            .tint(isOwn ? .white : .black)
+                            .scaleEffect(0.85)
+                    } else {
+                        Image(systemName: isThisPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(isOwn ? Color.white : Color.black.opacity(0.85))
+                            .offset(x: isThisPlaying ? 0 : 1)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!canPlay)
+
+            VStack(alignment: .leading, spacing: 6) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.18))
+                            .frame(height: 4)
+                        Capsule()
+                            .fill(isOwn ? Color.white.opacity(0.85) : Cinema2026.accent)
+                            .frame(
+                                width: geo.size.width * (isThisPlaying ? max(0.04, player.progress) : 0.04),
+                                height: 4
+                            )
+                    }
+                }
+                .frame(height: 4)
+
+                HStack {
+                    Text(durationLabel)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                    if !canPlay {
+                        Text("· нет аудио")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(minWidth: 120, maxWidth: 180)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(isOwn
+                      ? Cinema2026.accent.opacity(0.92)
+                      : Color.white.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(isOwn ? 0.15 : 0.12), lineWidth: 0.7)
+        )
     }
 }
 

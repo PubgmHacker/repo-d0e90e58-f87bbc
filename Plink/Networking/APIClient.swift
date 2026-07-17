@@ -13,7 +13,8 @@ final class APIClient: ObservableObject, @unchecked Sendable {
     /// 🔧 Pack v3: Singleton — для использования в views без EnvironmentObject
     static let shared = APIClient()
 
-    private let baseURL: URL
+    /// Public so media helpers (voice notes, avatars) can build authenticated URLs.
+    let baseURL: URL
 
     // 🔧 FIX H10: Lock-protected encoder/decoder (not thread-safe by Apple docs)
     private let encoderLock = NSLock()

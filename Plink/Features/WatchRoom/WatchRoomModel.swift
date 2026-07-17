@@ -145,6 +145,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     public func connect() async {
         wantsDismiss = false
         connectionState = .connecting
+        NSLog("[WatchRoom] connect roomId=\(_roomId) mediaSource=\(String(describing: mediaSource)) mediaId=\(String(describing: mediaId))")
 
         // Show local user immediately (never "0 in room" while WS is negotiating)
         if !participants.contains(where: { $0.userId == currentUserId }) {

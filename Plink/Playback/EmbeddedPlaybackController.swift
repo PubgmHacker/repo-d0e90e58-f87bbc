@@ -129,11 +129,14 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     public func prepare(_ source: PlaybackSource) async throws {
         guard case .youtube(let id) = source else {
+            NSLog("[YT] prepare rejected: not a youtube source")
             throw ProviderError.unsupportedSource
         }
         guard Self.isValidVideoId(id) else {
+            NSLog("[YT] prepare rejected: invalid videoId=\(id)")
             throw ProviderError.loadingFailed("Invalid YouTube video ID")
         }
+        NSLog("[YT] prepare start videoId=\(id)")
 
         teardown()
         self.videoId = id
@@ -174,9 +177,11 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             Task { @MainActor in
                 guard let self else { return }
                 if ok {
+                    NSLog("[YT] navigation didFinish")
                     self.pageDidFinishLoad = true
                 } else {
-                    self.lastError = err ?? "Не удалось загрузить страницу плеера"
+                    NSLog("[YT] navigation FAIL: \(err ?? "unknown")")
+                    self.lastError = err ?? "navigation failed"
                     self.isBuffering = false
                 }
             }
@@ -210,8 +215,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             URLQueryItem(name: "v", value: "22")
         ]
         guard let wrapperURL = components.url else {
+            NSLog("[YT] wrapper URL invalid")
             throw ProviderError.loadingFailed("Invalid wrapper URL")
         }
+        NSLog("[YT] loading wrapper URL=\(wrapperURL.absoluteString)")
 
         // Wait until SwiftUI pins WKWebView into the hierarchy.
         // Off-screen / zero-size WKWebView often never fires YT onReady.
@@ -273,10 +280,13 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         }
 
         if !isReady {
+            NSLog("[YT] prepare timeout - YouTube IFrame API never signaled ready")
             // Keep webview visible; stop covering it with a full-screen spinner.
             // YouTube chrome may still become interactive.
             isBuffering = false
             lastError = nil
+        } else {
+            NSLog("[YT] prepare OK - ready=true")
         }
 
         startPolling()
@@ -381,6 +391,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     private func handleReady() {
         guard !isReady else { return }
+        NSLog("[YT] handleReady - YouTube IFrame API ready")
         isReady = true
         isBuffering = false
 
@@ -445,6 +456,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 
     private func handleError(code: Int) {
+        NSLog("[YT] handleError code=\(code)")
         // Brain §5.1: map official YouTube IFrame API error codes.
         // https://developers.google.com/youtube/iframe_api_reference#onError
         let message: String

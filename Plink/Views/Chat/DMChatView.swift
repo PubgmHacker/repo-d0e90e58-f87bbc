@@ -246,15 +246,18 @@ struct DMChatView: View {
                 quiet: false
             )
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else { break }
                 await friendManager.loadFriends()
-                // quiet:false every poll so server newest messages always win
+                // quiet:true so loadHistory's change-detection gates UI
+                // updates - only re-renders when messages actually changed.
+                // (quiet:false forced historyEpoch bump every poll -> flicker
+                // on long-press because contextMenu preview re-snapshotted.)
                 await dmService.loadHistory(
                     friendId: friend.id,
                     friendName: liveFriend.displayTitle,
                     friendAvatarURL: liveFriend.avatarURL,
-                    quiet: false
+                    quiet: true
                 )
             }
         }

@@ -398,10 +398,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         // Log actual player state + frame to diagnose "video doesn't play"
         Task { [weak self] in
             guard let self, let web = self.webView else { return }
-            let state = await web.evaluateJavaScript(
+            let state = try? await web.evaluateJavaScript(
                 "(function(){try{return player&&player.getPlayerState?player.getPlayerState():'no-player';}catch(e){return 'err:'+e.message;}})()"
             )
-            let url = await web.evaluateJavaScript(
+            let url = try? await web.evaluateJavaScript(
                 "(function(){try{return player&&player.getVideoUrl?player.getVideoUrl():'no-url';}catch(e){return 'err:'+e.message;}})()"
             )
             NSLog("[YT] post-ready state=\(state ?? "?") url=\(url ?? "?") frame=\(web.frame)")

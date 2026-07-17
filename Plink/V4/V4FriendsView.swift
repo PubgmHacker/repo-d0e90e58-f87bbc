@@ -1,6 +1,5 @@
 // Plink/V4/V4FriendsView.swift
-// Layout: Чаты + Недавние комнаты as page sections.
-// Заявки = header icon (badge) next to «Добавить друга».
+// Three segments: Друзья · Чаты/Общение · Недавние комнаты (with whom / what).
 
 import SwiftUI
 import PhotosUI
@@ -19,6 +18,32 @@ struct V4FriendsView: View {
     }
 }
 
+// MARK: - Friends hub segments
+
+private enum FriendsHubSegment: Int, CaseIterable, Identifiable {
+    case friends = 0
+    case chats = 1
+    case rooms = 2
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .friends: return "Друзья"
+        case .chats: return "Чаты"
+        case .rooms: return "Комнаты"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .friends: return "person.2.fill"
+        case .chats: return "bubble.left.and.bubble.right.fill"
+        case .rooms: return "play.rectangle.fill"
+        }
+    }
+}
+
 // MARK: - Live friends
 
 struct V4FriendsViewLive: View {
@@ -26,6 +51,8 @@ struct V4FriendsViewLive: View {
     var store: V4FriendsStore?
     /// When false (other tab), pause polling. Root passes tab == friends.
     var isActive: Bool = true
+    /// Default: Друзья (not chats) — full friend list / carousel first.
+    @State private var segment: FriendsHubSegment = .friends
     @State private var dmFriend: Friend?
     @State private var profileFriend: Friend?
     @State private var showCreateRoom = false
@@ -48,6 +75,19 @@ struct V4FriendsViewLive: View {
     /// Pin order — shared store (not a private stored prop so memberwise init stays public).
     private var pinStore: FriendPinStore { FriendPinStore.shared }
 
+    /// Alphabetical / online-first friends list (no chat previews).
+    private var peopleFriends: [Friend] {
+        let list = store?.friends ?? []
+        return list.sorted { a, b in
+            if a.isOnline != b.isOnline { return a.isOnline && !b.isOnline }
+            return a.displayTitle.localizedCaseInsensitiveCompare(b.displayTitle) == .orderedAscending
+        }
+    }
+
+    private var onlineFriends: [Friend] {
+        peopleFriends.filter(\.isOnline)
+    }
+
     /// Telegram order: pinned (stable) → unpinned by last message time.
     private var orderedFriends: [Friend] {
         let list = store?.friends ?? []
@@ -58,21 +98,35 @@ struct V4FriendsViewLive: View {
         )
     }
 
+    private var totalUnread: Int { dmService.totalUnread }
+
     var body: some View {
         // No NavigationStack — keep living theme visible
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
-                .padding(.bottom, 14)
+                .padding(.bottom, 10)
+
+            segmentPicker
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Invites always visible above content (actionable)
                     if !inviteService.pendingInvites.isEmpty {
                         roomInvitesBlock
                     }
-                    chatsBlock
-                    recentBlock
+
+                    switch segment {
+                    case .friends:
+                        friendsPeopleBlock
+                    case .chats:
+                        chatsBlock
+                    case .rooms:
+                        recentBlock
+                    }
                 }
                 .padding(.bottom, 100)
             }
@@ -80,6 +134,7 @@ struct V4FriendsViewLive: View {
             .refreshable {
                 await store?.load()
                 await loadRecentRooms()
+                await dmService.refreshUnread()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -353,11 +408,78 @@ struct V4FriendsViewLive: View {
         }
     }
 
+    // MARK: - Segment picker
+
+    private var segmentPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(FriendsHubSegment.allCases) { seg in
+                Button {
+                    HapticManager.selection()
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                        segment = seg
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: seg.icon)
+                            .font(.system(size: 12, weight: .bold))
+                        Text(seg.title)
+                            .font(.system(size: 13, weight: .bold))
+                        // Badges
+                        if seg == .chats, totalUnread > 0 {
+                            Text(totalUnread > 99 ? "99+" : "\(totalUnread)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(V4.accent, in: Capsule())
+                        }
+                        if seg == .friends, let n = store?.friends.count, n > 0 {
+                            Text("\(n)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(segment == seg ? V4.accentInk.opacity(0.8) : V4.muted)
+                        }
+                        if seg == .rooms, !recentRooms.isEmpty {
+                            Text("\(recentRooms.count)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(segment == seg ? V4.accentInk.opacity(0.8) : V4.muted)
+                        }
+                    }
+                    .foregroundStyle(segment == seg ? V4.accentInk : V4.ink.opacity(0.75))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(segment == seg ? V4.accent : V4.surface.opacity(0.45))
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(segment == seg ? Color.clear : V4.line.opacity(0.55), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(V4.surface.opacity(0.28))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(V4.line.opacity(0.4), lineWidth: 0.8)
+        )
+    }
+
     // MARK: - Header
 
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
-            V4Heading(eyebrow: "ВМЕСТЕ", title: "Друзья")
+            V4Heading(
+                eyebrow: "ВМЕСТЕ",
+                title: segment == .friends ? "Друзья"
+                    : segment == .chats ? "Общение"
+                    : "Комнаты"
+            )
             Spacer(minLength: 8)
 
             // Заявки — icon only, badge if incoming
@@ -487,13 +609,234 @@ struct V4FriendsViewLive: View {
         .padding(.horizontal, 12)
     }
 
-    // MARK: - Чаты block
+    // MARK: - Друзья (people only — no chat previews)
+
+    @ViewBuilder
+    private var friendsPeopleBlock: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Online carousel
+            if !onlineFriends.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader(
+                        title: "В сети",
+                        icon: "circle.fill",
+                        count: onlineFriends.count,
+                        actionTitle: nil,
+                        action: nil
+                    )
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            ForEach(onlineFriends) { friend in
+                                onlineFriendChip(friend)
+                            }
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader(
+                    title: "Все друзья",
+                    icon: "person.2.fill",
+                    count: store?.friends.count,
+                    actionTitle: "Добавить",
+                    action: { showAddFriend = true }
+                )
+
+                if let s = store {
+                    switch s.state {
+                    case .loading:
+                        sectionCard {
+                            ProgressView().tint(V4.accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 36)
+                        }
+                    case .failed(let err):
+                        sectionCard {
+                            emptyInside(icon: "wifi.exclamationmark", title: "Не загрузилось", subtitle: err)
+                        }
+                    case .idle:
+                        Color.clear.frame(height: 1)
+                    case .loaded, .empty:
+                        if s.friends.isEmpty {
+                            sectionCard {
+                                emptyInside(
+                                    icon: "person.badge.plus",
+                                    title: "Пока нет друзей",
+                                    subtitle: "Добавь друга по @username — он появится здесь",
+                                    cta: "Найти друга"
+                                ) { showAddFriend = true }
+                            }
+                        } else {
+                            // 2-column grid of friend cards
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), spacing: 12),
+                                    GridItem(.flexible(), spacing: 12)
+                                ],
+                                spacing: 12
+                            ) {
+                                ForEach(peopleFriends) { friend in
+                                    friendPersonCard(friend)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                } else {
+                    sectionCard {
+                        ProgressView().tint(V4.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 36)
+                    }
+                }
+            }
+        }
+    }
+
+    private func onlineFriendChip(_ friend: Friend) -> some View {
+        Button {
+            HapticManager.selection()
+            profileFriend = friend
+        } label: {
+            VStack(spacing: 8) {
+                ZStack(alignment: .bottomTrailing) {
+                    PlinkStableAvatar(
+                        url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
+                        letter: friend.initials,
+                        size: 64,
+                        userId: friend.id
+                    )
+                    .overlay(Circle().stroke(Color(red: 0.3, green: 0.9, blue: 0.55), lineWidth: 2.5))
+                    Circle()
+                        .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
+                        .frame(width: 14, height: 14)
+                        .overlay(Circle().stroke(V4.surface.opacity(0.95), lineWidth: 2))
+                        .offset(x: 2, y: 2)
+                }
+                Text(friend.displayTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(V4.ink)
+                    .lineLimit(1)
+                    .frame(width: 72)
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button { dmFriend = friend } label: {
+                Label("Написать", systemImage: "message.fill")
+            }
+            Button {
+                watchWithFriend = friend
+                showCreateRoom = true
+            } label: {
+                Label("Смотреть вместе", systemImage: "film.fill")
+            }
+        }
+    }
+
+    private func friendPersonCard(_ friend: Friend) -> some View {
+        VStack(spacing: 10) {
+            Button {
+                HapticManager.selection()
+                profileFriend = friend
+            } label: {
+                VStack(spacing: 8) {
+                    ZStack(alignment: .bottomTrailing) {
+                        PlinkStableAvatar(
+                            url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
+                            letter: friend.initials,
+                            size: 56,
+                            userId: friend.id
+                        )
+                        if friend.isOnline {
+                            Circle()
+                                .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
+                                .frame(width: 12, height: 12)
+                                .overlay(Circle().stroke(V4.surface.opacity(0.95), lineWidth: 2))
+                                .offset(x: 1, y: 1)
+                        }
+                    }
+                    Text(friend.displayTitle)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(V4.ink)
+                        .lineLimit(1)
+                    Text(friend.presenceText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(
+                            friend.isOnline
+                            ? Color(red: 0.3, green: 0.9, blue: 0.55)
+                            : V4.muted
+                        )
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 8) {
+                Button {
+                    HapticManager.selection()
+                    dmFriend = friend
+                } label: {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(V4.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(V4.raised.opacity(0.75), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Чат с \(friend.displayTitle)")
+
+                Button {
+                    HapticManager.impact(.light)
+                    watchWithFriend = friend
+                    showCreateRoom = true
+                } label: {
+                    Image(systemName: "film.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(V4.accentInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(V4.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Смотреть вместе с \(friend.displayTitle)")
+            }
+        }
+        .padding(12)
+        .background(V4.surface.opacity(0.42), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(V4.line.opacity(0.55), lineWidth: 1)
+        )
+        .contextMenu {
+            Button { profileFriend = friend } label: {
+                Label("Профиль", systemImage: "person.crop.circle")
+            }
+            Button { dmFriend = friend } label: {
+                Label("Написать", systemImage: "message.fill")
+            }
+            Button {
+                watchWithFriend = friend
+                showCreateRoom = true
+            } label: {
+                Label("Смотреть вместе", systemImage: "film.fill")
+            }
+        }
+    }
+
+    // MARK: - Чаты / Общение
 
     @ViewBuilder
     private var chatsBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(
-                title: "Чаты",
+                title: "Чаты и общение",
                 icon: "bubble.left.and.bubble.right.fill",
                 count: store?.friends.count,
                 actionTitle: "Добавить",
@@ -545,18 +888,24 @@ struct V4FriendsViewLive: View {
         }
     }
 
-    // MARK: - Недавние block
+    // MARK: - Недавние комнаты (с кем / что смотрели)
 
     @ViewBuilder
     private var recentBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(
-                title: "Недавние комнаты",
+                title: "С друзьями",
                 icon: "clock.arrow.circlepath",
                 count: recentRooms.isEmpty ? nil : recentRooms.count,
                 actionTitle: "Создать",
                 action: { showCreateRoom = true }
             )
+
+            Text("Комнаты, где вы смотрели вместе — кто был и что крутили")
+                .font(.system(size: 13))
+                .foregroundStyle(V4.muted)
+                .padding(.horizontal, 18)
+                .padding(.top, -4)
 
             sectionCard {
                 if recentLoading && recentRooms.isEmpty {
@@ -566,8 +915,8 @@ struct V4FriendsViewLive: View {
                 } else if recentRooms.isEmpty {
                     emptyInside(
                         icon: "play.rectangle.fill",
-                        title: "Нет недавних комнат",
-                        subtitle: "Комнаты, где ты был хостом, появятся здесь",
+                        title: "Пока пусто",
+                        subtitle: "Создай комнату с другом — здесь появится история «с кем и что»",
                         cta: "Создать комнату"
                     ) { showCreateRoom = true }
                 } else {
@@ -746,42 +1095,96 @@ struct V4FriendsViewLive: View {
     }
 
     private func recentRoomRow(_ room: Room) -> some View {
-        Button {
+        let mediaTitle = room.mediaItem?.title ?? room.name
+        let withFriends = coWatchFriends(in: room)
+        let othersCount = max(0, room.participantCount - 1)
+
+        return Button {
             HapticManager.impact(.light)
             roomToOpen = room
         } label: {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [V4.accent.opacity(0.35), V4.raised.opacity(0.9)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            HStack(alignment: .top, spacing: 12) {
+                // Thumbnail / media poster
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [V4.accent.opacity(0.4), Color.purple.opacity(0.35), V4.raised],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 48, height: 48)
-                    .overlay(
+                    if let thumb = room.mediaItem?.thumbnailURL,
+                       let url = URL(string: thumb) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let img):
+                                img.resizable().scaledToFill()
+                            default:
+                                Image(systemName: "play.rectangle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(V4.accent)
+                            }
+                        }
+                    } else {
                         Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 20))
                             .foregroundStyle(V4.accent)
-                    )
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(room.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(V4.ink)
-                        .lineLimit(1)
-                    Text(
-                        room.isActive
-                            ? "LIVE · \(room.participantCount) чел. · \(room.code)"
-                            : "История · \(room.code)"
-                    )
-                        .font(.system(size: 12))
-                        .foregroundStyle(V4.muted)
+                    }
                 }
-                Spacer()
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(V4.line.opacity(0.5), lineWidth: 0.8)
+                )
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        if room.isActive {
+                            Text("LIVE")
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.red.opacity(0.85), in: Capsule())
+                        }
+                        Text(mediaTitle)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(V4.ink)
+                            .lineLimit(2)
+                    }
+
+                    // Who you watched with
+                    if !withFriends.isEmpty {
+                        HStack(spacing: 6) {
+                            overlappingFriendAvatars(withFriends)
+                            Text(withFriendsLine(withFriends, others: othersCount))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(V4.muted)
+                                .lineLimit(1)
+                        }
+                    } else if othersCount > 0 {
+                        Text("\(othersCount) участник(ов) · код \(room.code)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(V4.muted)
+                    } else {
+                        Text(room.isActive ? "Ты один · код \(room.code)" : "История · \(room.code)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(V4.muted)
+                    }
+
+                    if !room.hostName.isEmpty, room.hostName != "Unknown" {
+                        Text("Хост: \(room.hostName)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(V4.muted.opacity(0.85))
+                    }
+                }
+                Spacer(minLength: 4)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(V4.muted)
+                    .padding(.top, 8)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -789,7 +1192,54 @@ struct V4FriendsViewLive: View {
         }
         .buttonStyle(.plain)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(V4.line.opacity(0.55)).frame(height: 1).padding(.leading, 74)
+            Rectangle().fill(V4.line.opacity(0.45)).frame(height: 0.5).padding(.leading, 90)
+        }
+    }
+
+    /// Friends who were in this room (match against local friends list).
+    private func coWatchFriends(in room: Room) -> [Friend] {
+        let friendIds = Set((store?.friends ?? []).map(\.id))
+        let me = UserDefaults.standard.string(forKey: "plink_current_user_id") ?? ""
+        // Map participants that are friends
+        var result: [Friend] = []
+        for p in room.participants where p.id != me && friendIds.contains(p.id) {
+            if let f = store?.friends.first(where: { $0.id == p.id }) {
+                result.append(f)
+            }
+        }
+        // Host if friend and not already listed
+        if room.hostID != me, friendIds.contains(room.hostID),
+           !result.contains(where: { $0.id == room.hostID }),
+           let f = store?.friends.first(where: { $0.id == room.hostID }) {
+            result.insert(f, at: 0)
+        }
+        return result
+    }
+
+    private func withFriendsLine(_ friends: [Friend], others: Int) -> String {
+        let names = friends.prefix(2).map(\.displayTitle)
+        var s = "с " + names.joined(separator: ", ")
+        let extra = friends.count - names.count
+        if extra > 0 {
+            s += " +\(extra)"
+        } else if others > friends.count {
+            s += " · ещё \(others - friends.count)"
+        }
+        return s
+    }
+
+    private func overlappingFriendAvatars(_ friends: [Friend]) -> some View {
+        HStack(spacing: -8) {
+            ForEach(Array(friends.prefix(3).enumerated()), id: \.element.id) { idx, f in
+                PlinkStableAvatar(
+                    url: PlinkAvatarURL.stable(userId: f.id, stored: f.avatarURL),
+                    letter: f.initials,
+                    size: 22,
+                    userId: f.id
+                )
+                .overlay(Circle().stroke(V4.surface.opacity(0.9), lineWidth: 1.5))
+                .zIndex(Double(3 - idx))
+            }
         }
     }
 

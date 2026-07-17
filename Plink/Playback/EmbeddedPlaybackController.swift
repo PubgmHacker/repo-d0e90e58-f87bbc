@@ -422,6 +422,18 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         NSLog("[YT] handleReady - YouTube IFrame API ready")
         isReady = true
         isBuffering = false
+        // iOS WKWebView blocks autoplay of unmuted video. The backend HTML
+        // calls player.mute() in onReady, but by then YouTube has already
+        // decided not to autoplay (state stays at 3=buffering forever).
+        // Fix: destroy the player and recreate with mute:1 in playerVars.
+        // muted autoplay is always allowed by iOS.
+        Task { [weak self] in
+            guard let self, let web = self.webView else { return }
+            NSLog("[YT] force-recreating player with mute:1")
+            let js = "(function(){try{if(player&&player.destroy){player.destroy();player=null;}var vid=window.__plinkVideoId||'\(videoId ?? "")';if(!vid)return 'no-vid';player=new YT.Player('player',{height:'100%',width:'100%',videoId:vid,playerVars:{playsinline:1,controls:1,rel:0,modestbranding:1,iv_load_policy:3,enablejsapi:1,origin:window.location.origin,autoplay:1,mute:1,fs:1},events:{onReady:function(){try{player.playVideo();}catch(e){}setTimeout(function(){try{player.unMute();}catch(e){}},1500);},onStateChange:function(event){try{window.webkit.messageHandlers.plinkPlayer.postMessage({event:'state',state:event.data});}catch(e){}},onError:function(event){try{window.webkit.messageHandlers.plinkPlayer.postMessage({event:'error',code:event.data});}catch(e){}}}});return 'recreated';}catch(e){return 'err:'+e.message;}})();"
+            let result = try? await web.evaluateJavaScript(js)
+            NSLog("[YT] force-recreate result=\(result ?? "?")")
+        }
         // Log actual player state + frame to diagnose "video doesn't play"
         Task { [weak self] in
             guard let self, let web = self.webView else { return }

@@ -304,7 +304,7 @@ struct V4FriendsViewLive: View {
             dmService.startUnreadPolling()
             await inviteService.refreshFromServer()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
                 guard !Task.isCancelled else { break }
                 if scenePhase == .active {
                     await inviteService.refreshFromServer()

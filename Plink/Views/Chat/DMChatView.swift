@@ -246,7 +246,7 @@ struct DMChatView: View {
                 quiet: false
             )
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
                 guard !Task.isCancelled else { break }
                 // Do NOT call friendManager.loadFriends() here \u2014 it triggers
                 // a full UI re-render every 3s (friends list is @Observable),
@@ -1049,12 +1049,15 @@ private struct VoiceNoteBubble: View {
     /// Resolve the same BubbleFrameModel PlinkMessageBubble uses, so the
     /// voice bubble matches the user's selected bubble style (Prisma, etc.)
     /// instead of always using Cinema2026.accent (turquoise).
+    /// For own voice notes, ALWAYS prefer PlinkBubbleStylePrefs.currentID
+    /// over message.bubbleStyle because legacy voice messages may have nil
+    /// bubbleStyle even though the user selected Prisma/etc locally.
     private var frame: BubbleFrameModel {
-        if let styleID = message.bubbleStyle, !styleID.isEmpty {
-            return BubbleFrameModel.resolve(styleID: styleID)
-        }
         if isOwn {
             return BubbleFrameModel.resolve(styleID: PlinkBubbleStylePrefs.currentID)
+        }
+        if let styleID = message.bubbleStyle, !styleID.isEmpty {
+            return BubbleFrameModel.resolve(styleID: styleID)
         }
         return .quiet
     }

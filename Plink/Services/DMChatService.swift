@@ -538,18 +538,31 @@ final class DMChatService: ObservableObject {
         if conversations[convID] == nil { conversations[convID] = [] }
         if conversations[convID]?.contains(where: { $0.id == message.id }) == true { return }
         let decoded = PlinkBubbleWire.decode(message.text)
+        // Re-detect voice metadata from the wire format. The realtime path
+        // may carry voice notes as text-only payloads when the upstream
+        // service does not set mediaType/hasMedia explicitly. If we don't
+        // re-flag voice here, the bubble renders as plain text instead of
+        // the VoiceNoteBubble capsule.
+        let wireVoice = PlinkVoiceWire.decode(decoded.text)
+        let isVoice = message.mediaType == "voice"
+            || message.hasMedia
+            || wireVoice.isVoice
+        let displayText = wireVoice.isVoice ? wireVoice.displayText : decoded.text
         let normalized = DirectMessage(
             id: message.id,
             conversationID: message.conversationID,
             senderID: message.senderID,
             recipientID: message.recipientID,
             senderName: message.senderName,
-            text: decoded.text,
+            text: displayText,
             timestamp: message.timestamp,
             isRead: message.isRead,
             senderAvatarURL: message.senderAvatarURL,
             bubbleStyle: decoded.styleID ?? message.bubbleStyle,
-            reactions: message.reactions
+            reactions: message.reactions,
+            mediaType: isVoice ? "voice" : message.mediaType,
+            mediaDurationSec: message.mediaDurationSec ?? wireVoice.durationSec,
+            hasMedia: isVoice || message.hasMedia
         )
         conversations[convID]?.append(normalized)
         historyEpoch &+= 1

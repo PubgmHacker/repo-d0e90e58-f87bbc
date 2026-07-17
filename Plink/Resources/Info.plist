@@ -25,9 +25,9 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон нужен для голосовых сообщений друзьям и голосового общения в комнате.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Плинк сохраняет изображения только по вашему действию.</string>
+	<string>Плинк может сохранять изображения только по вашему действию.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Плинк запрашивает доступ к фото, чтобы вы могли выбрать аватар и обложку профиля прямо из галереи.</string>
+	<string>Плинк использует галерею, чтобы вы могли выбрать и сменить аватар в профиле.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

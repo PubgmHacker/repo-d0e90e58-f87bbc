@@ -879,34 +879,30 @@ private struct DMBubble: View {
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-                Group {
-                    if message.isVoiceNote {
-                        VoiceNoteBubble(
-                            message: message,
-                            isOwn: isOwn
-                        )
-                    } else {
-                        PlinkMessageBubble(
-                            text: message.text,
-                            isOwn: isOwn,
-                            styleID: message.bubbleStyle,
-                            fontSize: PlinkTelegramBubbleMetrics.fontSize,
-                            isLastInGroup: cluster.isLastInGroup
-                        )
+                // Apply .contextMenu to each individual bubble rather than to
+                // the Group wrapping the conditional content. SwiftUI's
+                // contextMenu preview snapshot hits a flicker when the Group's
+                // body re-evaluates during the long-press (e.g. a polling
+                // refresh flips isVoiceNote or arrives with new reactions).
+                // Per-bubble contextMenu gives a stable snapshot target.
+                if message.isVoiceNote {
+                    VoiceNoteBubble(
+                        message: message,
+                        isOwn: isOwn
+                    )
+                    .contextMenu {
+                        contextMenuButtons
                     }
-                }
-                .contextMenu {
-                    Button {
-                        onReact()
-                    } label: {
-                        Label("Реакция", systemImage: "face.smiling")
-                    }
-                    if !message.isVoiceNote {
-                        Button {
-                            UIPasteboard.general.string = message.text
-                        } label: {
-                            Label("Копировать", systemImage: "doc.on.doc")
-                        }
+                } else {
+                    PlinkMessageBubble(
+                        text: message.text,
+                        isOwn: isOwn,
+                        styleID: message.bubbleStyle,
+                        fontSize: PlinkTelegramBubbleMetrics.fontSize,
+                        isLastInGroup: cluster.isLastInGroup
+                    )
+                    .contextMenu {
+                        contextMenuButtons
                     }
                 }
                 // Removed onLongPressGesture — conflicts with .contextMenu causing flicker.
@@ -946,6 +942,26 @@ private struct DMBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
+    }
+
+    /// Context menu buttons shared by both voice and text bubbles.
+    /// Defined once so the menu's content is identical regardless of which
+    /// bubble type the user long-pressed — avoids SwiftUI re-evaluating two
+    /// separate menu builders during the long-press gesture.
+    @ViewBuilder
+    private var contextMenuButtons: some View {
+        Button {
+            onReact()
+        } label: {
+            Label("Реакция", systemImage: "face.smiling")
+        }
+        if !message.isVoiceNote {
+            Button {
+                UIPasteboard.general.string = message.text
+            } label: {
+                Label("Копировать", systemImage: "doc.on.doc")
+            }
+        }
     }
 
     private var reactionChips: some View {

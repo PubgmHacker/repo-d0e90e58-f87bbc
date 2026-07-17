@@ -20,15 +20,19 @@ public struct PlayerSurfaceView: View {
     }
 
     public var body: some View {
+        // Observe surfaceEpoch so WKWebView appears as soon as prepare attaches it
+        let _ = coordinator.surfaceEpoch
+        let _ = coordinator.isPreparing
+        let _ = coordinator.lastError
         ZStack {
             if let vc = coordinator.makePlayerViewController() {
                 PlayerViewControllerRepresentable(controller: vc)
             } else if let embedded = coordinator.embeddedView {
+                // Stable identity — do NOT use .id(surfaceEpoch) or SwiftUI will
+                // tear down / re-create the UIViewRepresentable and kill YT load.
                 EmbeddedViewRepresentable(view: embedded)
             } else if let error = coordinator.lastError {
-                // Media prepare failed (e.g. YouTube timeout) — show error
-                // overlay so the user knows why the player is blank.
-                // Chat + participants + reactions still work over WebSocket.
+                // Media prepare failed — show error (chat still works).
                 Color.black
                     .overlay(
                         VStack(spacing: 14) {
@@ -48,11 +52,22 @@ public struct PlayerSurfaceView: View {
                                 .foregroundStyle(.white.opacity(0.4))
                         }
                     )
+            } else if coordinator.isPreparing {
+                Color.black
+                    .overlay(
+                        VStack(spacing: 10) {
+                            ProgressView().tint(.white)
+                            Text("Загрузка видео…")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                    )
             } else {
                 Color.black
                     .overlay(
-                        ProgressView()
-                            .tint(.white)
+                        Text("Нет видео")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
                     )
             }
         }
@@ -85,6 +100,8 @@ public struct PlayerViewControllerRepresentable: UIViewControllerRepresentable {
 }
 
 /// Wraps a UIView (WKWebView for embedded YouTube) for SwiftUI.
+/// Uses a container so Auto Layout always gives the webview a non-zero frame
+/// (zero-size WKWebView often never finishes YouTube IFrame load).
 public struct EmbeddedViewRepresentable: UIViewRepresentable {
     public let view: UIView
 
@@ -93,10 +110,41 @@ public struct EmbeddedViewRepresentable: UIViewRepresentable {
     }
 
     public func makeUIView(context: Context) -> UIView {
-        view
+        let container = UIView()
+        container.backgroundColor = .black
+        container.clipsToBounds = true
+        install(view, in: container)
+        return container
     }
 
     public func updateUIView(_ uiView: UIView, context: Context) {
-        // WKWebView is managed by EmbeddedPlaybackController
+        if view.superview !== uiView {
+            // Only re-parent if needed — never strip a live WKWebView mid-load
+            // when it's already correctly installed.
+            if view.superview != nil {
+                view.removeFromSuperview()
+            }
+            uiView.subviews.forEach { sub in
+                if sub !== view { sub.removeFromSuperview() }
+            }
+            install(view, in: uiView)
+        }
+        // Keep frame in sync with container (constraints also active)
+        if uiView.bounds.width > 0, uiView.bounds.height > 0 {
+            view.frame = uiView.bounds
+        }
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+    }
+
+    private func install(_ child: UIView, in parent: UIView) {
+        child.translatesAutoresizingMaskIntoConstraints = false
+        parent.addSubview(child)
+        NSLayoutConstraint.activate([
+            child.topAnchor.constraint(equalTo: parent.topAnchor),
+            child.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
+            child.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+            child.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
+        ])
     }
 }

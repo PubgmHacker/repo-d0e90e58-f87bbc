@@ -36,6 +36,9 @@ public final class PlaybackCoordinator: AnyObject {
     public private(set) var currentSource: PlaybackSource?
     public private(set) var isPreparing: Bool = false
     public private(set) var lastError: String?
+    /// Bumped whenever embedded WKWebView is attached so SwiftUI re-reads `embeddedView`.
+    /// Keep bumps minimal — `.id(surfaceEpoch)` style identity changes kill WKWebView loads.
+    public private(set) var surfaceEpoch: Int = 0
 
     /// Native AVPlayer (nil for embedded YouTube source).
     public var nativePlayer: AVPlayer? {
@@ -45,6 +48,8 @@ public final class PlaybackCoordinator: AnyObject {
     /// Embedded view (nil for native HLS/MP4 source).
     /// Returns the embedded view for YouTube OR Rutube controllers.
     public var embeddedView: UIView? {
+        // Touch surfaceEpoch so Observation tracks UI attach of WKWebView
+        _ = surfaceEpoch
         if let youtube = currentController as? EmbeddedPlaybackController {
             return youtube.embeddedView
         }
@@ -55,6 +60,10 @@ public final class PlaybackCoordinator: AnyObject {
     }
 
     public init() {}
+
+    public func noteSurfaceChanged() {
+        surfaceEpoch &+= 1
+    }
 
     // P1-36: prepare now throws — caller can catch and decide not to connect
     public func prepare(_ source: PlaybackSource) async throws {
@@ -67,6 +76,7 @@ public final class PlaybackCoordinator: AnyObject {
             if let rutube = prev as? RutubePlaybackController { rutube.teardown() }
         }
         currentController = nil
+        surfaceEpoch &+= 1
 
         do {
             let controller: PlaybackControlling
@@ -75,18 +85,37 @@ public final class PlaybackCoordinator: AnyObject {
                 let native = NativePlayerController()
                 try await native.prepare(source)
                 controller = native
+                currentController = controller
             case .youtube:
+                // Attach controller BEFORE prepare so WKWebView is in the view
+                // hierarchy while the YouTube page loads (off-screen WKWebView
+                // often never fires onReady → eternal spinner).
                 let embedded = EmbeddedPlaybackController()
+                // Only bump once when the webview actually appears (not on every
+                // intermediate callback — recreating UIViewRepresentable kills load).
+                let surfaceGate = SurfaceNotifyGate()
+                embedded.onSurfaceChanged = { [weak self] in
+                    guard let self else { return }
+                    let hasView = (self.currentController as? EmbeddedPlaybackController)?.embeddedView != nil
+                    if surfaceGate.shouldNotify(hasView: hasView) {
+                        self.noteSurfaceChanged()
+                    }
+                }
+                currentController = embedded
+                surfaceEpoch &+= 1
                 try await embedded.prepare(source)
                 controller = embedded
             case .rutube:
                 let rutube = RutubePlaybackController()
+                currentController = rutube
+                surfaceEpoch &+= 1
                 try await rutube.prepare(source)
                 controller = rutube
             case .vk:
                 let vk = VKPlaybackController()
                 try await vk.prepare(source)
                 controller = vk
+                currentController = controller
             case .embed(let url):
                 // Generic web embed is not the YouTube IFrame path.
                 // Prefer native only if it looks like a stream; otherwise fail clearly.
@@ -95,15 +124,24 @@ public final class PlaybackCoordinator: AnyObject {
                     let native = NativePlayerController()
                     try await native.prepare(s.contains(".m3u8") ? .hls(url, headers: [:]) : .mp4(url, headers: [:]))
                     controller = native
+                    currentController = controller
                 } else {
                     throw ProviderError.loadingFailed("Этот источник пока нельзя воспроизвести в комнате")
                 }
             }
             currentController = controller
             currentSource = source
+            // Surface already live for YouTube; avoid extra epoch bumps that
+            // would rebuild EmbeddedViewRepresentable mid-load.
+            if case .youtube = source {
+                // no-op surfaceEpoch
+            } else {
+                surfaceEpoch &+= 1
+            }
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             isPreparing = false
+            surfaceEpoch &+= 1
             throw error
         }
         isPreparing = false
@@ -116,6 +154,7 @@ public final class PlaybackCoordinator: AnyObject {
         currentController = nil
         currentSource = nil
         lastError = nil
+        surfaceEpoch &+= 1
     }
 
     /// Returns the AVPlayerViewController for PiP / fullscreen presentation.
@@ -127,5 +166,23 @@ public final class PlaybackCoordinator: AnyObject {
         vc.allowsPictureInPicturePlayback = true
         vc.allowsVideoFrameAnalysis = false
         return vc
+    }
+}
+
+/// Coalesces surfaceEpoch bumps so attach notifies once, teardown once.
+@MainActor
+private final class SurfaceNotifyGate {
+    private var attached = false
+
+    func shouldNotify(hasView: Bool) -> Bool {
+        if hasView {
+            guard !attached else { return false }
+            attached = true
+            return true
+        } else {
+            guard attached else { return false }
+            attached = false
+            return true
+        }
     }
 }

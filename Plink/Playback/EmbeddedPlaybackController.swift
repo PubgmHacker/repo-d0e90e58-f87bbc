@@ -64,10 +64,16 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     /// Host WatchRoomModel uses this to emit `sync.command`.
     public var onUserPlaybackChange: ((Bool, Double) -> Void)?
 
+    /// Called when WKWebView is created so coordinator can bump surfaceEpoch
+    /// and SwiftUI attaches the view *before* YouTube finishes loading.
+    public var onSurfaceChanged: (() -> Void)?
+
     /// Suppress host broadcast while applying remote sync or host Plink commands.
     private var suppressUserBroadcastDepth: Int = 0
     private var lastBroadcastPlaying: Bool?
     private var lastBroadcastPosition: Double = 0
+    private var navigationDelegateBox: YTWebNavigationDelegate?
+    private var pageDidFinishLoad: Bool = false
 
     public var capabilities: PlaybackCapabilities {
         .init(
@@ -133,30 +139,56 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         self.videoId = id
         isReady = false
         lastError = nil
+        isBuffering = true
+        pageDidFinishLoad = false
 
         // WKWebView configuration
         let content = WKUserContentController()
+        // Avoid duplicate handler crash if reused
+        content.removeScriptMessageHandler(forName: "plinkPlayer")
         content.add(bridge, name: "plinkPlayer")
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        // Allow autoplay without user gesture (YouTube muted-then-unmute in wrapper)
+        config.allowsPictureInPictureMediaPlayback = false
+        // Allow autoplay without user gesture (wrapper mutes then unmutes)
         config.mediaTypesRequiringUserActionForPlayback = []
         config.userContentController = content
-        // Default data store — YouTube IFrame often fails in non-persistent (no cookies/cache)
         config.websiteDataStore = .default()
         if #available(iOS 14.0, *) {
             config.defaultWebpagePreferences.allowsContentJavaScript = true
         }
 
-        let web = WKWebView(frame: .zero, configuration: config)
+        // Non-zero frame helps first layout pass before Auto Layout
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 220), configuration: config)
         web.configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         web.isOpaque = false
         web.backgroundColor = UIColor(red: 0x0E/255, green: 0x10/255, blue: 0x16/255, alpha: 1)
         web.scrollView.isScrollEnabled = false
-        web.translatesAutoresizingMaskIntoConstraints = false
+        web.scrollView.bounces = false
+        web.scrollView.contentInsetAdjustmentBehavior = .never
+        web.translatesAutoresizingMaskIntoConstraints = true
+        web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        let nav = YTWebNavigationDelegate { [weak self] ok, err in
+            Task { @MainActor in
+                guard let self else { return }
+                if ok {
+                    self.pageDidFinishLoad = true
+                } else {
+                    self.lastError = err ?? "Не удалось загрузить страницу плеера"
+                    self.isBuffering = false
+                }
+            }
+        }
+        navigationDelegateBox = nav
+        web.navigationDelegate = nav
+
         webView = web
         embeddedView = web
+        // One surface notify — enough for SwiftUI to attach. Do NOT spam
+        // surfaceEpoch (recreates UIViewRepresentable and kills the load).
+        onSurfaceChanged?()
 
         // Wire bridge callbacks
         bridge.onReady = { [weak self] in
@@ -169,67 +201,82 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
             Task { @MainActor in self?.handleError(code: code) }
         }
 
-        // Brain Phase 2: navigate to backend HTTPS wrapper (NO loadHTMLString).
-        // The wrapper at /api/media/youtube-player?id=VIDEO_ID serves a static
-        // HTML page with a real Plink HTTPS origin. This:
-        //   - gives the page a real origin (fixes YouTube error 153)
-        //   - allows the strict CSP to be enforced by the backend
-        //   - prevents YouTube bot-detection (we're not loading youtube.com/embed/)
-        //   - keeps YouTube controls visible (controls=1)
+        // Backend HTTPS wrapper (real origin for YouTube IFrame API)
         var components = URLComponents(url: Self.backendBaseURL, resolvingAgainstBaseURL: false)!
         components.path = "/api/media/youtube-player"
-        components.queryItems = [URLQueryItem(name: "id", value: id)]
+        components.queryItems = [
+            URLQueryItem(name: "id", value: id),
+            // Cache-bust so wrapper HTML updates (bridge fixes) land immediately
+            URLQueryItem(name: "v", value: "22")
+        ]
         guard let wrapperURL = components.url else {
             throw ProviderError.loadingFailed("Invalid wrapper URL")
         }
-        web.load(URLRequest(url: wrapperURL))
 
-        // Wait for player ready:
-        //   A) bridge event "ready" → handleReady() sets isReady
-        //   B) JS fallback: window.__plinkIsReady() (backend v21+)
-        // Timeout 20s — IFrame API + first frame can be slow on cellular.
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { [weak self] in
-                guard let self else { return }
-                var ticks = 0
-                while true {
-                    let ready = await MainActor.run { self.isReady }
-                    if ready { return }
+        // Wait until SwiftUI pins WKWebView into the hierarchy.
+        // Off-screen / zero-size WKWebView often never fires YT onReady.
+        for _ in 0..<40 {
+            if web.superview != nil || web.window != nil { break }
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+        // One extra layout pass after attach
+        web.setNeedsLayout()
+        web.layoutIfNeeded()
+        await Task.yield()
 
-                    // Every ~400ms probe JS readiness in case webkit postMessage
-                    // was dropped or an older wrapper lacked the iOS bridge shape.
-                    ticks += 1
-                    if ticks % 5 == 0 {
-                        let jsReady = await self.evaluate(
-                            "(function(){try{return !!(window.__plinkIsReady&&window.__plinkIsReady());}catch(e){return false;}})()"
-                        )
-                        if let flag = jsReady as? Bool, flag {
-                            await MainActor.run { self.handleReady() }
-                            return
-                        }
-                        // Ensure control helpers exist even on older wrapper HTML
-                        _ = await self.evaluate("""
-                        (function(){
-                          if (typeof window.plinkPlay !== 'function' && typeof window.plinkCmd === 'function') {
-                            window.plinkPlay = function(){ window.plinkCmd('play'); return true; };
-                            window.plinkPause = function(){ window.plinkCmd('pause'); return true; };
-                            window.plinkSeek = function(s){ window.plinkCmd('seek',{seconds:s}); return true; };
-                            window.plinkSnapshot = function(){ return {time:0,duration:0}; };
-                          }
-                          return true;
-                        })()
-                        """)
-                    }
+        var req = URLRequest(url: wrapperURL)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        web.load(req)
 
-                    try await Task.sleep(for: .milliseconds(80))
+        // Soft-wait for ready so callers are not blocked forever.
+        // IMPORTANT: do NOT throw on timeout — keep WKWebView visible so YouTube
+        // can finish loading / show its own UI. Throwing discarded the webview
+        // and left a permanent spinner.
+        let started = Date()
+        let deadline = started.addingTimeInterval(10)
+        while !isReady && Date() < deadline {
+            if lastError != nil { break }
+
+            let jsReady = await evaluate(
+                "(function(){try{return !!(window.__plinkIsReady&&window.__plinkIsReady());}catch(e){return false;}})()"
+            )
+            if let flag = jsReady as? Bool, flag {
+                handleReady()
+                break
+            }
+
+            // Soft-ready: page finished + YT API present after a few seconds
+            let elapsed = Date().timeIntervalSince(started)
+            if elapsed > 3.5 {
+                let ytExists = await evaluate(
+                    "(function(){try{return !!(window.YT&&window.YT.Player);}catch(e){return false;}})()"
+                )
+                if let yt = ytExists as? Bool, yt {
+                    // Player API present — surface is playable even if bridge lagged
+                    handleReady()
+                    break
                 }
             }
-            group.addTask {
-                try await Task.sleep(for: .seconds(20))
-                throw ProviderError.loadingFailed("Таймаут YouTube-плеера — проверьте сеть")
+            // Soft-ready: page loaded and iframe exists (YT controls visible)
+            if pageDidFinishLoad, elapsed > 5 {
+                let hasIframe = await evaluate(
+                    "(function(){try{return !!document.querySelector('iframe');}catch(e){return false;}})()"
+                )
+                if let has = hasIframe as? Bool, has {
+                    handleReady()
+                    break
+                }
             }
-            _ = try await group.next()
-            group.cancelAll()
+
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+
+        if !isReady {
+            // Keep webview visible; stop covering it with a full-screen spinner.
+            // YouTube chrome may still become interactive.
+            isBuffering = false
+            lastError = nil
         }
 
         startPolling()
@@ -306,11 +353,14 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         pollTask?.cancel()
         pollTask = nil
 
+        webView?.navigationDelegate = nil
+        navigationDelegateBox = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "plinkPlayer")
         webView?.stopLoading()
         webView?.removeFromSuperview()
         webView = nil
         embeddedView = nil
+        onSurfaceChanged?()
 
         bridge.onReady = nil
         bridge.onStateChange = nil
@@ -323,11 +373,14 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         position = 0
         duration = 0
         pending = .none
+        lastError = nil
+        pageDidFinishLoad = false
     }
 
     // MARK: - Bridge handlers
 
     private func handleReady() {
+        guard !isReady else { return }
         isReady = true
         isBuffering = false
 
@@ -368,14 +421,20 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         case 1:
             isPlaying = true
             isBuffering = false
+            if !isReady { handleReady() }
         case 2:
             isPlaying = false
             isBuffering = false
+            if !isReady { handleReady() }
         case 3:
             isBuffering = true
         case 0:
             isPlaying = false
             isBuffering = false
+        case 5:
+            // cued — player has video, treat as ready surface
+            isBuffering = false
+            if !isReady { handleReady() }
         default:
             break
         }
@@ -419,7 +478,15 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                 if let dict = snapshot as? [String: Any] {
                     let time = dict["time"] as? Double
                     let dur = dict["duration"] as? Double
+                    let playing = dict["playing"] as? Bool
+                    let state = dict["state"] as? Int
                     await MainActor.run {
+                        // Late ready detection via snapshot
+                        if !self.isReady {
+                            if playing == true || state == 1 || state == 2 || state == 5 {
+                                self.handleReady()
+                            }
+                        }
                         let prev = self.position
                         if let t = time, t.isFinite {
                             self.position = t
@@ -433,6 +500,12 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                             }
                         }
                         if let d = dur, d > 0 { self.duration = d }
+                        if let p = playing {
+                            if p {
+                                self.isPlaying = true
+                                self.isBuffering = false
+                            }
+                        }
                     }
                 }
                 let interval: UInt64 = isBackgrounded ? 1_000_000_000 : 250_000_000
@@ -461,6 +534,28 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     }
 }
 
+// MARK: - Navigation (surface load failures)
+
+private final class YTWebNavigationDelegate: NSObject, WKNavigationDelegate {
+    private let onFinish: (Bool, String?) -> Void
+
+    init(onFinish: @escaping (Bool, String?) -> Void) {
+        self.onFinish = onFinish
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        onFinish(true, nil)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        onFinish(false, error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        onFinish(false, error.localizedDescription)
+    }
+}
+
 // MARK: - Bridge message handler
 
 private final class EmbeddedMessageHandler: NSObject, WKScriptMessageHandler {
@@ -477,10 +572,18 @@ private final class EmbeddedMessageHandler: NSObject, WKScriptMessageHandler {
         case "state":
             if let state = body["state"] as? Int {
                 onStateChange?(state)
+            } else if let state = body["state"] as? Double {
+                onStateChange?(Int(state))
+            } else if let state = body["state"] as? NSNumber {
+                onStateChange?(state.intValue)
             }
         case "error":
             if let code = body["code"] as? Int {
                 onError?(code)
+            } else if let code = body["code"] as? Double {
+                onError?(Int(code))
+            } else if let code = body["code"] as? NSNumber {
+                onError?(code.intValue)
             }
         default:
             break

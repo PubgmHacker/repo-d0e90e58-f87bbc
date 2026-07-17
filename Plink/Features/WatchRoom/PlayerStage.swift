@@ -30,14 +30,25 @@ struct PlayerStage: View {
             .padding(.top, 60)
             .padding(.bottom, 80)
 
-            // Functional overlays only (no decorative)
-            if model.coordinator.isPreparing {
+            // Loading overlay only when we still have no player surface.
+            // Once WKWebView is attached, never cover it with a full-screen spinner
+            // (that was the "eternal loading" symptom: 1 in room + black spinner).
+            let hasSurface = model.coordinator.embeddedView != nil
+                || model.coordinator.nativePlayer != nil
+            if model.coordinator.isPreparing && !hasSurface {
                 PlayerLoadingView()
                     .transition(.opacity)
             }
-            if model.coordinator.isBuffering && !model.coordinator.isPreparing {
+            // Soft buffering chip — only mid-playback, never blocks hit testing
+            // and never shown for the whole prepare period.
+            if model.coordinator.isBuffering
+                && hasSurface
+                && model.coordinator.isPlaying == false
+                && model.coordinator.isPreparing == false
+            {
                 BufferingOverlay()
                     .transition(.opacity)
+                    .allowsHitTesting(false)
             }
 
             // Top chrome only (functional, not decorative)

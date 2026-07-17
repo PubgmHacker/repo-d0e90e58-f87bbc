@@ -156,7 +156,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         // P0-31: subscribe to stateChanges stream
         startStateChangesSubscription()
 
-        // Media prepare must NOT block realtime — chat/presence work even if player fails
+        // Realtime first — chat/presence must work even while YouTube is loading.
+        // Player prepare used to block connect for ~10s and delayed everything.
+        realtimeClient.connect(roomId: _roomId)
+        startDanmakuPolling()
+
+        // Media prepare runs after WS kickoff so SwiftUI can attach WKWebView
+        // while room UI is already live ("1 в комнате" + chat).
         if let source = mediaSource {
             do {
                 try await coordinator.prepare(source)
@@ -177,14 +183,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 lastError = detail
                 // coordinator.lastError already set inside prepare(); UI reads that.
-                // Continue — still join room for chat/sync retry
             }
         } else {
             lastError = "Нет медиа в комнате"
         }
-
-        realtimeClient.connect(roomId: _roomId)
-        startDanmakuPolling()
     }
 
     public func disconnect() {

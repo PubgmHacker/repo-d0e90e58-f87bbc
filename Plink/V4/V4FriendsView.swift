@@ -75,9 +75,11 @@ struct V4FriendsViewLive: View {
     /// Pin order — shared store (not a private stored prop so memberwise init stays public).
     private var pinStore: FriendPinStore { FriendPinStore.shared }
 
-    /// Alphabetical / online-first friends list (no chat previews).
+    @ObservedObject private var blockManager = UserBlockManager.shared
+
+    /// Alphabetical / online-first friends list (no chat previews). Blocked hidden.
     private var peopleFriends: [Friend] {
-        let list = store?.friends ?? []
+        let list = (store?.friends ?? []).filter { !blockManager.isBlocked($0.id) }
         return list.sorted { a, b in
             if a.isOnline != b.isOnline { return a.isOnline && !b.isOnline }
             return a.displayTitle.localizedCaseInsensitiveCompare(b.displayTitle) == .orderedAscending
@@ -88,9 +90,9 @@ struct V4FriendsViewLive: View {
         peopleFriends.filter(\.isOnline)
     }
 
-    /// Telegram order: pinned (stable) → unpinned by last message time.
+    /// Telegram order: pinned (stable) → unpinned by last message time. Blocked hidden.
     private var orderedFriends: [Friend] {
-        let list = store?.friends ?? []
+        let list = (store?.friends ?? []).filter { !blockManager.isBlocked($0.id) }
         return pinStore.sortedChats(
             friends: list,
             lastActivity: { dmService.lastActivityAt(for: $0) },
@@ -260,6 +262,7 @@ struct V4FriendsViewLive: View {
             await loadRecentRooms()
             await dmService.refreshUnread()
             await inviteService.refreshFromServer()
+            await UserBlockManager.shared.refreshBlocksFromServer()
         }
         // Tabs stay mounted (opacity switch) — re-fetch when this tab is shown
         .onChange(of: isActive) { _, active in
@@ -1052,6 +1055,48 @@ struct V4FriendsViewLive: View {
             } label: {
                 Label("Смотреть вместе", systemImage: "film.fill")
             }
+            Divider()
+            Button(role: .destructive) {
+                Task {
+                    await dmService.deleteChat(with: friend)
+                    toast = "Чат удалён"
+                }
+            } label: {
+                Label("Удалить чат", systemImage: "trash")
+            }
+            Button(role: .destructive) {
+                Task {
+                    await UserBlockManager.shared.blockAndDeleteChat(
+                        userId: friend.id,
+                        friend: friend
+                    )
+                    toast = "\(friend.displayTitle) заблокирован"
+                }
+            } label: {
+                Label("Заблокировать", systemImage: "hand.raised.fill")
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                Task {
+                    await dmService.deleteChat(with: friend)
+                    toast = "Чат удалён"
+                }
+            } label: {
+                Label("Удалить", systemImage: "trash.fill")
+            }
+            Button {
+                Task {
+                    await UserBlockManager.shared.blockAndDeleteChat(
+                        userId: friend.id,
+                        friend: friend
+                    )
+                    toast = "\(friend.displayTitle) заблокирован"
+                }
+            } label: {
+                Label("Блок", systemImage: "hand.raised.fill")
+            }
+            .tint(.orange)
         }
     }
 

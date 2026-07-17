@@ -272,6 +272,49 @@ final class DMChatService: ObservableObject {
         return conversations[convID] ?? []
     }
 
+    // MARK: - Delete chat (Telegram)
+
+    /// Clears local + server thread with friend. Does not remove the friendship.
+    func deleteChat(with friend: Friend) async {
+        let friendId = friend.id
+        let convID = conversationID(with: friendId)
+        // Optimistic local clear
+        conversations[convID] = []
+        lastPreviewByFriend[friendId] = nil
+        lastActivityAtByFriend[friendId] = nil
+        unreadByFriend[friendId] = nil
+        unreadByFriend = unreadByFriend.filter { $0.value > 0 }
+        lastMessages.removeAll { $0.id == convID }
+        historyEpoch &+= 1
+        inboxEpoch &+= 1
+
+        ensureToken()
+        struct Resp: Decodable { let success: Bool?; let deleted: Int? }
+        do {
+            let _: Resp = try await api.request(
+                "messages/dm/\(friendId)",
+                method: .delete
+            )
+            print("[DM] deleteChat ok with \(friendId)")
+        } catch {
+            print("[DM] deleteChat server error: \(error.localizedDescription)")
+            // Local clear already applied — list stays clean offline
+        }
+    }
+
+    /// Hide chat from list without server wipe (after block).
+    func clearLocalChat(friendId: String) {
+        let convID = conversationID(with: friendId)
+        conversations[convID] = []
+        lastPreviewByFriend[friendId] = nil
+        lastActivityAtByFriend[friendId] = nil
+        unreadByFriend[friendId] = nil
+        unreadByFriend = unreadByFriend.filter { $0.value > 0 }
+        lastMessages.removeAll { $0.id == convID }
+        historyEpoch &+= 1
+        inboxEpoch &+= 1
+    }
+
     // MARK: - Send voice note (real audio)
 
     /// Upload recorded AAC/m4a and create a DM voice note.
@@ -373,6 +416,10 @@ final class DMChatService: ObservableObject {
     // MARK: - Send
 
     func sendMessage(_ text: String, to friend: Friend) {
+        if UserBlockManager.shared.isBlocked(friend.id) {
+            errorMessage = "Пользователь заблокирован"
+            return
+        }
         // Allow room-invite payloads (up to 280 server-side)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

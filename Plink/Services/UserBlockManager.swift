@@ -31,7 +31,22 @@ final class UserBlockManager: ObservableObject {
         blockedUserIds.insert(userId)
         persist()
         onBlockChanged?(userId, true)
+        // Telegram: blocked peer disappears from active chat flow
+        DMChatService.shared.clearLocalChat(friendId: userId)
         Task { await syncBlockToServer(userId: userId) }
+    }
+
+    /// Block + wipe DM history (Telegram «Заблокировать» with chat clear).
+    func blockAndDeleteChat(userId: String, friend: Friend? = nil) async {
+        blockUser(userId)
+        if let friend {
+            await DMChatService.shared.deleteChat(with: friend)
+        } else {
+            // Still clear server thread if we only have id
+            struct Resp: Decodable { let success: Bool? }
+            _ = try? await api.request("messages/dm/\(userId)", method: .delete) as Resp
+            DMChatService.shared.clearLocalChat(friendId: userId)
+        }
     }
 
     func unblockUser(_ userId: String) {

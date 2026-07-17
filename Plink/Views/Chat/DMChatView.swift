@@ -12,6 +12,9 @@ struct DMChatView: View {
     @State private var showEmojiPicker = false
     @State private var showWatchTogether = false
     @State private var showPeerProfile = false
+    @State private var showChatActions = false
+    @State private var confirmDeleteChat = false
+    @State private var confirmBlockUser = false
     @State private var reactionTarget: DirectMessage?
     @FocusState private var isInputFocused: Bool
     private let charLimit = 280
@@ -20,6 +23,7 @@ struct DMChatView: View {
     @State private var voiceRecorder = VoiceNoteRecorder()
     @State private var voiceError: String?
     @State private var voiceStartInFlight = false
+    @ObservedObject private var blockManager = UserBlockManager.shared
 
     /// Telegram iOS private-chat navigation metrics.
     private enum TGHeader {
@@ -309,7 +313,7 @@ struct DMChatView: View {
 
                     Button {
                         HapticManager.impact(.light)
-                        showPeerProfile = true
+                        showChatActions = true
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 16, weight: .semibold))
@@ -319,6 +323,53 @@ struct DMChatView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Ещё")
+                    .confirmationDialog(
+                        liveFriend.displayTitle,
+                        isPresented: $showChatActions,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Профиль") { showPeerProfile = true }
+                        Button("Смотреть вместе") { showWatchTogether = true }
+                        Button("Удалить чат", role: .destructive) {
+                            confirmDeleteChat = true
+                        }
+                        if blockManager.isBlocked(liveFriend.id) {
+                            Button("Разблокировать") {
+                                blockManager.unblockUser(liveFriend.id)
+                                HapticManager.impact(.light)
+                            }
+                        } else {
+                            Button("Заблокировать", role: .destructive) {
+                                confirmBlockUser = true
+                            }
+                        }
+                        Button("Отмена", role: .cancel) {}
+                    }
+                    .alert("Удалить чат?", isPresented: $confirmDeleteChat) {
+                        Button("Удалить", role: .destructive) {
+                            Task {
+                                await dmService.deleteChat(with: liveFriend)
+                                await MainActor.run { dismiss() }
+                            }
+                        }
+                        Button("Отмена", role: .cancel) {}
+                    } message: {
+                        Text("История переписки с \(liveFriend.displayTitle) будет удалена. Это действие нельзя отменить.")
+                    }
+                    .alert("Заблокировать \(liveFriend.displayTitle)?", isPresented: $confirmBlockUser) {
+                        Button("Заблокировать", role: .destructive) {
+                            Task {
+                                await blockManager.blockAndDeleteChat(
+                                    userId: liveFriend.id,
+                                    friend: liveFriend
+                                )
+                                await MainActor.run { dismiss() }
+                            }
+                        }
+                        Button("Отмена", role: .cancel) {}
+                    } message: {
+                        Text("Пользователь не сможет писать вам. Чат будет удалён, как в Telegram.")
+                    }
                 }
                 .padding(.trailing, 4)
             }
@@ -340,69 +391,90 @@ struct DMChatView: View {
     // MARK: - Glass input
 
     private var glassInputBar: some View {
-        HStack(spacing: 10) {
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    showEmojiPicker.toggle()
-                }
-                if showEmojiPicker { isInputFocused = false }
-            } label: {
-                Image(systemName: showEmojiPicker ? "keyboard.fill" : "face.smiling.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(showEmojiPicker ? Cinema2026.accent : Color.white.opacity(0.55))
-                    .frame(width: 36, height: 36)
-            }
-
-            TextField("Сообщение", text: $messageText)
-                .font(.system(size: 17))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(minHeight: 42)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
-                )
-                .focused($isInputFocused)
-                .submitLabel(.send)
-                .onSubmit { sendAction() }
-                .onChange(of: messageText) { _, newValue in
-                    if newValue.count > charLimit {
-                        messageText = String(newValue.prefix(charLimit))
+        Group {
+            if blockManager.isBlocked(friend.id) {
+                HStack(spacing: 10) {
+                    Image(systemName: "hand.raised.fill")
+                        .foregroundStyle(.orange.opacity(0.9))
+                    Text("Вы заблокировали \(liveFriend.displayTitle)")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                    Spacer()
+                    Button("Разблок.") {
+                        blockManager.unblockUser(friend.id)
                         HapticManager.impact(.light)
                     }
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Cinema2026.accent)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial)
+            } else {
+                HStack(spacing: 10) {
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            showEmojiPicker.toggle()
+                        }
+                        if showEmojiPicker { isInputFocused = false }
+                    } label: {
+                        Image(systemName: showEmojiPicker ? "keyboard.fill" : "face.smiling.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(showEmojiPicker ? Cinema2026.accent : Color.white.opacity(0.55))
+                            .frame(width: 36, height: 36)
+                    }
 
-            // Free friend voice note — hold to record, release to send
-            voiceMicButton
-
-            Button(action: sendAction) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(
-                        messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? Color.white.opacity(0.35)
-                        : Color.black.opacity(0.85)
-                    )
-                    .frame(width: 36, height: 36)
-                    .background(
-                        Circle().fill(
-                            messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? Color.white.opacity(0.10)
-                            : Cinema2026.accent
+                    TextField("Сообщение", text: $messageText)
+                        .font(.system(size: 17))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: 42)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.08))
                         )
-                    )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
+                        )
+                        .focused($isInputFocused)
+                        .submitLabel(.send)
+                        .onSubmit { sendAction() }
+                        .onChange(of: messageText) { _, newValue in
+                            if newValue.count > charLimit {
+                                messageText = String(newValue.prefix(charLimit))
+                                HapticManager.impact(.light)
+                            }
+                        }
+
+                    voiceMicButton
+
+                    Button(action: sendAction) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(
+                                messageText.trimmingCharacters(in: .whitespaces).isEmpty
+                                ? Color.white.opacity(0.35)
+                                : Color.black.opacity(0.85)
+                            )
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle().fill(
+                                    messageText.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? Color.white.opacity(0.10)
+                                    : Cinema2026.accent
+                                )
+                            )
+                    }
+                    .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
             }
-            .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(Color.white.opacity(0.08))

@@ -191,9 +191,10 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
         webView = web
         embeddedView = web
-        // One surface notify — enough for SwiftUI to attach. Do NOT spam
+        // One surface notify \u2014 enough for SwiftUI to attach. Do NOT spam
         // surfaceEpoch (recreates UIViewRepresentable and kills the load).
         onSurfaceChanged?()
+        NSLog("[YT] WKWebView created frame=\(web.frame)")
 
         // Wire bridge callbacks
         bridge.onReady = { [weak self] in
@@ -394,6 +395,17 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         NSLog("[YT] handleReady - YouTube IFrame API ready")
         isReady = true
         isBuffering = false
+        // Log actual player state + frame to diagnose "video doesn't play"
+        Task { [weak self] in
+            guard let self, let web = self.webView else { return }
+            let state = await web.evaluateJavaScript(
+                "(function(){try{return player&&player.getPlayerState?player.getPlayerState():'no-player';}catch(e){return 'err:'+e.message;}})()"
+            )
+            let url = await web.evaluateJavaScript(
+                "(function(){try{return player&&player.getVideoUrl?player.getVideoUrl():'no-url';}catch(e){return 'err:'+e.message;}})()"
+            )
+            NSLog("[YT] post-ready state=\(state ?? "?") url=\(url ?? "?") frame=\(web.frame)")
+        }
 
         // Drain pending commands atomically.
         let command = pending

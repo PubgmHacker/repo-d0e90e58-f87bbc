@@ -22,7 +22,11 @@ import UIKit  // PATCH 16: UIApplication + UIWindowScene for Rutube fallback pre
 @Observable
 public final class WatchRoomModel: RealtimeClientDelegate {
     // MARK: - Public state (UI binds to these)
-    public private(set) var connectionState: RealtimeConnectionState = .idle
+    // Default to .connecting (not .idle) so the SyncHealthPill shows
+    // "Connecting\u2026" instead of "Offline" during the brief moment between
+    // view appear and model.connect() running. disconnect() still sets .idle
+    // so the pill correctly shows "Offline" after the user leaves the room.
+    public private(set) var connectionState: RealtimeConnectionState = .connecting
     public private(set) var isHost: Bool = false
     public private(set) var role: RoomRole = .viewer
     public private(set) var participants: [ParticipantInfo] = []

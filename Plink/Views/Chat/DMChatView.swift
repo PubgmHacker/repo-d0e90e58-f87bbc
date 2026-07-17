@@ -248,11 +248,11 @@ struct DMChatView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else { break }
-                await friendManager.loadFriends()
-                // quiet:true so loadHistory's change-detection gates UI
-                // updates - only re-renders when messages actually changed.
-                // (quiet:false forced historyEpoch bump every poll -> flicker
-                // on long-press because contextMenu preview re-snapshotted.)
+                // Do NOT call friendManager.loadFriends() here \u2014 it triggers
+                // a full UI re-render every 3s (friends list is @Observable),
+                // which re-snapshots the contextMenu preview during long-press
+                // and causes flicker. Friends are loaded once on .task entry
+                // above; the Friends tab refreshes presence independently.
                 await dmService.loadHistory(
                     friendId: friend.id,
                     friendName: liveFriend.displayTitle,

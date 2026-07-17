@@ -1,5 +1,5 @@
 // Plink/Services/VoiceNotePlayer.swift
-// Plays friend-DM voice notes via authenticated download + AVAudioPlayer.
+// Plays friend-DM voice notes: local cache (just-sent) + authenticated download.
 
 import Foundation
 import AVFoundation
@@ -17,11 +17,47 @@ final class VoiceNotePlayer: NSObject {
 
     private var player: AVAudioPlayer?
     private var tickTimer: Timer?
-    private var cache: [String: URL] = [:]
+    /// messageId → on-disk m4a (downloaded or written from local record)
+    private var fileCache: [String: URL] = [:]
+    /// messageId → raw bytes (optimistic send before server id exists)
+    private var memoryCache: [String: Data] = [:]
     private let api = APIClient.shared
 
+    // MARK: - Local register (own just-recorded notes)
+
+    /// Keep bytes so own voice plays immediately without waiting for GET /voice/:id.
+    func registerLocal(messageId: String, data: Data) {
+        guard !messageId.isEmpty, data.count > 100 else { return }
+        memoryCache[messageId] = data
+        if let url = try? writeToDisk(messageId: messageId, data: data) {
+            fileCache[messageId] = url
+        }
+    }
+
+    /// After POST /dm/voice returns server id — keep the same audio under the new key.
+    func promote(from localId: String, to serverId: String) {
+        guard localId != serverId, !serverId.isEmpty else { return }
+        if let data = memoryCache.removeValue(forKey: localId) {
+            memoryCache[serverId] = data
+        }
+        if let oldURL = fileCache.removeValue(forKey: localId) {
+            if let data = try? Data(contentsOf: oldURL),
+               let newURL = try? writeToDisk(messageId: serverId, data: data) {
+                fileCache[serverId] = newURL
+                try? FileManager.default.removeItem(at: oldURL)
+            } else {
+                fileCache[serverId] = oldURL
+            }
+        }
+        if playingMessageId == localId {
+            playingMessageId = serverId
+        }
+    }
+
+    // MARK: - Playback
+
     func toggle(messageId: String) {
-        if playingMessageId == messageId {
+        if playingMessageId == messageId, player?.isPlaying == true {
             stop()
             return
         }
@@ -40,7 +76,10 @@ final class VoiceNotePlayer: NSObject {
             try configurePlaybackSession()
             let p = try AVAudioPlayer(contentsOf: fileURL)
             p.delegate = self
+            p.volume = 1.0
             p.prepareToPlay()
+            // Some devices need a brief delay after session flip (record → play).
+            try await Task.sleep(nanoseconds: 30_000_000)
             guard p.play() else {
                 throw URLError(.cannotDecodeContentData)
             }
@@ -48,9 +87,9 @@ final class VoiceNotePlayer: NSObject {
             progress = 0
             startTick()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyError(error)
             playingMessageId = nil
-            print("[VoiceNote] play error: \(error)")
+            print("[VoiceNote] play error id=\(messageId): \(error)")
         }
     }
 
@@ -62,22 +101,31 @@ final class VoiceNotePlayer: NSObject {
         playingMessageId = nil
         progress = 0
         if !keepCache {
-            for (_, url) in cache {
+            for (_, url) in fileCache {
                 try? FileManager.default.removeItem(at: url)
             }
-            cache.removeAll()
+            fileCache.removeAll()
+            memoryCache.removeAll()
         }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Don't deactivate session aggressively — avoids killing next play.
     }
 
-    // MARK: - Download
+    // MARK: - Resolve file
 
     private func localFile(for messageId: String) async throws -> URL {
-        if let cached = cache[messageId], FileManager.default.fileExists(atPath: cached.path) {
-            return cached
+        if let cached = fileCache[messageId], FileManager.default.fileExists(atPath: cached.path) {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: cached.path)
+            let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+            if size > 100 { return cached }
         }
 
-        // Ensure auth token
+        if let data = memoryCache[messageId], data.count > 100 {
+            let url = try writeToDisk(messageId: messageId, data: data)
+            fileCache[messageId] = url
+            return url
+        }
+
+        // Download from API
         if api.authToken == nil {
             api.authToken = KeychainHelper.read(for: "rave_auth_token")
                 ?? AuthService.shared.authToken
@@ -86,33 +134,60 @@ final class VoiceNotePlayer: NSObject {
             throw URLError(.userAuthenticationRequired)
         }
 
-        let base = api.baseURL
-        let url = base.appendingPathComponent("messages/voice/\(messageId)")
+        // Build path safely (avoid slash encoding issues on some SDKs)
+        let url = api.baseURL
+            .appendingPathComponent("messages")
+            .appendingPathComponent("voice")
+            .appendingPathComponent(messageId)
+
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.cachePolicy = .returnCacheDataElseLoad
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 30
 
         let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 404 {
+                throw VoicePlayError.notFound
+            }
+            throw VoicePlayError.http(http.statusCode)
+        }
         guard data.count > 100 else {
-            throw URLError(.zeroByteResource)
+            throw VoicePlayError.empty
         }
 
+        // Validate it looks like media (m4a/mp4 often starts with ftyp after size box)
+        let file = try writeToDisk(messageId: messageId, data: data)
+        fileCache[messageId] = file
+        memoryCache[messageId] = data
+        return file
+    }
+
+    private func writeToDisk(messageId: String, data: Data) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("plink-voice-play", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent("\(messageId).m4a")
+        // Use safe file name (ids are UUIDs)
+        let safe = messageId.replacingOccurrences(of: "/", with: "_")
+        let file = dir.appendingPathComponent("\(safe).m4a")
         try data.write(to: file, options: .atomic)
-        cache[messageId] = file
         return file
     }
 
     private func configurePlaybackSession() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try session.setActive(true)
+        // .playback → audible even with the hardware mute switch (messenger standard)
+        try session.setCategory(
+            .playback,
+            mode: .default,
+            options: [.duckOthers]
+        )
+        try session.setActive(true, options: [])
+        // Prefer loudspeaker for phone earpiece devices when possible
+        try? session.overrideOutputAudioPort(.speaker)
     }
 
     private func startTick() {
@@ -121,12 +196,35 @@ final class VoiceNotePlayer: NSObject {
             Task { @MainActor in
                 guard let self, let p = self.player, p.duration > 0 else { return }
                 self.progress = min(1, p.currentTime / p.duration)
+                if !p.isPlaying, self.progress >= 0.98 {
+                    self.progress = 1
+                }
             }
         }
         if let tickTimer {
             RunLoop.main.add(tickTimer, forMode: .common)
         }
     }
+
+    private func friendlyError(_ error: Error) -> String {
+        if let v = error as? VoicePlayError {
+            switch v {
+            case .notFound: return "Аудио ещё не загружено"
+            case .empty: return "Пустой файл"
+            case .http(let c): return "Ошибка \(c)"
+            }
+        }
+        if (error as NSError).domain == NSURLErrorDomain {
+            return "Нет сети для голосового"
+        }
+        return error.localizedDescription
+    }
+}
+
+private enum VoicePlayError: Error {
+    case notFound
+    case empty
+    case http(Int)
 }
 
 extension VoiceNotePlayer: AVAudioPlayerDelegate {
@@ -136,6 +234,14 @@ extension VoiceNotePlayer: AVAudioPlayerDelegate {
             self.playingMessageId = nil
             self.tickTimer?.invalidate()
             self.tickTimer = nil
+            self.player = nil
+        }
+    }
+
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        Task { @MainActor in
+            self.errorMessage = error?.localizedDescription ?? "Ошибка декодирования"
+            self.playingMessageId = nil
             self.player = nil
         }
     }

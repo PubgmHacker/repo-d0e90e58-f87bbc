@@ -371,6 +371,11 @@ final class DMChatService: ObservableObject {
         touchActivity(friendId: friend.id, at: message.timestamp, preview: "🎤 Голосовое сообщение")
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
+        // Play immediately from local bytes (before / while upload runs)
+        if let raw = Self.decodeDataURL(dataURL) {
+            VoiceNotePlayer.shared.registerLocal(messageId: localID, data: raw)
+        }
+
         struct Body: Encodable {
             let receiverId: String
             let audioData: String
@@ -390,6 +395,8 @@ final class DMChatService: ObservableObject {
                         content: wireContent
                     )
                 )
+                // Re-key local audio so play keeps working after id swap
+                VoiceNotePlayer.shared.promote(from: localID, to: saved.id)
                 if var cur = conversations[convID],
                    let idx = cur.firstIndex(where: { $0.id == localID }) {
                     let decoded = PlinkBubbleWire.decode(saved.content.isEmpty ? wireContent : saved.content)
@@ -408,17 +415,26 @@ final class DMChatService: ObservableObject {
                         reactions: [],
                         mediaType: saved.mediaType ?? "voice",
                         mediaDurationSec: saved.mediaDurationSec ?? dur,
-                        hasMedia: saved.hasMedia ?? true
+                        hasMedia: true
                     )
                     conversations[convID] = cur
                     historyEpoch &+= 1
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = "Голосовое: \(error.localizedDescription)"
                 print("[DM] sendVoiceNote error: \(error.localizedDescription)")
-                // Keep optimistic row so the user sees the attempt
+                // Keep optimistic row — still playable from local cache
             }
         }
+    }
+
+    /// Extract raw audio bytes from `data:audio/...;base64,...` or bare base64.
+    private static func decodeDataURL(_ dataURL: String) -> Data? {
+        if let range = dataURL.range(of: "base64,") {
+            let b64 = String(dataURL[range.upperBound...])
+            return Data(base64Encoded: b64, options: .ignoreUnknownCharacters)
+        }
+        return Data(base64Encoded: dataURL, options: .ignoreUnknownCharacters)
     }
 
     // MARK: - Send

@@ -52,12 +52,13 @@ final class VoiceNoteRecorder: NSObject {
             let url = try makeFileURL()
             fileURL = url
 
+            // AAC in .m4a — widely playable on iOS AVAudioPlayer + server stream
             let settings: [String: Any] = [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: 22_050,
+                AVSampleRateKey: 44_100,
                 AVNumberOfChannelsKey: 1,
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
-                AVEncoderBitRateKey: 48_000,
+                AVEncoderBitRateKey: 64_000,
             ]
 
             let rec = try AVAudioRecorder(url: url, settings: settings)
@@ -143,10 +144,11 @@ final class VoiceNoteRecorder: NSObject {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(
             .playAndRecord,
-            mode: .spokenAudio,
-            options: [.defaultToSpeaker, .allowBluetoothHFP, .duckOthers]
+            mode: .default,
+            options: [.defaultToSpeaker, .allowBluetoothHFP, .duckOthers, .mixWithOthers]
         )
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        try session.setActive(true)
+        try? session.overrideOutputAudioPort(.speaker)
     }
 
     private func makeFileURL() throws -> URL {

@@ -23,6 +23,11 @@ struct DMChatView: View {
     @State private var voiceRecorder = VoiceNoteRecorder()
     @State private var voiceError: String?
     @State private var voiceStartInFlight = false
+    /// Finger is currently holding the mic (Telegram hold-to-record).
+    @State private var voiceFingerDown = false
+    /// Drag left past threshold → cancel (VK / Telegram).
+    @State private var voiceCancelArmed = false
+    @State private var voiceDragX: CGFloat = 0
     @ObservedObject private var blockManager = UserBlockManager.shared
 
     /// Telegram iOS 2026 private-chat navigation metrics.
@@ -496,68 +501,39 @@ struct DMChatView: View {
                 .padding(.vertical, 14)
                 .background(.ultraThinMaterial)
             } else {
+                // Stable layout: left content changes, mic keeps the same identity
+                // so hold-gesture is not cancelled when recording UI appears.
                 HStack(spacing: 10) {
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            showEmojiPicker.toggle()
-                        }
-                        if showEmojiPicker { isInputFocused = false }
-                    } label: {
-                        Image(systemName: showEmojiPicker ? "keyboard.fill" : "face.smiling.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(showEmojiPicker ? Cinema2026.accent : Color.white.opacity(0.55))
-                            .frame(width: 36, height: 36)
+                    if voiceRecorder.isRecording || voiceFingerDown {
+                        voiceRecordingLeading
+                    } else {
+                        composerLeading
                     }
 
-                    TextField("Сообщение", text: $messageText)
-                        .font(.system(size: 17))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .frame(minHeight: 42)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
-                        )
-                        .focused($isInputFocused)
-                        .submitLabel(.send)
-                        .onSubmit { sendAction() }
-                        .onChange(of: messageText) { _, newValue in
-                            if newValue.count > charLimit {
-                                messageText = String(newValue.prefix(charLimit))
-                                HapticManager.impact(.light)
-                            }
+                    // Empty text → mic (hold). Has text → send (tap). While recording always mic.
+                    if messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || voiceRecorder.isRecording || voiceFingerDown {
+                        voiceMicButton
+                    } else {
+                        Button(action: sendAction) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Color.black.opacity(0.85))
+                                .frame(width: 44, height: 44)
+                                .background(Circle().fill(Cinema2026.accent))
                         }
-
-                    voiceMicButton
-
-                    Button(action: sendAction) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(
-                                messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? Color.white.opacity(0.35)
-                                : Color.black.opacity(0.85)
-                            )
-                            .frame(width: 36, height: 36)
-                            .background(
-                                Circle().fill(
-                                    messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? Color.white.opacity(0.10)
-                                    : Cinema2026.accent
-                                )
-                            )
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Отправить")
                     }
-                    .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(.ultraThinMaterial)
+                .onChange(of: voiceRecorder.durationSec) { _, dur in
+                    if dur >= VoiceNoteRecorder.maxDuration {
+                        finishVoiceRecording(send: true)
+                    }
+                }
             }
         }
         .overlay(alignment: .top) {
@@ -565,72 +541,175 @@ struct DMChatView: View {
                 .fill(Color.white.opacity(0.08))
                 .frame(height: 0.5)
         }
+        .alert("Голосовое", isPresented: Binding(
+            get: { voiceError != nil },
+            set: { if !$0 { voiceError = nil } }
+        )) {
+            Button("OK", role: .cancel) { voiceError = nil }
+        } message: {
+            Text(voiceError ?? "")
+        }
     }
 
+    // MARK: - Voice recording (Telegram / VK style)
+
+    private var composerLeading: some View {
+        HStack(spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    showEmojiPicker.toggle()
+                }
+                if showEmojiPicker { isInputFocused = false }
+            } label: {
+                Image(systemName: showEmojiPicker ? "keyboard.fill" : "face.smiling.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(showEmojiPicker ? Cinema2026.accent : Color.white.opacity(0.55))
+                    .frame(width: 36, height: 36)
+            }
+
+            TextField("Сообщение", text: $messageText)
+                .font(.system(size: 17))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minHeight: 42)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
+                )
+                .focused($isInputFocused)
+                .submitLabel(.send)
+                .onSubmit { sendAction() }
+                .onChange(of: messageText) { _, newValue in
+                    if newValue.count > charLimit {
+                        messageText = String(newValue.prefix(charLimit))
+                        HapticManager.impact(.light)
+                    }
+                }
+        }
+    }
+
+    /// Left side of bar while holding: cancel hint + levels + timer.
+    private var voiceRecordingLeading: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .bold))
+                Text(voiceCancelArmed ? "Отмена" : "Влево")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(voiceCancelArmed ? Color.red.opacity(0.95) : Color.white.opacity(0.45))
+
+            Spacer(minLength: 4)
+
+            VoiceLevelBars(level: voiceRecorder.peakLevel, active: true)
+                .frame(width: 64, height: 22)
+
+            Text(PlinkVoiceWire.formatDuration(voiceRecorder.durationSec))
+                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .frame(minWidth: 40, alignment: .trailing)
+        }
+    }
+
+    /// Mic stays mounted while recording so the hold gesture never drops.
     private var voiceMicButton: some View {
-        Image(systemName: voiceRecorder.isRecording ? "waveform.circle.fill" : "mic.fill")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(voiceRecorder.isRecording ? Cinema2026.accent : Color.white.opacity(0.65))
-            .frame(width: 36, height: 36)
-            .scaleEffect(voiceRecorder.isRecording ? 1.12 + CGFloat(voiceRecorder.peakLevel) * 0.2 : 1)
-            .animation(.easeOut(duration: 0.08), value: voiceRecorder.peakLevel)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if voiceRecorder.isRecording {
-                            // Auto-send at max duration
-                            if voiceRecorder.durationSec >= VoiceNoteRecorder.maxDuration {
-                                finishVoiceRecording(send: true)
-                            }
+        let recording = voiceRecorder.isRecording || voiceFingerDown
+        return ZStack {
+            Circle()
+                .fill(
+                    voiceCancelArmed
+                    ? Color.red.opacity(0.35)
+                    : (recording ? Cinema2026.accent.opacity(0.28) : Color.white.opacity(0.10))
+                )
+                .frame(width: recording ? 58 : 44, height: recording ? 58 : 44)
+                .scaleEffect(recording ? 1.0 + CGFloat(voiceRecorder.peakLevel) * 0.12 : 1)
+            Circle()
+                .fill(voiceCancelArmed ? Color.red : (recording ? Cinema2026.accent : Color.white.opacity(0.14)))
+                .frame(width: recording ? 46 : 40, height: recording ? 46 : 40)
+            Image(systemName: voiceCancelArmed ? "trash.fill" : "mic.fill")
+                .font(.system(size: recording ? 20 : 18, weight: .semibold))
+                .foregroundStyle(recording || voiceCancelArmed ? Color.white : Color.white.opacity(0.85))
+        }
+        .offset(x: max(-80, min(0, voiceDragX * 0.3)))
+        .contentShape(Circle().scale(1.6))
+        .gesture(voiceHoldGesture)
+        .animation(.easeOut(duration: 0.08), value: voiceRecorder.peakLevel)
+        .accessibilityLabel("Удерживайте для голосового сообщения")
+        .accessibilityHint("Отпустите, чтобы отправить. Сдвиньте влево, чтобы отменить")
+    }
+
+    private var voiceHoldGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                voiceFingerDown = true
+                voiceDragX = value.translation.width
+                let cancel = value.translation.width < -55
+                if cancel != voiceCancelArmed {
+                    voiceCancelArmed = cancel
+                    HapticManager.impact(cancel ? .rigid : .light)
+                }
+                if voiceRecorder.isRecording {
+                    return
+                }
+                guard !voiceStartInFlight else { return }
+                voiceStartInFlight = true
+                isInputFocused = false
+                showEmojiPicker = false
+                Task {
+                    HapticManager.impact(.medium)
+                    let ok = await voiceRecorder.start()
+                    await MainActor.run {
+                        voiceStartInFlight = false
+                        // Finger already up while permission sheet was open → drop
+                        if !voiceFingerDown {
+                            if ok { voiceRecorder.cancel() }
+                            resetVoiceGestureUI()
                             return
                         }
-                        guard !voiceStartInFlight else { return }
-                        voiceStartInFlight = true
-                        Task {
-                            HapticManager.impact(.medium)
-                            let ok = await voiceRecorder.start()
-                            voiceStartInFlight = false
-                            if !ok {
-                                if case .failed(let m) = voiceRecorder.state {
-                                    voiceError = m
-                                } else {
-                                    voiceError = "Нет доступа к микрофону"
-                                }
+                        if !ok {
+                            resetVoiceGestureUI()
+                            if case .failed(let m) = voiceRecorder.state {
+                                voiceError = m
+                            } else {
+                                voiceError = "Нет доступа к микрофону. Разрешите в окне iOS или в Настройках."
                             }
                         }
                     }
-                    .onEnded { value in
-                        voiceStartInFlight = false
-                        // Swipe up ≈ cancel (Telegram-like)
-                        if value.translation.height < -50 {
-                            finishVoiceRecording(send: false)
-                        } else {
-                            finishVoiceRecording(send: true)
-                        }
-                    }
-            )
-            .accessibilityLabel("Удерживайте для голосового")
-            .overlay(alignment: .top) {
-                if voiceRecorder.isRecording {
-                    Text(PlinkVoiceWire.formatDuration(voiceRecorder.durationSec))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Cinema2026.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Color.black.opacity(0.55)))
-                        .offset(y: -28)
-                        .transition(.opacity)
                 }
             }
-            .alert("Голосовое", isPresented: Binding(
-                get: { voiceError != nil },
-                set: { if !$0 { voiceError = nil } }
-            )) {
-                Button("OK", role: .cancel) { voiceError = nil }
-            } message: {
-                Text(voiceError ?? "")
+            .onEnded { _ in
+                voiceFingerDown = false
+                voiceStartInFlight = false
+                let shouldCancel = voiceCancelArmed
+                // If still starting (permission), cancel is handled when start returns
+                if voiceRecorder.isRecording || {
+                    if case .encoding = voiceRecorder.state { return true }
+                    return false
+                }() {
+                    finishVoiceRecording(send: !shouldCancel)
+                } else {
+                    // Never got to recording (permission / short tap)
+                    if case .failed(let m) = voiceRecorder.state {
+                        voiceError = m
+                    }
+                    voiceRecorder.cancel()
+                }
+                resetVoiceGestureUI()
             }
+    }
+
+    private func resetVoiceGestureUI() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+            voiceCancelArmed = false
+            voiceDragX = 0
+            voiceFingerDown = false
+        }
     }
 
     private func finishVoiceRecording(send: Bool) {
@@ -638,17 +717,18 @@ struct DMChatView: View {
             if case .encoding = voiceRecorder.state { return true }
             return false
         }() else {
-            // Permission failed mid-gesture
             if case .failed(let m) = voiceRecorder.state {
                 voiceError = m
             }
             voiceRecorder.cancel()
+            resetVoiceGestureUI()
             return
         }
 
         if !send {
             voiceRecorder.cancel()
             HapticManager.impact(.light)
+            resetVoiceGestureUI()
             return
         }
 
@@ -656,6 +736,7 @@ struct DMChatView: View {
             if case .failed(let m) = voiceRecorder.state {
                 voiceError = m
             }
+            resetVoiceGestureUI()
             return
         }
         HapticManager.impact(.medium)
@@ -664,6 +745,7 @@ struct DMChatView: View {
             durationSec: exported.duration,
             to: friend
         )
+        resetVoiceGestureUI()
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
@@ -928,6 +1010,7 @@ private struct VoiceNoteBubble: View {
     let message: DirectMessage
     let isOwn: Bool
     @State private var player = VoiceNotePlayer.shared
+    @State private var playError: String?
 
     private var durationLabel: String {
         if let d = message.voiceDurationSec {
@@ -941,7 +1024,8 @@ private struct VoiceNoteBubble: View {
     }
 
     private var canPlay: Bool {
-        message.hasMedia || message.mediaType == "voice"
+        // Voice notes always try play — local cache or server stream
+        message.isVoiceNote || message.hasMedia || message.mediaType == "voice"
     }
 
     var body: some View {
@@ -949,7 +1033,16 @@ private struct VoiceNoteBubble: View {
             Button {
                 guard canPlay else { return }
                 HapticManager.impact(.light)
+                playError = nil
                 player.toggle(messageId: message.id)
+                // Surface player errors shortly after tap
+                Task {
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    if player.playingMessageId == nil,
+                       let err = player.errorMessage, !err.isEmpty {
+                        playError = err
+                    }
+                }
             } label: {
                 ZStack {
                     Circle()
@@ -971,34 +1064,34 @@ private struct VoiceNoteBubble: View {
             .disabled(!canPlay)
 
             VStack(alignment: .leading, spacing: 7) {
+                // Static fake waveform + progress overlay (Telegram-like)
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.18))
-                            .frame(height: 5)
-                        Capsule()
-                            .fill(isOwn ? Color.white.opacity(0.85) : Cinema2026.accent)
-                            .frame(
-                                width: geo.size.width * (isThisPlaying ? max(0.04, player.progress) : 0.04),
-                                height: 5
-                            )
+                        VoiceWaveformStrip(seed: message.id, progress: isThisPlaying ? player.progress : 0)
+                            .frame(height: 22)
+                        // scrub progress line
+                        Rectangle()
+                            .fill(isOwn ? Color.white.opacity(0.55) : Cinema2026.accent.opacity(0.9))
+                            .frame(width: 2, height: 22)
+                            .offset(x: max(0, geo.size.width * (isThisPlaying ? player.progress : 0) - 1))
                     }
                 }
-                .frame(height: 5)
+                .frame(height: 22)
 
                 HStack {
                     Text(durationLabel)
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.8))
-                    if !canPlay {
-                        Text("· нет аудио")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.white.opacity(0.4))
+                    if let playError {
+                        Text("· \(playError)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
             }
-            .frame(minWidth: 140, maxWidth: 200)
+            .frame(minWidth: 150, maxWidth: 220)
         }
         .padding(.horizontal, PlinkTelegramBubbleMetrics.padH)
         .padding(.vertical, PlinkTelegramBubbleMetrics.padV)
@@ -1013,6 +1106,63 @@ private struct VoiceNoteBubble: View {
                 .stroke(Color.white.opacity(isOwn ? 0.20 : 0.14), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+    }
+}
+
+// MARK: - Voice UI helpers
+
+/// Live mic level bars while recording (VK / TG style).
+private struct VoiceLevelBars: View {
+    var level: Float
+    var active: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<8, id: \.self) { i in
+                let phase = abs(sin(Double(i) * 0.9 + Double(level) * 8))
+                let h = active
+                    ? 4 + CGFloat(level) * 16 * CGFloat(0.35 + phase * 0.65)
+                    : 4
+                Capsule()
+                    .fill(Color.white.opacity(0.75))
+                    .frame(width: 3.5, height: max(4, h))
+            }
+        }
+        .animation(.easeOut(duration: 0.06), value: level)
+    }
+}
+
+/// Decorative waveform for a voice bubble (deterministic from message id).
+private struct VoiceWaveformStrip: View {
+    let seed: String
+    var progress: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let count = 28
+            let w = max(2, (geo.size.width - CGFloat(count - 1) * 2) / CGFloat(count))
+            HStack(alignment: .center, spacing: 2) {
+                ForEach(0..<count, id: \.self) { i in
+                    let h = barHeight(index: i)
+                    let filled = Double(i) / Double(count) <= progress
+                    Capsule()
+                        .fill(Color.white.opacity(filled ? 0.95 : 0.28))
+                        .frame(width: w, height: h)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .center)
+        }
+    }
+
+    private func barHeight(index: Int) -> CGFloat {
+        // Stable pseudo-random heights from seed
+        var hash: UInt64 = 5381
+        for u in seed.unicodeScalars {
+            hash = ((hash << 5) &+ hash) &+ UInt64(u.value)
+        }
+        hash = hash &+ UInt64(index) &* 2654435761
+        let n = Double((hash % 1000)) / 1000.0
+        return 5 + CGFloat(n) * 16
     }
 }
 

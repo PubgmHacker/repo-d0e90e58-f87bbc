@@ -5,6 +5,7 @@ import SwiftUI
 struct DMChatView: View {
     @EnvironmentObject private var dmService: DMChatService
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var friendManager = FriendManager.shared
 
     let friend: Friend
     @State private var messageText = ""
@@ -19,13 +20,20 @@ struct DMChatView: View {
     @State private var voiceError: String?
     @State private var voiceStartInFlight = false
 
+    /// Live friend snapshot (avatarURL updates when they change photo).
+    private var liveFriend: Friend {
+        friendManager.friends.first(where: { $0.id == friend.id }) ?? friend
+    }
+
     private var peerAvatarURL: URL? {
-        // Stable URL — no cache-bust flicker in chat
-        PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL)
+        // Touch epoch so Observation / ObservedObject refresh re-renders avatar
+        _ = friendManager.avatarEpoch
+        // Uses per-user ?v= so a friend photo update reloads without flicker thrash
+        return PlinkAvatarURL.stable(userId: liveFriend.id, stored: liveFriend.avatarURL)
     }
 
     private var peerLetter: String {
-        PlinkAvatarURL.letter(from: friend.displayTitle)
+        PlinkAvatarURL.letter(from: liveFriend.displayTitle)
     }
 
     private var meId: String {
@@ -168,19 +176,23 @@ struct DMChatView: View {
         }
         .task {
             dmService.chatDidOpen(friendId: friend.id)
+            // Seed live friends so avatar updates while DM is open
+            await friendManager.loadFriends()
             await dmService.loadHistory(
                 friendId: friend.id,
-                friendName: friend.displayTitle,
-                friendAvatarURL: friend.avatarURL,
+                friendName: liveFriend.displayTitle,
+                friendAvatarURL: liveFriend.avatarURL,
                 quiet: false
             )
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 guard !Task.isCancelled else { break }
+                // Keep friend avatar fresh while chat is open (~1s)
+                await friendManager.loadFriends()
                 await dmService.loadHistory(
                     friendId: friend.id,
-                    friendName: friend.displayTitle,
-                    friendAvatarURL: friend.avatarURL,
+                    friendName: liveFriend.displayTitle,
+                    friendAvatarURL: liveFriend.avatarURL,
                     quiet: true
                 )
             }
@@ -201,11 +213,17 @@ struct DMChatView: View {
             }
             .buttonStyle(.plain)
 
-            PlinkStableAvatar(url: peerAvatarURL, letter: peerLetter, size: 40)
+            PlinkStableAvatar(
+                url: peerAvatarURL,
+                letter: peerLetter,
+                size: 40,
+                userId: friend.id
+            )
                 .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                .id("\(friend.id)-\(friendManager.avatarEpoch)-\(peerAvatarURL?.absoluteString ?? "")")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(friend.displayTitle)
+                Text(liveFriend.displayTitle)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -660,7 +678,12 @@ private struct DMBubble: View {
     @ViewBuilder
     private var avatarSlot: some View {
         if cluster.showAvatar {
-            PlinkStableAvatar(url: avatarURL, letter: letter, size: avatarSize)
+            PlinkStableAvatar(
+                url: avatarURL,
+                letter: letter,
+                size: avatarSize,
+                userId: message.senderID
+            )
                 .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
         } else {
             Color.clear.frame(width: avatarSize, height: avatarSize)

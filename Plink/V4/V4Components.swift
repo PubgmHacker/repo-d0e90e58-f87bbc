@@ -73,6 +73,9 @@ struct V4Avatar: View {
 }
 
 /// Resolves avatar URL from stored field or always-available `/users/:id/avatar` endpoint.
+///
+/// Realtime friend updates: server puts `?v=<avatarUpdatedAt ms>` on avatarURL.
+/// When `v` changes we drop the memory cache and notify UI — no global flash.
 enum PlinkAvatarURL {
     static let apiBase = "https://plink-backend-production-ef31.up.railway.app"
 
@@ -82,39 +85,99 @@ enum PlinkAvatarURL {
         set { UserDefaults.standard.set(newValue, forKey: "plink.avatarSessionBust") }
     }
 
+    /// Per-user avatar version (from server `?v=` / avatarVersion). Survives list reloads.
+    private static var versionByUserId: [String: String] = [:]
+
     static func bumpSessionBust() {
         sessionBust &+= 1
         NotificationCenter.default.post(name: .plinkAvatarsDidChange, object: sessionBust)
     }
 
+    /// Record server avatar revision for a user. Returns true if version changed.
+    /// First seed (prev empty → non-empty) does NOT notify (avoids flash on cold load).
+    @discardableResult
+    static func noteAvatar(userId: String, storedURL: String?, version: String? = nil) -> Bool {
+        guard !userId.isEmpty else { return false }
+        let extracted = (version ?? extractVersion(from: storedURL) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let prev = versionByUserId[userId] ?? ""
+        // Same version — no-op
+        if extracted == prev { return false }
+        let isFirstSeed = prev.isEmpty && !extracted.isEmpty
+        versionByUserId[userId] = extracted
+        // Drop any cached image for this user (old and new URL keys)
+        if !isFirstSeed {
+            PlinkAvatarImageCache.shared.removeAll(matchingUserId: userId)
+            NotificationCenter.default.post(
+                name: .plinkUserAvatarDidChange,
+                object: userId,
+                userInfo: ["version": extracted, "url": storedURL as Any]
+            )
+            // Nudge list observers that use session bust (not on first seed)
+            bumpSessionBust()
+        }
+        return !isFirstSeed
+    }
+
+    static func currentVersion(for userId: String) -> String? {
+        versionByUserId[userId]
+    }
+
+    private static func extractVersion(from raw: String?) -> String? {
+        guard let raw, !raw.isEmpty,
+              let comps = URLComponents(string: raw),
+              let v = comps.queryItems?.first(where: { $0.name == "v" })?.value,
+              !v.isEmpty else { return nil }
+        return v
+    }
+
     /// Always bind avatar to a concrete userId so one person's photo/letter
     /// never leaks onto another friend's row or chat bubble.
     static func resolve(userId: String?, stored: String?, cacheBust: Bool = true) -> URL? {
+        let uid = userId?.trimmingCharacters(in: .whitespacesAndNewlines)
         var raw = ""
-        if let userId, !userId.isEmpty {
-            // Prefer canonical per-user endpoint (authoritative).
-            raw = "\(apiBase)/api/users/\(userId)/avatar"
-        } else {
-            raw = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if raw.hasPrefix("/") {
-                raw = apiBase + raw
+
+        // Prefer server-provided URL when it already carries ?v= (realtime revision)
+        let storedTrim = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !storedTrim.isEmpty, storedTrim.contains("/avatar") {
+            raw = storedTrim.hasPrefix("/") ? apiBase + storedTrim : storedTrim
+        } else if let uid, !uid.isEmpty {
+            raw = "\(apiBase)/api/users/\(uid)/avatar"
+        } else if !storedTrim.isEmpty {
+            raw = storedTrim.hasPrefix("/") ? apiBase + storedTrim : storedTrim
+        }
+
+        guard !raw.isEmpty, var components = URLComponents(string: raw) else { return nil }
+        var items = components.queryItems ?? []
+
+        // Prefer known per-user version over stale query / session bust
+        if let uid, let ver = versionByUserId[uid], !ver.isEmpty {
+            items.removeAll { $0.name == "v" || $0.name == "b" || $0.name == "t" }
+            items.append(URLQueryItem(name: "v", value: ver))
+        } else if cacheBust {
+            // Session bust only when we have no per-user version yet
+            if items.first(where: { $0.name == "v" }) == nil {
+                items.removeAll { $0.name == "b" || $0.name == "t" }
+                items.append(URLQueryItem(name: "b", value: "\(sessionBust)"))
             }
         }
-        guard !raw.isEmpty, var components = URLComponents(string: raw) else { return nil }
-        if cacheBust {
-            // Session bust only (NOT a 10s time bucket) — avoids avatar URL
-            // changing every few seconds and flashing letter placeholders.
-            var items = components.queryItems ?? []
-            items.removeAll { $0.name == "v" || $0.name == "b" }
-            items.append(URLQueryItem(name: "b", value: "\(sessionBust)"))
-            components.queryItems = items
-        }
+
+        components.queryItems = items.isEmpty ? nil : items
         return components.url
     }
 
-    /// Stable URL for chat bubbles / headers — never auto-bust.
+    /// URL for chat / list — uses per-user `?v=` so a friend photo update swaps immediately
+    /// without thrashing every poll (version only changes on real avatar upload).
     static func stable(userId: String?, stored: String?) -> URL? {
-        resolve(userId: userId, stored: stored, cacheBust: false)
+        if let userId, !userId.isEmpty {
+            // Keep version map warm from stored URL
+            if let v = extractVersion(from: stored) {
+                if versionByUserId[userId] != v {
+                    versionByUserId[userId] = v
+                }
+            }
+        }
+        return resolve(userId: userId, stored: stored, cacheBust: false)
     }
 
     /// Letter for placeholder: strip @, use first unicode scalar uppercased.
@@ -128,6 +191,8 @@ enum PlinkAvatarURL {
 
 extension Notification.Name {
     static let plinkAvatarsDidChange = Notification.Name("plink.avatarsDidChange")
+    /// object = userId (String)
+    static let plinkUserAvatarDidChange = Notification.Name("plink.userAvatarDidChange")
 }
 
 struct V4RoundButton: View {

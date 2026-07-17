@@ -263,7 +263,8 @@ struct PlinkApprovedV4Root: View {
                 ?? KeychainHelper.read(for: "rave_auth_token")
         }
         let rs = RoomService(api: api)
-        let fm = FriendManager(api: api)
+        // Shared FriendManager so friends list + open DM share avatar version updates
+        let fm = FriendManager.shared
         // Always use shared AuthService so profile + WatchRoom share identity
         let as_ = AuthService.shared
         roomsStore = V4RoomsStore(roomService: rs)

@@ -3,12 +3,15 @@ import UIKit
 
 // MARK: - Stable avatar (no flicker on poll / historyEpoch)
 
-/// Loads remote avatar once into memory and keeps it — avoids AsyncImage
+/// Loads remote avatar into memory and keeps it — avoids AsyncImage
 /// flashing letter ↔ photo every few seconds when chat re-renders.
+/// When a friend's avatar version (`?v=`) changes, reloads immediately.
 struct PlinkStableAvatar: View {
     let url: URL?
     let letter: String
     var size: CGFloat = 28
+    /// Optional — enables targeted invalidation when this user changes photo.
+    var userId: String? = nil
 
     @State private var image: UIImage?
     @State private var loadedKey: String?
@@ -25,7 +28,14 @@ struct PlinkStableAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .task(id: url?.absoluteString ?? letter) {
-            await loadIfNeeded()
+            await loadIfNeeded(force: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkUserAvatarDidChange)) { note in
+            guard let uid = userId, let changed = note.object as? String, changed == uid else { return }
+            // Drop current image and force network refetch for new ?v=
+            image = nil
+            loadedKey = nil
+            Task { await loadIfNeeded(force: true) }
         }
     }
 
@@ -45,24 +55,24 @@ struct PlinkStableAvatar: View {
     }
 
     @MainActor
-    private func loadIfNeeded() async {
+    private func loadIfNeeded(force: Bool) async {
         let key = url?.absoluteString ?? ""
-        // Already have this URL
-        if key == loadedKey, image != nil { return }
+        if !force, key == loadedKey, image != nil { return }
         guard let url, !key.isEmpty else {
             image = nil
             loadedKey = nil
             return
         }
-        // Memory cache
-        if let cached = PlinkAvatarImageCache.shared.image(for: key) {
+        // Memory cache (skip when force-reload after avatar change)
+        if !force, let cached = PlinkAvatarImageCache.shared.image(for: key) {
             image = cached
             loadedKey = key
             return
         }
         do {
             var req = URLRequest(url: url)
-            req.cachePolicy = .returnCacheDataElseLoad
+            // Always hit network for avatar bytes — HTTP cache was keeping old photos
+            req.cachePolicy = .reloadIgnoringLocalCacheData
             req.timeoutInterval = 12
             let (data, response) = try await URLSession.shared.data(for: req)
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -81,18 +91,41 @@ struct PlinkStableAvatar: View {
     }
 }
 
-@MainActor
-final class PlinkAvatarImageCache {
+/// In-memory avatar bitmaps — thread-safe for MainActor UI + friend poll callbacks.
+final class PlinkAvatarImageCache: @unchecked Sendable {
     static let shared = PlinkAvatarImageCache()
     private var map: [String: UIImage] = [:]
-    private let maxEntries = 80
+    private let maxEntries = 120
+    private let lock = NSLock()
 
-    func image(for key: String) -> UIImage? { map[key] }
+    func image(for key: String) -> UIImage? {
+        lock.lock(); defer { lock.unlock() }
+        return map[key]
+    }
 
     func store(_ image: UIImage, for key: String) {
+        lock.lock(); defer { lock.unlock() }
         if map.count >= maxEntries, let first = map.keys.first {
             map.removeValue(forKey: first)
         }
         map[key] = image
+    }
+
+    func remove(for key: String) {
+        lock.lock(); defer { lock.unlock() }
+        map.removeValue(forKey: key)
+    }
+
+    /// Drop every cached entry for this user's avatar endpoint (any ?v=).
+    func removeAll(matchingUserId userId: String) {
+        guard !userId.isEmpty else { return }
+        let needle = "/users/\(userId)/avatar"
+        lock.lock(); defer { lock.unlock() }
+        map = map.filter { !$0.key.contains(needle) }
+    }
+
+    func removeAll() {
+        lock.lock(); defer { lock.unlock() }
+        map.removeAll()
     }
 }

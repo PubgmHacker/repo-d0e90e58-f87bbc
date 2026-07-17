@@ -6,6 +6,9 @@ import Combine
 @MainActor
 final class FriendManager: ObservableObject {
 
+    /// Shared instance so DM / list / profile all see the same friends + avatar versions.
+    static let shared = FriendManager(api: APIClient.shared)
+
     @Published private(set) var friends: [Friend] = []
     @Published private(set) var incomingRequests: [FriendRequest] = []
     @Published private(set) var outgoingRequests: [FriendRequest] = []
@@ -13,6 +16,8 @@ final class FriendManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var lastSuccessMessage: String?
+    /// Bumps when any friend's avatarURL / version changes (DM headers observe this).
+    @Published private(set) var avatarEpoch: Int = 0
 
     var onIncomingRequest: ((FriendRequest) -> Void)?
     var onFriendAdded: ((Friend) -> Void)?
@@ -52,16 +57,43 @@ final class FriendManager: ObservableObject {
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
             let next = dtos.map { $0.toFriend() }
-            // Only bust avatar cache when a friend's avatar URL actually changed —
-            // otherwise list/chat avatars flash every poll (letter ↔ photo).
+            // Realtime avatar: when server ?v= / avatarVersion changes, drop cache
+            // for that user so list + open DM show the new photo immediately.
             let prevAvatars = Dictionary(uniqueKeysWithValues: friends.map { ($0.id, $0.avatarURL ?? "") })
-            let avatarChanged = next.contains { f in
-                (prevAvatars[f.id] ?? "") != (f.avatarURL ?? "")
+            let prevVersions = Dictionary(uniqueKeysWithValues: friends.map {
+                ($0.id, $0.avatarVersion.map(String.init) ?? "")
+            })
+            var anyAvatarChange = false
+            for f in next {
+                let verStr = f.avatarVersion.map(String.init)
+                let changed = PlinkAvatarURL.noteAvatar(
+                    userId: f.id,
+                    storedURL: f.avatarURL,
+                    version: verStr
+                )
+                let urlChanged = (prevAvatars[f.id] ?? "") != (f.avatarURL ?? "")
+                let verChanged = (prevVersions[f.id] ?? "") != (verStr ?? "")
+                // Only treat as change after we already had a previous value for this friend
+                let hadPrev = prevAvatars[f.id] != nil
+                if changed || (hadPrev && (urlChanged || verChanged)) {
+                    anyAvatarChange = true
+                    if urlChanged || verChanged {
+                        PlinkAvatarImageCache.shared.removeAll(matchingUserId: f.id)
+                        NotificationCenter.default.post(
+                            name: .plinkUserAvatarDidChange,
+                            object: f.id,
+                            userInfo: ["url": f.avatarURL as Any]
+                        )
+                    }
+                }
             }
             friends = next
             FriendPinStore.shared.mergeFromServer(friends)
-            if avatarChanged {
-                PlinkAvatarURL.bumpSessionBust()
+            if anyAvatarChange {
+                avatarEpoch &+= 1
+                // Session bust already posted inside noteAvatar when version flips;
+                // ensure observers refresh even if only URL string changed.
+                NotificationCenter.default.post(name: .plinkAvatarsDidChange, object: PlinkAvatarURL.sessionBust)
             }
             print("[Friends] loaded \(friends.count) friends")
         } catch {
@@ -315,6 +347,7 @@ private struct FriendDTO: Decodable {
     let lastSeenAt: Date?
     let isPinned: Bool?
     let pinOrder: Int?
+    let avatarVersion: Int64?
 
     func toFriend() -> Friend {
         Friend(
@@ -326,7 +359,8 @@ private struct FriendDTO: Decodable {
             displayName: displayName,
             lastSeenAt: lastSeenAt,
             isPinned: isPinned,
-            pinOrder: pinOrder
+            pinOrder: pinOrder,
+            avatarVersion: avatarVersion
         )
     }
 }

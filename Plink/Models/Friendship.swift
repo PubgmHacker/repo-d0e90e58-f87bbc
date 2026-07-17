@@ -25,6 +25,8 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
     var isPinned: Bool? = nil
     /// Lower = higher among pinned (server).
     var pinOrder: Int? = nil
+    /// Server avatar revision (ms). Changes only when friend uploads a new photo.
+    var avatarVersion: Int64? = nil
 
     /// Конвертация в UserPreview для UI-компонентов.
     var asUserPreview: UserPreview {

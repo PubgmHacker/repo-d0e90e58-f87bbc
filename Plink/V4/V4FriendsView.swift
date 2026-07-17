@@ -226,12 +226,12 @@ struct V4FriendsViewLive: View {
         .onReceive(NotificationCenter.default.publisher(for: .plinkRoomsDidChange)) { _ in
             Task { await loadRecentRooms() }
         }
-        // Friends list (presence + avatars) while tab visible — fast
+        // Friends list (presence + avatars) while tab visible — ~1s for near-realtime avatars
         .task(id: isActive) {
             guard isActive else { return }
             await store?.refreshQuietly()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
                 guard !Task.isCancelled, isActive else { break }
                 await store?.refreshQuietly()
             }
@@ -598,7 +598,8 @@ struct V4FriendsViewLive: View {
                         PlinkStableAvatar(
                             url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
                             letter: friend.initials,
-                            size: 48
+                            size: 48,
+                            userId: friend.id
                         )
                         if friend.isOnline {
                             Circle()

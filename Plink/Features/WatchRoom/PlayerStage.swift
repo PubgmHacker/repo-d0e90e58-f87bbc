@@ -34,6 +34,35 @@ struct PlayerStage: View {
             .padding(.top, 60)
             .padding(.bottom, 80)
 
+            // Tap-to-play overlay - shown when YouTube IFrame is ready
+            // but the video is stuck in buffering and never reached playing
+            // state. iOS WKWebView often requires a real user gesture to
+            // start YouTube playback even with autoplay:1 in playerVars.
+            if let yt = model.coordinator.currentController as? EmbeddedPlaybackController,
+               yt.requiresTapToPlay {
+                Button {
+                    HapticManager.impact(.medium)
+                    Task { await yt.userTapToPlay() }
+                } label: {
+                    VStack(spacing: 12) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 64))
+                            .foregroundStyle(.white)
+                        Text("Tap to play")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                        Text("YouTube needs a tap to start")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity)
+                .zIndex(50)
+            }
+
             // Loading overlay only when we still have no player surface.
             // Once WKWebView is attached, never cover it with a full-screen spinner
             // (that was the "eternal loading" symptom: 1 in room + black spinner).

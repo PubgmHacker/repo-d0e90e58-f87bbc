@@ -285,12 +285,16 @@ struct V4FriendsViewLive: View {
         .onReceive(NotificationCenter.default.publisher(for: .plinkRoomsDidChange)) { _ in
             Task { await loadRecentRooms() }
         }
-        // Friends list (presence + avatars) while tab visible — ~1s for near-realtime avatars
+        // Friends list (presence + avatars) while tab visible.
+        // Was 1s poll - caused contextMenu flicker on long-press because
+        // friendManager.loadAll() rebuilds @Published friends array every
+        // second, forcing SwiftUI to re-snapshot the preview. 10s is enough
+        // for presence; avatars refresh instantly via .plinkAvatarsDidChange.
         .task(id: isActive) {
             guard isActive else { return }
             await store?.refreshQuietly()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10s
                 guard !Task.isCancelled, isActive else { break }
                 await store?.refreshQuietly()
             }

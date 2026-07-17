@@ -55,6 +55,11 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
     /// surface YouTube error callback for UI binding.
     public private(set) var lastError: String?
 
+    /// True when YouTube IFrame is ready but video stays in buffering state
+    /// for >5s after handleReady. UI shows a "Tap to play" overlay so the
+    /// user can give the gesture YouTube needs to actually start playback.
+    public private(set) var requiresTapToPlay: Bool = false
+
     /// Brain Phase 2: YouTube owns transport controls — Plink does NOT
     /// render its own PlayerControlLayer on this content.
     public var chromeOwnership: PlayerChromeOwnership { .provider }
@@ -358,6 +363,28 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
         // = false. OrderedSyncController falls back to precise seeks.
     }
 
+    /// Called by UI when user taps the "Tap to play" overlay. Sends a real
+    /// user-gesture-initiated playVideo() to YouTube - this is the only
+    /// reliable way to start playback on iOS WKWebView when initial
+    /// autoplay failed.
+    public func userTapToPlay() async {
+        guard let web = webView else { return }
+        NSLog("[YT] userTapToPlay - sending playVideo with user gesture")
+        _ = try? await web.evaluateJavaScript(
+            "(function(){try{if(player){player.unMute();player.playVideo();}return 1;}catch(e){return 'err:'+e.message;}})()"
+        )
+        // Give YouTube 600ms then clear the overlay if playback started
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        let st = try? await web.evaluateJavaScript(
+            "(function(){try{return player&&player.getPlayerState?player.getPlayerState():-99;}catch(e){return -98;}})()"
+        )
+        let stInt = (st as? Int) ?? -1
+        NSLog("[YT] after userTap state=\(stInt)")
+        if stInt == 1 || stInt == 2 {
+            await MainActor.run { self.requiresTapToPlay = false }
+        }
+    }
+
     // MARK: - Teardown
 
     public func teardown() {
@@ -405,6 +432,34 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
                 "(function(){try{return player&&player.getVideoUrl?player.getVideoUrl():'no-url';}catch(e){return 'err:'+e.message;}})()"
             )
             NSLog("[YT] post-ready state=\(state ?? "?") url=\(url ?? "?") frame=\(web.frame)")
+        }
+        // Retry playVideo() with delays - YouTube on iOS WKWebView often needs
+        // multiple nudges because the initial player.mute(); player.playVideo()
+        // in onReady doesn't always start playback (state stays at 3=buffering).
+        // We retry every 800ms up to 6 times (~5s total) until state becomes
+        // 1 (playing) or 2 (paused by user).
+        Task { [weak self] in
+            guard let self else { return }
+            for attempt in 1...6 {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                guard !Task.isCancelled else { return }
+                guard let web = self.webView else { return }
+                let st = try? await web.evaluateJavaScript(
+                    "(function(){try{return player&&player.getPlayerState?player.getPlayerState():-99;}catch(e){return -98;}})()"
+                )
+                let stInt = (st as? Int) ?? -1
+                NSLog("[YT] playRetry attempt=\(attempt) state=\(stInt)")
+                if stInt == 1 || stInt == 2 || stInt == 0 {
+                    return // playing, paused, or ended - stop retrying
+                }
+                // Force playVideo + unmute
+                _ = try? await web.evaluateJavaScript(
+                    "(function(){try{if(player){player.unMute();player.playVideo();}return 1;}catch(e){return 'err:'+e.message;}})()"
+                )
+            }
+            // If still buffering after 6 retries, surface tap-to-play overlay
+            NSLog("[YT] playRetry exhausted - enabling tapToPlay overlay")
+            await MainActor.run { self.requiresTapToPlay = true }
         }
 
         // Drain pending commands atomically.

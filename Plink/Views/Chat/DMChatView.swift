@@ -1046,6 +1046,61 @@ private struct VoiceNoteBubble: View {
         message.isVoiceNote || message.hasMedia || message.mediaType == "voice"
     }
 
+    /// Resolve the same BubbleFrameModel PlinkMessageBubble uses, so the
+    /// voice bubble matches the user's selected bubble style (Prisma, etc.)
+    /// instead of always using Cinema2026.accent (turquoise).
+    private var frame: BubbleFrameModel {
+        if let styleID = message.bubbleStyle, !styleID.isEmpty {
+            return BubbleFrameModel.resolve(styleID: styleID)
+        }
+        if isOwn {
+            return BubbleFrameModel.resolve(styleID: PlinkBubbleStylePrefs.currentID)
+        }
+        return .quiet
+    }
+
+    /// Fill layer matching PlinkMessageBubble.fillLayer so voice bubbles
+    /// visually match text bubbles with the same styleID.
+    @ViewBuilder
+    private var fillLayer: some View {
+        switch frame {
+        case .quiet:
+            if isOwn {
+                LinearGradient(
+                    colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.92)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                LinearGradient(
+                    colors: [Color(hex: "#2E333A"), Color(hex: "#252A30")],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        default:
+            LinearGradient(
+                colors: frame.fillColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var borderLayer: some View {
+        if frame.borderColors.count >= 2 {
+            V5BubbleShape(isOutgoing: isOwn, isLastInGroup: true)
+                .stroke(
+                    AngularGradient(
+                        colors: frame.borderColors + [frame.borderColors[0]],
+                        center: .center
+                    ),
+                    lineWidth: frame.borderWidth
+                )
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Button {
@@ -1115,23 +1170,13 @@ private struct VoiceNoteBubble: View {
         .padding(.vertical, PlinkTelegramBubbleMetrics.padV)
         .background(
             ZStack {
+                // Dark base for contrast even if gradient is translucent
                 Color(hex: "#1A1C20")
-                if isOwn {
-                    LinearGradient(
-                        colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.92)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                } else {
-                    Color(hex: "#2E333A")
-                }
+                fillLayer
             }
         )
         .clipShape(V5BubbleShape(isOutgoing: isOwn, isLastInGroup: true))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(isOwn ? 0.20 : 0.14), lineWidth: 1)
-        )
+        .overlay(borderLayer)
         .shadow(color: .black.opacity(0.40), radius: 8, y: 3)
         .shadow(color: .black.opacity(0.20), radius: 1, y: 0.5)
     }

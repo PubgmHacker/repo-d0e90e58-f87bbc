@@ -427,7 +427,7 @@ struct AvatarPickerSheet: View {
 
                 Rectangle().fill(V4.line).frame(height: 0.5).padding(.horizontal, 24)
 
-                // Request Photos permission once, then present the system picker
+                // System iOS photo dialog (if first time) → then PhotosPicker
                 Button {
                     Task { await pickFromGallery() }
                 } label: {
@@ -453,11 +453,11 @@ struct AvatarPickerSheet: View {
                 .onChange(of: photoItem) { _, newItem in
                     Task { await loadPhoto(newItem) }
                 }
-                .alert("Нет доступа к галерее", isPresented: $photosDeniedAlert) {
+                .alert("Фото недоступны", isPresented: $photosDeniedAlert) {
                     Button("Настройки") { PlinkPermissions.openAppSettings() }
                     Button("Отмена", role: .cancel) {}
                 } message: {
-                    Text("Разрешите доступ к фото в Настройках → Плинк, чтобы сменить аватар.")
+                    Text("На этом устройстве доступ к фото ограничен. Если нужно — разрешите в Настройках → Плинк.")
                 }
 
                 if let err = uploadError {
@@ -526,12 +526,16 @@ struct AvatarPickerSheet: View {
         dismiss()
     }
 
-    /// System Photos dialog appears the first time (Info.plist usage string).
+    /// 1) If never asked → system iOS permission sheet immediately.
+    /// 2) Then always open PhotosPicker (works even after «Не разрешать»).
     private func pickFromGallery() async {
-        let ok = await PlinkPermissions.requestPhotosIfNeeded()
-        if ok {
+        let access = await PlinkPermissions.preparePhotoPicker()
+        switch access {
+        case .authorized, .systemPickerOnly:
+            // Small yield so the permission sheet can dismiss before PHPicker.
+            try? await Task.sleep(nanoseconds: 150_000_000)
             showPhotosPicker = true
-        } else {
+        case .blocked:
             photosDeniedAlert = true
         }
     }

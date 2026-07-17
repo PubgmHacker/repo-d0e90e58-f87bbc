@@ -1,6 +1,13 @@
 // Plink/Services/PlinkPermissions.swift
 // Central iOS permission prompts — photo library (avatar) + microphone (voice).
-// System dialogs appear once per permission; we only call when the feature is used.
+//
+// Photos (iOS 14+ / 2024–2026):
+// • System dialog appears only while status is `.notDetermined` — call
+//   `requestAuthorization` on the user action (tap «из галереи»), not later.
+// • `PhotosPicker` / PHPicker does NOT require full library access; even after
+//   Deny, the system picker still works. Never force users into Settings for
+//   simple avatar/cover picks.
+// • Settings is only for features that need full/limited library re-grant.
 
 import Foundation
 import Photos
@@ -18,6 +25,16 @@ enum PlinkPermissions {
 
     // MARK: - Photos (avatar / gallery)
 
+    /// Outcome for opening the system photo UI (avatar / cover).
+    enum PhotoPickerAccess: Sendable {
+        /// Full or limited library grant.
+        case authorized
+        /// Full library denied/restricted, but system PHPicker still works.
+        case systemPickerOnly
+        /// Device policy blocks any photo access (rare).
+        case blocked
+    }
+
     /// Current authorization for reading the photo library.
     static var photosStatus: PHAuthorizationStatus {
         if #available(iOS 14, *) {
@@ -34,34 +51,70 @@ enum PlinkPermissions {
         return s == .authorized
     }
 
-    /// Request gallery access once — call when user taps «Выбрать из галереи» / change avatar.
-    /// Returns true if app may present PhotosPicker.
-    @discardableResult
-    static func requestPhotosIfNeeded() async -> Bool {
-        if isPhotosAuthorized { return true }
-
-        UserDefaults.standard.set(true, forKey: Keys.didPromptPhotos)
-
-        let status: PHAuthorizationStatus
+    /// Whether the user can still open the system Photos picker without
+    /// full-library permission (always true on iOS 14+ for PHPicker).
+    static var canPresentSystemPhotoPicker: Bool {
         if #available(iOS 14, *) {
-            status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-        } else {
-            status = await withCheckedContinuation { cont in
-                PHPhotoLibrary.requestAuthorization { cont.resume(returning: $0) }
-            }
+            // PHPicker is privacy-preserving and works even when status is denied.
+            return photosStatus != .restricted
         }
-
-        if #available(iOS 14, *) {
-            return status == .authorized || status == .limited
-        }
-        return status == .authorized
+        return isPhotosAuthorized || photosStatus == .notDetermined
     }
 
-    /// After first successful login/registration — soft flag only.
-    /// Actual system dialog still fires on first avatar gallery action (Apple HIG).
+    /// Call on the user tap that needs gallery (avatar / cover).
+    /// 1) If `.notDetermined` → shows the **system iOS permission alert** immediately.
+    /// 2) Always allows presenting `PhotosPicker` unless the device is restricted.
+    /// Returns whether the UI should present the picker (almost always true).
+    @discardableResult
+    static func requestPhotosIfNeeded() async -> Bool {
+        let outcome = await preparePhotoPicker()
+        return outcome != .blocked
+    }
+
+    /// Prefer this over a bare Bool — distinguishes full grant vs picker-only.
+    static func preparePhotoPicker() async -> PhotoPickerAccess {
+        let current = photosStatus
+
+        switch current {
+        case .authorized:
+            return .authorized
+        case .limited:
+            return .authorized
+        case .restricted:
+            return .blocked
+        case .denied:
+            // System PHPicker still works without re-granting in Settings.
+            return canPresentSystemPhotoPicker ? .systemPickerOnly : .blocked
+        case .notDetermined:
+            // ── This is the only moment iOS will show the system sheet ──
+            UserDefaults.standard.set(true, forKey: Keys.didPromptPhotos)
+            let status: PHAuthorizationStatus
+            if #available(iOS 14, *) {
+                // `.readWrite` triggers the standard «Allow Full Access /
+                // Limit Access / Don't Allow» dialog (iOS 14–18+).
+                status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            } else {
+                status = await withCheckedContinuation { cont in
+                    PHPhotoLibrary.requestAuthorization { cont.resume(returning: $0) }
+                }
+            }
+            switch status {
+            case .authorized, .limited:
+                return .authorized
+            case .restricted:
+                return .blocked
+            default:
+                // User tapped Don't Allow — still open PHPicker for one-shot pick.
+                return .systemPickerOnly
+            }
+        @unknown default:
+            return .systemPickerOnly
+        }
+    }
+
+    /// After first successful login — remember we may soft-explain photos later.
+    /// Does **not** auto-fire the system dialog (App Store HIG: only on user action).
     static func markPostAuthSession() {
-        // No auto system prompt here (would be rejected as unrelated to the moment).
-        // Avatar sheet will request when user picks gallery.
         UserDefaults.standard.set(true, forKey: Keys.postAuthPhotosNudge)
     }
 
@@ -69,6 +122,12 @@ enum PlinkPermissions {
         UserDefaults.standard.bool(forKey: Keys.postAuthPhotosNudge)
             && !isPhotosAuthorized
             && photosStatus == .notDetermined
+    }
+
+    /// True only when full library was denied and you truly need Settings
+    /// (not for ordinary PhotosPicker avatar flow).
+    static var needsPhotosSettings: Bool {
+        photosStatus == .denied
     }
 
     // MARK: - Microphone (voice notes / room voice)
@@ -80,7 +139,7 @@ enum PlinkPermissions {
         return AVAudioSession.sharedInstance().recordPermission == .granted
     }
 
-    /// Request mic once — first voice note or room voice toggle.
+    /// Request mic once — first voice note or room voice toggle. Shows system dialog.
     @discardableResult
     static func requestMicrophoneIfNeeded() async -> Bool {
         if isMicAuthorized { return true }
@@ -97,7 +156,7 @@ enum PlinkPermissions {
         }
     }
 
-    /// Open Settings when user previously denied.
+    /// Open Settings when user previously denied and a feature truly requires re-grant.
     static func openAppSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)

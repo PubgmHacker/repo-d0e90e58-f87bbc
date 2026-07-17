@@ -688,10 +688,7 @@ struct EditProfileSheet: View {
                             .frame(maxHeight: .infinity, alignment: .bottom)
 
                             Button {
-                                Task {
-                                    let ok = await PlinkPermissions.requestPhotosIfNeeded()
-                                    if ok { showCoverPicker = true } else { photosDeniedAlert = true }
-                                }
+                                Task { await openCoverPicker() }
                             } label: {
                                 ZStack {
                                     Circle()
@@ -726,10 +723,7 @@ struct EditProfileSheet: View {
                                 .frame(width: 108, height: 108)
 
                             Button {
-                                Task {
-                                    let ok = await PlinkPermissions.requestPhotosIfNeeded()
-                                    if ok { showAvatarPicker = true } else { photosDeniedAlert = true }
-                                }
+                                Task { await openAvatarPicker() }
                             } label: {
                                 ZStack(alignment: .bottomTrailing) {
                                     AvatarView(
@@ -929,12 +923,35 @@ struct EditProfileSheet: View {
                 }
                 selectedCoverItem = nil
             }
-            .alert("Нет доступа к галерее", isPresented: $photosDeniedAlert) {
+            .alert("Фото недоступны", isPresented: $photosDeniedAlert) {
                 Button("Настройки") { PlinkPermissions.openAppSettings() }
                 Button("Отмена", role: .cancel) {}
             } message: {
-                Text("Разрешите доступ к фото в Настройках → Плинк, чтобы сменить аватар.")
+                Text("На этом устройстве доступ к фото ограничен. Если нужно — разрешите в Настройках → Плинк.")
             }
+        }
+    }
+
+    /// System permission sheet (first time) → PhotosPicker. PHPicker works even after Deny.
+    private func openAvatarPicker() async {
+        let access = await PlinkPermissions.preparePhotoPicker()
+        switch access {
+        case .authorized, .systemPickerOnly:
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            showAvatarPicker = true
+        case .blocked:
+            photosDeniedAlert = true
+        }
+    }
+
+    private func openCoverPicker() async {
+        let access = await PlinkPermissions.preparePhotoPicker()
+        switch access {
+        case .authorized, .systemPickerOnly:
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            showCoverPicker = true
+        case .blocked:
+            photosDeniedAlert = true
         }
     }
 }

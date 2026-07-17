@@ -9,9 +9,12 @@ final class RoomInviteService: ObservableObject {
     static let shared = RoomInviteService()
 
     @Published var pendingInvites: [RoomInvite] = []
+    /// Accepted / declined — never re-surface from server poll until app reinstall.
+    private var dismissedKeys: Set<String> = []
 
     private init() {
         loadInvites()
+        loadDismissed()
     }
 
     // MARK: - Server poll
@@ -24,8 +27,8 @@ final class RoomInviteService: ObservableObject {
         guard APIClient.shared.authToken != nil else { return }
         do {
             let remote: [RemoteInviteDTO] = try await APIClient.shared.request("messages/invites")
-            let mapped = remote.map { dto in
-                RoomInvite(
+            let mapped = remote.compactMap { dto -> RoomInvite? in
+                let inv = RoomInvite(
                     id: dto.id,
                     roomID: dto.roomID,
                     roomCode: dto.roomCode,
@@ -37,12 +40,13 @@ final class RoomInviteService: ObservableObject {
                     mediaTitle: dto.mediaTitle,
                     service: nil
                 )
+                // Skip accepted/declined invites (server still has unread DM)
+                if isDismissed(inv) { return nil }
+                return inv
             }
-            // Merge: remote first, keep any local-only still pending
             var byId: [String: RoomInvite] = [:]
             for inv in mapped { byId[inv.id] = inv }
-            for inv in pendingInvites where byId[inv.id] == nil {
-                // drop stale local if code matches remote
+            for inv in pendingInvites where byId[inv.id] == nil && !isDismissed(inv) {
                 if !mapped.contains(where: { $0.roomCode == inv.roomCode }) {
                     byId[inv.id] = inv
                 }
@@ -85,31 +89,61 @@ final class RoomInviteService: ObservableObject {
             APIClient.shared.authToken = KeychainHelper.read(for: "rave_auth_token")
                 ?? AuthService.shared.authToken
         }
+        // Dismiss UI immediately so it never "sticks" if join is slow
+        dismissInvite(invite)
         do {
             let room = try await RoomService(api: APIClient.shared).joinRoom(code: invite.roomCode, password: nil)
-            removeInvite(invite)
-            // Mark invite DM read by opening history with that friend (best-effort)
-            Task {
-                await DMChatService.shared.loadHistory(
-                    friendId: invite.fromUserID,
-                    friendName: invite.fromUsername,
-                    quiet: true
-                )
-            }
+            await markInviteDMRead(invite)
             return room
         } catch {
             print("[RoomInvite] accept failed: \(error.localizedDescription)")
+            // Keep dismissed — user can re-join by code; card must not linger
             return nil
         }
     }
 
     func declineInvite(_ invite: RoomInvite) {
-        removeInvite(invite)
+        dismissInvite(invite)
+        Task { await markInviteDMRead(invite) }
     }
 
     func removeInvite(_ invite: RoomInvite) {
-        pendingInvites.removeAll { $0.id == invite.id || $0.roomCode == invite.roomCode }
+        dismissInvite(invite)
+    }
+
+    private func dismissInvite(_ invite: RoomInvite) {
+        pendingInvites.removeAll { $0.id == invite.id || $0.roomCode.uppercased() == invite.roomCode.uppercased() }
+        dismissedKeys.insert(dismissKey(invite))
+        dismissedKeys.insert("id:\(invite.id)")
+        dismissedKeys.insert("code:\(invite.roomCode.uppercased())")
         saveInvites()
+        saveDismissed()
+    }
+
+    private func isDismissed(_ invite: RoomInvite) -> Bool {
+        dismissedKeys.contains(dismissKey(invite))
+            || dismissedKeys.contains("id:\(invite.id)")
+            || dismissedKeys.contains("code:\(invite.roomCode.uppercased())")
+    }
+
+    private func dismissKey(_ invite: RoomInvite) -> String {
+        "\(invite.id)|\(invite.roomCode.uppercased())"
+    }
+
+    /// Marks invite DM as read so GET /messages/invites stops returning it.
+    private func markInviteDMRead(_ invite: RoomInvite) async {
+        do {
+            try await APIClient.shared.requestNoBody(
+                "messages/dm/\(invite.fromUserID)/read",
+                method: .post
+            )
+        } catch {
+            await DMChatService.shared.loadHistory(
+                friendId: invite.fromUserID,
+                friendName: invite.fromUsername,
+                quiet: true
+            )
+        }
     }
 
     var inviteCount: Int {
@@ -130,7 +164,17 @@ final class RoomInviteService: ObservableObject {
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
         if let invites = try? dec.decode([RoomInvite].self, from: data) {
-            pendingInvites = invites
+            pendingInvites = invites.filter { !isDismissed($0) }
+        }
+    }
+
+    private func saveDismissed() {
+        UserDefaults.standard.set(Array(dismissedKeys), forKey: "room_invites_dismissed")
+    }
+
+    private func loadDismissed() {
+        if let arr = UserDefaults.standard.stringArray(forKey: "room_invites_dismissed") {
+            dismissedKeys = Set(arr)
         }
     }
 }

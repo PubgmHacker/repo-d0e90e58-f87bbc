@@ -140,12 +140,17 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = [.audio]
+        // Allow autoplay without user gesture (YouTube muted-then-unmute in wrapper)
+        config.mediaTypesRequiringUserActionForPlayback = []
         config.userContentController = content
-        // nonPersistent data store to prevent stale HTML cache.
-        config.websiteDataStore = .nonPersistent()
+        // Default data store — YouTube IFrame often fails in non-persistent (no cookies/cache)
+        config.websiteDataStore = .default()
+        if #available(iOS 14.0, *) {
+            config.defaultWebpagePreferences.allowsContentJavaScript = true
+        }
 
         let web = WKWebView(frame: .zero, configuration: config)
+        web.configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         web.isOpaque = false
         web.backgroundColor = UIColor(red: 0x0E/255, green: 0x10/255, blue: 0x16/255, alpha: 1)
         web.scrollView.isScrollEnabled = false

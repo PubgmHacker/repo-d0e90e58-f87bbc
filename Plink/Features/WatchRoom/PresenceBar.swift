@@ -37,10 +37,10 @@ struct PresenceBar: View {
 
             // Identity + status
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(model.participants.count) in room")
+                Text("\(max(1, model.participants.count)) в комнате")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Cinema2026.text)
-                Text(model.activeSpeakerName.map { "\($0) speaking" } ?? "Watching together")
+                Text(model.activeSpeakerName.map { "\($0) говорит" } ?? "Смотрим вместе")
                     .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(Cinema2026.secondary)
             }

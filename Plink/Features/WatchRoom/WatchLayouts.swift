@@ -27,17 +27,23 @@ struct PortraitWatchLayout: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Player must ignore keyboard — otherwise send/chat focus shrinks video
             PlayerStage(model: model, ui: $ui, variant: .portrait)
                 .id("plink.player.stage")
                 .aspectRatio(16 / 9, contentMode: .fit)
+                .layoutPriority(1)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
             PresenceBar(model: model)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
             WatchChatView(model: model)
                 .frame(maxHeight: .infinity)
+                .scrollDismissesKeyboard(.interactively)
 
             WatchChatComposer(model: model)
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 

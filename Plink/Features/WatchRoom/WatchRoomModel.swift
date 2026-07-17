@@ -789,9 +789,23 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         do {
             let snapshot = try await client.fetchParticipants(roomId: _roomId)
             // P0-58: apply snapshot, then merge buffered events
-            participants = snapshot.map { p in
+            var next = snapshot.map { p in
                 ParticipantInfo(userId: p.userId, username: p.username, isLocal: p.userId == currentUserId)
             }
+            // Never show "0 in room" — always keep local user + host if known
+            if !next.contains(where: { $0.userId == currentUserId }) {
+                next.insert(
+                    ParticipantInfo(userId: currentUserId, username: currentUsername, isLocal: true),
+                    at: 0
+                )
+            }
+            if let host = roomHostId, !host.isEmpty,
+               !next.contains(where: { $0.userId == host }) {
+                next.append(
+                    ParticipantInfo(userId: host, username: "Host", isLocal: host == currentUserId)
+                )
+            }
+            participants = next
             // P0-58: replay buffered participant events
             for event in bufferedParticipantEvents {
                 if event.isJoin {
@@ -799,13 +813,20 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     if !participants.contains(where: { $0.userId == info.userId }) {
                         participants.append(info)
                     }
-                } else {
+                } else if event.userId != currentUserId {
+                    // Never remove self from presence bar mid-session
                     participants.removeAll { $0.userId == event.userId }
                 }
             }
             bufferedParticipantEvents.removeAll()
         } catch {
-            // Non-fatal — participant events will still arrive
+            // Non-fatal — ensure at least local user is visible
+            if !participants.contains(where: { $0.userId == currentUserId }) {
+                participants.insert(
+                    ParticipantInfo(userId: currentUserId, username: currentUsername, isLocal: true),
+                    at: 0
+                )
+            }
         }
         snapshotInFlight = false
     }

@@ -14,10 +14,12 @@ struct DMChatView: View {
     @FocusState private var isInputFocused: Bool
     private let charLimit = 280
     @State private var lastSendTime: Date = .distantPast
-    @State private var avatarBust = PlinkAvatarURL.sessionBust
+    @State private var wallpaper = PlinkChatWallpaperPrefs.current
+    @State private var isRecordingVoice = false
 
     private var peerAvatarURL: URL? {
-        PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
+        // Stable URL — no cache-bust flicker in chat
+        PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL)
     }
 
     private var peerLetter: String {
@@ -38,7 +40,7 @@ struct DMChatView: View {
     }
 
     private var meAvatarURL: URL? {
-        PlinkAvatarURL.resolve(userId: meId.isEmpty ? nil : meId, stored: nil)
+        PlinkAvatarURL.stable(userId: meId.isEmpty ? nil : meId, stored: nil)
     }
 
     private var messages: [DirectMessage] {
@@ -47,29 +49,7 @@ struct DMChatView: View {
 
     var body: some View {
         ZStack {
-            // Layered glass background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.06, green: 0.08, blue: 0.12),
-                    Color(red: 0.04, green: 0.05, blue: 0.08),
-                    Color(red: 0.07, green: 0.05, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            // Soft orbs (glass depth)
-            Circle()
-                .fill(Cinema2026.accent.opacity(0.12))
-                .frame(width: 220, height: 220)
-                .blur(radius: 60)
-                .offset(x: -120, y: -180)
-            Circle()
-                .fill(Color.purple.opacity(0.10))
-                .frame(width: 260, height: 260)
-                .blur(radius: 70)
-                .offset(x: 140, y: 320)
+            wallpaper.background
 
             VStack(spacing: 0) {
                 glassHeader
@@ -115,6 +95,16 @@ struct DMChatView: View {
                         .padding(.bottom, 8)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 24)
+                            .onEnded { value in
+                                // Swipe down to hide keyboard (Telegram-like)
+                                if value.translation.height > 40 {
+                                    isInputFocused = false
+                                    showEmojiPicker = false
+                                }
+                            }
+                    )
                     .onChange(of: dmService.historyEpoch) { _, _ in
                         DispatchQueue.main.async { scrollToBottom(proxy: proxy) }
                     }
@@ -171,8 +161,8 @@ struct DMChatView: View {
         .onDisappear {
             dmService.chatDidClose(friendId: friend.id)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .plinkAvatarsDidChange)) { n in
-            avatarBust = (n.object as? Int) ?? PlinkAvatarURL.sessionBust
+        .onReceive(NotificationCenter.default.publisher(for: .plinkChatWallpaperChanged)) { _ in
+            wallpaper = PlinkChatWallpaperPrefs.current
         }
         .task {
             dmService.chatDidOpen(friendId: friend.id)
@@ -209,12 +199,8 @@ struct DMChatView: View {
             }
             .buttonStyle(.plain)
 
-            DMCircleAvatar(url: peerAvatarURL, letter: peerLetter, size: 40)
-                .id("dm-header-av-\(friend.id)-\(avatarBust)")
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                )
+            PlinkStableAvatar(url: peerAvatarURL, letter: peerLetter, size: 40)
+                .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(friend.displayTitle)
@@ -294,6 +280,7 @@ struct DMChatView: View {
                         .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
                 )
                 .focused($isInputFocused)
+                .submitLabel(.send)
                 .onSubmit { sendAction() }
                 .onChange(of: messageText) { _, newValue in
                     if newValue.count > charLimit {
@@ -301,6 +288,18 @@ struct DMChatView: View {
                         HapticManager.impact(.light)
                     }
                 }
+
+            // Free voice note (hold to record — MVP: quick voice placeholder send)
+            Button {
+                sendVoiceNotePlaceholder()
+            } label: {
+                Image(systemName: isRecordingVoice ? "waveform.circle.fill" : "mic.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isRecordingVoice ? Cinema2026.accent : Color.white.opacity(0.65))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Голосовое сообщение")
 
             Button(action: sendAction) {
                 Image(systemName: "arrow.up")
@@ -329,6 +328,19 @@ struct DMChatView: View {
             Rectangle()
                 .fill(Color.white.opacity(0.08))
                 .frame(height: 0.5)
+        }
+    }
+
+    private func sendVoiceNotePlaceholder() {
+        // Free voice notes in friend chat — short text token until full recorder ships
+        HapticManager.impact(.medium)
+        isRecordingVoice = true
+        Task {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            await MainActor.run {
+                isRecordingVoice = false
+                dmService.sendMessage("🎤 Голосовое · 0:\(String(format: "%02d", Int.random(in: 3...15)))", to: friend)
+            }
         }
     }
 
@@ -492,10 +504,28 @@ private struct DMBubble: View {
                 }
 
                 if cluster.isLastInGroup {
-                    Text(message.timeString)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.35))
-                        .padding(.horizontal, 4)
+                    HStack(spacing: 4) {
+                        Text(message.timeString)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                        if isOwn {
+                            // Telegram: ✓ sent · ✓✓ read
+                            Image(systemName: message.isRead ? "checkmark.circle.fill" : "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(
+                                    message.isRead
+                                    ? Cinema2026.accent.opacity(0.95)
+                                    : Color.white.opacity(0.4)
+                                )
+                            if message.isRead {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(Cinema2026.accent.opacity(0.95))
+                                    .offset(x: -6)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 4)
                 }
             }
             .frame(maxWidth: 290, alignment: isOwn ? .trailing : .leading)
@@ -551,7 +581,7 @@ private struct DMBubble: View {
     @ViewBuilder
     private var avatarSlot: some View {
         if cluster.showAvatar {
-            DMCircleAvatar(url: avatarURL, letter: letter, size: avatarSize)
+            PlinkStableAvatar(url: avatarURL, letter: letter, size: avatarSize)
                 .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
         } else {
             Color.clear.frame(width: avatarSize, height: avatarSize)

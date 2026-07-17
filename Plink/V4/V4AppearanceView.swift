@@ -61,6 +61,7 @@ struct V4AppearanceView: View {
     @State private var highContrast = PlinkAppearancePrefs.highContrast
     @State private var showRoomThemes = false
     @State private var selectedBubbleID = PlinkBubbleStylePrefs.currentID
+    @State private var selectedWallpaper = PlinkChatWallpaperPrefs.current
     @State private var toast: String?
     @ObservedObject private var premium = PremiumStatusManager.shared
 
@@ -161,6 +162,27 @@ struct V4AppearanceView: View {
                         HStack(spacing: 10) {
                             ForEach(bubbleStyles) { style in
                                 bubbleStyleCard(style)
+                            }
+                        }
+                        .padding(.horizontal, 19)
+                        .padding(.bottom, 18)
+                    }
+
+                    // ── Chat wallpapers (Telegram-style DM backgrounds) ──
+                    V4Heading(
+                        eyebrow: "ЧАТ С ДРУГОМ",
+                        title: "Фон переписки",
+                        subtitle: "Как в Telegram — фон только в личных чатах."
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 19)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(PlinkChatWallpaper.allCases) { wall in
+                                wallpaperCard(wall)
                             }
                         }
                         .padding(.horizontal, 19)
@@ -281,6 +303,45 @@ struct V4AppearanceView: View {
         PlinkBubbleStylePrefs.set(style.id)
         HapticManager.selection()
         flashToast("Бабл: \(style.title)")
+    }
+
+    private func wallpaperCard(_ wall: PlinkChatWallpaper) -> some View {
+        let selected = selectedWallpaper == wall
+        return Button {
+            selectedWallpaper = wall
+            PlinkChatWallpaperPrefs.set(wall)
+            HapticManager.selection()
+            flashToast("Фон чата: \(wall.title)")
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack {
+                    LinearGradient(colors: wall.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    // Mini bubble preview
+                    HStack {
+                        Spacer(minLength: 20)
+                        Text("Hi")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Cinema2026.accent.opacity(0.85), in: Capsule())
+                    }
+                    .padding(8)
+                }
+                .frame(width: 100, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(selected ? V4.accent : Color.white.opacity(0.12), lineWidth: selected ? 2 : 0.8)
+                )
+                Text(wall.title)
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(V4.ink)
+                    .lineLimit(1)
+            }
+            .frame(width: 100)
+        }
+        .buttonStyle(.plain)
     }
 
     private func bubbleStyleCard(_ style: AppearanceDescriptor) -> some View {

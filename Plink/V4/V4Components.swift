@@ -102,15 +102,19 @@ enum PlinkAvatarURL {
         }
         guard !raw.isEmpty, var components = URLComponents(string: raw) else { return nil }
         if cacheBust {
-            // Short time bucket (10s) + session bust for near-instant avatar updates
-            let bucket = Int(Date().timeIntervalSince1970 / 10)
+            // Session bust only (NOT a 10s time bucket) — avoids avatar URL
+            // changing every few seconds and flashing letter placeholders.
             var items = components.queryItems ?? []
             items.removeAll { $0.name == "v" || $0.name == "b" }
-            items.append(URLQueryItem(name: "v", value: "\(bucket)"))
             items.append(URLQueryItem(name: "b", value: "\(sessionBust)"))
             components.queryItems = items
         }
         return components.url
+    }
+
+    /// Stable URL for chat bubbles / headers — never auto-bust.
+    static func stable(userId: String?, stored: String?) -> URL? {
+        resolve(userId: userId, stored: stored, cacheBust: false)
     }
 
     /// Letter for placeholder: strip @, use first unicode scalar uppercased.

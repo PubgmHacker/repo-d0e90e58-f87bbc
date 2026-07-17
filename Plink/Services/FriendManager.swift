@@ -51,11 +51,18 @@ final class FriendManager: ObservableObject {
         }
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
-            friends = dtos.map { $0.toFriend() }
-            // Sync pin flags from server → local ordered pin list
+            let next = dtos.map { $0.toFriend() }
+            // Only bust avatar cache when a friend's avatar URL actually changed —
+            // otherwise list/chat avatars flash every poll (letter ↔ photo).
+            let prevAvatars = Dictionary(uniqueKeysWithValues: friends.map { ($0.id, $0.avatarURL ?? "") })
+            let avatarChanged = next.contains { f in
+                (prevAvatars[f.id] ?? "") != (f.avatarURL ?? "")
+            }
+            friends = next
             FriendPinStore.shared.mergeFromServer(friends)
-            // Bust avatar URL cache so new photos appear immediately in list/chat
-            PlinkAvatarURL.bumpSessionBust()
+            if avatarChanged {
+                PlinkAvatarURL.bumpSessionBust()
+            }
             print("[Friends] loaded \(friends.count) friends")
         } catch {
             print("[Friends] loadFriends error: \(error.localizedDescription)")

@@ -60,8 +60,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // P0-30: roomId stored as _roomId (private) + protocol conformance via
     // computed var roomId: String? { _roomId }. Only ONE declaration.
     private let _roomId: String
-    public let mediaSource: PlaybackSource?
-    public let mediaId: String?  // P1-33: typed media ID for host commands
+    /// May be recovered after connect if create/join stripped mediaItem.
+    public private(set) var mediaSource: PlaybackSource?
+    public private(set) var mediaId: String?  // P1-33: typed media ID for host commands
     public let currentUserId: String  // P1-32: identity via init, not UserDefaults
     public let currentUsername: String  // P1-32
     private var chatCatchupCursor: String?  // P0-59: opaque server cursor
@@ -157,12 +158,18 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         startStateChangesSubscription()
 
         // Realtime first — chat/presence must work even while YouTube is loading.
-        // Player prepare used to block connect for ~10s and delayed everything.
         realtimeClient.connect(roomId: _roomId)
         startDanmakuPolling()
 
-        // Media prepare runs after WS kickoff so SwiftUI can attach WKWebView
-        // while room UI is already live ("1 в комнате" + chat).
+        // Media prepare — if mediaSource was nil at init (server stripped mediaItem),
+        // try one REST re-fetch before giving up on "Нет видео".
+        if mediaSource == nil {
+            if let recovered = await Self.refetchMediaSource(roomId: _roomId) {
+                mediaSource = recovered.source
+                if mediaId == nil { mediaId = recovered.mediaId }
+            }
+        }
+
         if let source = mediaSource {
             do {
                 try await coordinator.prepare(source)
@@ -182,10 +189,22 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             } catch {
                 let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 lastError = detail
-                // coordinator.lastError already set inside prepare(); UI reads that.
             }
         } else {
-            lastError = "Нет медиа в комнате"
+            lastError = "Нет медиа в комнате — выберите YouTube-видео при создании"
+        }
+    }
+
+    /// Recover YouTube/media when create/join returned room without mediaItem.
+    private static func refetchMediaSource(roomId: String) async -> (source: PlaybackSource, mediaId: String?)? {
+        do {
+            let room = try await RoomService(api: APIClient.shared).fetchRoom(id: roomId)
+            guard let source = WatchRoomCompositionRoot.mediaSource(from: room) else { return nil }
+            let mid = room.mediaItem?.videoId ?? room.mediaItem?.id
+            return (source, mid)
+        } catch {
+            print("[WatchRoom] refetch media failed: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -743,13 +762,32 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 for msg in response.messages {
                     // P0-60: dedupe by messageId using persistent set
                     if knownMessageIds.contains(msg.messageId) { continue }
-                    if let cmid = msg.clientMessageId, clientMessageIds.contains(cmid) {
-                        knownMessageIds.insert(msg.messageId)
-                        continue
-                    }
                     knownMessageIds.insert(msg.messageId)
 
                     let decoded = PlinkBubbleWire.decode(msg.text)
+
+                    // Reconcile optimistic local send — keep same SwiftUI id (clientMessageId)
+                    if let cmid = msg.clientMessageId,
+                       let idx = chatMessages.firstIndex(where: { $0.clientMessageId == cmid }) {
+                        chatMessages[idx] = ChatMessageInfo(
+                            messageId: msg.messageId,
+                            clientMessageId: cmid,
+                            senderId: msg.senderId.isEmpty ? chatMessages[idx].senderId : msg.senderId,
+                            senderName: msg.senderName.isEmpty ? chatMessages[idx].senderName : msg.senderName,
+                            text: decoded.text.isEmpty ? chatMessages[idx].text : decoded.text,
+                            createdAtMs: msg.createdAtMs,
+                            isPending: false,
+                            isFailed: false,
+                            bubbleStyle: decoded.styleID ?? chatMessages[idx].bubbleStyle
+                        )
+                        clientMessageIds.insert(cmid)
+                        continue
+                    }
+                    if let cmid = msg.clientMessageId, clientMessageIds.contains(cmid) {
+                        // Already reconciled via broadcast
+                        continue
+                    }
+
                     let info = ChatMessageInfo(
                         messageId: msg.messageId,
                         clientMessageId: msg.clientMessageId,
@@ -990,7 +1028,13 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public var isPremium: Bool = false
     /// Sender bubble style (synced via wire format in text).
     public var bubbleStyle: String? = nil
-    public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
+    /// Stable SwiftUI identity — MUST NOT flip from clientMessageId → server messageId
+    /// or ForEach deletes the bubble (looks like "message vanished").
+    public var id: String {
+        if let cmid = clientMessageId, !cmid.isEmpty { return cmid }
+        if let mid = messageId, !mid.isEmpty { return mid }
+        return "\(senderId)-\(createdAtMs)-\(text.hashValue)"
+    }
 
     // P1-54: convenience init without isFailed
     public init(messageId: String?, clientMessageId: String?, senderId: String,

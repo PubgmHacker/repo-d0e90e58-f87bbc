@@ -17,7 +17,11 @@ struct PlayerStage: View {
             Color.black
 
             // Player surface — never decorated
-            PlayerSurfaceView(coordinator: model.coordinator)
+            PlayerSurfaceView(
+                coordinator: model.coordinator,
+                roomError: model.lastError,
+                expectMedia: model.mediaSource != nil || model.lastError == nil
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Danmaku layer (above video, below chrome)

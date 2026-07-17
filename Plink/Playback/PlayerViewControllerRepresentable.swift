@@ -14,9 +14,15 @@ import AVKit
 
 public struct PlayerSurfaceView: View {
     public let coordinator: PlaybackCoordinator
+    /// Optional room-level error (e.g. mediaSource missing) — coordinator may still be idle.
+    public var roomError: String? = nil
+    /// When true, show loading instead of "Нет видео" during connect bootstrap.
+    public var expectMedia: Bool = true
 
-    public init(coordinator: PlaybackCoordinator) {
+    public init(coordinator: PlaybackCoordinator, roomError: String? = nil, expectMedia: Bool = true) {
         self.coordinator = coordinator
+        self.roomError = roomError
+        self.expectMedia = expectMedia
     }
 
     public var body: some View {
@@ -31,7 +37,7 @@ public struct PlayerSurfaceView: View {
                 // Stable identity — do NOT use .id(surfaceEpoch) or SwiftUI will
                 // tear down / re-create the UIViewRepresentable and kill YT load.
                 EmbeddedViewRepresentable(view: embedded)
-            } else if let error = coordinator.lastError {
+            } else if let error = coordinator.lastError ?? roomError {
                 // Media prepare failed — show error (chat still works).
                 Color.black
                     .overlay(
@@ -52,7 +58,8 @@ public struct PlayerSurfaceView: View {
                                 .foregroundStyle(.white.opacity(0.4))
                         }
                     )
-            } else if coordinator.isPreparing {
+            } else if coordinator.isPreparing || (expectMedia && coordinator.currentSource == nil && coordinator.currentController == nil) {
+                // Avoid flash "Нет видео" while connect() is still resolving YouTube
                 Color.black
                     .overlay(
                         VStack(spacing: 10) {

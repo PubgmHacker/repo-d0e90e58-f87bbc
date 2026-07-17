@@ -79,13 +79,7 @@ struct PlinkPhoneTabShell: View {
 
     @ViewBuilder
     private func watchRoom(for room: Room) -> some View {
-        WatchRoomCompositionRoot.makeScreenForRoom(
-            room: room,
-            userId: UserDefaults.standard.string(forKey: "plink_user_id") ?? "",
-            username: UserDefaults.standard.string(forKey: "plink_username") ?? "",
-            apiBaseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")!,
-            wsBaseURL: URL(string: "wss://plink-backend-production-ef31.up.railway.app/ws")!,
-            authToken: KeychainHelper.read(for: "rave_auth_token") ?? ""
-        )
+        // Hydrates plink_current_user_id / token — never empty plink_user_id keys
+        WatchRoomContainer(room: room)
     }
 }

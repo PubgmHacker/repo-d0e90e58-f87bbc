@@ -653,7 +653,23 @@ struct RoomCreationView: View {
             // Ensure host is joined (presence / participant count) even if
             // older backends omitted RoomParticipant on create.
             if let joined = try? await RoomService(api: apiClient).joinRoom(code: room.code) {
-                room = joined
+                // Never drop local mediaItem when join returns a stripped payload
+                let mergedMedia = joined.mediaItem ?? room.mediaItem ?? mediaItem
+                room = Room(
+                    id: joined.id,
+                    name: joined.name,
+                    hostID: joined.hostID,
+                    hostName: joined.hostName,
+                    code: joined.code,
+                    participants: joined.participants.isEmpty ? room.participants : joined.participants,
+                    mediaItem: mergedMedia,
+                    isActive: joined.isActive,
+                    maxParticipants: joined.maxParticipants,
+                    hostIsPremium: joined.hostIsPremium,
+                    createdAt: joined.createdAt,
+                    privacy: joined.privacy,
+                    password: joined.password
+                )
             }
             // Keep client-side media if server stripped it
             if room.mediaItem == nil {

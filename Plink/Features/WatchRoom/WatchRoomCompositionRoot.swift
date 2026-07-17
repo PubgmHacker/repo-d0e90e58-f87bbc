@@ -44,6 +44,11 @@ public enum WatchRoomCompositionRoot {
         }
     }
 
+    /// Public so WatchRoomModel can recover media after a stripped create/join payload.
+    static func mediaSource(from room: Room) -> PlaybackSource? {
+        mediaSourceFromRoom(room)
+    }
+
     /// Derive PlaybackSource from room.mediaItem
     private static func mediaSourceFromRoom(_ room: Room) -> PlaybackSource? {
         guard let mediaItem = room.mediaItem else { return nil }
@@ -74,19 +79,23 @@ public enum WatchRoomCompositionRoot {
 
     /// Resolve a valid 11-char YouTube id from mediaItem fields.
     private static func resolveYouTubeVideoId(from mediaItem: MediaItem) -> String? {
+        // 1) Explicit videoId field
         if let raw = mediaItem.videoId?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
             if isValidYouTubeVideoId(raw) { return raw }
             if let fromField = extractYouTubeVideoId(from: raw) { return fromField }
         }
-        if mediaItem.source == .youtube || mediaItem.streamURL.lowercased().contains("youtu") {
-            if let fromURL = extractYouTubeVideoId(from: mediaItem.streamURL) { return fromURL }
-            // Bare 11-char id stored as streamURL / id
-            let bare = mediaItem.streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            if isValidYouTubeVideoId(bare) { return bare }
-            let bareId = mediaItem.id.trimmingCharacters(in: .whitespacesAndNewlines)
-            if isValidYouTubeVideoId(bareId) { return bareId }
+        // 2) Any youtu URL in streamURL / id — even if source was lost as "url"
+        if let fromURL = extractYouTubeVideoId(from: mediaItem.streamURL) { return fromURL }
+        let bare = mediaItem.streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isValidYouTubeVideoId(bare) { return bare }
+        let bareId = mediaItem.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isValidYouTubeVideoId(bareId) { return bareId }
+        if let fromId = extractYouTubeVideoId(from: mediaItem.id) { return fromId }
+        // 3) Thumbnail often embeds the id: …/vi/VIDEO_ID/…
+        if let thumb = mediaItem.thumbnailURL, let fromThumb = extractYouTubeVideoId(from: thumb) {
+            return fromThumb
         }
-        return extractYouTubeVideoId(from: mediaItem.streamURL)
+        return nil
     }
 
     private static func isValidYouTubeVideoId(_ id: String) -> Bool {

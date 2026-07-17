@@ -25,15 +25,30 @@ struct DMChatView: View {
     @State private var voiceStartInFlight = false
     @ObservedObject private var blockManager = UserBlockManager.shared
 
-    /// Telegram iOS private-chat navigation metrics.
+    /// Telegram iOS 2026 private-chat navigation metrics.
     private enum TGHeader {
-        /// Avatar in TG chat nav ≈ 37pt
-        static let avatar: CGFloat = 37
-        static let barHeight: CGFloat = 44
-        static let nameSize: CGFloat = 17
-        static let statusSize: CGFloat = 13
+        /// Avatar sits on the right (Telegram 2025–26 chat header)
+        static let avatar: CGFloat = 40
+        static let barHeight: CGFloat = 52
+        static let nameSize: CGFloat = 16
+        static let statusSize: CGFloat = 12
         /// Classic Telegram “online” green
         static let online = Color(red: 0.20, green: 0.78, blue: 0.35)
+    }
+
+    private var chatsUnreadBadge: Int {
+        max(0, dmService.totalUnread - dmService.unreadCount(for: friend.id))
+    }
+
+    private var headerPresence: String {
+        FriendPresence.headerStatus(
+            isOnline: liveFriend.isOnline,
+            lastSeenAt: liveFriend.lastSeenAt
+        )
+    }
+
+    private var headerIsOnline: Bool {
+        liveFriend.isOnline || headerPresence == "в сети"
     }
 
     /// Live friend snapshot (avatarURL updates when they change photo).
@@ -182,8 +197,10 @@ struct DMChatView: View {
                     }
                 }
             }
-            .presentationDetents([.large])
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+            .presentationCornerRadius(28)
+            .presentationBackground(.ultraThinMaterial)
         }
         .sheet(item: $reactionTarget) { msg in
             DMReactionPickerSheet(
@@ -237,31 +254,90 @@ struct DMChatView: View {
         }
     }
 
-    // MARK: - Telegram private-chat navigation bar
+    // MARK: - Telegram 2026 glass chat header
 
-    /// Mirrors Telegram iOS: back · avatar 37 + name/status (tappable profile) · actions.
+    /// Layout: [← Чаты · badge]  [  ник / online  ]  [ avatar ⋯ ]
     private var telegramNavBar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                // Back — plain chevron like Telegram (no giant glass circle)
+            HStack(spacing: 8) {
+                // ── Left: back to all chats (glass pill + unread indicator)
                 Button {
+                    HapticManager.selection()
                     dismiss()
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.95))
-                        .frame(width: 40, height: TGHeader.barHeight)
-                        .contentShape(Rectangle())
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .bold))
+                        Text("Чаты")
+                            .font(.system(size: 16, weight: .semibold))
+                        if chatsUnreadBadge > 0 {
+                            Text(chatsUnreadBadge > 99 ? "99+" : "\(chatsUnreadBadge)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Cinema2026.accent, in: Capsule())
+                        }
+                    }
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.14), lineWidth: 0.7)
+                    )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Назад")
+                .accessibilityLabel(
+                    chatsUnreadBadge > 0
+                    ? "К чатам, непрочитанных \(chatsUnreadBadge)"
+                    : "К чатам"
+                )
 
-                // Profile block (tap → FriendProfileView) — same as TG title view
+                Spacer(minLength: 4)
+
+                // ── Center: glass capsule with nick + presence (tap → profile)
                 Button {
                     HapticManager.impact(.light)
                     showPeerProfile = true
                 } label: {
-                    HStack(spacing: 10) {
+                    VStack(spacing: 1) {
+                        Text(liveFriend.displayTitle)
+                            .font(.system(size: TGHeader.nameSize, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(headerPresence)
+                            .font(.system(size: TGHeader.statusSize, weight: headerIsOnline ? .semibold : .regular))
+                            .foregroundStyle(
+                                headerIsOnline
+                                ? TGHeader.online
+                                : Color.white.opacity(0.55)
+                            )
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .frame(minWidth: 120, maxWidth: 200)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.16), lineWidth: 0.8)
+                    )
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(liveFriend.displayTitle), \(headerPresence)")
+                .accessibilityHint("Открыть профиль")
+
+                Spacer(minLength: 4)
+
+                // ── Right: avatar + more
+                HStack(spacing: 8) {
+                    Button {
+                        HapticManager.impact(.light)
+                        showPeerProfile = true
+                    } label: {
                         PlinkStableAvatar(
                             url: peerAvatarURL,
                             letter: peerLetter,
@@ -270,121 +346,108 @@ struct DMChatView: View {
                         )
                         .overlay(
                             Circle()
-                                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+                                .stroke(Color.white.opacity(0.22), lineWidth: 1)
                         )
-                        .id("tg-av-\(liveFriend.id)-\(friendManager.avatarEpoch)-\(peerAvatarURL?.absoluteString ?? "")")
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(liveFriend.displayTitle)
-                                .font(.system(size: TGHeader.nameSize, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            Text(liveFriend.presenceText)
-                                .font(.system(size: TGHeader.statusSize, weight: .regular))
-                                .foregroundStyle(
-                                    liveFriend.isOnline
-                                    ? TGHeader.online
-                                    : Color.white.opacity(0.55)
-                                )
-                                .lineLimit(1)
+                        .overlay(alignment: .bottomTrailing) {
+                            if headerIsOnline {
+                                Circle()
+                                    .fill(TGHeader.online)
+                                    .frame(width: 11, height: 11)
+                                    .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 1.5))
+                                    .offset(x: 1, y: 1)
+                            }
                         }
-                        Spacer(minLength: 4)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: TGHeader.barHeight, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(liveFriend.displayTitle), \(liveFriend.presenceText)")
-                .accessibilityHint("Открыть профиль")
-
-                // Right actions — compact icon row (Telegram has call / menu)
-                HStack(spacing: 2) {
-                    Button {
-                        showWatchTogether = true
-                    } label: {
-                        Image(systemName: "play.rectangle.fill")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(Cinema2026.accent)
-                            .frame(width: 40, height: TGHeader.barHeight)
-                            .contentShape(Rectangle())
+                        .id("tg-av-\(liveFriend.id)-\(friendManager.avatarEpoch)-\(peerAvatarURL?.absoluteString ?? "")")
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Смотреть вместе")
+                    .accessibilityLabel("Профиль \(liveFriend.displayTitle)")
 
                     Button {
                         HapticManager.impact(.light)
                         showChatActions = true
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.9))
-                            .frame(width: 36, height: TGHeader.barHeight)
-                            .contentShape(Rectangle())
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .frame(width: 34, height: 34)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 0.7))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Ещё")
-                    .confirmationDialog(
-                        liveFriend.displayTitle,
-                        isPresented: $showChatActions,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Профиль") { showPeerProfile = true }
-                        Button("Смотреть вместе") { showWatchTogether = true }
-                        Button("Удалить чат", role: .destructive) {
-                            confirmDeleteChat = true
-                        }
-                        if blockManager.isBlocked(liveFriend.id) {
-                            Button("Разблокировать") {
-                                blockManager.unblockUser(liveFriend.id)
-                                HapticManager.impact(.light)
-                            }
-                        } else {
-                            Button("Заблокировать", role: .destructive) {
-                                confirmBlockUser = true
-                            }
-                        }
-                        Button("Отмена", role: .cancel) {}
-                    }
-                    .alert("Удалить чат?", isPresented: $confirmDeleteChat) {
-                        Button("Удалить", role: .destructive) {
-                            Task {
-                                await dmService.deleteChat(with: liveFriend)
-                                await MainActor.run { dismiss() }
-                            }
-                        }
-                        Button("Отмена", role: .cancel) {}
-                    } message: {
-                        Text("История переписки с \(liveFriend.displayTitle) будет удалена. Это действие нельзя отменить.")
-                    }
-                    .alert("Заблокировать \(liveFriend.displayTitle)?", isPresented: $confirmBlockUser) {
-                        Button("Заблокировать", role: .destructive) {
-                            Task {
-                                await blockManager.blockAndDeleteChat(
-                                    userId: liveFriend.id,
-                                    friend: liveFriend
-                                )
-                                await MainActor.run { dismiss() }
-                            }
-                        }
-                        Button("Отмена", role: .cancel) {}
-                    } message: {
-                        Text("Пользователь не сможет писать вам. Чат будет удалён, как в Telegram.")
-                    }
                 }
-                .padding(.trailing, 4)
+                .padding(.trailing, 2)
             }
-            .frame(height: TGHeader.barHeight)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(minHeight: TGHeader.barHeight)
 
             Rectangle()
-                .fill(Color.white.opacity(0.10))
+                .fill(Color.white.opacity(0.08))
                 .frame(height: 0.5)
         }
         .background {
-            // Telegram translucent bar under status bar
+            // Glass curtain under status bar (Telegram 2026 liquid glass)
             Rectangle()
                 .fill(.ultraThinMaterial)
-                .overlay(Color.black.opacity(0.22))
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.28),
+                            Color.black.opacity(0.12)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .ignoresSafeArea(edges: .top)
+        }
+        .confirmationDialog(
+            liveFriend.displayTitle,
+            isPresented: $showChatActions,
+            titleVisibility: .visible
+        ) {
+            Button("Профиль") { showPeerProfile = true }
+            Button("Смотреть вместе") { showWatchTogether = true }
+            Button("Удалить чат", role: .destructive) {
+                confirmDeleteChat = true
+            }
+            if blockManager.isBlocked(liveFriend.id) {
+                Button("Разблокировать") {
+                    blockManager.unblockUser(liveFriend.id)
+                    HapticManager.impact(.light)
+                }
+            } else {
+                Button("Заблокировать", role: .destructive) {
+                    confirmBlockUser = true
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        }
+        .alert("Удалить чат?", isPresented: $confirmDeleteChat) {
+            Button("Удалить", role: .destructive) {
+                Task {
+                    await dmService.deleteChat(with: liveFriend)
+                    await MainActor.run { dismiss() }
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("История переписки с \(liveFriend.displayTitle) будет удалена. Это действие нельзя отменить.")
+        }
+        .alert("Заблокировать \(liveFriend.displayTitle)?", isPresented: $confirmBlockUser) {
+            Button("Заблокировать", role: .destructive) {
+                Task {
+                    await blockManager.blockAndDeleteChat(
+                        userId: liveFriend.id,
+                        friend: liveFriend
+                    )
+                    await MainActor.run { dismiss() }
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Пользователь не сможет писать вам. Чат будет удалён, как в Telegram.")
         }
     }
 

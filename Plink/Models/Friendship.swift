@@ -89,7 +89,18 @@ enum FriendPresence {
             return "был(а) \(df.string(from: last))"
         }
         if isOnline { return "в сети" }
-        return "был(а) давно"
+        // Telegram privacy: last-seen hidden → soft status
+        return "был(а) недавно"
+    }
+
+    /// Compact status for the chat header capsule (Telegram 2026 style).
+    static func headerStatus(isOnline: Bool, lastSeenAt: Date?) -> String {
+        if isOnline { return "в сети" }
+        guard let last = lastSeenAt else { return "был(а) недавно" }
+        let sec = Date().timeIntervalSince(last)
+        if sec < 90 { return "в сети" }
+        if sec < 15 * 60 { return "был(а) недавно" }
+        return displayText(isOnline: false, lastSeenAt: last)
     }
 
     private static func dayWord(_ d: Int) -> String {

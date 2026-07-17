@@ -55,25 +55,47 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
 // MARK: - Presence copy (RU, Telegram-style)
 
 enum FriendPresence {
+    /// Telegram RU status line under the name in a private chat.
     static func displayText(isOnline: Bool, lastSeenAt: Date?) -> String {
-        if isOnline { return "В сети" }
-        guard let last = lastSeenAt else { return "Не в сети" }
+        if isOnline { return "в сети" }
+        guard let last = lastSeenAt else { return "был(а) давно" }
         let sec = Date().timeIntervalSince(last)
-        if sec < 0 { return "В сети" }
-        if sec < 60 { return "Был(а) только что" }
+        if sec < 0 { return "в сети" }
+        if sec < 45 { return "был(а) только что" }
         if sec < 3600 {
             let m = max(1, Int(sec / 60))
-            return "Был(а) \(m) мин. назад"
+            if m == 1 { return "был(а) 1 минуту назад" }
+            if m < 5 { return "был(а) \(m) минуты назад" }
+            return "был(а) \(m) минут назад"
         }
-        if sec < 86_400 {
-            let h = max(1, Int(sec / 3600))
-            return "Был(а) \(h) ч. назад"
+        // Same calendar day → «был(а) в 14:32»
+        let cal = Calendar.current
+        if cal.isDateInToday(last) {
+            let t = last.formatted(Date.FormatStyle().hour().minute())
+            return "был(а) в \(t)"
         }
-        let d = max(1, Int(sec / 86_400))
-        if d < 30 {
-            return "Был(а) \(d) дн. назад"
+        if cal.isDateInYesterday(last) {
+            let t = last.formatted(Date.FormatStyle().hour().minute())
+            return "был(а) вчера в \(t)"
         }
-        return "Был(а) давно"
+        if sec < 86_400 * 7 {
+            let d = max(1, Int(sec / 86_400))
+            return "был(а) \(d) \(dayWord(d)) назад"
+        }
+        // Older: date only
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ru_RU")
+        df.dateFormat = "d MMM"
+        return "был(а) \(df.string(from: last))"
+    }
+
+    private static func dayWord(_ d: Int) -> String {
+        let n = d % 100
+        let n1 = d % 10
+        if n > 10 && n < 20 { return "дней" }
+        if n1 == 1 { return "день" }
+        if n1 >= 2 && n1 <= 4 { return "дня" }
+        return "дней"
     }
 }
 

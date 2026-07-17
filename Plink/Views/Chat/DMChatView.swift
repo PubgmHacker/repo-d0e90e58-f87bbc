@@ -11,6 +11,7 @@ struct DMChatView: View {
     @State private var messageText = ""
     @State private var showEmojiPicker = false
     @State private var showWatchTogether = false
+    @State private var showPeerProfile = false
     @State private var reactionTarget: DirectMessage?
     @FocusState private var isInputFocused: Bool
     private let charLimit = 280
@@ -19,6 +20,17 @@ struct DMChatView: View {
     @State private var voiceRecorder = VoiceNoteRecorder()
     @State private var voiceError: String?
     @State private var voiceStartInFlight = false
+
+    /// Telegram iOS private-chat navigation metrics.
+    private enum TGHeader {
+        /// Avatar in TG chat nav ≈ 37pt
+        static let avatar: CGFloat = 37
+        static let barHeight: CGFloat = 44
+        static let nameSize: CGFloat = 17
+        static let statusSize: CGFloat = 13
+        /// Classic Telegram “online” green
+        static let online = Color(red: 0.20, green: 0.78, blue: 0.35)
+    }
 
     /// Live friend snapshot (avatarURL updates when they change photo).
     private var liveFriend: Friend {
@@ -62,8 +74,6 @@ struct DMChatView: View {
             wallpaper.background
 
             VStack(spacing: 0) {
-                glassHeader
-
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
@@ -138,6 +148,10 @@ struct DMChatView: View {
                 glassInputBar
             }
         }
+        // Telegram: fixed top bar over chat (safe-area aware)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            telegramNavBar
+        }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showWatchTogether) {
             RoomCreationView { room in
@@ -147,6 +161,25 @@ struct DMChatView: View {
                 dmService.sendMessage("Мы создали комнату «\(name)» · код \(code). Смотрим вместе!", to: friend)
             }
             .environmentObject(APIClient.shared)
+        }
+        .sheet(isPresented: $showPeerProfile) {
+            NavigationStack {
+                FriendProfileView(
+                    userId: liveFriend.id,
+                    usernameHint: liveFriend.username,
+                    onWatchTogether: {
+                        showPeerProfile = false
+                        showWatchTogether = true
+                    }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Закрыть") { showPeerProfile = false }
+                    }
+                }
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $reactionTarget) { msg in
             DMReactionPickerSheet(
@@ -199,74 +232,107 @@ struct DMChatView: View {
         }
     }
 
-    // MARK: - Glass header (Telegram-style)
+    // MARK: - Telegram private-chat navigation bar
 
-    private var glassHeader: some View {
-        HStack(spacing: 12) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.6))
-            }
-            .buttonStyle(.plain)
-
-            PlinkStableAvatar(
-                url: peerAvatarURL,
-                letter: peerLetter,
-                size: 40,
-                userId: friend.id
-            )
-                .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1))
-                .id("\(friend.id)-\(friendManager.avatarEpoch)-\(peerAvatarURL?.absoluteString ?? "")")
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(liveFriend.displayTitle)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(friend.isOnline
-                              ? Color(red: 0.3, green: 0.9, blue: 0.55)
-                              : Color.white.opacity(0.25))
-                        .frame(width: 7, height: 7)
-                    Text(friend.presenceText)
-                        .font(.system(size: 12, weight: friend.isOnline ? .semibold : .regular))
-                        .foregroundStyle(friend.isOnline
-                                         ? Color(red: 0.3, green: 0.9, blue: 0.55)
-                                         : Color.white.opacity(0.45))
-                        .lineLimit(1)
+    /// Mirrors Telegram iOS: back · avatar 37 + name/status (tappable profile) · actions.
+    private var telegramNavBar: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                // Back — plain chevron like Telegram (no giant glass circle)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.95))
+                        .frame(width: 40, height: TGHeader.barHeight)
+                        .contentShape(Rectangle())
                 }
-            }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Назад")
 
-            Spacer(minLength: 8)
+                // Profile block (tap → FriendProfileView) — same as TG title view
+                Button {
+                    HapticManager.impact(.light)
+                    showPeerProfile = true
+                } label: {
+                    HStack(spacing: 10) {
+                        PlinkStableAvatar(
+                            url: peerAvatarURL,
+                            letter: peerLetter,
+                            size: TGHeader.avatar,
+                            userId: liveFriend.id
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+                        )
+                        .id("tg-av-\(liveFriend.id)-\(friendManager.avatarEpoch)-\(peerAvatarURL?.absoluteString ?? "")")
 
-            Button {
-                showWatchTogether = true
-            } label: {
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Cinema2026.accent)
-                    .frame(width: 38, height: 38)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.6))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(liveFriend.displayTitle)
+                                .font(.system(size: TGHeader.nameSize, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                            Text(liveFriend.presenceText)
+                                .font(.system(size: TGHeader.statusSize, weight: .regular))
+                                .foregroundStyle(
+                                    liveFriend.isOnline
+                                    ? TGHeader.online
+                                    : Color.white.opacity(0.55)
+                                )
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: TGHeader.barHeight, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(liveFriend.displayTitle), \(liveFriend.presenceText)")
+                .accessibilityHint("Открыть профиль")
+
+                // Right actions — compact icon row (Telegram has call / menu)
+                HStack(spacing: 2) {
+                    Button {
+                        showWatchTogether = true
+                    } label: {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(Cinema2026.accent)
+                            .frame(width: 40, height: TGHeader.barHeight)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Смотреть вместе")
+
+                    Button {
+                        HapticManager.impact(.light)
+                        showPeerProfile = true
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .frame(width: 36, height: TGHeader.barHeight)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Ещё")
+                }
+                .padding(.trailing, 4)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Смотреть вместе")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(
-            .ultraThinMaterial,
-            in: Rectangle()
-        )
-        .overlay(alignment: .bottom) {
+            .frame(height: TGHeader.barHeight)
+
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(Color.white.opacity(0.10))
                 .frame(height: 0.5)
+        }
+        .background {
+            // Telegram translucent bar under status bar
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.22))
+                .ignoresSafeArea(edges: .top)
         }
     }
 

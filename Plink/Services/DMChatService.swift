@@ -125,7 +125,7 @@ final class DMChatService: ObservableObject {
                     counts[item.friendId] = item.unreadCount
                 }
                 if let p = item.lastPreview, !p.isEmpty {
-                    previews[item.friendId] = p
+                    previews[item.friendId] = PlinkBubbleWire.decode(p).text
                 }
                 if let at = item.lastAt {
                     let prev = activities[item.friendId]
@@ -173,25 +173,45 @@ final class DMChatService: ObservableObject {
             let me = currentUserId ?? ""
             let messages = dtos.map { dto -> DirectMessage in
                 let isOwn = !me.isEmpty && dto.senderID == me
+                let decoded = PlinkBubbleWire.decode(dto.content)
                 return DirectMessage(
                     id: dto.id,
                     conversationID: convID,
                     senderID: dto.senderID,
                     recipientID: dto.receiverID,
                     senderName: isOwn ? "You" : friendName,
-                    text: dto.content,
+                    text: decoded.text,
                     timestamp: dto.createdAt,
                     isRead: dto.isRead ?? (dto.receiverID == me),
-                    senderAvatarURL: isOwn ? nil : friendAvatarURL
+                    senderAvatarURL: isOwn ? nil : friendAvatarURL,
+                    bubbleStyle: decoded.styleID
                 )
             }
-            // Never replace a non-empty local thread with an empty server list
+            // Merge server history with any newer local-only optimistic messages
             // (avoids chat "vanishing" after send if server lags).
             if messages.isEmpty, let existing = conversations[convID], !existing.isEmpty {
                 print("[DM] history empty from server — keep \(existing.count) local msgs")
             } else {
-                conversations[convID] = messages
-                historyEpoch &+= 1
+                var merged = messages
+                if let existing = conversations[convID] {
+                    let serverIds = Set(messages.map(\.id))
+                    let localsOnly = existing.filter { !serverIds.contains($0.id) && $0.id.count > 20 }
+                    // Keep very recent optimistics not yet on server
+                    for loc in localsOnly {
+                        if !merged.contains(where: { $0.text == loc.text && abs($0.timestamp.timeIntervalSince(loc.timestamp)) < 30 }) {
+                            merged.append(loc)
+                        }
+                    }
+                    merged.sort { $0.timestamp < $1.timestamp }
+                }
+                // Avoid thrashing UI when nothing meaningful changed
+                let prev = conversations[convID] ?? []
+                let changed = prev.count != merged.count
+                    || zip(prev, merged).contains { $0.id != $1.id || $0.text != $1.text || $0.bubbleStyle != $1.bubbleStyle }
+                if changed {
+                    conversations[convID] = merged
+                    historyEpoch &+= 1
+                }
             }
             if let last = (conversations[convID] ?? messages).last {
                 lastPreviewByFriend[friendId] = last.text
@@ -228,6 +248,11 @@ final class DMChatService: ObservableObject {
 
         let convID = conversationID(with: friend.id)
         let localID = UUID().uuidString
+        let styleID = PlinkBubbleStylePrefs.currentID
+        // Wire style so peer devices render the same bubble (fits in 280 server limit)
+        let markerLen = "[[bs:\(BubbleStyleRegistry.migrateLegacyID(styleID))]]".count
+        let body = String(payload.prefix(max(1, 280 - markerLen)))
+        let wireContent = PlinkBubbleWire.encode(text: body, styleID: styleID)
 
         let message = DirectMessage(
             id: localID,
@@ -235,18 +260,19 @@ final class DMChatService: ObservableObject {
             senderID: me,
             recipientID: friend.id,
             senderName: "You",
-            text: payload,
+            text: body,
             timestamp: Date(),
             isRead: false,
-            senderAvatarURL: nil
+            senderAvatarURL: nil,
+            bubbleStyle: styleID
         )
 
         var list = conversations[convID] ?? []
         list.append(message)
         conversations[convID] = list
         historyEpoch &+= 1
-        lastPreviewByFriend[friend.id] = payload
-        touchActivity(friendId: friend.id, at: message.timestamp, preview: payload)
+        lastPreviewByFriend[friend.id] = body
+        touchActivity(friendId: friend.id, at: message.timestamp, preview: body)
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
         struct Body: Encodable { let receiverId: String; let content: String }
@@ -255,22 +281,24 @@ final class DMChatService: ObservableObject {
                 let saved: DMMessageDTO = try await api.request(
                     "messages/dm",
                     method: .post,
-                    body: Body(receiverId: friend.id, content: payload)
+                    body: Body(receiverId: friend.id, content: wireContent)
                 )
                 // Replace optimistic message in-place — do NOT wipe history
                 // (full reload was clearing UI / crashing identity updates).
                 if var cur = conversations[convID],
                    let idx = cur.firstIndex(where: { $0.id == localID }) {
+                    let decoded = PlinkBubbleWire.decode(saved.content.isEmpty ? wireContent : saved.content)
                     cur[idx] = DirectMessage(
                         id: saved.id,
                         conversationID: convID,
                         senderID: saved.senderID.isEmpty ? me : saved.senderID,
                         recipientID: saved.receiverID.isEmpty ? friend.id : saved.receiverID,
                         senderName: "You",
-                        text: saved.content.isEmpty ? payload : saved.content,
+                        text: decoded.text.isEmpty ? body : decoded.text,
                         timestamp: saved.createdAt,
                         isRead: false,
-                        senderAvatarURL: nil
+                        senderAvatarURL: nil,
+                        bubbleStyle: decoded.styleID ?? styleID
                     )
                     conversations[convID] = cur
                     historyEpoch &+= 1
@@ -287,12 +315,25 @@ final class DMChatService: ObservableObject {
         let convID = conversationID(with: friend.id)
         if conversations[convID] == nil { conversations[convID] = [] }
         if conversations[convID]?.contains(where: { $0.id == message.id }) == true { return }
-        conversations[convID]?.append(message)
+        let decoded = PlinkBubbleWire.decode(message.text)
+        let normalized = DirectMessage(
+            id: message.id,
+            conversationID: message.conversationID,
+            senderID: message.senderID,
+            recipientID: message.recipientID,
+            senderName: message.senderName,
+            text: decoded.text,
+            timestamp: message.timestamp,
+            isRead: message.isRead,
+            senderAvatarURL: message.senderAvatarURL,
+            bubbleStyle: decoded.styleID ?? message.bubbleStyle
+        )
+        conversations[convID]?.append(normalized)
         historyEpoch &+= 1
-        lastPreviewByFriend[friend.id] = message.text
-        touchActivity(friendId: friend.id, at: message.timestamp, preview: message.text)
-        updateLastMessage(conversationID: convID, friend: friend, message: message)
-        if openFriendId != friend.id, message.senderID != currentUserId {
+        lastPreviewByFriend[friend.id] = normalized.text
+        touchActivity(friendId: friend.id, at: normalized.timestamp, preview: normalized.text)
+        updateLastMessage(conversationID: convID, friend: friend, message: normalized)
+        if openFriendId != friend.id, normalized.senderID != currentUserId {
             unreadByFriend[friend.id, default: 0] += 1
         }
     }

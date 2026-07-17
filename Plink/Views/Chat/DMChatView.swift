@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - DM Chat View v5 — per-user avatars + Telegram left/right
+// MARK: - DM Chat View v6 — Telegram clusters + synced bubble styles
 struct DMChatView: View {
     @EnvironmentObject private var dmService: DMChatService
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +24,9 @@ struct DMChatView: View {
     }
 
     private var meId: String {
-        UserDefaults.standard.string(forKey: "plink_current_user_id") ?? ""
+        dmService.currentUserId
+            ?? UserDefaults.standard.string(forKey: "plink_current_user_id")
+            ?? ""
     }
 
     private var meLetter: String {
@@ -49,26 +51,35 @@ struct DMChatView: View {
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 6) {
+                        LazyVStack(spacing: 0) {
                             DMDayDivider(label: "Сегодня")
 
-                            ForEach(messages) { msg in
-                                let own = msg.isOwnMessage
+                            ForEach(Array(messages.enumerated()), id: \.element.id) { index, msg in
+                                let own = msg.isFromCurrentUser(currentUserId: meId)
+                                let prevId = index > 0 ? messages[index - 1].senderID : nil
+                                let nextId = index + 1 < messages.count ? messages[index + 1].senderID : nil
+                                let cluster = ChatClusterLayout.compute(
+                                    senderId: msg.senderID,
+                                    previousSenderId: prevId,
+                                    nextSenderId: nextId,
+                                    isOwn: own
+                                )
                                 DMBubble(
                                     message: msg,
                                     isOwn: own,
                                     avatarURL: own ? meAvatarURL : peerAvatarURL,
-                                    letter: own ? meLetter : peerLetter
+                                    letter: own ? meLetter : peerLetter,
+                                    cluster: cluster
                                 )
                                 .id(msg.id)
                                 .padding(.horizontal, 10)
+                                .padding(.top, cluster.topPadding)
                             }
                         }
                         .padding(.vertical, 10)
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .onChange(of: dmService.historyEpoch) { _, _ in
-                        // Delay so LazyVStack has registered new message ids
                         DispatchQueue.main.async {
                             scrollToBottom(proxy: proxy)
                         }
@@ -149,7 +160,6 @@ struct DMChatView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             dmService.chatDidOpen(friendId: friend.id)
-            // Instant unread clear when entering chat
             Task { await dmService.refreshUnread() }
         }
         .onDisappear {
@@ -166,9 +176,8 @@ struct DMChatView: View {
                 friendAvatarURL: friend.avatarURL,
                 quiet: false
             )
-            // Faster history refresh while chat is open (new messages)
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2s
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
                 guard !Task.isCancelled else { break }
                 await dmService.loadHistory(
                     friendId: friend.id,
@@ -265,6 +274,8 @@ private struct DMCircleAvatar: View {
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
+                    case .empty:
+                        letterView
                     default:
                         letterView
                     }
@@ -275,6 +286,8 @@ private struct DMCircleAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+        // Stable identity so AsyncImage doesn't thrash
+        .id(url?.absoluteString ?? "letter-\(letter)")
     }
 
     private var letterView: some View {
@@ -287,44 +300,60 @@ private struct DMCircleAvatar: View {
     }
 }
 
-// MARK: - DM Bubble (Telegram: own right / peer left)
+// MARK: - DM Bubble (Telegram clusters + sender bubble style)
 
 private struct DMBubble: View {
     let message: DirectMessage
     let isOwn: Bool
     var avatarURL: URL?
     var letter: String = "?"
+    var cluster: ChatClusterLayout
+
+    private let avatarSize: CGFloat = 28
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isOwn {
                 Spacer(minLength: 48)
             } else {
-                DMCircleAvatar(url: avatarURL, letter: letter, size: 28)
+                avatarSlot
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 3) {
                 PlinkMessageBubble(
                     text: message.text,
                     isOwn: isOwn,
-                    styleID: isOwn ? PlinkBubbleStylePrefs.currentID : nil,
-                    fontSize: 16
+                    styleID: message.bubbleStyle,
+                    fontSize: 16,
+                    isLastInGroup: cluster.isLastInGroup
                 )
 
-                Text(message.timeString)
-                    .font(.system(size: 11))
-                    .foregroundColor(Cinema2026.tertiary)
-                    .padding(.horizontal, 4)
+                if cluster.isLastInGroup {
+                    Text(message.timeString)
+                        .font(.system(size: 11))
+                        .foregroundColor(Cinema2026.tertiary)
+                        .padding(.horizontal, 4)
+                }
             }
             .frame(maxWidth: 280, alignment: isOwn ? .trailing : .leading)
 
             if isOwn {
-                DMCircleAvatar(url: avatarURL, letter: letter, size: 28)
+                avatarSlot
             } else {
                 Spacer(minLength: 48)
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
+    }
+
+    @ViewBuilder
+    private var avatarSlot: some View {
+        if cluster.showAvatar {
+            DMCircleAvatar(url: avatarURL, letter: letter, size: avatarSize)
+        } else {
+            // Keep column width so bubble doesn't jump left/right
+            Color.clear.frame(width: avatarSize, height: avatarSize)
+        }
     }
 }
 
@@ -342,19 +371,5 @@ private struct DMDayDivider: View {
             .clipShape(Capsule())
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
-    }
-}
-
-// MARK: - Bubble Shape
-private struct ChatBubbleShapeDM: Shape {
-    let isOwn: Bool
-
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(
-            roundedRect: rect,
-            byRoundingCorners: [.topLeft, .topRight, isOwn ? .bottomLeft : .bottomRight],
-            cornerRadii: CGSize(width: 16, height: 16)
-        )
-        return Path(path.cgPath)
     }
 }

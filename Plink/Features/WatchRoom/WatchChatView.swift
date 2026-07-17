@@ -13,14 +13,26 @@ struct WatchChatView: View {
     var body: some View {
         ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(model.chatMessages.filter { !UserBlockManager.shared.isBlocked($0.senderId) }) { message in
+                let visible = model.chatMessages.filter { !UserBlockManager.shared.isBlocked($0.senderId) }
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, message in
+                        let isOwn = message.senderId == model.currentUserId
+                        let prevId = index > 0 ? visible[index - 1].senderId : nil
+                        let nextId = index + 1 < visible.count ? visible[index + 1].senderId : nil
+                        let cluster = ChatClusterLayout.compute(
+                            senderId: message.senderId,
+                            previousSenderId: prevId,
+                            nextSenderId: nextId,
+                            isOwn: isOwn
+                        )
                         WatchChatBubbleInline(
                             message: message,
-                            isOwn: message.senderId == model.currentUserId,
+                            isOwn: isOwn,
+                            cluster: cluster,
                             onRetry: { model.retryChatMessage(message) }
                         )
                         .id(message.id)
+                        .padding(.top, cluster.topPadding)
                         .contextMenu {
                             if message.senderId != model.currentUserId {
                                 Button {
@@ -246,15 +258,21 @@ private struct ChatReportSheet: View {
 private struct WatchChatBubbleInline: View {
     let message: ChatMessageInfo
     let isOwn: Bool
+    var cluster: ChatClusterLayout = ChatClusterLayout.compute(
+        senderId: "", previousSenderId: nil, nextSenderId: nil, isOwn: false
+    )
     let onRetry: () -> Void
+
+    private let avatarSize: CGFloat = 28
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isOwn { Spacer(minLength: 56) }
-            if !isOwn { ChatAvatarInline(message: message) }
+            if !isOwn { avatarSlot }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 3) {
-                if !isOwn {
+                // Name only on first message of a consecutive group (Telegram)
+                if cluster.showName {
                     HStack(spacing: 4) {
                         if message.isAdmin {
                             Image(systemName: "shield.fill")
@@ -272,11 +290,13 @@ private struct WatchChatBubbleInline: View {
                     }
                 }
 
+                // Always use style from message so all clients see sender's bubble
                 PlinkMessageBubble(
                     text: message.text,
                     isOwn: isOwn,
-                    styleID: isOwn ? PlinkBubbleStylePrefs.currentID : nil,
-                    fontSize: 15
+                    styleID: message.bubbleStyle,
+                    fontSize: 15,
+                    isLastInGroup: cluster.isLastInGroup
                 )
 
                 if message.isPending {
@@ -295,13 +315,21 @@ private struct WatchChatBubbleInline: View {
                 }
             }
 
-            if isOwn { ChatAvatarInline(message: message) }
+            if isOwn { avatarSlot }
             if !isOwn { Spacer(minLength: 56) }
         }
-        // No aggressive transition — was causing chat list to flash/vanish on send
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isOwn ? "Вы" : message.senderName): \(message.text)")
         .accessibilityHint(isOwn ? "" : "Удерживайте для жалобы или блокировки")
+    }
+
+    @ViewBuilder
+    private var avatarSlot: some View {
+        if cluster.showAvatar {
+            ChatAvatarInline(message: message)
+        } else {
+            Color.clear.frame(width: avatarSize, height: avatarSize)
+        }
     }
 
     private var roleColor: Color {
@@ -330,6 +358,8 @@ private struct ChatAvatarInline: View {
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
+                    case .empty:
+                        letterCircle
                     default:
                         letterCircle
                     }
@@ -340,6 +370,7 @@ private struct ChatAvatarInline: View {
         }
         .frame(width: 28, height: 28)
         .clipShape(Circle())
+        .id("room-av-\(message.senderId)-\(avatarURL?.absoluteString ?? letter)")
         .accessibilityHidden(true)
     }
 

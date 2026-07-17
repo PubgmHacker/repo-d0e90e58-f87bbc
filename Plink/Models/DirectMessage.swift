@@ -11,6 +11,8 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
     let timestamp: Date
     var isRead: Bool
     var senderAvatarURL: String?
+    /// Sender's bubble style (synced via wire format). Renders for all viewers.
+    var bubbleStyle: String?
 
     var timeString: String {
         timestamp.formatted(.dateTime.hour().minute())
@@ -19,6 +21,14 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
     /// Own vs other — prefer lightweight id key (always set on login).
     /// Uses only UserDefaults so this stays nonisolated / Sendable-safe.
     var isOwnMessage: Bool {
+        isFromCurrentUser(currentUserId: nil)
+    }
+
+    /// Prefer explicit currentUserId from UI (more reliable than UD race).
+    func isFromCurrentUser(currentUserId: String?) -> Bool {
+        if let currentUserId, !currentUserId.isEmpty {
+            return senderID == currentUserId
+        }
         if let id = UserDefaults.standard.string(forKey: "plink_current_user_id"), !id.isEmpty {
             return senderID == id
         }

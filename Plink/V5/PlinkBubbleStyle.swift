@@ -289,23 +289,100 @@ extension Notification.Name {
     static let plinkBubbleStyleChanged = Notification.Name("plink.bubbleStyleChanged")
 }
 
+// MARK: - Wire format (style rides with message text — all clients see it)
+
+/// Embeds the sender's bubble style into message text so every device can
+/// render it without relying on local preferences.
+/// Format: `[[bs:STYLE_ID]]actual message text`
+enum PlinkBubbleWire {
+    private static let prefix = "[[bs:"
+    private static let suffix = "]]"
+
+    /// Encode style for transport. Free-tier safe styles always allowed;
+    /// premium IDs still travel so free recipients can *see* them.
+    static func encode(text: String, styleID: String?) -> String {
+        let raw = (styleID ?? PlinkBubbleStylePrefs.currentID).trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = BubbleStyleRegistry.migrateLegacyID(raw.isEmpty ? nil : raw)
+        // Strip accidental nested markers from body
+        let body = decode(text).text
+        return "\(prefix)\(id)\(suffix)\(body)"
+    }
+
+    static func decode(_ raw: String) -> (styleID: String?, text: String) {
+        guard raw.hasPrefix(prefix),
+              let end = raw.range(of: suffix) else {
+            return (nil, raw)
+        }
+        let idStart = raw.index(raw.startIndex, offsetBy: prefix.count)
+        let id = String(raw[idStart..<end.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = String(raw[end.upperBound...])
+        guard !id.isEmpty, id.count <= 64, id.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
+            return (nil, raw)
+        }
+        return (BubbleStyleRegistry.migrateLegacyID(id), body)
+    }
+}
+
+// MARK: - Telegram-style message clustering
+
+/// Avatar + name only on group edges (like Telegram).
+struct ChatClusterLayout: Equatable {
+    /// Show avatar on this row (last message of consecutive same-sender group).
+    let showAvatar: Bool
+    /// Show sender name (first message of group, incoming only).
+    let showName: Bool
+    /// First bubble in a same-sender run.
+    let isFirstInGroup: Bool
+    /// Last bubble in a same-sender run.
+    let isLastInGroup: Bool
+    /// Spacing *before* this row.
+    let topPadding: CGFloat
+
+    static func compute(
+        senderId: String,
+        previousSenderId: String?,
+        nextSenderId: String?,
+        isOwn: Bool
+    ) -> ChatClusterLayout {
+        let samePrev = previousSenderId == senderId
+        let sameNext = nextSenderId == senderId
+        return ChatClusterLayout(
+            showAvatar: !sameNext,
+            showName: !isOwn && !samePrev,
+            isFirstInGroup: !samePrev,
+            isLastInGroup: !sameNext,
+            topPadding: samePrev ? 2 : 10
+        )
+    }
+}
+
 // MARK: - Shared bubble for DM + room chat
 
-/// Renders text in the selected bubble style (Оформление).
-/// Crash-safe: never force-indexes color arrays; own messages use preference.
+/// Renders text with the **sender's** bubble style (rides with the message).
+/// All clients must render premium styles for free viewers.
 struct PlinkMessageBubble: View {
     let text: String
     let isOwn: Bool
+    /// Sender style ID from the message (not local prefs for peers).
     var styleID: String? = nil
     var fontSize: CGFloat = 15
+    /// Telegram tail: only last in group gets the "pointy" corner.
+    var isLastInGroup: Bool = true
 
-    private var styleKey: String {
-        guard isOwn else { return "peer" }
-        return BubbleStyleRegistry.migrateLegacyID(styleID ?? PlinkBubbleStylePrefs.currentID)
+    /// Resolved style — from message when present; own messages fall back to prefs.
+    private var styleKey: String? {
+        if let styleID, !styleID.isEmpty {
+            return BubbleStyleRegistry.migrateLegacyID(styleID)
+        }
+        if isOwn {
+            return BubbleStyleRegistry.migrateLegacyID(PlinkBubbleStylePrefs.currentID)
+        }
+        return nil
     }
 
     private var fillColors: [Color] {
-        guard isOwn else { return [Color.white.opacity(0.10)] }
+        guard let styleKey else { return [Color.white.opacity(0.10)] }
         let desc = BubbleStyleRegistry.safeDescriptor(id: styleKey)
         let hexes = desc.previewColors
         let parsed: [Color] = hexes.compactMap { hex -> Color? in
@@ -315,7 +392,6 @@ struct PlinkMessageBubble: View {
         }
         if parsed.count >= 2 { return parsed }
         if let one = parsed.first { return [one, one.opacity(0.85)] }
-        // Solid accent fallback — never crash
         return [Cinema2026.accent.opacity(0.92)]
     }
 
@@ -326,7 +402,7 @@ struct PlinkMessageBubble: View {
             .background(bubbleFill)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(isOwn ? 0.14 : 0.06), lineWidth: 0.8)
+                    .strokeBorder(Color.white.opacity(isOwn || styleKey != nil ? 0.14 : 0.06), lineWidth: 0.8)
             )
             .clipShape(V5BubbleShape(isOutgoing: isOwn))
             .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
@@ -334,18 +410,20 @@ struct PlinkMessageBubble: View {
 
     @ViewBuilder
     private var bubbleFill: some View {
-        if isOwn {
+        if let styleKey {
             switch styleKey {
             case "bubble-quiet":
-                Color.white.opacity(0.14)
+                Color.white.opacity(isOwn ? 0.14 : 0.12)
             default:
                 LinearGradient(
                     colors: fillColors,
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+                .opacity(isOwn ? 1.0 : 0.92)
             }
         } else {
+            // Incoming without style metadata — neutral gray
             Color.white.opacity(0.10)
         }
     }

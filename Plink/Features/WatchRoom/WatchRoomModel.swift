@@ -410,15 +410,19 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     public func sendChat(text: String) {
         let clientMessageId = UUID().uuidString
+        let styleID = PlinkBubbleStylePrefs.currentID
+        let displayText = PlinkBubbleWire.decode(text).text
+        let wireText = PlinkBubbleWire.encode(text: displayText, styleID: styleID)
         let optimistic = ChatMessageInfo(
             messageId: nil,
             clientMessageId: clientMessageId,
             senderId: currentUserId,
             senderName: currentUsername,
-            text: text,
+            text: displayText,
             createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
             isPending: true,
-            isFailed: false
+            isFailed: false,
+            bubbleStyle: styleID
         )
         chatMessages.append(optimistic)
         clientMessageIds.insert(clientMessageId)
@@ -428,7 +432,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         realtimeClient.send(.chatSend(.init(
             roomId: _roomId,
             clientMessageId: clientMessageId,
-            text: text
+            text: wireText
         )))
         AnalyticsService.shared.messageSent()
         // P1-54: schedule 5s timeout — mark as failed if no server echo
@@ -458,6 +462,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     public func retryChatMessage(_ message: ChatMessageInfo) {
         guard message.isFailed, let cmid = message.clientMessageId else { return }
+        let style = message.bubbleStyle ?? PlinkBubbleStylePrefs.currentID
+        let wire = PlinkBubbleWire.encode(text: message.text, styleID: style)
         // Find and update the message back to pending
         if let idx = chatMessages.firstIndex(where: { $0.clientMessageId == cmid }) {
             chatMessages[idx] = ChatMessageInfo(
@@ -468,13 +474,14 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 text: message.text,
                 createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
                 isPending: true,
-                isFailed: false
+                isFailed: false,
+                bubbleStyle: style
             )
         }
         realtimeClient.send(.chatSend(.init(
             roomId: _roomId,
             clientMessageId: cmid,
-            text: message.text
+            text: wire
         )))
         scheduleChatSendTimeout(clientMessageId: cmid)
     }
@@ -497,7 +504,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     text: msg.text,
                     createdAtMs: msg.createdAtMs,
                     isPending: false,
-                    isFailed: true
+                    isFailed: true,
+                    bubbleStyle: msg.bubbleStyle
                 )
             }
         }
@@ -602,6 +610,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     // MARK: - Private handlers
 
     private func handleChatBroadcast(_ chat: RealtimeServerMessage.ChatBroadcast) {
+        let decoded = PlinkBubbleWire.decode(chat.text)
         if let cmid = chat.clientMessageId, clientMessageIds.contains(cmid) {
             if let idx = chatMessages.firstIndex(where: { $0.clientMessageId == cmid }) {
                 chatMessages[idx] = ChatMessageInfo(
@@ -609,9 +618,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     clientMessageId: cmid,
                     senderId: chat.senderId,
                     senderName: chat.senderName,
-                    text: chat.text,
+                    text: decoded.text,
                     createdAtMs: chat.createdAtMs,
-                    isPending: false
+                    isPending: false,
+                    bubbleStyle: decoded.styleID ?? chatMessages[idx].bubbleStyle
                 )
             }
             // P0-35: update cursor for confirmed own messages too
@@ -623,9 +633,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             clientMessageId: chat.clientMessageId,
             senderId: chat.senderId,
             senderName: chat.senderName,
-            text: chat.text,
+            text: decoded.text,
             createdAtMs: chat.createdAtMs,
-            isPending: false
+            isPending: false,
+            bubbleStyle: decoded.styleID
         )
         chatMessages.append(msg)
         if let cmid = chat.clientMessageId { clientMessageIds.insert(cmid) }
@@ -736,14 +747,16 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     }
                     knownMessageIds.insert(msg.messageId)
 
+                    let decoded = PlinkBubbleWire.decode(msg.text)
                     let info = ChatMessageInfo(
                         messageId: msg.messageId,
                         clientMessageId: msg.clientMessageId,
                         senderId: msg.senderId,
                         senderName: msg.senderName,
-                        text: msg.text,
+                        text: decoded.text,
                         createdAtMs: msg.createdAtMs,
-                        isPending: false
+                        isPending: false,
+                        bubbleStyle: decoded.styleID
                     )
                     chatMessages.append(info)
                     if let cmid = msg.clientMessageId { clientMessageIds.insert(cmid) }
@@ -952,12 +965,14 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public var isFailed: Bool  // P1-54: failed messages can be retried
     public var isAdmin: Bool = false
     public var isPremium: Bool = false
+    /// Sender bubble style (synced via wire format in text).
+    public var bubbleStyle: String? = nil
     public var id: String { messageId ?? clientMessageId ?? UUID().uuidString }
 
     // P1-54: convenience init without isFailed
     public init(messageId: String?, clientMessageId: String?, senderId: String,
                 senderName: String, text: String, createdAtMs: Int64,
-                isPending: Bool, isFailed: Bool = false) {
+                isPending: Bool, isFailed: Bool = false, bubbleStyle: String? = nil) {
         self.messageId = messageId
         self.clientMessageId = clientMessageId
         self.senderId = senderId
@@ -966,6 +981,7 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
         self.createdAtMs = createdAtMs
         self.isPending = isPending
         self.isFailed = isFailed
+        self.bubbleStyle = bubbleStyle
     }
 }
 

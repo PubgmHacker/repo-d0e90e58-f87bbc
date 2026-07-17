@@ -1,87 +1,158 @@
 import SwiftUI
 
-// MARK: - Telegram-style DM chat wallpapers
+// MARK: - Telegram-style bright wallpapers with 3D sticker patterns
 
 enum PlinkChatWallpaper: String, CaseIterable, Identifiable, Sendable {
-    case defaultDark
-    case telegramBlue
-    case night
-    case purpleMist
-    case forest
+    case cosmos
+    case candy
+    case ocean
+    case jungle
     case sunset
-    case graphite
-    case aurora
+    case neon
+    case ice
+    case party
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .defaultDark: return "Тёмный"
-        case .telegramBlue: return "Telegram"
-        case .night: return "Ночь"
-        case .purpleMist: return "Фиолет"
-        case .forest: return "Лес"
+        case .cosmos: return "Космос"
+        case .candy: return "Конфеты"
+        case .ocean: return "Океан"
+        case .jungle: return "Джунгли"
         case .sunset: return "Закат"
-        case .graphite: return "Графит"
-        case .aurora: return "Аврора"
+        case .neon: return "Неон"
+        case .ice: return "Лёд"
+        case .party: return "Вечеринка"
         }
     }
 
+    /// Bright base gradient (Telegram wallpapers are vivid, not near-black).
     var colors: [Color] {
         switch self {
-        case .defaultDark:
-            return [Color(red: 0.06, green: 0.08, blue: 0.12),
-                    Color(red: 0.04, green: 0.05, blue: 0.08),
-                    Color(red: 0.07, green: 0.05, blue: 0.12)]
-        case .telegramBlue:
-            return [Color(red: 0.08, green: 0.14, blue: 0.22),
-                    Color(red: 0.10, green: 0.18, blue: 0.28),
-                    Color(red: 0.06, green: 0.12, blue: 0.20)]
-        case .night:
-            return [Color(red: 0.04, green: 0.05, blue: 0.10),
-                    Color(red: 0.02, green: 0.03, blue: 0.08)]
-        case .purpleMist:
-            return [Color(red: 0.12, green: 0.06, blue: 0.18),
-                    Color(red: 0.08, green: 0.04, blue: 0.14),
-                    Color(red: 0.15, green: 0.08, blue: 0.22)]
-        case .forest:
-            return [Color(red: 0.05, green: 0.12, blue: 0.09),
-                    Color(red: 0.03, green: 0.08, blue: 0.06)]
+        case .cosmos:
+            return [Color(hex: 0x1A0B3C), Color(hex: 0x2D1B69), Color(hex: 0x0F3460)]
+        case .candy:
+            return [Color(hex: 0xFF6B9D), Color(hex: 0xC44DFF), Color(hex: 0x6B8CFF)]
+        case .ocean:
+            return [Color(hex: 0x0077B6), Color(hex: 0x00B4D8), Color(hex: 0x48CAE4)]
+        case .jungle:
+            return [Color(hex: 0x1B4332), Color(hex: 0x2D6A4F), Color(hex: 0x40916C)]
         case .sunset:
-            return [Color(red: 0.18, green: 0.08, blue: 0.10),
-                    Color(red: 0.12, green: 0.05, blue: 0.14),
-                    Color(red: 0.08, green: 0.05, blue: 0.12)]
-        case .graphite:
-            return [Color(red: 0.12, green: 0.12, blue: 0.13),
-                    Color(red: 0.08, green: 0.08, blue: 0.09)]
-        case .aurora:
-            return [Color(red: 0.04, green: 0.12, blue: 0.16),
-                    Color(red: 0.08, green: 0.06, blue: 0.18),
-                    Color(red: 0.04, green: 0.10, blue: 0.12)]
+            return [Color(hex: 0xFF6B35), Color(hex: 0xF72585), Color(hex: 0x7209B7)]
+        case .neon:
+            return [Color(hex: 0x0D0221), Color(hex: 0x240046), Color(hex: 0x5A189A)]
+        case .ice:
+            return [Color(hex: 0xCAF0F8), Color(hex: 0x90E0EF), Color(hex: 0x48CAE4)]
+        case .party:
+            return [Color(hex: 0xFF006E), Color(hex: 0x8338EC), Color(hex: 0x3A86FF)]
         }
+    }
+
+    /// Floating “3D” sticker emojis (Telegram-like decorative models on wallpaper).
+    var stickers: [String] {
+        switch self {
+        case .cosmos: return ["🪐", "⭐", "🚀", "👽", "🌙", "✨", "🛸", "💫"]
+        case .candy: return ["🍬", "🍭", "🧁", "🍩", "🍓", "🎀", "💖", "🦄"]
+        case .ocean: return ["🐠", "🐙", "🌊", "🐚", "🦈", "🪸", "🐬", "⚓"]
+        case .jungle: return ["🌴", "🦜", "🦁", "🐸", "🍃", "🦋", "🌺", "🐵"]
+        case .sunset: return ["🌅", "🦩", "☀️", "🍑", "🧡", "🏝️", "🔥", "✨"]
+        case .neon: return ["💜", "🔮", "⚡", "👾", "🎮", "💿", "💜", "✨"]
+        case .ice: return ["❄️", "🐧", "🏔️", "💎", "🧊", "🦭", "💙", "⭐"]
+        case .party: return ["🎉", "🎈", "🎊", "🥳", "🍾", "🪩", "🎵", "✨"]
+        }
+    }
+
+    var isLight: Bool {
+        self == .ice || self == .candy || self == .ocean
     }
 
     @ViewBuilder
     var background: some View {
-        ZStack {
-            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-            // Subtle pattern dots like Telegram wallpapers
-            Canvas { ctx, size in
-                let step: CGFloat = 28
-                var y: CGFloat = 12
-                while y < size.height {
-                    var x: CGFloat = 12
-                    while x < size.width {
-                        let r = CGRect(x: x, y: y, width: 2.2, height: 2.2)
-                        ctx.fill(Path(ellipseIn: r), with: .color(.white.opacity(0.04)))
-                        x += step
-                    }
-                    y += step
-                }
+        GeometryReader { geo in
+            ZStack {
+                // Bright multi-stop gradient
+                LinearGradient(
+                    colors: colors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                // Soft light orbs for depth (3D feel)
+                Circle()
+                    .fill(Color.white.opacity(isLight ? 0.35 : 0.12))
+                    .frame(width: geo.size.width * 0.55)
+                    .blur(radius: 50)
+                    .offset(x: -geo.size.width * 0.2, y: -geo.size.height * 0.15)
+
+                Circle()
+                    .fill(colors.last?.opacity(0.45) ?? Color.purple.opacity(0.3))
+                    .frame(width: geo.size.width * 0.7)
+                    .blur(radius: 60)
+                    .offset(x: geo.size.width * 0.25, y: geo.size.height * 0.35)
+
+                // Pattern of 3D stickers (pseudo-random grid)
+                TelegramStickerField(stickers: stickers, size: geo.size, isLight: isLight)
             }
-            .allowsHitTesting(false)
         }
         .ignoresSafeArea()
+    }
+}
+
+/// Scattered sticker “models” like Telegram animated wallpaper patterns.
+private struct TelegramStickerField: View {
+    let stickers: [String]
+    let size: CGSize
+    let isLight: Bool
+
+    var body: some View {
+        let cols = 5
+        let rows = 9
+        let cellW = size.width / CGFloat(cols)
+        let cellH = size.height / CGFloat(rows)
+
+        Canvas { ctx, _ in
+            // Soft bubble circles behind stickers
+            for r in 0..<rows {
+                for c in 0..<cols {
+                    let seed = r * 17 + c * 31
+                    let ox = CGFloat((seed * 13) % 17) - 8
+                    let oy = CGFloat((seed * 7) % 15) - 7
+                    let cx = CGFloat(c) * cellW + cellW * 0.5 + ox
+                    let cy = CGFloat(r) * cellH + cellH * 0.5 + oy
+                    let rad = 10 + CGFloat(seed % 10)
+                    let circle = Path(ellipseIn: CGRect(x: cx - rad, y: cy - rad, width: rad * 2, height: rad * 2))
+                    ctx.fill(circle, with: .color(.white.opacity(isLight ? 0.18 : 0.07)))
+                }
+            }
+        }
+        .overlay {
+            // Emoji stickers as “3D models”
+            ForEach(0..<(cols * rows), id: \.self) { i in
+                let r = i / cols
+                let c = i % cols
+                let seed = r * 17 + c * 31
+                // Skip some cells for airiness
+                if seed % 3 != 0 {
+                    let emoji = stickers[seed % stickers.count]
+                    let ox = CGFloat((seed * 13) % 17) - 8
+                    let oy = CGFloat((seed * 7) % 15) - 7
+                    let fontSize = CGFloat(22 + (seed % 14))
+                    let rot = Double((seed * 11) % 40) - 20
+                    Text(emoji)
+                        .font(.system(size: fontSize))
+                        .shadow(color: .black.opacity(isLight ? 0.12 : 0.35), radius: 3, y: 2)
+                        .rotationEffect(.degrees(rot))
+                        .scaleEffect(0.85 + CGFloat(seed % 5) * 0.06)
+                        .position(
+                            x: CGFloat(c) * cellW + cellW * 0.5 + ox,
+                            y: CGFloat(r) * cellH + cellH * 0.5 + oy
+                        )
+                        .opacity(0.88)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -89,8 +160,14 @@ enum PlinkChatWallpaperPrefs {
     static let storageKey = "plink.chatWallpaperID"
 
     static var current: PlinkChatWallpaper {
-        let raw = UserDefaults.standard.string(forKey: storageKey) ?? PlinkChatWallpaper.defaultDark.rawValue
-        return PlinkChatWallpaper(rawValue: raw) ?? .defaultDark
+        let raw = UserDefaults.standard.string(forKey: storageKey) ?? PlinkChatWallpaper.cosmos.rawValue
+        // Migrate old dim defaults
+        if raw == "defaultDark" || raw == "telegramBlue" || raw == "night"
+            || raw == "purpleMist" || raw == "graphite" || raw == "aurora"
+            || raw == "forest" {
+            return .cosmos
+        }
+        return PlinkChatWallpaper(rawValue: raw) ?? .cosmos
     }
 
     static func set(_ wallpaper: PlinkChatWallpaper) {

@@ -316,30 +316,37 @@ struct V4AppearanceView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack {
                     LinearGradient(colors: wall.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-                    // Mini bubble preview
+                    // Mini 3D stickers preview
+                    HStack(spacing: 4) {
+                        ForEach(Array(wall.stickers.prefix(4).enumerated()), id: \.offset) { _, e in
+                            Text(e).font(.system(size: 14))
+                        }
+                    }
+                    .offset(y: -6)
                     HStack {
-                        Spacer(minLength: 20)
+                        Spacer(minLength: 18)
                         Text("Hi")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(Cinema2026.accent.opacity(0.85), in: Capsule())
+                            .background(Color.black.opacity(0.35), in: Capsule())
                     }
                     .padding(8)
+                    .offset(y: 10)
                 }
-                .frame(width: 100, height: 72)
+                .frame(width: 108, height: 78)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(selected ? V4.accent : Color.white.opacity(0.12), lineWidth: selected ? 2 : 0.8)
+                        .stroke(selected ? V4.accent : Color.white.opacity(0.18), lineWidth: selected ? 2.2 : 0.8)
                 )
                 Text(wall.title)
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(V4.ink)
                     .lineLimit(1)
             }
-            .frame(width: 100)
+            .frame(width: 108)
         }
         .buttonStyle(.plain)
     }

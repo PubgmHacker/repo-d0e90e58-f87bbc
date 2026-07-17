@@ -177,6 +177,15 @@ final class DMChatService: ObservableObject {
                 let chips = (dto.reactions ?? []).map {
                     DMReactionChip(emoji: $0.emoji, count: $0.count, includesMe: $0.includesMe)
                 }
+                // Telegram read receipt:
+                //  - outbound (I sent): isRead=true means peer opened the chat (✓✓)
+                //  - inbound: isRead is for our unread badge; default true once history loaded
+                let readFlag: Bool
+                if isOwn {
+                    readFlag = dto.isRead ?? false
+                } else {
+                    readFlag = dto.isRead ?? true
+                }
                 return DirectMessage(
                     id: dto.id,
                     conversationID: convID,
@@ -185,7 +194,7 @@ final class DMChatService: ObservableObject {
                     senderName: isOwn ? "You" : friendName,
                     text: decoded.text,
                     timestamp: dto.createdAt,
-                    isRead: dto.isRead ?? (dto.receiverID == me),
+                    isRead: readFlag,
                     senderAvatarURL: isOwn ? nil : friendAvatarURL,
                     bubbleStyle: decoded.styleID,
                     reactions: chips
@@ -208,11 +217,16 @@ final class DMChatService: ObservableObject {
                     }
                     merged.sort { $0.timestamp < $1.timestamp }
                 }
-                // Avoid thrashing UI when nothing meaningful changed
+                // Avoid thrashing UI when nothing meaningful changed —
+                // MUST include isRead so Telegram ✓ / ✓✓ updates when peer opens chat.
                 let prev = conversations[convID] ?? []
                 let changed = prev.count != merged.count
                     || zip(prev, merged).contains {
-                        $0.id != $1.id || $0.text != $1.text || $0.bubbleStyle != $1.bubbleStyle || $0.reactions != $1.reactions
+                        $0.id != $1.id
+                            || $0.text != $1.text
+                            || $0.bubbleStyle != $1.bubbleStyle
+                            || $0.reactions != $1.reactions
+                            || $0.isRead != $1.isRead
                     }
                 if changed {
                     conversations[convID] = merged

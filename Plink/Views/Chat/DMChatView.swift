@@ -504,25 +504,13 @@ private struct DMBubble: View {
                 }
 
                 if cluster.isLastInGroup {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Text(message.timeString)
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.35))
+                            .foregroundStyle(Color.white.opacity(0.45))
                         if isOwn {
-                            // Telegram: ✓ sent · ✓✓ read
-                            Image(systemName: message.isRead ? "checkmark.circle.fill" : "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(
-                                    message.isRead
-                                    ? Cinema2026.accent.opacity(0.95)
-                                    : Color.white.opacity(0.4)
-                                )
-                            if message.isRead {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(Cinema2026.accent.opacity(0.95))
-                                    .offset(x: -6)
-                            }
+                            // Telegram ticks: one gray = sent, two blue = read
+                            TelegramReadTicks(isRead: message.isRead)
                         }
                     }
                     .padding(.horizontal, 4)
@@ -589,6 +577,32 @@ private struct DMBubble: View {
     }
 }
 
+// MARK: - Telegram read ticks (✓ / ✓✓)
+
+/// Exact Telegram semantics:
+///  - not read → single gray check
+///  - read by peer → two blue checks (slightly overlapping)
+private struct TelegramReadTicks: View {
+    let isRead: Bool
+
+    private var tickColor: Color {
+        isRead ? Color(red: 0.34, green: 0.78, blue: 1.0) : Color.white.opacity(0.45)
+    }
+
+    var body: some View {
+        HStack(spacing: isRead ? -4.5 : 0) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+            if isRead {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+        }
+        .foregroundStyle(tickColor)
+        .accessibilityLabel(isRead ? "Прочитано" : "Отправлено")
+    }
+}
+
 // MARK: - Day Divider (glass capsule)
 
 private struct DMDayDivider: View {
@@ -597,11 +611,11 @@ private struct DMDayDivider: View {
     var body: some View {
         Text(label)
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(0.55))
+            .foregroundStyle(Color.white.opacity(0.85))
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.6))
+            .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.6))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
     }

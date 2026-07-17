@@ -87,7 +87,8 @@ struct V4FriendsViewLive: View {
     }
 
     private var onlineFriends: [Friend] {
-        peopleFriends.filter(\.isOnline)
+        // Deleted accounts never appear as online (Telegram).
+        peopleFriends.filter { $0.isOnline && !$0.deleted }
     }
 
     /// Telegram order: pinned (stable) → unpinned by last message time. Blocked hidden.
@@ -706,18 +707,14 @@ struct V4FriendsViewLive: View {
         } label: {
             VStack(spacing: 8) {
                 ZStack(alignment: .bottomTrailing) {
-                    PlinkStableAvatar(
-                        url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
-                        letter: friend.initials,
-                        size: 64,
-                        userId: friend.id
-                    )
-                    .overlay(Circle().stroke(Color(red: 0.3, green: 0.9, blue: 0.55), lineWidth: 2.5))
-                    Circle()
-                        .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
-                        .frame(width: 14, height: 14)
-                        .overlay(Circle().stroke(V4.surface.opacity(0.95), lineWidth: 2))
-                        .offset(x: 2, y: 2)
+                    friendAvatar(friend, size: 64)
+                    if !friend.deleted {
+                        Circle()
+                            .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
+                            .frame(width: 14, height: 14)
+                            .overlay(Circle().stroke(V4.surface.opacity(0.95), lineWidth: 2))
+                            .offset(x: 2, y: 2)
+                    }
                 }
                 Text(friend.displayTitle)
                     .font(.system(size: 12, weight: .semibold))
@@ -728,15 +725,31 @@ struct V4FriendsViewLive: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button { dmFriend = friend } label: {
-                Label("Написать", systemImage: "message.fill")
+            if !friend.deleted {
+                Button { dmFriend = friend } label: {
+                    Label("Написать", systemImage: "message.fill")
+                }
+                Button {
+                    watchWithFriend = friend
+                    showCreateRoom = true
+                } label: {
+                    Label("Смотреть вместе", systemImage: "film.fill")
+                }
             }
-            Button {
-                watchWithFriend = friend
-                showCreateRoom = true
-            } label: {
-                Label("Смотреть вместе", systemImage: "film.fill")
-            }
+        }
+    }
+
+    @ViewBuilder
+    private func friendAvatar(_ friend: Friend, size: CGFloat) -> some View {
+        if friend.deleted {
+            PlinkDeletedAvatar(size: size)
+        } else {
+            PlinkStableAvatar(
+                url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
+                letter: friend.initials,
+                size: size,
+                userId: friend.id
+            )
         }
     }
 
@@ -748,13 +761,8 @@ struct V4FriendsViewLive: View {
             } label: {
                 VStack(spacing: 8) {
                     ZStack(alignment: .bottomTrailing) {
-                        PlinkStableAvatar(
-                            url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
-                            letter: friend.initials,
-                            size: 56,
-                            userId: friend.id
-                        )
-                        if friend.isOnline {
+                        friendAvatar(friend, size: 56)
+                        if friend.isOnline && !friend.deleted {
                             Circle()
                                 .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
                                 .frame(width: 12, height: 12)
@@ -769,7 +777,7 @@ struct V4FriendsViewLive: View {
                     Text(friend.presenceText)
                         .font(.system(size: 11))
                         .foregroundStyle(
-                            friend.isOnline
+                            friend.isOnline && !friend.deleted
                             ? Color(red: 0.3, green: 0.9, blue: 0.55)
                             : V4.muted
                         )
@@ -780,35 +788,44 @@ struct V4FriendsViewLive: View {
             }
             .buttonStyle(.plain)
 
-            HStack(spacing: 8) {
-                Button {
-                    HapticManager.selection()
-                    dmFriend = friend
-                } label: {
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(V4.ink)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(V4.raised.opacity(0.75), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Чат с \(friend.displayTitle)")
+            if friend.deleted {
+                Text("Нельзя написать")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(V4.muted)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 34)
+                    .background(V4.raised.opacity(0.4), in: Capsule())
+            } else {
+                HStack(spacing: 8) {
+                    Button {
+                        HapticManager.selection()
+                        dmFriend = friend
+                    } label: {
+                        Image(systemName: "message.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(V4.ink)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(V4.raised.opacity(0.75), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Чат с \(friend.displayTitle)")
 
-                Button {
-                    HapticManager.impact(.light)
-                    watchWithFriend = friend
-                    showCreateRoom = true
-                } label: {
-                    Image(systemName: "film.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(V4.accentInk)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(V4.accent, in: Capsule())
+                    Button {
+                        HapticManager.impact(.light)
+                        watchWithFriend = friend
+                        showCreateRoom = true
+                    } label: {
+                        Image(systemName: "film.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(V4.accentInk)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(V4.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Смотреть вместе с \(friend.displayTitle)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Смотреть вместе с \(friend.displayTitle)")
             }
         }
         .padding(12)
@@ -821,14 +838,16 @@ struct V4FriendsViewLive: View {
             Button { profileFriend = friend } label: {
                 Label("Профиль", systemImage: "person.crop.circle")
             }
-            Button { dmFriend = friend } label: {
-                Label("Написать", systemImage: "message.fill")
-            }
-            Button {
-                watchWithFriend = friend
-                showCreateRoom = true
-            } label: {
-                Label("Смотреть вместе", systemImage: "film.fill")
+            if !friend.deleted {
+                Button { dmFriend = friend } label: {
+                    Label("Написать", systemImage: "message.fill")
+                }
+                Button {
+                    watchWithFriend = friend
+                    showCreateRoom = true
+                } label: {
+                    Label("Смотреть вместе", systemImage: "film.fill")
+                }
             }
         }
     }
@@ -947,13 +966,8 @@ struct V4FriendsViewLive: View {
             } label: {
                 HStack(spacing: 12) {
                     ZStack(alignment: .bottomTrailing) {
-                        PlinkStableAvatar(
-                            url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
-                            letter: friend.initials,
-                            size: 48,
-                            userId: friend.id
-                        )
-                        if friend.isOnline {
+                        friendAvatar(friend, size: 48)
+                        if friend.isOnline && !friend.deleted {
                             Circle()
                                 .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
                                 .frame(width: 11, height: 11)
@@ -1276,14 +1290,9 @@ struct V4FriendsViewLive: View {
     private func overlappingFriendAvatars(_ friends: [Friend]) -> some View {
         HStack(spacing: -8) {
             ForEach(Array(friends.prefix(3).enumerated()), id: \.element.id) { idx, f in
-                PlinkStableAvatar(
-                    url: PlinkAvatarURL.stable(userId: f.id, stored: f.avatarURL),
-                    letter: f.initials,
-                    size: 22,
-                    userId: f.id
-                )
-                .overlay(Circle().stroke(V4.surface.opacity(0.9), lineWidth: 1.5))
-                .zIndex(Double(3 - idx))
+                friendAvatar(f, size: 22)
+                    .overlay(Circle().stroke(V4.surface.opacity(0.9), lineWidth: 1.5))
+                    .zIndex(Double(3 - idx))
             }
         }
     }

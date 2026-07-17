@@ -10,6 +10,7 @@ struct UserSocialProfile: Codable, Identifiable, Sendable, Equatable {
     let isOnline: Bool?
     let lastSeenAt: Date?
     let isPremium: Bool?
+    let isDeleted: Bool?
     let friendsCount: Int
     let roomsCreated: Int
     let filmsWatched: Int
@@ -18,10 +19,18 @@ struct UserSocialProfile: Codable, Identifiable, Sendable, Equatable {
     let badges: [String]
     let joinedAt: Date?
 
-    var displayTitle: String { displayName ?? username }
+    var deleted: Bool {
+        isDeleted == true || username.hasPrefix("deleted_")
+    }
+
+    var displayTitle: String {
+        if deleted { return "Удалённый аккаунт" }
+        return displayName ?? username
+    }
 
     var presenceText: String {
-        FriendPresence.displayText(isOnline: isOnline == true, lastSeenAt: lastSeenAt)
+        if deleted { return "аккаунт удалён" }
+        return FriendPresence.displayText(isOnline: isOnline == true, lastSeenAt: lastSeenAt)
     }
 
     var watchHoursText: String {

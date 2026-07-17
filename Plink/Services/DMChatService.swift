@@ -322,6 +322,14 @@ final class DMChatService: ObservableObject {
     ///   - dataURL: `data:audio/mp4;base64,...`
     ///   - durationSec: measured recording length
     func sendVoiceNote(dataURL: String, durationSec: TimeInterval, to friend: Friend) {
+        if friend.deleted {
+            errorMessage = "Нельзя написать удалённому аккаунту"
+            return
+        }
+        if UserBlockManager.shared.isBlocked(friend.id) {
+            errorMessage = "Пользователь заблокирован"
+            return
+        }
         ensureToken()
         let me = currentUserId
             ?? UserDefaults.standard.string(forKey: "plink_current_user_id")
@@ -416,6 +424,10 @@ final class DMChatService: ObservableObject {
     // MARK: - Send
 
     func sendMessage(_ text: String, to friend: Friend) {
+        if friend.deleted {
+            errorMessage = "Нельзя написать удалённому аккаунту"
+            return
+        }
         if UserBlockManager.shared.isBlocked(friend.id) {
             errorMessage = "Пользователь заблокирован"
             return

@@ -53,6 +53,11 @@ final class FriendManager: ObservableObject {
             let f = friends[idx]
             let last = max(f.lastSeenAt ?? .distantPast, date)
             let online = Date().timeIntervalSince(last) < 10 * 60
+            // Never "revive" a tombstoned peer via local activity.
+            if f.deleted {
+                objectWillChange.send()
+                return
+            }
             friends[idx] = Friend(
                 id: f.id,
                 username: f.username,
@@ -63,13 +68,15 @@ final class FriendManager: ObservableObject {
                 lastSeenAt: last,
                 isPinned: f.isPinned,
                 pinOrder: f.pinOrder,
-                avatarVersion: f.avatarVersion
+                avatarVersion: f.avatarVersion,
+                isDeleted: f.isDeleted
             )
             objectWillChange.send()
         }
     }
 
     private func applyLocalPresenceHints(_ friend: Friend) -> Friend {
+        if friend.deleted { return friend }
         let hinted = localActivityAt[friend.id]
         let serverLast = friend.lastSeenAt
         let best: Date? = {
@@ -93,7 +100,8 @@ final class FriendManager: ObservableObject {
             lastSeenAt: best,
             isPinned: friend.isPinned,
             pinOrder: friend.pinOrder,
-            avatarVersion: friend.avatarVersion
+            avatarVersion: friend.avatarVersion,
+            isDeleted: friend.isDeleted
         )
     }
 
@@ -312,7 +320,8 @@ final class FriendManager: ObservableObject {
                 isOnline: request.fromUser.isOnline,
                 friendsSince: Date(),
                 displayName: nil,
-                lastSeenAt: nil
+                lastSeenAt: nil,
+                isDeleted: false
             )
             if !friends.contains(where: { $0.id == newFriend.id }) {
                 friends.append(newFriend)
@@ -419,19 +428,22 @@ private struct FriendDTO: Decodable {
     let isPinned: Bool?
     let pinOrder: Int?
     let avatarVersion: Int64?
+    let isDeleted: Bool?
 
     func toFriend() -> Friend {
-        Friend(
+        let deleted = isDeleted == true || username.hasPrefix("deleted_")
+        return Friend(
             id: id,
             username: username,
-            avatarURL: avatarURL,
-            isOnline: isOnline ?? false,
+            avatarURL: deleted ? nil : avatarURL,
+            isOnline: deleted ? false : (isOnline ?? false),
             friendsSince: friendsSince ?? Date(),
-            displayName: displayName,
-            lastSeenAt: lastSeenAt,
+            displayName: deleted ? "Удалённый аккаунт" : displayName,
+            lastSeenAt: deleted ? nil : lastSeenAt,
             isPinned: isPinned,
             pinOrder: pinOrder,
-            avatarVersion: avatarVersion
+            avatarVersion: avatarVersion,
+            isDeleted: deleted
         )
     }
 }

@@ -48,7 +48,8 @@ struct DMChatView: View {
     }
 
     private var headerIsOnline: Bool {
-        liveFriend.isOnline || headerPresence == "в сети"
+        if liveFriend.deleted { return false }
+        return liveFriend.isOnline || headerPresence == "в сети"
     }
 
     /// Live friend snapshot (avatarURL updates when they change photo).
@@ -185,8 +186,8 @@ struct DMChatView: View {
             NavigationStack {
                 FriendProfileView(
                     userId: liveFriend.id,
-                    usernameHint: liveFriend.username,
-                    onWatchTogether: {
+                    usernameHint: liveFriend.deleted ? "Удалённый аккаунт" : liveFriend.username,
+                    onWatchTogether: liveFriend.deleted ? nil : {
                         showPeerProfile = false
                         showWatchTogether = true
                     }
@@ -338,23 +339,29 @@ struct DMChatView: View {
                         HapticManager.impact(.light)
                         showPeerProfile = true
                     } label: {
-                        PlinkStableAvatar(
-                            url: peerAvatarURL,
-                            letter: peerLetter,
-                            size: TGHeader.avatar,
-                            userId: liveFriend.id
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.22), lineWidth: 1)
-                        )
-                        .overlay(alignment: .bottomTrailing) {
-                            if headerIsOnline {
-                                Circle()
-                                    .fill(TGHeader.online)
-                                    .frame(width: 11, height: 11)
-                                    .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 1.5))
-                                    .offset(x: 1, y: 1)
+                        Group {
+                            if liveFriend.deleted {
+                                PlinkDeletedAvatar(size: TGHeader.avatar)
+                            } else {
+                                PlinkStableAvatar(
+                                    url: peerAvatarURL,
+                                    letter: peerLetter,
+                                    size: TGHeader.avatar,
+                                    userId: liveFriend.id
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                                )
+                                .overlay(alignment: .bottomTrailing) {
+                                    if headerIsOnline {
+                                        Circle()
+                                            .fill(TGHeader.online)
+                                            .frame(width: 11, height: 11)
+                                            .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 1.5))
+                                            .offset(x: 1, y: 1)
+                                    }
+                                }
                             }
                         }
                         .id("tg-av-\(liveFriend.id)-\(friendManager.avatarEpoch)-\(peerAvatarURL?.absoluteString ?? "")")
@@ -408,7 +415,9 @@ struct DMChatView: View {
             titleVisibility: .visible
         ) {
             Button("Профиль") { showPeerProfile = true }
-            Button("Смотреть вместе") { showWatchTogether = true }
+            if !liveFriend.deleted {
+                Button("Смотреть вместе") { showWatchTogether = true }
+            }
             Button("Удалить чат", role: .destructive) {
                 confirmDeleteChat = true
             }
@@ -455,7 +464,20 @@ struct DMChatView: View {
 
     private var glassInputBar: some View {
         Group {
-            if blockManager.isBlocked(friend.id) {
+            if liveFriend.deleted {
+                HStack(spacing: 10) {
+                    Image(systemName: "person.crop.circle.badge.xmark")
+                        .foregroundStyle(.white.opacity(0.55))
+                    Text("Нельзя отправить сообщение удалённому аккаунту")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial)
+            } else if blockManager.isBlocked(friend.id) {
                 HStack(spacing: 10) {
                     Image(systemName: "hand.raised.fill")
                         .foregroundStyle(.orange.opacity(0.9))

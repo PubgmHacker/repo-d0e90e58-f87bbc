@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// Friend / public social profile: stats, badges, watch history, Watch Together.
+/// Deleted peers show a Telegram-style tombstone (no PII, no messaging actions).
 struct FriendProfileView: View {
     let userId: String
     var usernameHint: String = ""
@@ -11,32 +12,40 @@ struct FriendProfileView: View {
     @State private var isLoading = true
     @Environment(\.dismiss) private var dismiss
 
+    private var isDeleted: Bool {
+        profile?.deleted == true || usernameHint.hasPrefix("deleted_")
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 header
-                statsGrid
-                badgesSection
-                historySection
-                if let onWatchTogether {
-                    Button {
-                        onWatchTogether()
-                    } label: {
-                        Label("Смотреть вместе", systemImage: "play.rectangle.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Cinema2026.background)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 16))
+                if isDeleted {
+                    deletedBanner
+                } else {
+                    statsGrid
+                    badgesSection
+                    historySection
+                    if let onWatchTogether {
+                        Button {
+                            onWatchTogether()
+                        } label: {
+                            Label("Смотреть вместе", systemImage: "play.rectangle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(Cinema2026.background)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(Cinema2026.accent, in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Смотреть вместе")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Смотреть вместе")
                 }
             }
             .padding(20)
         }
         .background(Cinema2026.background.ignoresSafeArea())
-        .navigationTitle(profile?.displayTitle ?? usernameHint)
+        .navigationTitle(profile?.displayTitle ?? (isDeleted ? "Удалённый аккаунт" : usernameHint))
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
@@ -45,7 +54,9 @@ struct FriendProfileView: View {
     private var header: some View {
         HStack(spacing: 14) {
             Group {
-                if let url = PlinkAvatarURL.resolve(userId: userId, stored: profile?.avatarURL) {
+                if isDeleted {
+                    PlinkDeletedAvatar(size: 64)
+                } else if let url = PlinkAvatarURL.resolve(userId: userId, stored: profile?.avatarURL) {
                     AsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
@@ -60,13 +71,22 @@ struct FriendProfileView: View {
             }
             .frame(width: 64, height: 64)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Cinema2026.accent.opacity(0.4), lineWidth: 2))
+            .overlay(
+                Circle().stroke(
+                    isDeleted ? Color.white.opacity(0.12) : Cinema2026.accent.opacity(0.4),
+                    lineWidth: 2
+                )
+            )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(profile?.displayTitle ?? usernameHint)
+                Text(profile?.displayTitle ?? (isDeleted ? "Удалённый аккаунт" : usernameHint))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Cinema2026.text)
-                if let u = profile?.username {
+                if isDeleted {
+                    Text("Этот профиль больше недоступен")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Cinema2026.secondary)
+                } else if let u = profile?.username {
                     Text("@\(u)")
                         .font(.system(size: 14))
                         .foregroundStyle(Cinema2026.secondary)
@@ -74,12 +94,35 @@ struct FriendProfileView: View {
                 if let p = profile {
                     Text(p.presenceText)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(p.isOnline == true ? Cinema2026.accent : Cinema2026.secondary)
+                        .foregroundStyle(
+                            isDeleted
+                                ? Cinema2026.secondary
+                                : (p.isOnline == true ? Cinema2026.accent : Cinema2026.secondary)
+                        )
                 }
             }
             Spacer()
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var deletedBanner: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Аккаунт удалён", systemImage: "person.crop.circle.badge.xmark")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Text("История чата сохраняется, но написать или пригласить этого пользователя нельзя.")
+                .font(.system(size: 13))
+                .foregroundStyle(Cinema2026.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private var avatarLetter: some View {

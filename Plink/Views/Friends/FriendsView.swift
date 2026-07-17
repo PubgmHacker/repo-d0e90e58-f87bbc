@@ -277,25 +277,32 @@ private struct FriendRow: View {
         HStack(spacing: 12) {
             avatar(friend)
             VStack(alignment: .leading, spacing: 2) {
-                Text(friend.username)
+                Text(friend.displayTitle)
                     .font(.subheadline.bold())
                     .foregroundColor(.raveTextPrimary)
                 HStack(spacing: 4) {
-                    Circle()
-                        .fill(friend.isOnline ? Color.raveGreen : Color.raveTextTertiary)
-                        .frame(width: 6, height: 6)
-                        // 🔧 SUBTLE: only the ONLINE dot breathes (offline stays static)
-                        // ConditionalBreathing modifier was removed in cleanup — using scaleEffect
-                        .scaleEffect(friend.isOnline ? 1.0 : 1.0)
-                        .animation(
-                            friend.isOnline
-                                ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
-                                : .default,
-                            value: friend.isOnline
-                        )
-                    Text(friend.isOnline ? loc.string(.friendsOnline) : loc.string(.friendsOffline))
-                        .font(.caption)
-                        .foregroundColor(.raveTextSecondary)
+                    if friend.deleted {
+                        Image(systemName: "person.crop.circle.badge.xmark")
+                            .font(.system(size: 10))
+                            .foregroundColor(.raveTextTertiary)
+                        Text("аккаунт удалён")
+                            .font(.caption)
+                            .foregroundColor(.raveTextSecondary)
+                    } else {
+                        Circle()
+                            .fill(friend.isOnline ? Color.raveGreen : Color.raveTextTertiary)
+                            .frame(width: 6, height: 6)
+                            .scaleEffect(friend.isOnline ? 1.0 : 1.0)
+                            .animation(
+                                friend.isOnline
+                                    ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
+                                    : .default,
+                                value: friend.isOnline
+                            )
+                        Text(friend.isOnline ? loc.string(.friendsOnline) : loc.string(.friendsOffline))
+                            .font(.caption)
+                            .foregroundColor(.raveTextSecondary)
+                    }
                 }
             }
             Spacer()
@@ -316,7 +323,9 @@ private struct FriendRow: View {
     @ViewBuilder
     private func avatar(_ friend: Friend) -> some View {
         Group {
-            if let url = PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL) {
+            if friend.deleted {
+                PlinkDeletedAvatar(size: 44)
+            } else if let url = PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL) {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFill()

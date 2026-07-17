@@ -27,14 +27,22 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
     var pinOrder: Int? = nil
     /// Server avatar revision (ms). Changes only when friend uploads a new photo.
     var avatarVersion: Int64? = nil
+    /// Telegram soft-delete tombstone.
+    var isDeleted: Bool? = nil
 
     /// Конвертация в UserPreview для UI-компонентов.
     var asUserPreview: UserPreview {
         UserPreview(id: id, username: username, avatarURL: avatarURL, isOnline: isOnline)
     }
 
+    var deleted: Bool {
+        if isDeleted == true { return true }
+        return username.hasPrefix("deleted_")
+    }
+
     /// Name shown in UI — displayName if set, else @username.
     var displayTitle: String {
+        if deleted { return "Удалённый аккаунт" }
         if let d = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
             return d
         }
@@ -43,12 +51,14 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
 
     /// Single letter for avatar fallback — never uses current user.
     var initials: String {
-        PlinkAvatarURL.letter(from: displayTitle)
+        if deleted { return "—" }
+        return PlinkAvatarURL.letter(from: displayTitle)
     }
 
     /// «В сети» / «Был(а) N мин. назад» / «Не в сети»
     var presenceText: String {
-        FriendPresence.displayText(isOnline: isOnline, lastSeenAt: lastSeenAt)
+        if deleted { return "аккаунт удалён" }
+        return FriendPresence.displayText(isOnline: isOnline, lastSeenAt: lastSeenAt)
     }
 }
 

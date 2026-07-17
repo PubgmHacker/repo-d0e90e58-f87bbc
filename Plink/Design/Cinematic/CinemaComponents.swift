@@ -374,6 +374,8 @@ struct EmojiPickerGrid: View {
 struct MessageRichText: View {
     let text: String
     var fontSize: CGFloat = 16
+    /// Telegram-readable body on solid bubbles (default white on dark/colored fills).
+    var textColor: Color = .white
 
     var body: some View {
         let parts = PlinkEmojiCatalog.splitMessage(text)
@@ -386,8 +388,10 @@ struct MessageRichText: View {
                     switch part {
                     case .text(let s):
                         Text(s)
-                            .font(.system(size: fontSize))
-                            .foregroundStyle(.white)
+                            .font(.system(size: fontSize, weight: .regular))
+                            .foregroundStyle(textColor)
+                            // Slight shadow so glyphs never vanish on busy wallpaper edges
+                            .shadow(color: .black.opacity(0.22), radius: 0.5, y: 0.5)
                     case .custom(let pack, let name):
                         EmojiAssetImage(name: name, pack: pack)
                             .frame(width: fontSize + 10, height: fontSize + 10)

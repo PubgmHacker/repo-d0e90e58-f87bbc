@@ -615,14 +615,21 @@ private struct DMBubble: View {
                 if cluster.isLastInGroup {
                     HStack(spacing: 3) {
                         Text(message.timeString)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.5))
+                            .font(.system(size: 11, weight: .semibold))
+                            // Time sits on wallpaper — use solid pill so it never vanishes
+                            .foregroundStyle(Color.white.opacity(0.95))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.black.opacity(0.42)))
                         if isOwn {
                             // Telegram ticks: one gray = sent, two blue = read
                             TelegramReadTicks(isRead: message.isRead)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.black.opacity(0.42)))
                         }
                     }
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, 2)
                 }
             }
             .frame(maxWidth: PlinkTelegramBubbleMetrics.maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
@@ -774,13 +781,14 @@ private struct VoiceNoteBubble: View {
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(isOwn
-                      ? Cinema2026.accent.opacity(0.92)
-                      : Color.white.opacity(0.10))
+                      ? Cinema2026.accent
+                      : Color(hex: "#2E333A"))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(isOwn ? 0.15 : 0.12), lineWidth: 0.7)
+                .stroke(Color.white.opacity(isOwn ? 0.20 : 0.14), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
     }
 }
 
@@ -817,12 +825,16 @@ private struct DMDayDivider: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(0.85))
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Color.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.6))
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.48))
+            )
+            .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.7))
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
     }

@@ -159,40 +159,42 @@ enum BubbleFrameModel: String, CaseIterable, Sendable {
         }
     }
 
+    /// Fully opaque fills (Telegram rule: wallpaper never shows through the capsule).
     var fillColors: [Color] {
         switch self {
         case .quiet:
-            return [Color.white.opacity(0.12)]
+            // Incoming default — solid slate (see PlinkMessageBubble for own/incoming split)
+            return [Color(hex: "#2B2F36")]
         case .accent, .pulse:
-            return [Color(hex: "#00D4FF").opacity(0.88), Color(hex: "#3FE8C8").opacity(0.75)]
+            return [Color(hex: "#00D4FF"), Color(hex: "#3FE8C8")]
         case .cat:
-            return [Color(hex: "#3D1F33").opacity(0.92), Color(hex: "#5A2A48").opacity(0.88)]
+            return [Color(hex: "#4A2540"), Color(hex: "#6B3558")]
         case .dog:
-            return [Color(hex: "#3A2618").opacity(0.92), Color(hex: "#5C3A22").opacity(0.88)]
+            return [Color(hex: "#4A3220"), Color(hex: "#6B4528")]
         case .hearts:
-            return [Color(hex: "#3B1528").opacity(0.92), Color(hex: "#5C1F3D").opacity(0.9)]
+            return [Color(hex: "#4A1E36"), Color(hex: "#6B2A48")]
         case .bunny:
-            return [Color(hex: "#2A2040").opacity(0.92), Color(hex: "#3D2F5C").opacity(0.9)]
+            return [Color(hex: "#352850"), Color(hex: "#4A3A6B")]
         case .panda:
-            return [Color(hex: "#1A1A1A").opacity(0.92), Color(hex: "#2C2C2C").opacity(0.9)]
+            return [Color(hex: "#1E1E1E"), Color(hex: "#2E2E2E")]
         case .fox:
-            return [Color(hex: "#3A1E0C").opacity(0.92), Color(hex: "#5C3014").opacity(0.9)]
+            return [Color(hex: "#4A2814"), Color(hex: "#6B3A1C")]
         case .bear:
-            return [Color(hex: "#2A1C12").opacity(0.92), Color(hex: "#3F2A1A").opacity(0.9)]
+            return [Color(hex: "#352418"), Color(hex: "#4A3522")]
         case .unicorn:
-            return [Color(hex: "#2A1840").opacity(0.92), Color(hex: "#1E2A4A").opacity(0.9)]
+            return [Color(hex: "#352050"), Color(hex: "#28365A")]
         case .dino:
-            return [Color(hex: "#14281A").opacity(0.92), Color(hex: "#1F3D28").opacity(0.9)]
+            return [Color(hex: "#1A3222"), Color(hex: "#284A32")]
         case .stars:
-            return [Color(hex: "#12142E").opacity(0.94), Color(hex: "#1C1F48").opacity(0.9)]
+            return [Color(hex: "#181A3A"), Color(hex: "#242858")]
         case .flowers:
-            return [Color(hex: "#2E1524").opacity(0.92), Color(hex: "#3F1E32").opacity(0.9)]
+            return [Color(hex: "#3A1C2E"), Color(hex: "#4A283C")]
         case .rainbow:
-            return [Color(hex: "#1A1A2E").opacity(0.92), Color(hex: "#252545").opacity(0.9)]
+            return [Color(hex: "#22223A"), Color(hex: "#2E2E52")]
         case .frog:
-            return [Color(hex: "#142A18").opacity(0.92), Color(hex: "#1F3D24").opacity(0.9)]
+            return [Color(hex: "#1A3220"), Color(hex: "#284A2C")]
         case .prism:
-            return [Color(hex: "#1A1430").opacity(0.92), Color(hex: "#2A1F48").opacity(0.9)]
+            return [Color(hex: "#221A3A"), Color(hex: "#342858")]
         }
     }
 
@@ -582,10 +584,17 @@ struct PlinkMessageBubble: View {
         let padV: CGFloat = frame.isDecorative ? m.decorativePadV : m.padV
         let outer: CGFloat = frame.isDecorative ? m.decorativeOuter : 0
 
-        MessageRichText(text: text, fontSize: fontSize)
+        MessageRichText(text: text, fontSize: fontSize, textColor: .white)
             .padding(.horizontal, padH)
             .padding(.vertical, padV)
-            .background(fillLayer)
+            // Solid capsule only — wallpaper must never show through (Telegram)
+            .background(
+                ZStack {
+                    // Dark base guarantees contrast even if gradient is translucent
+                    Color(hex: "#1A1C20")
+                    fillLayer
+                }
+            )
             .clipShape(shape)
             .overlay(borderLayer)
             .overlay(alignment: .center) {
@@ -594,13 +603,9 @@ struct PlinkMessageBubble: View {
                 }
             }
             .padding(outer)
-            .shadow(
-                color: frame.isDecorative
-                    ? frame.borderColors.first?.opacity(0.35) ?? .black.opacity(0.2)
-                    : .black.opacity(0.18),
-                radius: frame.isDecorative ? 10 : 5,
-                y: 1
-            )
+            // Lift capsule off patterned wallpaper like Telegram
+            .shadow(color: .black.opacity(0.40), radius: 8, y: 3)
+            .shadow(color: .black.opacity(0.20), radius: 1, y: 0.5)
     }
 
     @ViewBuilder
@@ -608,16 +613,25 @@ struct PlinkMessageBubble: View {
         switch frame {
         case .quiet:
             if isOwn {
+                // Telegram-style solid outgoing (no transparency)
                 LinearGradient(
                     colors: [
-                        Cinema2026.accent.opacity(0.88),
-                        Cinema2026.accent.opacity(0.72)
+                        Cinema2026.accent,
+                        Cinema2026.accent.opacity(0.92)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             } else {
-                Color.white.opacity(0.12)
+                // Telegram night incoming: solid slate — readable on any wallpaper
+                LinearGradient(
+                    colors: [
+                        Color(hex: "#2E333A"),
+                        Color(hex: "#252A30")
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
         default:
             LinearGradient(
@@ -640,10 +654,13 @@ struct PlinkMessageBubble: View {
                     lineWidth: frame.borderWidth
                 )
         } else {
+            // Soft edge so solid capsules separate from wallpaper patterns
             shape
                 .stroke(
-                    frame.borderColors.first ?? Color.white.opacity(0.12),
-                    lineWidth: frame.borderWidth
+                    isOwn
+                        ? Color.white.opacity(0.22)
+                        : Color.white.opacity(0.14),
+                    lineWidth: max(frame.borderWidth, 1)
                 )
         }
     }

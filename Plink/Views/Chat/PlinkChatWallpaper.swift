@@ -80,19 +80,31 @@ enum PlinkChatWallpaper: String, CaseIterable, Identifiable, Sendable {
 
                 // Soft light orbs for depth (3D feel)
                 Circle()
-                    .fill(Color.white.opacity(isLight ? 0.35 : 0.12))
+                    .fill(Color.white.opacity(isLight ? 0.28 : 0.10))
                     .frame(width: geo.size.width * 0.55)
                     .blur(radius: 50)
                     .offset(x: -geo.size.width * 0.2, y: -geo.size.height * 0.15)
 
                 Circle()
-                    .fill(colors.last?.opacity(0.45) ?? Color.purple.opacity(0.3))
+                    .fill(colors.last?.opacity(0.38) ?? Color.purple.opacity(0.28))
                     .frame(width: geo.size.width * 0.7)
                     .blur(radius: 60)
                     .offset(x: geo.size.width * 0.25, y: geo.size.height * 0.35)
 
-                // Pattern of 3D stickers (pseudo-random grid)
+                // Pattern of 3D stickers (kept quieter so bubbles stay primary, like Telegram)
                 TelegramStickerField(stickers: stickers, size: geo.size, isLight: isLight)
+
+                // Very light vignette — improves bubble separation without killing wallpaper
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(isLight ? 0.06 : 0.12),
+                        .clear,
+                        Color.black.opacity(isLight ? 0.08 : 0.16)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea()
@@ -141,14 +153,15 @@ private struct TelegramStickerField: View {
                     let rot = Double((seed * 11) % 40) - 20
                     Text(emoji)
                         .font(.system(size: fontSize))
-                        .shadow(color: .black.opacity(isLight ? 0.12 : 0.35), radius: 3, y: 2)
+                        .shadow(color: .black.opacity(isLight ? 0.10 : 0.28), radius: 2, y: 1)
                         .rotationEffect(.degrees(rot))
-                        .scaleEffect(0.85 + CGFloat(seed % 5) * 0.06)
+                        .scaleEffect(0.78 + CGFloat(seed % 5) * 0.05)
                         .position(
                             x: CGFloat(c) * cellW + cellW * 0.5 + ox,
                             y: CGFloat(r) * cellH + cellH * 0.5 + oy
                         )
-                        .opacity(0.88)
+                        // Stickers are decoration only — must not compete with message capsules
+                        .opacity(isLight ? 0.42 : 0.38)
                 }
             }
         }

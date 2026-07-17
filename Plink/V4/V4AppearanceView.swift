@@ -152,7 +152,7 @@ struct V4AppearanceView: View {
                             text: "Привет! Смотрим вместе 🎬",
                             isOwn: true,
                             styleID: selectedBubbleID,
-                            fontSize: 15
+                            fontSize: PlinkTelegramBubbleMetrics.fontSize
                         )
                     }
                     .padding(.horizontal, 22)

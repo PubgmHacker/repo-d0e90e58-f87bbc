@@ -393,7 +393,7 @@ internal struct BubbleStyleRenderer<Content: View>: View {
 
 // MARK: - V5BubbleShape (renamed to avoid clash with any legacy BubbleShape)
 
-/// Telegram-like capsule bubble: large continuous corners; slight tail cut
+/// Telegram-sized capsule bubble: large continuous corners; slight tail cut
 /// only on the last message of a group (via isLastInGroup on the parent).
 struct V5BubbleShape: Shape {
     let isOutgoing: Bool
@@ -401,11 +401,12 @@ struct V5BubbleShape: Shape {
     var isLastInGroup: Bool = true
 
     func path(in rect: CGRect) -> Path {
-        // Capsule-like: corner radius ~ half height, capped for wide bubbles
-        let r = min(18, rect.height / 2)
+        // Telegram iOS: short messages read as true capsules (radius ≈ half height),
+        // multi-line bubbles keep a large continuous corner (~20–22pt).
+        let r = min(22, max(16, rect.height / 2))
         var path = Path()
-        // Telegram: slightly tighter corner on the "tail" side of last bubble
-        let tail: CGFloat = isLastInGroup ? 6 : r
+        // Tail corner is softer than a sharp point (TG ≈ 6–8pt)
+        let tail: CGFloat = isLastInGroup ? 8 : r
         let tl: CGFloat = isOutgoing ? r : (isLastInGroup ? tail : r)
         let tr: CGFloat = isOutgoing ? (isLastInGroup ? tail : r) : r
         let bl: CGFloat = r
@@ -419,6 +420,24 @@ struct V5BubbleShape: Shape {
         )
         return path
     }
+}
+
+// MARK: - Telegram bubble metrics (shared DM + room)
+
+/// Canonical sizes so DM / room / preview all match Telegram proportions.
+enum PlinkTelegramBubbleMetrics {
+    /// Telegram iOS message body ≈ 17pt
+    static let fontSize: CGFloat = 17
+    static let padH: CGFloat = 15
+    static let padV: CGFloat = 11
+    static let decorativePadH: CGFloat = 20
+    static let decorativePadV: CGFloat = 13
+    static let decorativeOuter: CGFloat = 11
+    /// ~75% of a typical phone content width
+    static let maxBubbleWidth: CGFloat = 320
+    static let avatarSize: CGFloat = 34
+    static let clusterGapSame: CGFloat = 3
+    static let clusterGapNew: CGFloat = 12
 }
 
 // MARK: - BubbleIndexTracker
@@ -521,7 +540,9 @@ struct ChatClusterLayout: Equatable {
             showName: !isOwn && !samePrev,
             isFirstInGroup: !samePrev,
             isLastInGroup: !sameNext,
-            topPadding: samePrev ? 2 : 10
+            topPadding: samePrev
+                ? PlinkTelegramBubbleMetrics.clusterGapSame
+                : PlinkTelegramBubbleMetrics.clusterGapNew
         )
     }
 }
@@ -535,7 +556,8 @@ struct PlinkMessageBubble: View {
     let isOwn: Bool
     /// Sender style ID from the message (not local prefs for peers).
     var styleID: String? = nil
-    var fontSize: CGFloat = 15
+    /// Defaults to Telegram body size (17pt).
+    var fontSize: CGFloat = PlinkTelegramBubbleMetrics.fontSize
     /// Telegram tail: only last in group gets the "pointy" corner.
     var isLastInGroup: Bool = true
 
@@ -555,9 +577,10 @@ struct PlinkMessageBubble: View {
 
     var body: some View {
         // Extra inset for decorative frames so mascots sit outside the text
-        let padH: CGFloat = frame.isDecorative ? 18 : 14
-        let padV: CGFloat = frame.isDecorative ? 12 : 10
-        let outer: CGFloat = frame.isDecorative ? 10 : 0
+        let m = PlinkTelegramBubbleMetrics.self
+        let padH: CGFloat = frame.isDecorative ? m.decorativePadH : m.padH
+        let padV: CGFloat = frame.isDecorative ? m.decorativePadV : m.padV
+        let outer: CGFloat = frame.isDecorative ? m.decorativeOuter : 0
 
         MessageRichText(text: text, fontSize: fontSize)
             .padding(.horizontal, padH)
@@ -574,9 +597,9 @@ struct PlinkMessageBubble: View {
             .shadow(
                 color: frame.isDecorative
                     ? frame.borderColors.first?.opacity(0.35) ?? .black.opacity(0.2)
-                    : .black.opacity(0.22),
-                radius: frame.isDecorative ? 10 : 6,
-                y: 2
+                    : .black.opacity(0.18),
+                radius: frame.isDecorative ? 10 : 5,
+                y: 1
             )
     }
 

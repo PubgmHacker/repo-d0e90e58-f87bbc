@@ -89,7 +89,7 @@ struct DMChatView: View {
                                     }
                                 )
                                 .id(msg.id)
-                                .padding(.horizontal, 12)
+                                .padding(.horizontal, 10)
                                 .padding(.top, cluster.topPadding)
                             }
                         }
@@ -269,10 +269,11 @@ struct DMChatView: View {
             }
 
             TextField("Сообщение", text: $messageText)
-                .font(.system(size: 16))
+                .font(.system(size: 17))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 11)
+                .padding(.vertical, 12)
+                .frame(minHeight: 42)
                 .background(
                     Capsule(style: .continuous)
                         .fill(Color.white.opacity(0.08))
@@ -542,12 +543,12 @@ private struct DMBubble: View {
     var onReact: () -> Void
     var onToggleChip: (String) -> Void
 
-    private let avatarSize: CGFloat = 30
+    private let avatarSize: CGFloat = PlinkTelegramBubbleMetrics.avatarSize
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isOwn {
-                Spacer(minLength: 44)
+                Spacer(minLength: 36)
             } else {
                 avatarSlot
             }
@@ -564,7 +565,7 @@ private struct DMBubble: View {
                             text: message.text,
                             isOwn: isOwn,
                             styleID: message.bubbleStyle,
-                            fontSize: 16,
+                            fontSize: PlinkTelegramBubbleMetrics.fontSize,
                             isLastInGroup: cluster.isLastInGroup
                         )
                     }
@@ -596,8 +597,8 @@ private struct DMBubble: View {
                 if cluster.isLastInGroup {
                     HStack(spacing: 3) {
                         Text(message.timeString)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.45))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.5))
                         if isOwn {
                             // Telegram ticks: one gray = sent, two blue = read
                             TelegramReadTicks(isRead: message.isRead)
@@ -606,12 +607,12 @@ private struct DMBubble: View {
                     .padding(.horizontal, 4)
                 }
             }
-            .frame(maxWidth: 290, alignment: isOwn ? .trailing : .leading)
+            .frame(maxWidth: PlinkTelegramBubbleMetrics.maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
 
             if isOwn {
                 avatarSlot
             } else {
-                Spacer(minLength: 44)
+                Spacer(minLength: 36)
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
@@ -690,7 +691,7 @@ private struct VoiceNoteBubble: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button {
                 guard canPlay else { return }
                 HapticManager.impact(.light)
@@ -699,14 +700,14 @@ private struct VoiceNoteBubble: View {
                 ZStack {
                     Circle()
                         .fill(isOwn ? Color.black.opacity(0.22) : Cinema2026.accent.opacity(0.85))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                     if player.isLoading && isThisPlaying {
                         ProgressView()
                             .tint(isOwn ? .white : .black)
-                            .scaleEffect(0.85)
+                            .scaleEffect(0.9)
                     } else {
                         Image(systemName: isThisPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(isOwn ? Color.white : Color.black.opacity(0.85))
                             .offset(x: isThisPlaying ? 0 : 1)
                     }
@@ -715,46 +716,46 @@ private struct VoiceNoteBubble: View {
             .buttonStyle(.plain)
             .disabled(!canPlay)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 7) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.white.opacity(0.18))
-                            .frame(height: 4)
+                            .frame(height: 5)
                         Capsule()
                             .fill(isOwn ? Color.white.opacity(0.85) : Cinema2026.accent)
                             .frame(
                                 width: geo.size.width * (isThisPlaying ? max(0.04, player.progress) : 0.04),
-                                height: 4
+                                height: 5
                             )
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 5)
 
                 HStack {
                     Text(durationLabel)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.75))
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.8))
                     if !canPlay {
                         Text("· нет аудио")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(Color.white.opacity(0.4))
                     }
                     Spacer(minLength: 0)
                 }
             }
-            .frame(minWidth: 120, maxWidth: 180)
+            .frame(minWidth: 140, maxWidth: 200)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, PlinkTelegramBubbleMetrics.padH)
+        .padding(.vertical, PlinkTelegramBubbleMetrics.padV)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(isOwn
                       ? Cinema2026.accent.opacity(0.92)
                       : Color.white.opacity(0.10))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.white.opacity(isOwn ? 0.15 : 0.12), lineWidth: 0.7)
         )
     }

@@ -263,11 +263,11 @@ private struct WatchChatBubbleInline: View {
     )
     let onRetry: () -> Void
 
-    private let avatarSize: CGFloat = 28
+    private let avatarSize: CGFloat = PlinkTelegramBubbleMetrics.avatarSize
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            if isOwn { Spacer(minLength: 56) }
+            if isOwn { Spacer(minLength: 44) }
             if !isOwn { avatarSlot }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 3) {
@@ -276,16 +276,16 @@ private struct WatchChatBubbleInline: View {
                     HStack(spacing: 4) {
                         if message.isAdmin {
                             Image(systemName: "shield.fill")
-                                .font(.system(size: 9))
+                                .font(.system(size: 10))
                                 .foregroundStyle(Cinema2026.amber)
                         }
                         if message.isPremium {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 9))
+                                .font(.system(size: 10))
                                 .foregroundStyle(Cinema2026.accent)
                         }
                         Text(message.senderName)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(roleColor)
                     }
                 }
@@ -295,9 +295,10 @@ private struct WatchChatBubbleInline: View {
                     text: message.text,
                     isOwn: isOwn,
                     styleID: message.bubbleStyle,
-                    fontSize: 15,
+                    fontSize: PlinkTelegramBubbleMetrics.fontSize,
                     isLastInGroup: cluster.isLastInGroup
                 )
+                .frame(maxWidth: PlinkTelegramBubbleMetrics.maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
 
                 if message.isPending {
                     Text("Sending…")
@@ -316,7 +317,7 @@ private struct WatchChatBubbleInline: View {
             }
 
             if isOwn { avatarSlot }
-            if !isOwn { Spacer(minLength: 56) }
+            if !isOwn { Spacer(minLength: 44) }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isOwn ? "Вы" : message.senderName): \(message.text)")

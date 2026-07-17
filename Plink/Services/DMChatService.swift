@@ -15,6 +15,10 @@ final class DMChatService: ObservableObject {
     @Published private(set) var unreadByFriend: [String: Int] = [:]
     /// friendId → last message preview (for list subtitle)
     @Published private(set) var lastPreviewByFriend: [String: String] = [:]
+    /// friendId → last message / activity time (Telegram chat reordering)
+    @Published private(set) var lastActivityAtByFriend: [String: Date] = [:]
+    /// Bumps when inbox activity changes so chat list can re-sort.
+    @Published private(set) var inboxEpoch: Int = 0
     @Published private(set) var historyEpoch: Int = 0
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -67,6 +71,23 @@ final class DMChatService: ObservableObject {
         return unreadByFriend[friendId] ?? 0
     }
 
+    func lastActivityAt(for friendId: String) -> Date? {
+        lastActivityAtByFriend[friendId]
+    }
+
+    private func touchActivity(friendId: String, at date: Date = Date(), preview: String? = nil) {
+        var acts = lastActivityAtByFriend
+        let prev = acts[friendId]
+        if prev == nil || date >= (prev ?? .distantPast) {
+            acts[friendId] = date
+            lastActivityAtByFriend = acts
+            if let preview, !preview.isEmpty {
+                lastPreviewByFriend[friendId] = preview
+            }
+            inboxEpoch &+= 1
+        }
+    }
+
     // MARK: - Open / close chat (drives badge zeroing)
 
     func chatDidOpen(friendId: String) {
@@ -95,15 +116,23 @@ final class DMChatService: ObservableObject {
             let items: [UnreadDTO] = try await api.request("messages/unread")
             var counts: [String: Int] = [:]
             var previews: [String: String] = lastPreviewByFriend
+            var activities: [String: Date] = lastActivityAtByFriend
+            var activityChanged = false
             for item in items {
                 if openFriendId == item.friendId {
-                    // Open chat — treat as read optimistically
-                    continue
+                    // Open chat — treat as read optimistically, still track last activity
                 } else if item.unreadCount > 0 {
                     counts[item.friendId] = item.unreadCount
                 }
                 if let p = item.lastPreview, !p.isEmpty {
                     previews[item.friendId] = p
+                }
+                if let at = item.lastAt {
+                    let prev = activities[item.friendId]
+                    if prev == nil || at > (prev ?? .distantPast) {
+                        activities[item.friendId] = at
+                        activityChanged = true
+                    }
                 }
             }
             // Only publish if changed — but always update when counts differ for snappy UI
@@ -111,6 +140,10 @@ final class DMChatService: ObservableObject {
                 unreadByFriend = counts
             }
             lastPreviewByFriend = previews
+            if activityChanged || activities != lastActivityAtByFriend {
+                lastActivityAtByFriend = activities
+                inboxEpoch &+= 1
+            }
         } catch {
             print("[DM] refreshUnread error: \(error.localizedDescription)")
         }
@@ -162,6 +195,7 @@ final class DMChatService: ObservableObject {
             }
             if let last = (conversations[convID] ?? messages).last {
                 lastPreviewByFriend[friendId] = last.text
+                touchActivity(friendId: friendId, at: last.timestamp, preview: last.text)
             }
             print("[DM] history \(conversations[convID]?.count ?? 0) msgs with \(friendId)")
         } catch {
@@ -212,6 +246,7 @@ final class DMChatService: ObservableObject {
         conversations[convID] = list
         historyEpoch &+= 1
         lastPreviewByFriend[friend.id] = payload
+        touchActivity(friendId: friend.id, at: message.timestamp, preview: payload)
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
         struct Body: Encodable { let receiverId: String; let content: String }
@@ -255,6 +290,7 @@ final class DMChatService: ObservableObject {
         conversations[convID]?.append(message)
         historyEpoch &+= 1
         lastPreviewByFriend[friend.id] = message.text
+        touchActivity(friendId: friend.id, at: message.timestamp, preview: message.text)
         updateLastMessage(conversationID: convID, friend: friend, message: message)
         if openFriendId != friend.id, message.senderID != currentUserId {
             unreadByFriend[friend.id, default: 0] += 1

@@ -21,6 +21,10 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
     var displayName: String? = nil
     /// ISO last-seen from server (nil if unknown).
     var lastSeenAt: Date? = nil
+    /// Server pin flag (optional — local FriendPinStore is authoritative for UI order).
+    var isPinned: Bool? = nil
+    /// Lower = higher among pinned (server).
+    var pinOrder: Int? = nil
 
     /// Конвертация в UserPreview для UI-компонентов.
     var asUserPreview: UserPreview {

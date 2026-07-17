@@ -52,11 +52,41 @@ final class FriendManager: ObservableObject {
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
             friends = dtos.map { $0.toFriend() }
+            // Sync pin flags from server → local ordered pin list
+            FriendPinStore.shared.mergeFromServer(friends)
             // Bust avatar URL cache so new photos appear immediately in list/chat
             PlinkAvatarURL.bumpSessionBust()
             print("[Friends] loaded \(friends.count) friends")
         } catch {
             print("[Friends] loadFriends error: \(error.localizedDescription)")
+        }
+    }
+
+    /// Pin / unpin friend (Telegram). Updates local store immediately, syncs server.
+    @discardableResult
+    func setPinned(friendId: String, pinned: Bool) async -> Bool {
+        if pinned {
+            guard FriendPinStore.shared.pin(friendId) else {
+                errorMessage = "Максимум 10 закреплений"
+                return false
+            }
+        } else {
+            FriendPinStore.shared.unpin(friendId)
+        }
+        ensureToken()
+        struct Body: Encodable { let pin: Bool }
+        struct Resp: Decodable { let success: Bool?; let isPinned: Bool? }
+        do {
+            let _: Resp = try await api.request(
+                "friends/\(friendId)/pin",
+                method: .post,
+                body: Body(pin: pinned)
+            )
+            return true
+        } catch {
+            // Local pin already applied — list still works offline
+            print("[Friends] pin sync: \(error.localizedDescription)")
+            return true
         }
     }
 
@@ -276,6 +306,8 @@ private struct FriendDTO: Decodable {
     let friendsSince: Date?
     let displayName: String?
     let lastSeenAt: Date?
+    let isPinned: Bool?
+    let pinOrder: Int?
 
     func toFriend() -> Friend {
         Friend(
@@ -285,7 +317,9 @@ private struct FriendDTO: Decodable {
             isOnline: isOnline ?? false,
             friendsSince: friendsSince ?? Date(),
             displayName: displayName,
-            lastSeenAt: lastSeenAt
+            lastSeenAt: lastSeenAt,
+            isPinned: isPinned,
+            pinOrder: pinOrder
         )
     }
 }

@@ -45,6 +45,19 @@ struct V4FriendsViewLive: View {
 
     private var requestBadge: Int { store?.requests.count ?? 0 }
 
+    /// Pin order — shared store (not a private stored prop so memberwise init stays public).
+    private var pinStore: FriendPinStore { FriendPinStore.shared }
+
+    /// Telegram order: pinned (stable) → unpinned by last message time.
+    private var orderedFriends: [Friend] {
+        let list = store?.friends ?? []
+        return pinStore.sortedChats(
+            friends: list,
+            lastActivity: { dmService.lastActivityAt(for: $0) },
+            unread: { dmService.unreadCount(for: $0) }
+        )
+    }
+
     var body: some View {
         // No NavigationStack — keep living theme visible
         VStack(spacing: 0) {
@@ -510,7 +523,12 @@ struct V4FriendsViewLive: View {
                                 cta: "Найти друга"
                             ) { showAddFriend = true }
                         } else {
-                            ForEach(s.friends) { friend in
+                            // Depend on inboxEpoch + pin list so new messages reorder
+                            // unpinned rows while pinned stay fixed.
+                            let _ = dmService.inboxEpoch
+                            let _ = pinStore.orderedPinnedIds
+                            let chats = orderedFriends
+                            ForEach(chats) { friend in
                                 friendChatRow(friend)
                             }
                         }
@@ -565,6 +583,8 @@ struct V4FriendsViewLive: View {
     private func friendChatRow(_ friend: Friend) -> some View {
         let unread = dmService.unreadCount(for: friend.id)
         let preview = dmService.lastPreviewByFriend[friend.id]
+        let pinned = pinStore.isPinned(friend.id)
+        let lastAt = dmService.lastActivityAt(for: friend.id)
 
         return HStack(spacing: 12) {
             Button { profileFriend = friend } label: {
@@ -591,6 +611,12 @@ struct V4FriendsViewLive: View {
             Button { dmFriend = friend } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
+                        if pinned {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(V4.accent)
+                                .accessibilityLabel("Закреплён")
+                        }
                         Text(friend.displayTitle)
                             .font(.system(size: 15, weight: unread > 0 ? .heavy : .bold))
                             .foregroundStyle(V4.ink)
@@ -600,11 +626,17 @@ struct V4FriendsViewLive: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(V4.accent)
                         }
+                        Spacer(minLength: 0)
+                        if let lastAt {
+                            Text(Self.chatListTime(lastAt))
+                                .font(.system(size: 11, weight: unread > 0 ? .semibold : .regular))
+                                .foregroundStyle(unread > 0 ? V4.accent : V4.muted)
+                        }
                     }
-                    if let preview, unread > 0 {
+                    if let preview, !preview.isEmpty {
                         Text(preview)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(V4.ink.opacity(0.85))
+                            .font(.system(size: 12, weight: unread > 0 ? .semibold : .regular))
+                            .foregroundStyle(unread > 0 ? V4.ink.opacity(0.85) : V4.muted)
                             .lineLimit(1)
                     } else {
                         HStack(spacing: 5) {
@@ -625,7 +657,7 @@ struct V4FriendsViewLive: View {
 
             Button { dmFriend = friend } label: {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: unread > 0 ? "message.fill" : "message.fill")
+                    Image(systemName: "message.fill")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(unread > 0 ? V4.accentInk : V4.ink)
                         .frame(width: 38, height: 38)
@@ -668,10 +700,74 @@ struct V4FriendsViewLive: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(unread > 0 ? V4.accent.opacity(0.06) : Color.clear)
+        .background(
+            pinned
+                ? V4.accent.opacity(0.05)
+                : (unread > 0 ? V4.accent.opacity(0.06) : Color.clear)
+        )
         .overlay(alignment: .bottom) {
             Rectangle().fill(V4.line.opacity(0.55)).frame(height: 1).padding(.leading, 70)
         }
+        .contextMenu {
+            Button {
+                togglePin(friend)
+            } label: {
+                Label(
+                    pinned ? "Открепить" : "Закрепить",
+                    systemImage: pinned ? "pin.slash.fill" : "pin.fill"
+                )
+            }
+            Button {
+                dmFriend = friend
+            } label: {
+                Label("Открыть чат", systemImage: "message.fill")
+            }
+            Button {
+                watchWithFriend = friend
+                showCreateRoom = true
+            } label: {
+                Label("Смотреть вместе", systemImage: "play.rectangle.fill")
+            }
+        }
+    }
+
+    private func togglePin(_ friend: Friend) {
+        HapticManager.impact(.medium)
+        let willPin = !pinStore.isPinned(friend.id)
+        Task {
+            let ok = await store?.friendManager.setPinned(friendId: friend.id, pinned: willPin) ?? false
+            await MainActor.run {
+                if willPin && !ok {
+                    toast = "Максимум 10 закреплений"
+                } else {
+                    toast = willPin
+                        ? "\(friend.displayTitle) закреплён"
+                        : "\(friend.displayTitle) откреплён"
+                }
+            }
+        }
+    }
+
+    /// Compact time for chat list (Telegram-like).
+    private static func chatListTime(_ date: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(date) {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "ru_RU")
+            f.dateFormat = "HH:mm"
+            return f.string(from: date)
+        }
+        if cal.isDateInYesterday(date) {
+            return "вчера"
+        }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        if cal.component(.year, from: date) == cal.component(.year, from: Date()) {
+            f.dateFormat = "d MMM"
+        } else {
+            f.dateFormat = "dd.MM.yy"
+        }
+        return f.string(from: date)
     }
 
     private func recentRoomRow(_ room: Room) -> some View {

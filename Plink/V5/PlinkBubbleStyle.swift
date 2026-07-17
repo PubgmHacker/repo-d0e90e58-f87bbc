@@ -231,14 +231,21 @@ internal struct BubbleStyleRenderer<Content: View>: View {
 
 // MARK: - V5BubbleShape (renamed to avoid clash with any legacy BubbleShape)
 
+/// Telegram-like capsule bubble: large continuous corners; slight tail cut
+/// only on the last message of a group (via isLastInGroup on the parent).
 struct V5BubbleShape: Shape {
     let isOutgoing: Bool
+    /// When false (middle of chain), use fully rounded capsule corners.
+    var isLastInGroup: Bool = true
 
     func path(in rect: CGRect) -> Path {
-        let r = min(16, rect.height / 2)
+        // Capsule-like: corner radius ~ half height, capped for wide bubbles
+        let r = min(18, rect.height / 2)
         var path = Path()
-        let tl: CGFloat = isOutgoing ? r : 4
-        let tr: CGFloat = isOutgoing ? 4 : r
+        // Telegram: slightly tighter corner on the "tail" side of last bubble
+        let tail: CGFloat = isLastInGroup ? 6 : r
+        let tl: CGFloat = isOutgoing ? r : (isLastInGroup ? tail : r)
+        let tr: CGFloat = isOutgoing ? (isLastInGroup ? tail : r) : r
         let bl: CGFloat = r
         let br: CGFloat = r
         path.addRoundedRect(
@@ -397,15 +404,30 @@ struct PlinkMessageBubble: View {
 
     var body: some View {
         MessageRichText(text: text, fontSize: fontSize)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .background(bubbleFill)
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(isOwn || styleKey != nil ? 0.14 : 0.06), lineWidth: 0.8)
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(isOwn ? 0.18 : 0.10), lineWidth: 0.7)
+                    .opacity(0) // stroke drawn via shape clip below
             )
-            .clipShape(V5BubbleShape(isOutgoing: isOwn))
-            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+            .background(
+                // Glass edge for Telegram-modern look
+                ZStack {
+                    bubbleFill
+                    if !isOwn {
+                        // Incoming glassmorphism wash
+                        Color.white.opacity(0.04)
+                    }
+                }
+            )
+            .clipShape(V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup))
+            .overlay(
+                V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup)
+                    .stroke(Color.white.opacity(isOwn ? 0.16 : 0.08), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.22), radius: 6, y: 2)
     }
 
     @ViewBuilder
@@ -413,18 +435,30 @@ struct PlinkMessageBubble: View {
         if let styleKey {
             switch styleKey {
             case "bubble-quiet":
-                Color.white.opacity(isOwn ? 0.14 : 0.12)
+                // Soft glass capsule (own = accent-tinted, peer = frosted)
+                if isOwn {
+                    LinearGradient(
+                        colors: [
+                            Cinema2026.accent.opacity(0.88),
+                            Cinema2026.accent.opacity(0.72)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else {
+                    Color.white.opacity(0.12)
+                }
             default:
                 LinearGradient(
                     colors: fillColors,
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .opacity(isOwn ? 1.0 : 0.92)
+                .opacity(isOwn ? 1.0 : 0.94)
             }
         } else {
-            // Incoming without style metadata — neutral gray
-            Color.white.opacity(0.10)
+            // Incoming without style — frosted glass capsule
+            Color.white.opacity(0.12)
         }
     }
 }

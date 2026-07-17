@@ -174,6 +174,9 @@ final class DMChatService: ObservableObject {
             let messages = dtos.map { dto -> DirectMessage in
                 let isOwn = !me.isEmpty && dto.senderID == me
                 let decoded = PlinkBubbleWire.decode(dto.content)
+                let chips = (dto.reactions ?? []).map {
+                    DMReactionChip(emoji: $0.emoji, count: $0.count, includesMe: $0.includesMe)
+                }
                 return DirectMessage(
                     id: dto.id,
                     conversationID: convID,
@@ -184,7 +187,8 @@ final class DMChatService: ObservableObject {
                     timestamp: dto.createdAt,
                     isRead: dto.isRead ?? (dto.receiverID == me),
                     senderAvatarURL: isOwn ? nil : friendAvatarURL,
-                    bubbleStyle: decoded.styleID
+                    bubbleStyle: decoded.styleID,
+                    reactions: chips
                 )
             }
             // Merge server history with any newer local-only optimistic messages
@@ -207,7 +211,9 @@ final class DMChatService: ObservableObject {
                 // Avoid thrashing UI when nothing meaningful changed
                 let prev = conversations[convID] ?? []
                 let changed = prev.count != merged.count
-                    || zip(prev, merged).contains { $0.id != $1.id || $0.text != $1.text || $0.bubbleStyle != $1.bubbleStyle }
+                    || zip(prev, merged).contains {
+                        $0.id != $1.id || $0.text != $1.text || $0.bubbleStyle != $1.bubbleStyle || $0.reactions != $1.reactions
+                    }
                 if changed {
                     conversations[convID] = merged
                     historyEpoch &+= 1
@@ -264,7 +270,8 @@ final class DMChatService: ObservableObject {
             timestamp: Date(),
             isRead: false,
             senderAvatarURL: nil,
-            bubbleStyle: styleID
+            bubbleStyle: styleID,
+            reactions: []
         )
 
         var list = conversations[convID] ?? []
@@ -298,7 +305,8 @@ final class DMChatService: ObservableObject {
                         timestamp: saved.createdAt,
                         isRead: false,
                         senderAvatarURL: nil,
-                        bubbleStyle: decoded.styleID ?? styleID
+                        bubbleStyle: decoded.styleID ?? styleID,
+                        reactions: []
                     )
                     conversations[convID] = cur
                     historyEpoch &+= 1
@@ -326,7 +334,8 @@ final class DMChatService: ObservableObject {
             timestamp: message.timestamp,
             isRead: message.isRead,
             senderAvatarURL: message.senderAvatarURL,
-            bubbleStyle: decoded.styleID ?? message.bubbleStyle
+            bubbleStyle: decoded.styleID ?? message.bubbleStyle,
+            reactions: message.reactions
         )
         conversations[convID]?.append(normalized)
         historyEpoch &+= 1
@@ -336,6 +345,81 @@ final class DMChatService: ObservableObject {
         if openFriendId != friend.id, normalized.senderID != currentUserId {
             unreadByFriend[friend.id, default: 0] += 1
         }
+    }
+
+    // MARK: - Reactions (Telegram-style)
+
+    /// Toggle reaction on a message. Same emoji again removes; other replaces.
+    func toggleReaction(emoji: String, on message: DirectMessage, friendId: String) async {
+        // Optimistic local update
+        applyOptimisticReaction(emoji: emoji, messageId: message.id, friendId: friendId)
+        ensureToken()
+        struct Body: Encodable { let emoji: String }
+        struct Resp: Decodable {
+            let success: Bool?
+            let reactions: [ReactionDTO]?
+        }
+        do {
+            let resp: Resp = try await api.request(
+                "messages/dm/\(message.id)/react",
+                method: .post,
+                body: Body(emoji: emoji)
+            )
+            if let chips = resp.reactions {
+                setReactions(
+                    chips.map { DMReactionChip(emoji: $0.emoji, count: $0.count, includesMe: $0.includesMe) },
+                    messageId: message.id,
+                    friendId: friendId
+                )
+            }
+        } catch {
+            print("[DM] react error: \(error.localizedDescription)")
+            // Soft-fail: keep optimistic state; next history poll reconciles
+        }
+    }
+
+    private func applyOptimisticReaction(emoji: String, messageId: String, friendId: String) {
+        let convID = conversationID(with: friendId)
+        guard var list = conversations[convID],
+              let idx = list.firstIndex(where: { $0.id == messageId }) else { return }
+        var chips = list[idx].reactions
+        if let i = chips.firstIndex(where: { $0.emoji == emoji && $0.includesMe }) {
+            // Toggle off
+            let c = chips[i]
+            if c.count <= 1 {
+                chips.remove(at: i)
+            } else {
+                chips[i] = DMReactionChip(emoji: emoji, count: c.count - 1, includesMe: false)
+            }
+        } else {
+            // Remove previous own reaction on other emoji
+            chips = chips.compactMap { chip in
+                if chip.includesMe {
+                    if chip.count <= 1 { return nil }
+                    return DMReactionChip(emoji: chip.emoji, count: chip.count - 1, includesMe: false)
+                }
+                return chip
+            }
+            if let i = chips.firstIndex(where: { $0.emoji == emoji }) {
+                let c = chips[i]
+                chips[i] = DMReactionChip(emoji: emoji, count: c.count + 1, includesMe: true)
+            } else {
+                chips.append(DMReactionChip(emoji: emoji, count: 1, includesMe: true))
+            }
+        }
+        chips.sort { $0.count > $1.count }
+        list[idx].reactions = chips
+        conversations[convID] = list
+        historyEpoch &+= 1
+    }
+
+    private func setReactions(_ chips: [DMReactionChip], messageId: String, friendId: String) {
+        let convID = conversationID(with: friendId)
+        guard var list = conversations[convID],
+              let idx = list.firstIndex(where: { $0.id == messageId }) else { return }
+        list[idx].reactions = chips
+        conversations[convID] = list
+        historyEpoch &+= 1
     }
 
     // MARK: - Helpers
@@ -375,6 +459,12 @@ private struct UnreadDTO: Decodable {
     let lastAt: Date?
 }
 
+private struct ReactionDTO: Decodable {
+    let emoji: String
+    let count: Int
+    let includesMe: Bool
+}
+
 private struct DMMessageDTO: Decodable {
     let id: String
     let senderID: String
@@ -382,9 +472,10 @@ private struct DMMessageDTO: Decodable {
     let content: String
     let createdAt: Date
     let isRead: Bool?
+    let reactions: [ReactionDTO]?
 
     enum CodingKeys: String, CodingKey {
-        case id, content, createdAt, isRead
+        case id, content, createdAt, isRead, reactions
         case senderID, receiverID
         case senderId, receiverId
     }
@@ -395,6 +486,7 @@ private struct DMMessageDTO: Decodable {
         content = try c.decode(String.self, forKey: .content)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead)
+        reactions = try c.decodeIfPresent([ReactionDTO].self, forKey: .reactions)
         if let s = try c.decodeIfPresent(String.self, forKey: .senderID) {
             senderID = s
         } else {

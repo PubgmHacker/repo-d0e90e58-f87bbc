@@ -586,141 +586,115 @@ struct V4FriendsViewLive: View {
         let pinned = pinStore.isPinned(friend.id)
         let lastAt = dmService.lastActivityAt(for: friend.id)
 
-        return HStack(spacing: 12) {
-            Button { profileFriend = friend } label: {
+        return Button {
+            HapticManager.selection()
+            dmFriend = friend
+        } label: {
+            HStack(spacing: 12) {
                 ZStack(alignment: .topTrailing) {
                     V4Avatar(
                         letter: friend.initials,
                         theme: theme,
-                        size: 44,
+                        size: 52,
                         imageURL: PlinkAvatarURL.resolve(userId: friend.id, stored: friend.avatarURL)
                     )
                     .id("avatar-\(friend.id)-\(avatarBust)")
-                    // Unread dot on avatar (Telegram-style)
-                    if unread > 0 {
+                    .overlay(
                         Circle()
-                            .fill(V4.accent)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    // Online ring
+                    if friend.isOnline {
+                        Circle()
+                            .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
                             .frame(width: 12, height: 12)
                             .overlay(Circle().stroke(V4.canvas, lineWidth: 2))
-                            .offset(x: 2, y: -2)
+                            .offset(x: 2, y: 36)
                     }
-                }
-            }
-            .buttonStyle(.plain)
-
-            Button { dmFriend = friend } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        if pinned {
-                            Image(systemName: "pin.fill")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(V4.accent)
-                                .accessibilityLabel("Закреплён")
-                        }
-                        Text(friend.displayTitle)
-                            .font(.system(size: 15, weight: unread > 0 ? .heavy : .bold))
-                            .foregroundStyle(V4.ink)
-                            .lineLimit(1)
-                        if unread > 0 {
-                            Text("· новое")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(V4.accent)
-                        }
-                        Spacer(minLength: 0)
-                        if let lastAt {
-                            Text(Self.chatListTime(lastAt))
-                                .font(.system(size: 11, weight: unread > 0 ? .semibold : .regular))
-                                .foregroundStyle(unread > 0 ? V4.accent : V4.muted)
-                        }
-                    }
-                    if let preview, !preview.isEmpty {
-                        Text(preview)
-                            .font(.system(size: 12, weight: unread > 0 ? .semibold : .regular))
-                            .foregroundStyle(unread > 0 ? V4.ink.opacity(0.85) : V4.muted)
-                            .lineLimit(1)
-                    } else {
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(friend.isOnline ? Color(red: 0.3, green: 0.9, blue: 0.55) : V4.muted.opacity(0.5))
-                                .frame(width: 7, height: 7)
-                            Text(friend.presenceText)
-                                .font(.system(size: 12, weight: friend.isOnline ? .semibold : .regular))
-                                .foregroundStyle(friend.isOnline ? Color(red: 0.3, green: 0.9, blue: 0.55) : V4.muted)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 6)
-
-            Button { dmFriend = friend } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(unread > 0 ? V4.accentInk : V4.ink)
-                        .frame(width: 38, height: 38)
-                        .background(
-                            (unread > 0 ? V4.accent.opacity(0.95) : V4.raised.opacity(0.7)),
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(unread > 0 ? V4.accent.opacity(0.3) : V4.line.opacity(0.7))
-                        )
-
                     if unread > 0 {
                         Text(unread > 9 ? "9+" : "\(unread)")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color.red, in: Capsule())
-                            .offset(x: 6, y: -6)
-                            .accessibilityLabel("\(unread) непрочитанных")
+                            .background(Cinema2026.accent, in: Capsule())
+                            .offset(x: 4, y: -2)
+                    }
+                }
+                .onTapGesture { profileFriend = friend }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        if pinned {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(V4.accent)
+                        }
+                        Text(friend.displayTitle)
+                            .font(.system(size: 16, weight: unread > 0 ? .heavy : .semibold))
+                            .foregroundStyle(V4.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if let lastAt {
+                            Text(Self.chatListTime(lastAt))
+                                .font(.system(size: 12, weight: unread > 0 ? .semibold : .regular))
+                                .foregroundStyle(unread > 0 ? V4.accent : V4.muted)
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        if let preview, !preview.isEmpty {
+                            Text(preview)
+                                .font(.system(size: 13, weight: unread > 0 ? .medium : .regular))
+                                .foregroundStyle(unread > 0 ? V4.ink.opacity(0.8) : V4.muted)
+                                .lineLimit(1)
+                        } else {
+                            Text(friend.presenceText)
+                                .font(.system(size: 13))
+                                .foregroundStyle(
+                                    friend.isOnline
+                                    ? Color(red: 0.3, green: 0.9, blue: 0.55)
+                                    : V4.muted
+                                )
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
             }
-            .buttonStyle(.plain)
-
-            Button {
-                HapticManager.impact(.light)
-                watchWithFriend = friend
-                showCreateRoom = true
-            } label: {
-                Text("Смотреть")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(V4.accentInk)
-                    .padding(.horizontal, 11)
-                    .frame(height: 38)
-                    .background(V4.accent.opacity(0.95), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.55)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(
+                        pinned
+                        ? V4.accent.opacity(0.35)
+                        : (unread > 0 ? V4.accent.opacity(0.22) : Color.white.opacity(0.08)),
+                        lineWidth: 0.8
+                    )
+            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(
-            pinned
-                ? V4.accent.opacity(0.05)
-                : (unread > 0 ? V4.accent.opacity(0.06) : Color.clear)
-        )
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(V4.line.opacity(0.55)).frame(height: 1).padding(.leading, 70)
-        }
+        .buttonStyle(.plain)
         .contextMenu {
-            Button {
-                togglePin(friend)
-            } label: {
+            Button { togglePin(friend) } label: {
                 Label(
                     pinned ? "Открепить" : "Закрепить",
                     systemImage: pinned ? "pin.slash.fill" : "pin.fill"
                 )
             }
-            Button {
-                dmFriend = friend
-            } label: {
+            Button { dmFriend = friend } label: {
                 Label("Открыть чат", systemImage: "message.fill")
+            }
+            Button {
+                profileFriend = friend
+            } label: {
+                Label("Профиль", systemImage: "person.crop.circle")
             }
             Button {
                 watchWithFriend = friend

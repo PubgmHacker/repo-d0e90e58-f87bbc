@@ -1,7 +1,14 @@
 import Foundation
 
 // MARK: - Direct Message (личное сообщение между друзьями)
-struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
+/// Aggregated reaction chip on a DM (Telegram-style).
+struct DMReactionChip: Codable, Sendable, Equatable, Hashable {
+    let emoji: String
+    let count: Int
+    let includesMe: Bool
+}
+
+struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
     let id: String
     let conversationID: String
     let senderID: String
@@ -13,9 +20,37 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
     var senderAvatarURL: String?
     /// Sender's bubble style (synced via wire format). Renders for all viewers.
     var bubbleStyle: String?
+    /// Telegram-style reaction chips.
+    var reactions: [DMReactionChip]
 
     var timeString: String {
         timestamp.formatted(.dateTime.hour().minute())
+    }
+
+    init(
+        id: String,
+        conversationID: String,
+        senderID: String,
+        recipientID: String,
+        senderName: String,
+        text: String,
+        timestamp: Date,
+        isRead: Bool,
+        senderAvatarURL: String? = nil,
+        bubbleStyle: String? = nil,
+        reactions: [DMReactionChip] = []
+    ) {
+        self.id = id
+        self.conversationID = conversationID
+        self.senderID = senderID
+        self.recipientID = recipientID
+        self.senderName = senderName
+        self.text = text
+        self.timestamp = timestamp
+        self.isRead = isRead
+        self.senderAvatarURL = senderAvatarURL
+        self.bubbleStyle = bubbleStyle
+        self.reactions = reactions
     }
 
     /// Own vs other — prefer lightweight id key (always set on login).
@@ -54,6 +89,14 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable {
 
     static func == (lhs: DirectMessage, rhs: DirectMessage) -> Bool {
         lhs.id == rhs.id
+            && lhs.text == rhs.text
+            && lhs.reactions == rhs.reactions
+            && lhs.bubbleStyle == rhs.bubbleStyle
+            && lhs.isRead == rhs.isRead
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 

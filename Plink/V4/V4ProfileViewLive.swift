@@ -365,6 +365,8 @@ struct AvatarPickerSheet: View {
     @State private var previewImage: UIImage?
     @State private var selectedDefault: String? = nil
     @State private var pendingImage: UIImage?
+    @State private var showPhotosPicker = false
+    @State private var photosDeniedAlert = false
 
     private let defaultAvatars = ["avatar_default", "avatar_blue", "avatar_purple"]
 
@@ -425,7 +427,10 @@ struct AvatarPickerSheet: View {
 
                 Rectangle().fill(V4.line).frame(height: 0.5).padding(.horizontal, 24)
 
-                PhotosPicker(selection: $photoItem, matching: .images) {
+                // Request Photos permission once, then present the system picker
+                Button {
+                    Task { await pickFromGallery() }
+                } label: {
                     HStack(spacing: 8) {
                         if uploading {
                             ProgressView().tint(.white)
@@ -441,10 +446,18 @@ struct AvatarPickerSheet: View {
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
+                .buttonStyle(.plain)
                 .padding(.horizontal, 24)
                 .disabled(uploading)
+                .photosPicker(isPresented: $showPhotosPicker, selection: $photoItem, matching: .images)
                 .onChange(of: photoItem) { _, newItem in
                     Task { await loadPhoto(newItem) }
+                }
+                .alert("Нет доступа к галерее", isPresented: $photosDeniedAlert) {
+                    Button("Настройки") { PlinkPermissions.openAppSettings() }
+                    Button("Отмена", role: .cancel) {}
+                } message: {
+                    Text("Разрешите доступ к фото в Настройках → Плинк, чтобы сменить аватар.")
                 }
 
                 if let err = uploadError {
@@ -511,6 +524,16 @@ struct AvatarPickerSheet: View {
             return
         }
         dismiss()
+    }
+
+    /// System Photos dialog appears the first time (Info.plist usage string).
+    private func pickFromGallery() async {
+        let ok = await PlinkPermissions.requestPhotosIfNeeded()
+        if ok {
+            showPhotosPicker = true
+        } else {
+            photosDeniedAlert = true
+        }
     }
 
     private func loadPhoto(_ item: PhotosPickerItem?) async {

@@ -135,15 +135,8 @@ final class VoiceNoteRecorder: NSObject {
     // MARK: - Internals
 
     private func requestMicPermission() async -> Bool {
-        // iOS 17+: AVAudioApplication; falls back to session API if needed.
-        if #available(iOS 17.0, *) {
-            return await AVAudioApplication.requestRecordPermission()
-        }
-        return await withCheckedContinuation { cont in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                cont.resume(returning: granted)
-            }
-        }
+        // Central helper — system dialog once (NSMicrophoneUsageDescription in Info.plist)
+        return await PlinkPermissions.requestMicrophoneIfNeeded()
     }
 
     private func configureSession() throws {

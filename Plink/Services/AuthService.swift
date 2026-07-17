@@ -300,6 +300,10 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
         defaults.set(user.username, forKey: "plink_current_username")
         defaults.set(user.displayName ?? user.username, forKey: "plink_current_display_name")
         defaults.set(user.role ?? "USER", forKey: "plink_current_user_role")
+        // After registration / login — ready for one-time gallery prompt on avatar change
+        Task { @MainActor in
+            PlinkPermissions.markPostAuthSession()
+        }
         NotificationCenter.default.post(name: .plinkProfileDidUpdate, object: user)
     }
 

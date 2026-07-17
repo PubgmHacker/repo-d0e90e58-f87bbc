@@ -63,6 +63,11 @@ public final class RoomRTCController {
 
     /// Toggle microphone (currently stub).
     public func toggleMicrophone() async {
+        // First room-voice use → system mic permission dialog (once).
+        if !isMicrophoneEnabled {
+            let ok = await PlinkPermissions.requestMicrophoneIfNeeded()
+            guard ok else { return }
+        }
         // Stub: toggle local state only.
         // Real: localParticipant.setMicrophone(enabled: !isMicrophoneEnabled)
         isMicrophoneEnabled.toggle()
@@ -77,6 +82,13 @@ public final class RoomRTCController {
 
     /// Set microphone enabled state.
     public func setMicrophone(enabled: Bool) async {
+        if enabled {
+            let ok = await PlinkPermissions.requestMicrophoneIfNeeded()
+            guard ok else {
+                isMicrophoneEnabled = false
+                return
+            }
+        }
         isMicrophoneEnabled = enabled
     }
 

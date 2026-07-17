@@ -81,6 +81,10 @@ targets:
       path: Plink/Resources/Info.plist
       properties:
         CFBundleDisplayName: Плинк
+        NSPhotoLibraryUsageDescription: Плинк использует галерею, чтобы вы могли выбрать и сменить аватар в профиле.
+        NSPhotoLibraryAddUsageDescription: Плинк может сохранять изображения только по вашему действию.
+        NSMicrophoneUsageDescription: Микрофон нужен для голосовых сообщений друзьям и голосового общения в комнате.
+        NSCameraUsageDescription: Камера нужна для аватара и видеосообщений, когда вы их включите.
         UILaunchScreen:
           UIColorName: raveBackground
         UIRequiresFullScreen: false

@@ -632,6 +632,7 @@ struct EditProfileSheet: View {
     @State private var showCoverPicker = false
     @State private var selectedAvatarItem: PhotosPickerItem?
     @State private var selectedCoverItem: PhotosPickerItem?
+    @State private var photosDeniedAlert = false
 
     init(viewModel: ProfileViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -687,7 +688,10 @@ struct EditProfileSheet: View {
                             .frame(maxHeight: .infinity, alignment: .bottom)
 
                             Button {
-                                showCoverPicker = true
+                                Task {
+                                    let ok = await PlinkPermissions.requestPhotosIfNeeded()
+                                    if ok { showCoverPicker = true } else { photosDeniedAlert = true }
+                                }
                             } label: {
                                 ZStack {
                                     Circle()
@@ -721,7 +725,12 @@ struct EditProfileSheet: View {
                                 .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                                 .frame(width: 108, height: 108)
 
-                            Button { showAvatarPicker = true } label: {
+                            Button {
+                                Task {
+                                    let ok = await PlinkPermissions.requestPhotosIfNeeded()
+                                    if ok { showAvatarPicker = true } else { photosDeniedAlert = true }
+                                }
+                            } label: {
                                 ZStack(alignment: .bottomTrailing) {
                                     AvatarView(
                                         image: viewModel.avatarImage,
@@ -919,6 +928,12 @@ struct EditProfileSheet: View {
                     }
                 }
                 selectedCoverItem = nil
+            }
+            .alert("Нет доступа к галерее", isPresented: $photosDeniedAlert) {
+                Button("Настройки") { PlinkPermissions.openAppSettings() }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("Разрешите доступ к фото в Настройках → Плинк, чтобы сменить аватар.")
             }
         }
     }

@@ -286,25 +286,57 @@ struct V4AppearanceView: View {
     private func bubbleStyleCard(_ style: AppearanceDescriptor) -> some View {
         let selected = selectedBubbleID == style.id
         let locked = style.premium && !premium.isPremium
+        let frame = BubbleFrameModel.resolve(styleID: style.id)
         return Button {
             selectBubbleStyle(style)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                // Mini bubble preview
-                Text("Aa")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        LinearGradient(
-                            colors: style.previewColors.map { Color(hex: $0) },
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                // Mini TikTok-style frame preview
+                ZStack {
+                    Text("Привет!")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            LinearGradient(
+                                colors: frame.fillColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .opacity(locked ? 0.45 : 1)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: frame.borderColors,
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: frame.borderWidth
+                                )
+                        )
+                    if frame.isDecorative {
+                        let c = frame.cornerEmojis
+                        VStack {
+                            HStack {
+                                if let e = c.tl { Text(e).font(.system(size: 12)) }
+                                Spacer(minLength: 0)
+                                if let e = c.tr { Text(e).font(.system(size: 12)) }
+                            }
+                            Spacer(minLength: 0)
+                            HStack {
+                                if let e = c.bl { Text(e).font(.system(size: 10)) }
+                                Spacer(minLength: 0)
+                                if let e = c.br { Text(e).font(.system(size: 10)) }
+                            }
+                        }
+                        .padding(2)
+                    }
+                }
+                .frame(height: 48)
+                .opacity(locked ? 0.45 : 1)
 
                 Text(style.title)
                     .font(.system(size: 11, weight: .heavy))

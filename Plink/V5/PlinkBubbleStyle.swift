@@ -43,10 +43,172 @@ enum BubbleStyleRegistry {
     static func migrateLegacyID(_ raw: String?) -> String {
         switch raw ?? "default" {
         case "default":       return "bubble-quiet"
-        case "cute_duck":     return "bubble-ink-flow"
+        case "cute_duck":     return "bubble-frame-cat"   // legacy cute → TikTok cat frame
         case "neon_cyber":    return "bubble-pulse-ring"
         case "admin_bubble":  return "bubble-prism"
+        case "bubble-ink-flow": return "bubble-frame-unicorn"
+        case "bubble-comet":    return "bubble-frame-stars"
+        case "bubble-signal":   return "bubble-frame-rainbow"
         default:              return raw ?? "bubble-quiet"
+        }
+    }
+}
+
+// MARK: - TikTok-style frame models (decorative borders + animal corners)
+
+/// One “frame model” — like TikTok chat frames: fill, border, corner mascots.
+enum BubbleFrameModel: String, CaseIterable, Sendable {
+    case quiet
+    case accent
+    case cat
+    case dog
+    case hearts
+    case bunny
+    case panda
+    case fox
+    case bear
+    case unicorn
+    case dino
+    case stars
+    case flowers
+    case rainbow
+    case frog
+    case pulse
+    case prism
+
+    static func resolve(styleID: String?) -> BubbleFrameModel {
+        let id = BubbleStyleRegistry.migrateLegacyID(styleID)
+        switch id {
+        case "bubble-quiet": return .quiet
+        case "bubble-accent": return .accent
+        case "bubble-frame-cat": return .cat
+        case "bubble-frame-dog": return .dog
+        case "bubble-frame-hearts": return .hearts
+        case "bubble-frame-bunny": return .bunny
+        case "bubble-frame-panda": return .panda
+        case "bubble-frame-fox": return .fox
+        case "bubble-frame-bear": return .bear
+        case "bubble-frame-unicorn": return .unicorn
+        case "bubble-frame-dino": return .dino
+        case "bubble-frame-stars": return .stars
+        case "bubble-frame-flowers": return .flowers
+        case "bubble-frame-rainbow": return .rainbow
+        case "bubble-frame-frog": return .frog
+        case "bubble-pulse-ring": return .pulse
+        case "bubble-prism": return .prism
+        default: return .quiet
+        }
+    }
+
+    /// Corner stickers (TikTok puts animals on frame corners).
+    var cornerEmojis: (tl: String?, tr: String?, bl: String?, br: String?) {
+        switch self {
+        case .quiet, .accent, .pulse, .prism:
+            return (nil, nil, nil, nil)
+        case .cat:
+            return ("🐱", "🐱", "🐾", "🐾")
+        case .dog:
+            return ("🐶", "🐶", "🦴", "🐾")
+        case .hearts:
+            return ("💕", "💖", "💗", "💘")
+        case .bunny:
+            return ("🐰", "🐰", "🥕", "✨")
+        case .panda:
+            return ("🐼", "🐼", "🎋", "🍃")
+        case .fox:
+            return ("🦊", "🦊", "🍂", "✨")
+        case .bear:
+            return ("🐻", "🐻", "🍯", "💤")
+        case .unicorn:
+            return ("🦄", "✨", "🌈", "💫")
+        case .dino:
+            return ("🦕", "🦕", "🌿", "🥚")
+        case .stars:
+            return ("⭐", "✨", "🌙", "💫")
+        case .flowers:
+            return ("🌸", "🌼", "🌺", "🌷")
+        case .rainbow:
+            return ("🌈", "✨", "☁️", "💛")
+        case .frog:
+            return ("🐸", "🐸", "🍃", "💚")
+        }
+    }
+
+    var borderColors: [Color] {
+        switch self {
+        case .quiet: return [Color.white.opacity(0.14)]
+        case .accent: return [Color(hex: "#00D4FF"), Color(hex: "#3FE8C8")]
+        case .cat: return [Color(hex: "#FF8DC7"), Color(hex: "#FFC6E8"), Color(hex: "#FF6BB5")]
+        case .dog: return [Color(hex: "#F5A962"), Color(hex: "#FFD4A3")]
+        case .hearts: return [Color(hex: "#FF6B9D"), Color(hex: "#FFB3C7")]
+        case .bunny: return [Color(hex: "#E8D5FF"), Color(hex: "#C4B5FD")]
+        case .panda: return [Color.white.opacity(0.9), Color.black.opacity(0.55)]
+        case .fox: return [Color(hex: "#FF7A18"), Color(hex: "#FFD29D")]
+        case .bear: return [Color(hex: "#A67C52"), Color(hex: "#E8C4A0")]
+        case .unicorn: return [Color(hex: "#F0ABFC"), Color(hex: "#A5B4FC"), Color(hex: "#67E8F9")]
+        case .dino: return [Color(hex: "#4ADE80"), Color(hex: "#86EFAC")]
+        case .stars: return [Color(hex: "#6366F1"), Color(hex: "#FDE68A")]
+        case .flowers: return [Color(hex: "#FB7185"), Color(hex: "#F9A8D4")]
+        case .rainbow: return [
+            Color(hex: "#F87171"), Color(hex: "#FBBF24"),
+            Color(hex: "#34D399"), Color(hex: "#60A5FA"), Color(hex: "#A78BFA")
+        ]
+        case .frog: return [Color(hex: "#4ADE80"), Color(hex: "#BBF7D0")]
+        case .pulse: return [Color(hex: "#3FE8C8"), Color(hex: "#00D4FF")]
+        case .prism: return [Color(hex: "#F59E0B"), Color(hex: "#3FE8C8"), Color(hex: "#A855F7")]
+        }
+    }
+
+    var fillColors: [Color] {
+        switch self {
+        case .quiet:
+            return [Color.white.opacity(0.12)]
+        case .accent, .pulse:
+            return [Color(hex: "#00D4FF").opacity(0.88), Color(hex: "#3FE8C8").opacity(0.75)]
+        case .cat:
+            return [Color(hex: "#3D1F33").opacity(0.92), Color(hex: "#5A2A48").opacity(0.88)]
+        case .dog:
+            return [Color(hex: "#3A2618").opacity(0.92), Color(hex: "#5C3A22").opacity(0.88)]
+        case .hearts:
+            return [Color(hex: "#3B1528").opacity(0.92), Color(hex: "#5C1F3D").opacity(0.9)]
+        case .bunny:
+            return [Color(hex: "#2A2040").opacity(0.92), Color(hex: "#3D2F5C").opacity(0.9)]
+        case .panda:
+            return [Color(hex: "#1A1A1A").opacity(0.92), Color(hex: "#2C2C2C").opacity(0.9)]
+        case .fox:
+            return [Color(hex: "#3A1E0C").opacity(0.92), Color(hex: "#5C3014").opacity(0.9)]
+        case .bear:
+            return [Color(hex: "#2A1C12").opacity(0.92), Color(hex: "#3F2A1A").opacity(0.9)]
+        case .unicorn:
+            return [Color(hex: "#2A1840").opacity(0.92), Color(hex: "#1E2A4A").opacity(0.9)]
+        case .dino:
+            return [Color(hex: "#14281A").opacity(0.92), Color(hex: "#1F3D28").opacity(0.9)]
+        case .stars:
+            return [Color(hex: "#12142E").opacity(0.94), Color(hex: "#1C1F48").opacity(0.9)]
+        case .flowers:
+            return [Color(hex: "#2E1524").opacity(0.92), Color(hex: "#3F1E32").opacity(0.9)]
+        case .rainbow:
+            return [Color(hex: "#1A1A2E").opacity(0.92), Color(hex: "#252545").opacity(0.9)]
+        case .frog:
+            return [Color(hex: "#142A18").opacity(0.92), Color(hex: "#1F3D24").opacity(0.9)]
+        case .prism:
+            return [Color(hex: "#1A1430").opacity(0.92), Color(hex: "#2A1F48").opacity(0.9)]
+        }
+    }
+
+    var borderWidth: CGFloat {
+        switch self {
+        case .quiet: return 0.8
+        case .accent, .pulse: return 1.6
+        case .rainbow, .unicorn, .prism: return 2.4
+        default: return 2.0
+        }
+    }
+
+    var isDecorative: Bool {
+        switch self {
+        case .quiet, .accent, .pulse, .prism: return false
+        default: return true
         }
     }
 }
@@ -364,10 +526,10 @@ struct ChatClusterLayout: Equatable {
     }
 }
 
-// MARK: - Shared bubble for DM + room chat
+// MARK: - Shared bubble for DM + room chat (TikTok frames + glass capsules)
 
-/// Renders text with the **sender's** bubble style (rides with the message).
-/// All clients must render premium styles for free viewers.
+/// Renders text with the **sender's** bubble / frame style.
+/// TikTok-style models add animal corners + colored borders (synced via wire).
 struct PlinkMessageBubble: View {
     let text: String
     let isOwn: Bool
@@ -377,88 +539,126 @@ struct PlinkMessageBubble: View {
     /// Telegram tail: only last in group gets the "pointy" corner.
     var isLastInGroup: Bool = true
 
-    /// Resolved style — from message when present; own messages fall back to prefs.
-    private var styleKey: String? {
+    private var frame: BubbleFrameModel {
         if let styleID, !styleID.isEmpty {
-            return BubbleStyleRegistry.migrateLegacyID(styleID)
+            return BubbleFrameModel.resolve(styleID: styleID)
         }
         if isOwn {
-            return BubbleStyleRegistry.migrateLegacyID(PlinkBubbleStylePrefs.currentID)
+            return BubbleFrameModel.resolve(styleID: PlinkBubbleStylePrefs.currentID)
         }
-        return nil
+        return .quiet
     }
 
-    private var fillColors: [Color] {
-        guard let styleKey else { return [Color.white.opacity(0.10)] }
-        let desc = BubbleStyleRegistry.safeDescriptor(id: styleKey)
-        let hexes = desc.previewColors
-        let parsed: [Color] = hexes.compactMap { hex -> Color? in
-            let t = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-            guard t.count == 6, let v = UInt32(t, radix: 16) else { return nil }
-            return Color(hex: v)
-        }
-        if parsed.count >= 2 { return parsed }
-        if let one = parsed.first { return [one, one.opacity(0.85)] }
-        return [Cinema2026.accent.opacity(0.92)]
+    private var shape: V5BubbleShape {
+        V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup)
     }
 
     var body: some View {
+        // Extra inset for decorative frames so mascots sit outside the text
+        let padH: CGFloat = frame.isDecorative ? 18 : 14
+        let padV: CGFloat = frame.isDecorative ? 12 : 10
+        let outer: CGFloat = frame.isDecorative ? 10 : 0
+
         MessageRichText(text: text, fontSize: fontSize)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(bubbleFill)
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.white.opacity(isOwn ? 0.18 : 0.10), lineWidth: 0.7)
-                    .opacity(0) // stroke drawn via shape clip below
-            )
-            .background(
-                // Glass edge for Telegram-modern look
-                ZStack {
-                    bubbleFill
-                    if !isOwn {
-                        // Incoming glassmorphism wash
-                        Color.white.opacity(0.04)
-                    }
+            .padding(.horizontal, padH)
+            .padding(.vertical, padV)
+            .background(fillLayer)
+            .clipShape(shape)
+            .overlay(borderLayer)
+            .overlay(alignment: .center) {
+                if frame.isDecorative {
+                    TikTokFrameDecor(frame: frame)
                 }
+            }
+            .padding(outer)
+            .shadow(
+                color: frame.isDecorative
+                    ? frame.borderColors.first?.opacity(0.35) ?? .black.opacity(0.2)
+                    : .black.opacity(0.22),
+                radius: frame.isDecorative ? 10 : 6,
+                y: 2
             )
-            .clipShape(V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup))
-            .overlay(
-                V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup)
-                    .stroke(Color.white.opacity(isOwn ? 0.16 : 0.08), lineWidth: 0.8)
-            )
-            .shadow(color: .black.opacity(0.22), radius: 6, y: 2)
     }
 
     @ViewBuilder
-    private var bubbleFill: some View {
-        if let styleKey {
-            switch styleKey {
-            case "bubble-quiet":
-                // Soft glass capsule (own = accent-tinted, peer = frosted)
-                if isOwn {
-                    LinearGradient(
-                        colors: [
-                            Cinema2026.accent.opacity(0.88),
-                            Cinema2026.accent.opacity(0.72)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                } else {
-                    Color.white.opacity(0.12)
-                }
-            default:
+    private var fillLayer: some View {
+        switch frame {
+        case .quiet:
+            if isOwn {
                 LinearGradient(
-                    colors: fillColors,
+                    colors: [
+                        Cinema2026.accent.opacity(0.88),
+                        Cinema2026.accent.opacity(0.72)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .opacity(isOwn ? 1.0 : 0.94)
+            } else {
+                Color.white.opacity(0.12)
             }
-        } else {
-            // Incoming without style — frosted glass capsule
-            Color.white.opacity(0.12)
+        default:
+            LinearGradient(
+                colors: frame.fillColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
+    }
+
+    @ViewBuilder
+    private var borderLayer: some View {
+        if frame.borderColors.count >= 2 {
+            shape
+                .stroke(
+                    AngularGradient(
+                        colors: frame.borderColors + [frame.borderColors[0]],
+                        center: .center
+                    ),
+                    lineWidth: frame.borderWidth
+                )
+        } else {
+            shape
+                .stroke(
+                    frame.borderColors.first ?? Color.white.opacity(0.12),
+                    lineWidth: frame.borderWidth
+                )
+        }
+    }
+}
+
+// MARK: - TikTok frame decorations (corner mascots)
+
+/// Animals / stickers sit on bubble corners — same idea as TikTok message frames.
+private struct TikTokFrameDecor: View {
+    let frame: BubbleFrameModel
+
+    var body: some View {
+        let c = frame.cornerEmojis
+        GeometryReader { geo in
+            let s: CGFloat = min(22, max(16, geo.size.height * 0.28))
+            ZStack {
+                if let e = c.tl {
+                    Text(e).font(.system(size: s))
+                        .position(x: 2, y: 2)
+                        .offset(x: s * 0.15, y: s * 0.1)
+                }
+                if let e = c.tr {
+                    Text(e).font(.system(size: s))
+                        .position(x: geo.size.width - 2, y: 2)
+                        .offset(x: -s * 0.15, y: s * 0.1)
+                }
+                if let e = c.bl {
+                    Text(e).font(.system(size: s * 0.85))
+                        .position(x: 4, y: geo.size.height - 2)
+                        .offset(x: s * 0.1, y: -s * 0.1)
+                }
+                if let e = c.br {
+                    Text(e).font(.system(size: s * 0.85))
+                        .position(x: geo.size.width - 4, y: geo.size.height - 2)
+                        .offset(x: -s * 0.1, y: -s * 0.1)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

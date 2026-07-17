@@ -125,7 +125,13 @@ final class PremiumStatusManager: ObservableObject {
 
     /// True if this bubble style id is free for everyone.
     static func isFreeBubbleStyle(_ id: String) -> Bool {
-        id == "bubble-quiet" || id == "bubble-accent" || id == "default"
+        switch id {
+        case "bubble-quiet", "bubble-accent", "default",
+             "bubble-frame-cat", "bubble-frame-dog", "bubble-frame-hearts":
+            return true
+        default:
+            return false
+        }
     }
 
     /// True if this room theme is free.

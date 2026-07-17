@@ -587,8 +587,8 @@ struct V4FriendsViewLive: View {
         let pinned = pinStore.isPinned(friend.id)
         let lastAt = dmService.lastActivityAt(for: friend.id)
 
-        return HStack(spacing: 0) {
-            // Main tappable chat area (Telegram-style row)
+        // Flat Telegram-style row inside shared sectionCard (no nested capsules / extra gaps)
+        return HStack(spacing: 10) {
             Button {
                 HapticManager.selection()
                 dmFriend = friend
@@ -598,31 +598,30 @@ struct V4FriendsViewLive: View {
                         PlinkStableAvatar(
                             url: PlinkAvatarURL.stable(userId: friend.id, stored: friend.avatarURL),
                             letter: friend.initials,
-                            size: 54
+                            size: 48
                         )
-                        .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
                         if friend.isOnline {
                             Circle()
                                 .fill(Color(red: 0.3, green: 0.9, blue: 0.55))
-                                .frame(width: 13, height: 13)
-                                .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 2))
+                                .frame(width: 11, height: 11)
+                                .overlay(Circle().stroke(V4.surface.opacity(0.95), lineWidth: 2))
                                 .offset(x: 1, y: 1)
                         }
                     }
                     .onTapGesture { profileFriend = friend }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
                             if pinned {
                                 Image(systemName: "pin.fill")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(size: 9, weight: .bold))
                                     .foregroundStyle(V4.accent)
                             }
                             Text(friend.displayTitle)
-                                .font(.system(size: 16, weight: unread > 0 ? .heavy : .semibold))
+                                .font(.system(size: 15.5, weight: unread > 0 ? .heavy : .semibold))
                                 .foregroundStyle(V4.ink)
                                 .lineLimit(1)
-                            Spacer(minLength: 4)
+                            Spacer(minLength: 6)
                             if let lastAt {
                                 Text(Self.chatListTime(lastAt))
                                     .font(.system(size: 12, weight: unread > 0 ? .semibold : .regular))
@@ -632,7 +631,7 @@ struct V4FriendsViewLive: View {
                         HStack(spacing: 6) {
                             if let preview, !preview.isEmpty {
                                 Text(preview)
-                                    .font(.system(size: 13.5, weight: unread > 0 ? .medium : .regular))
+                                    .font(.system(size: 13, weight: unread > 0 ? .medium : .regular))
                                     .foregroundStyle(unread > 0 ? V4.ink.opacity(0.85) : V4.muted)
                                     .lineLimit(1)
                             } else {
@@ -650,53 +649,43 @@ struct V4FriendsViewLive: View {
                                 Text(unread > 99 ? "99+" : "\(unread)")
                                     .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
                                     .background(V4.accent, in: Capsule())
                             }
                         }
                     }
                 }
-                .padding(.leading, 14)
-                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // Watch-together shortcut (movie logo)
+            // Compact watch-together control (icon only)
             Button {
                 HapticManager.impact(.light)
                 watchWithFriend = friend
                 showCreateRoom = true
             } label: {
-                VStack(spacing: 3) {
-                    Image(systemName: "film.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Смотреть")
-                        .font(.system(size: 9, weight: .bold))
-                }
-                .foregroundStyle(V4.accentInk)
-                .frame(width: 64, height: 54)
-                .background(V4.accent.opacity(0.95), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                Image(systemName: "film.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(V4.accent)
+                    .frame(width: 34, height: 34)
+                    .background(V4.accent.opacity(0.14), in: Circle())
+                    .overlay(Circle().stroke(V4.accent.opacity(0.28), lineWidth: 0.8))
             }
             .buttonStyle(.plain)
-            .padding(.trailing, 12)
             .accessibilityLabel("Смотреть вместе с \(friend.displayTitle)")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(unread > 0 ? 0.07 : 0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    pinned ? V4.accent.opacity(0.35) : Color.white.opacity(0.08),
-                    lineWidth: 0.8
-                )
-        )
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(unread > 0 ? V4.accent.opacity(0.05) : Color.clear)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(V4.line.opacity(0.45))
+                .frame(height: 0.5)
+                .padding(.leading, 74) // align under text, past avatar
+        }
         .contextMenu {
             Button { togglePin(friend) } label: {
                 Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash.fill" : "pin.fill")

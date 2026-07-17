@@ -23,7 +23,7 @@ import UIKit  // PATCH 16: UIApplication + UIWindowScene for Rutube fallback pre
 public final class WatchRoomModel: RealtimeClientDelegate {
     // MARK: - Public state (UI binds to these)
     // Default to .connecting (not .idle) so the SyncHealthPill shows
-    // "Connecting\u2026" instead of "Offline" during the brief moment between
+    // "Connecting..." instead of "Offline" during the brief moment between
     // view appear and model.connect() running. disconnect() still sets .idle
     // so the pill correctly shows "Offline" after the user leaves the room.
     public private(set) var connectionState: RealtimeConnectionState = .connecting
@@ -183,7 +183,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         if case .youtube(let ytId) = mediaSource {
             NSLog("[WatchRoom] extracting YouTube stream for AVPlayer, videoId=\(ytId)")
             if let extracted = await Self.extractYouTubeStreamURL(videoId: ytId) {
-                NSLog("[WatchRoom] extracted stream URL: \(extracted.absoluteString.prefix(80))\u2026")
+                NSLog("[WatchRoom] extracted stream URL: \(extracted.absoluteString.prefix(80))...")
                 if extracted.pathExtension.lowercased() == "m3u8" || extracted.absoluteString.contains(".m3u8") {
                     mediaSource = .hls(extracted, headers: [:])
                 } else {

@@ -22,7 +22,11 @@ import UIKit  // PATCH 16: UIApplication + UIWindowScene for Rutube fallback pre
 @Observable
 public final class WatchRoomModel: RealtimeClientDelegate {
     // MARK: - Public state (UI binds to these)
-    public private(set) var connectionState: RealtimeConnectionState = .idle
+    // Default to .connecting (not .idle) so the SyncHealthPill shows
+    // "Connecting\u2026" instead of "Offline" during the brief moment between
+    // view appear and model.connect() running. disconnect() still sets .idle
+    // so the pill correctly shows "Offline" after the user leaves the room.
+    public private(set) var connectionState: RealtimeConnectionState = .connecting
     public private(set) var isHost: Bool = false
     public private(set) var role: RoomRole = .viewer
     public private(set) var participants: [ParticipantInfo] = []
@@ -170,6 +174,26 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             }
         }
 
+        // AVPlayer path: if source is .youtube(videoId), extract direct stream
+        // URL via backend /api/media/extract. Backend uses Piped/Invidious/
+        // YouTube Internal API to get a muxed MP4 or HLS URL that AVPlayer can
+        // play natively with sound + autoplay + full sync control (like Rave).
+        // Falls back to .youtube (WKWebView) if extraction fails - degraded
+        // but app still works.
+        if case .youtube(let ytId) = mediaSource {
+            NSLog("[WatchRoom] extracting YouTube stream for AVPlayer, videoId=\(ytId)")
+            if let extracted = await Self.extractYouTubeStreamURL(videoId: ytId) {
+                NSLog("[WatchRoom] extracted stream URL: \(extracted.absoluteString.prefix(80))\u2026")
+                if extracted.pathExtension.lowercased() == "m3u8" || extracted.absoluteString.contains(".m3u8") {
+                    mediaSource = .hls(extracted, headers: [:])
+                } else {
+                    mediaSource = .mp4(extracted, headers: ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"])
+                }
+            } else {
+                NSLog("[WatchRoom] YouTube extraction failed - falling back to WKWebView")
+            }
+        }
+
         if let source = mediaSource {
             do {
                 try await coordinator.prepare(source)
@@ -204,6 +228,56 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             return (source, mid)
         } catch {
             print("[WatchRoom] refetch media failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Extract direct stream URL from backend /api/media/extract for AVPlayer.
+    /// Backend uses Piped API / Invidious / YouTube Internal API to get a
+    /// muxed MP4 or HLS URL that AVPlayer can play natively with sound +
+    /// autoplay (no WKWebView, no user gesture needed).
+    /// Returns nil if extraction fails - caller falls back to .youtube WKWebView.
+    private static func extractYouTubeStreamURL(videoId: String) async -> URL? {
+        let api = APIClient.shared
+        if api.authToken == nil {
+            api.authToken = KeychainHelper.read(for: "rave_auth_token")
+        }
+        guard let token = api.authToken else {
+            NSLog("[WatchRoom] extractYouTubeStreamURL: no auth token")
+            return nil
+        }
+        guard let baseURL = URL(string: "https://plink-backend-production-ef31.up.railway.app") else {
+            return nil
+        }
+        var components = URLComponents(url: baseURL.appendingPathComponent("api/media/extract"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "id", value: videoId)]
+        guard let url = components?.url else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                NSLog("[WatchRoom] extractYouTubeStreamURL: HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                return nil
+            }
+            // Parse { streamURL: "...", ... }
+            struct StreamInfo: Decodable {
+                let streamURL: String?
+                let hlsURL: String?
+            }
+            let info = try JSONDecoder().decode(StreamInfo.self, from: data)
+            // Prefer HLS for live/long videos, else muxed MP4
+            let urlString = info.hlsURL ?? info.streamURL
+            guard let urlString, !urlString.isEmpty, let url = URL(string: urlString) else {
+                NSLog("[WatchRoom] extractYouTubeStreamURL: no streamURL in response")
+                return nil
+            }
+            return url
+        } catch {
+            NSLog("[WatchRoom] extractYouTubeStreamURL error: \(error.localizedDescription)")
             return nil
         }
     }

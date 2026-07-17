@@ -11,7 +11,8 @@ enum PresenceHeartbeat {
         task = Task {
             await ping()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000) // 60s
+                // 30s — friends list ONLINE_THRESHOLD is 10 min; stay fresh
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { break }
                 if UIApplication.shared.applicationState == .active {
                     await ping()

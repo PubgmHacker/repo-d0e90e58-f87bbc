@@ -193,6 +193,8 @@ extension Notification.Name {
     static let plinkAvatarsDidChange = Notification.Name("plink.avatarsDidChange")
     /// object = userId (String)
     static let plinkUserAvatarDidChange = Notification.Name("plink.userAvatarDidChange")
+    /// object = friendId, userInfo["at"] = Date — DM activity for presence
+    static let plinkFriendActivity = Notification.Name("plink.friendActivity")
 }
 
 struct V4RoundButton: View {

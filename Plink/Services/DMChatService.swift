@@ -206,42 +206,59 @@ final class DMChatService: ObservableObject {
                     hasMedia: isVoice || (dto.hasMedia == true)
                 )
             }
-            // Merge server history with any newer local-only optimistic messages
-            // (avoids chat "vanishing" after send if server lags).
+            // Server history is source of truth for this window (newest 200).
+            // Keep only very recent optimistic locals not yet on server.
             if messages.isEmpty, let existing = conversations[convID], !existing.isEmpty {
                 print("[DM] history empty from server — keep \(existing.count) local msgs")
             } else {
                 var merged = messages
                 if let existing = conversations[convID] {
                     let serverIds = Set(messages.map(\.id))
-                    let localsOnly = existing.filter { !serverIds.contains($0.id) && $0.id.count > 20 }
-                    // Keep very recent optimistics not yet on server
+                    let newestServer = messages.map(\.timestamp).max() ?? .distantPast
+                    let localsOnly = existing.filter { msg in
+                        !serverIds.contains(msg.id)
+                            && msg.id.count > 20 // UUID optimistic
+                            && msg.timestamp >= newestServer.addingTimeInterval(-60)
+                    }
                     for loc in localsOnly {
-                        if !merged.contains(where: { $0.text == loc.text && abs($0.timestamp.timeIntervalSince(loc.timestamp)) < 30 }) {
+                        if !merged.contains(where: {
+                            $0.text == loc.text && abs($0.timestamp.timeIntervalSince(loc.timestamp)) < 45
+                        }) {
                             merged.append(loc)
                         }
                     }
                     merged.sort { $0.timestamp < $1.timestamp }
                 }
-                // Avoid thrashing UI when nothing meaningful changed —
-                // MUST include isRead so Telegram ✓ / ✓✓ updates when peer opens chat.
+                // Always apply server snapshot when quiet==false (open chat) or when
+                // content changed — fixes "preview shows msg, open chat shows old only".
                 let prev = conversations[convID] ?? []
-                let changed = prev.count != merged.count
+                let changed = !quiet
+                    || prev.count != merged.count
                     || zip(prev, merged).contains {
                         $0.id != $1.id
                             || $0.text != $1.text
                             || $0.bubbleStyle != $1.bubbleStyle
                             || $0.reactions != $1.reactions
                             || $0.isRead != $1.isRead
+                            || $0.hasMedia != $1.hasMedia
                     }
                 if changed {
                     conversations[convID] = merged
                     historyEpoch &+= 1
                 }
             }
+            // Preview / activity from real last message in conversation
             if let last = (conversations[convID] ?? messages).last {
                 lastPreviewByFriend[friendId] = last.text
                 touchActivity(friendId: friendId, at: last.timestamp, preview: last.text)
+                // Peer activity ⇒ fresher last-seen for presence UI
+                if last.senderID == friendId {
+                    NotificationCenter.default.post(
+                        name: .plinkFriendActivity,
+                        object: friendId,
+                        userInfo: ["at": last.timestamp]
+                    )
+                }
             }
             print("[DM] history \(conversations[convID]?.count ?? 0) msgs with \(friendId)")
         } catch {
@@ -462,6 +479,14 @@ final class DMChatService: ObservableObject {
         updateLastMessage(conversationID: convID, friend: friend, message: normalized)
         if openFriendId != friend.id, normalized.senderID != currentUserId {
             unreadByFriend[friend.id, default: 0] += 1
+        }
+        // Freshen last-seen from inbound DMs
+        if normalized.senderID == friend.id {
+            NotificationCenter.default.post(
+                name: .plinkFriendActivity,
+                object: friend.id,
+                userInfo: ["at": normalized.timestamp]
+            )
         }
     }
 

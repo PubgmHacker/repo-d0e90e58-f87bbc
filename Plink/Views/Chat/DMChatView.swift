@@ -209,8 +209,9 @@ struct DMChatView: View {
         }
         .task {
             dmService.chatDidOpen(friendId: friend.id)
-            // Seed live friends so avatar updates while DM is open
+            // Seed live friends so avatar / last-seen stay fresh
             await friendManager.loadFriends()
+            // Force full history apply (newest window) — fixes preview vs open mismatch
             await dmService.loadHistory(
                 friendId: friend.id,
                 friendName: liveFriend.displayTitle,
@@ -218,15 +219,15 @@ struct DMChatView: View {
                 quiet: false
             )
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
                 guard !Task.isCancelled else { break }
-                // Keep friend avatar fresh while chat is open (~1s)
                 await friendManager.loadFriends()
+                // quiet:false every poll so server newest messages always win
                 await dmService.loadHistory(
                     friendId: friend.id,
                     friendName: liveFriend.displayTitle,
                     friendAvatarURL: liveFriend.avatarURL,
-                    quiet: true
+                    quiet: false
                 )
             }
         }

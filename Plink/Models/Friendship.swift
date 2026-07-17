@@ -57,36 +57,39 @@ struct Friend: Codable, Identifiable, Sendable, Equatable, Hashable {
 enum FriendPresence {
     /// Telegram RU status line under the name in a private chat.
     static func displayText(isOnline: Bool, lastSeenAt: Date?) -> String {
+        // Fresh last-seen wins over a sticky isOnline flag
+        if let last = lastSeenAt {
+            let sec = Date().timeIntervalSince(last)
+            if sec < 0 || sec < 90 { return "в сети" }
+            if isOnline && sec < 10 * 60 { return "в сети" }
+            if sec < 3600 {
+                let m = max(1, Int(sec / 60))
+                if m == 1 { return "был(а) 1 минуту назад" }
+                if m < 5 { return "был(а) \(m) минуты назад" }
+                return "был(а) \(m) минут назад"
+            }
+            if sec < 86_400 {
+                let h = max(1, Int(sec / 3600))
+                if h == 1 { return "был(а) 1 час назад" }
+                if h < 5 { return "был(а) \(h) часа назад" }
+                return "был(а) \(h) часов назад"
+            }
+            let cal = Calendar.current
+            if cal.isDateInYesterday(last) {
+                let t = last.formatted(Date.FormatStyle().hour().minute())
+                return "был(а) вчера в \(t)"
+            }
+            if sec < 86_400 * 7 {
+                let d = max(1, Int(sec / 86_400))
+                return "был(а) \(d) \(dayWord(d)) назад"
+            }
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "ru_RU")
+            df.dateFormat = "d MMM"
+            return "был(а) \(df.string(from: last))"
+        }
         if isOnline { return "в сети" }
-        guard let last = lastSeenAt else { return "был(а) давно" }
-        let sec = Date().timeIntervalSince(last)
-        if sec < 0 { return "в сети" }
-        if sec < 45 { return "был(а) только что" }
-        if sec < 3600 {
-            let m = max(1, Int(sec / 60))
-            if m == 1 { return "был(а) 1 минуту назад" }
-            if m < 5 { return "был(а) \(m) минуты назад" }
-            return "был(а) \(m) минут назад"
-        }
-        // Same calendar day → «был(а) в 14:32»
-        let cal = Calendar.current
-        if cal.isDateInToday(last) {
-            let t = last.formatted(Date.FormatStyle().hour().minute())
-            return "был(а) в \(t)"
-        }
-        if cal.isDateInYesterday(last) {
-            let t = last.formatted(Date.FormatStyle().hour().minute())
-            return "был(а) вчера в \(t)"
-        }
-        if sec < 86_400 * 7 {
-            let d = max(1, Int(sec / 86_400))
-            return "был(а) \(d) \(dayWord(d)) назад"
-        }
-        // Older: date only
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "ru_RU")
-        df.dateFormat = "d MMM"
-        return "был(а) \(df.string(from: last))"
+        return "был(а) давно"
     }
 
     private static func dayWord(_ d: Int) -> String {

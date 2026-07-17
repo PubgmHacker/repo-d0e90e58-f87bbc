@@ -24,8 +24,77 @@ final class FriendManager: ObservableObject {
 
     private let api: APIClient
 
+    /// friendId → last activity we observed (DM message time) — max with server lastSeen.
+    private var localActivityAt: [String: Date] = [:]
+
     init(api: APIClient) {
         self.api = api
+        NotificationCenter.default.addObserver(
+            forName: .plinkFriendActivity,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let id = note.object as? String else { return }
+            let at = (note.userInfo?["at"] as? Date) ?? Date()
+            Task { @MainActor in
+                self?.noteActivity(friendId: id, at: at)
+            }
+        }
+    }
+
+    /// Record that a friend was active (sent a DM). Refreshes presence text immediately.
+    func noteActivity(friendId: String, at date: Date = Date()) {
+        let prev = localActivityAt[friendId]
+        if prev == nil || date > (prev ?? .distantPast) {
+            localActivityAt[friendId] = date
+        }
+        // Patch friend row in-place for instant UI
+        if let idx = friends.firstIndex(where: { $0.id == friendId }) {
+            let f = friends[idx]
+            let last = max(f.lastSeenAt ?? .distantPast, date)
+            let online = Date().timeIntervalSince(last) < 10 * 60
+            friends[idx] = Friend(
+                id: f.id,
+                username: f.username,
+                avatarURL: f.avatarURL,
+                isOnline: online || f.isOnline,
+                friendsSince: f.friendsSince,
+                displayName: f.displayName,
+                lastSeenAt: last,
+                isPinned: f.isPinned,
+                pinOrder: f.pinOrder,
+                avatarVersion: f.avatarVersion
+            )
+            objectWillChange.send()
+        }
+    }
+
+    private func applyLocalPresenceHints(_ friend: Friend) -> Friend {
+        let hinted = localActivityAt[friend.id]
+        let serverLast = friend.lastSeenAt
+        let best: Date? = {
+            switch (hinted, serverLast) {
+            case let (h?, s?): return max(h, s)
+            case let (h?, nil): return h
+            case let (nil, s?): return s
+            default: return nil
+            }
+        }()
+        guard let best else { return friend }
+        let age = Date().timeIntervalSince(best)
+        let online = age < 10 * 60 || friend.isOnline
+        return Friend(
+            id: friend.id,
+            username: friend.username,
+            avatarURL: friend.avatarURL,
+            isOnline: online,
+            friendsSince: friend.friendsSince,
+            displayName: friend.displayName,
+            lastSeenAt: best,
+            isPinned: friend.isPinned,
+            pinOrder: friend.pinOrder,
+            avatarVersion: friend.avatarVersion
+        )
     }
 
     // MARK: - Load All
@@ -56,7 +125,9 @@ final class FriendManager: ObservableObject {
         }
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
-            let next = dtos.map { $0.toFriend() }
+            var next = dtos.map { $0.toFriend() }
+            // Apply local activity hints (DM received) so last-seen isn't stuck 2h
+            next = next.map { applyLocalPresenceHints($0) }
             // Realtime avatar: when server ?v= / avatarVersion changes, drop cache
             // for that user so list + open DM show the new photo immediately.
             let prevAvatars = Dictionary(uniqueKeysWithValues: friends.map { ($0.id, $0.avatarURL ?? "") })

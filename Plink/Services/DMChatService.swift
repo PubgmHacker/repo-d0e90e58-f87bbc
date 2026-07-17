@@ -189,9 +189,6 @@ final class DMChatService: ObservableObject {
                 let voiceMeta = PlinkVoiceWire.decode(decoded.text)
                 let isVoice = dto.mediaType == "voice" || (dto.hasMedia == true) || voiceMeta.isVoice
                 let displayText = voiceMeta.isVoice ? voiceMeta.displayText : decoded.text
-                if isVoice {
-                    NSLog("[DMVoice] history voice msg id=\(dto.id) mediaType=\(dto.mediaType ?? "nil") hasMedia=\(dto.hasMedia ?? false) wireVoice=\(voiceMeta.isVoice) dur=\(voiceMeta.durationSec ?? -1)")
-                }
                 return DirectMessage(
                     id: dto.id,
                     conversationID: convID,
@@ -329,7 +326,6 @@ final class DMChatService: ObservableObject {
     ///   - dataURL: `data:audio/mp4;base64,...`
     ///   - durationSec: measured recording length
     func sendVoiceNote(dataURL: String, durationSec: TimeInterval, to friend: Friend) {
-        NSLog("[DMVoice] sendVoiceNote friendId=\(friend.id) dur=\(durationSec)s dataLen=\(dataURL.count)")
         if friend.deleted {
             errorMessage = "Нельзя написать удалённому аккаунту"
             return
@@ -403,7 +399,6 @@ final class DMChatService: ObservableObject {
                         content: wireContent
                     )
                 )
-                NSLog("[DMVoice] upload OK savedId=\(saved.id) mediaType=\(saved.mediaType ?? "nil") hasMedia=\(saved.hasMedia ?? false) dur=\(saved.mediaDurationSec ?? -1)")
                 // Re-key local audio so play keeps working after id swap
                 VoiceNotePlayer.shared.promote(from: localID, to: saved.id)
                 if var cur = conversations[convID],
@@ -431,7 +426,6 @@ final class DMChatService: ObservableObject {
                 }
             } catch {
                 errorMessage = "Голосовое: \(error.localizedDescription)"
-                NSLog("[DMVoice] upload FAIL: \(error.localizedDescription)")
                 print("[DM] sendVoiceNote error: \(error.localizedDescription)")
                 // Keep optimistic row — still playable from local cache
             }
@@ -544,31 +538,18 @@ final class DMChatService: ObservableObject {
         if conversations[convID] == nil { conversations[convID] = [] }
         if conversations[convID]?.contains(where: { $0.id == message.id }) == true { return }
         let decoded = PlinkBubbleWire.decode(message.text)
-        // Re-detect voice metadata from the wire format. The realtime path
-        // may carry voice notes as text-only payloads when the upstream
-        // service does not set mediaType/hasMedia explicitly. If we don't
-        // re-flag voice here, the bubble renders as plain text instead of
-        // the VoiceNoteBubble capsule.
-        let wireVoice = PlinkVoiceWire.decode(decoded.text)
-        let isVoice = message.mediaType == "voice"
-            || message.hasMedia
-            || wireVoice.isVoice
-        let displayText = wireVoice.isVoice ? wireVoice.displayText : decoded.text
         let normalized = DirectMessage(
             id: message.id,
             conversationID: message.conversationID,
             senderID: message.senderID,
             recipientID: message.recipientID,
             senderName: message.senderName,
-            text: displayText,
+            text: decoded.text,
             timestamp: message.timestamp,
             isRead: message.isRead,
             senderAvatarURL: message.senderAvatarURL,
             bubbleStyle: decoded.styleID ?? message.bubbleStyle,
-            reactions: message.reactions,
-            mediaType: isVoice ? "voice" : message.mediaType,
-            mediaDurationSec: message.mediaDurationSec ?? wireVoice.durationSec,
-            hasMedia: isVoice || message.hasMedia
+            reactions: message.reactions
         )
         conversations[convID]?.append(normalized)
         historyEpoch &+= 1

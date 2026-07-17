@@ -131,11 +131,12 @@ enum PlinkPermissions {
     }
 
     // MARK: - Microphone (voice notes / room voice)
-    // Deployment target is iOS 17.0+ — use AVAudioApplication exclusively.
-    // AVAudioSession.sharedInstance().recordPermission is deprecated in iOS 17.
 
     static var isMicAuthorized: Bool {
-        AVAudioApplication.shared.recordPermission == .granted
+        if #available(iOS 17.0, *) {
+            return AVAudioApplication.shared.recordPermission == .granted
+        }
+        return AVAudioSession.sharedInstance().recordPermission == .granted // deprecated fallback for iOS < 17
     }
 
     /// Request mic once — first voice note or room voice toggle. Shows system dialog.
@@ -145,7 +146,14 @@ enum PlinkPermissions {
 
         UserDefaults.standard.set(true, forKey: Keys.didPromptMic)
 
-        return await AVAudioApplication.requestRecordPermission()
+        if #available(iOS 17.0, *) {
+            return await AVAudioApplication.requestRecordPermission()
+        }
+        return await withCheckedContinuation { cont in
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                cont.resume(returning: granted)
+            }
+        }
     }
 
     /// Open Settings when user previously denied and a feature truly requires re-grant.

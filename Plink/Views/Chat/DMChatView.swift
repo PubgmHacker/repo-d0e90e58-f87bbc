@@ -246,18 +246,15 @@ struct DMChatView: View {
                 quiet: false
             )
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
                 guard !Task.isCancelled else { break }
-                // Do NOT call friendManager.loadFriends() here \u2014 it triggers
-                // a full UI re-render every 3s (friends list is @Observable),
-                // which re-snapshots the contextMenu preview during long-press
-                // and causes flicker. Friends are loaded once on .task entry
-                // above; the Friends tab refreshes presence independently.
+                await friendManager.loadFriends()
+                // quiet:false every poll so server newest messages always win
                 await dmService.loadHistory(
                     friendId: friend.id,
                     friendName: liveFriend.displayTitle,
                     friendAvatarURL: liveFriend.avatarURL,
-                    quiet: true
+                    quiet: false
                 )
             }
         }
@@ -882,30 +879,34 @@ private struct DMBubble: View {
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-                // Apply .contextMenu to each individual bubble rather than to
-                // the Group wrapping the conditional content. SwiftUI's
-                // contextMenu preview snapshot hits a flicker when the Group's
-                // body re-evaluates during the long-press (e.g. a polling
-                // refresh flips isVoiceNote or arrives with new reactions).
-                // Per-bubble contextMenu gives a stable snapshot target.
-                if message.isVoiceNote {
-                    VoiceNoteBubble(
-                        message: message,
-                        isOwn: isOwn
-                    )
-                    .contextMenu {
-                        contextMenuButtons
+                Group {
+                    if message.isVoiceNote {
+                        VoiceNoteBubble(
+                            message: message,
+                            isOwn: isOwn
+                        )
+                    } else {
+                        PlinkMessageBubble(
+                            text: message.text,
+                            isOwn: isOwn,
+                            styleID: message.bubbleStyle,
+                            fontSize: PlinkTelegramBubbleMetrics.fontSize,
+                            isLastInGroup: cluster.isLastInGroup
+                        )
                     }
-                } else {
-                    PlinkMessageBubble(
-                        text: message.text,
-                        isOwn: isOwn,
-                        styleID: message.bubbleStyle,
-                        fontSize: PlinkTelegramBubbleMetrics.fontSize,
-                        isLastInGroup: cluster.isLastInGroup
-                    )
-                    .contextMenu {
-                        contextMenuButtons
+                }
+                .contextMenu {
+                    Button {
+                        onReact()
+                    } label: {
+                        Label("Реакция", systemImage: "face.smiling")
+                    }
+                    if !message.isVoiceNote {
+                        Button {
+                            UIPasteboard.general.string = message.text
+                        } label: {
+                            Label("Копировать", systemImage: "doc.on.doc")
+                        }
                     }
                 }
                 // Removed onLongPressGesture — conflicts with .contextMenu causing flicker.
@@ -945,26 +946,6 @@ private struct DMBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
-    }
-
-    /// Context menu buttons shared by both voice and text bubbles.
-    /// Defined once so the menu's content is identical regardless of which
-    /// bubble type the user long-pressed — avoids SwiftUI re-evaluating two
-    /// separate menu builders during the long-press gesture.
-    @ViewBuilder
-    private var contextMenuButtons: some View {
-        Button {
-            onReact()
-        } label: {
-            Label("Реакция", systemImage: "face.smiling")
-        }
-        if !message.isVoiceNote {
-            Button {
-                UIPasteboard.general.string = message.text
-            } label: {
-                Label("Копировать", systemImage: "doc.on.doc")
-            }
-        }
     }
 
     private var reactionChips: some View {
@@ -1046,64 +1027,6 @@ private struct VoiceNoteBubble: View {
         message.isVoiceNote || message.hasMedia || message.mediaType == "voice"
     }
 
-    /// Resolve the same BubbleFrameModel PlinkMessageBubble uses, so the
-    /// voice bubble matches the user's selected bubble style (Prisma, etc.)
-    /// instead of always using Cinema2026.accent (turquoise).
-    /// For own voice notes, ALWAYS prefer PlinkBubbleStylePrefs.currentID
-    /// over message.bubbleStyle because legacy voice messages may have nil
-    /// bubbleStyle even though the user selected Prisma/etc locally.
-    private var frame: BubbleFrameModel {
-        if isOwn {
-            return BubbleFrameModel.resolve(styleID: PlinkBubbleStylePrefs.currentID)
-        }
-        if let styleID = message.bubbleStyle, !styleID.isEmpty {
-            return BubbleFrameModel.resolve(styleID: styleID)
-        }
-        return .quiet
-    }
-
-    /// Fill layer matching PlinkMessageBubble.fillLayer so voice bubbles
-    /// visually match text bubbles with the same styleID.
-    @ViewBuilder
-    private var fillLayer: some View {
-        switch frame {
-        case .quiet:
-            if isOwn {
-                LinearGradient(
-                    colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.92)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            } else {
-                LinearGradient(
-                    colors: [Color(hex: "#2E333A"), Color(hex: "#252A30")],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        default:
-            LinearGradient(
-                colors: frame.fillColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var borderLayer: some View {
-        if frame.borderColors.count >= 2 {
-            V5BubbleShape(isOutgoing: isOwn, isLastInGroup: true)
-                .stroke(
-                    AngularGradient(
-                        colors: frame.borderColors + [frame.borderColors[0]],
-                        center: .center
-                    ),
-                    lineWidth: frame.borderWidth
-                )
-        }
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             Button {
@@ -1173,13 +1096,23 @@ private struct VoiceNoteBubble: View {
         .padding(.vertical, PlinkTelegramBubbleMetrics.padV)
         .background(
             ZStack {
-                // Dark base for contrast even if gradient is translucent
                 Color(hex: "#1A1C20")
-                fillLayer
+                if isOwn {
+                    LinearGradient(
+                        colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.92)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else {
+                    Color(hex: "#2E333A")
+                }
             }
         )
         .clipShape(V5BubbleShape(isOutgoing: isOwn, isLastInGroup: true))
-        .overlay(borderLayer)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(isOwn ? 0.20 : 0.14), lineWidth: 1)
+        )
         .shadow(color: .black.opacity(0.40), radius: 8, y: 3)
         .shadow(color: .black.opacity(0.20), radius: 1, y: 0.5)
     }

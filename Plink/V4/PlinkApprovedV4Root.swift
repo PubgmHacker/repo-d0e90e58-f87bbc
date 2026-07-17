@@ -183,37 +183,21 @@ struct PlinkApprovedV4Root: View {
     private func quickCreateRoom() async {
         guard let trending = searchStore.trending.first else { return }
         guard KeychainHelper.read(for: "rave_auth_token") != nil else { return }
-        // Ensure APIClient.shared has the token — Keychain alone is NOT enough
-        // for RoomService.createRoom (which uses APIClient.request that reads
-        // authToken from memory). Without this, createRoom silently 401s and
-        // the user sees an eternal spinner with "Offline" pill in the room.
-        if APIClient.shared.authToken == nil {
-            APIClient.shared.authToken = KeychainHelper.read(for: "rave_auth_token")
-        }
-        guard APIClient.shared.authToken != nil else {
-            await MainActor.run { HapticManager.errorOccurred() }
-            return
-        }
-
         let videoId = trending.id
-        // Use watch URL — backend + client both extract videoId reliably
-        // (embed URL has different extraction paths and historically lost
-        // the mediaItem on the server side, leaving rooms with no media).
-        let streamURL = "https://www.youtube.com/watch?v=\(videoId)"
         let mediaItem = MediaItem(
-            id: videoId,
+            id: "https://www.youtube.com/embed/\(videoId)",
             title: trending.title,
             artist: nil,
             thumbnailURL: trending.artworkURL?.absoluteString,
-            streamURL: streamURL,
+            streamURL: "https://www.youtube.com/embed/\(videoId)",
             duration: nil,
             mediaType: .video,
             source: .youtube,
             videoId: videoId
         )
         let request = CreateRoomRequest(
-            name: String(trending.title.prefix(80)),
-            maxParticipants: 10,
+            name: "\(trending.title)",
+            maxParticipants: 4,
             mediaItem: mediaItem,
             privacy: .publicRoom,
             password: nil,
@@ -221,40 +205,15 @@ struct PlinkApprovedV4Root: View {
         )
         do {
             let api = APIClient.shared
-            var room = try await RoomService(api: api).createRoom(request)
-            // If server stripped mediaItem, keep the local one for playback
-            // — otherwise mediaSource is nil → "Нет видео" + Offline pill.
-            if room.mediaItem == nil {
-                room = Room(
-                    id: room.id,
-                    name: room.name,
-                    hostID: room.hostID,
-                    hostName: room.hostName,
-                    code: room.code,
-                    participants: room.participants,
-                    mediaItem: mediaItem,
-                    isActive: room.isActive,
-                    maxParticipants: room.maxParticipants,
-                    hostIsPremium: room.hostIsPremium,
-                    createdAt: room.createdAt,
-                    privacy: room.privacy,
-                    password: room.password
-                )
-            }
+            let room = try await RoomService(api: api).createRoom(request)
             await MainActor.run {
                 HapticManager.roomJoined()
                 PlinkAppDelegate.requestNotificationPermission()
                 UIPasteboard.general.string = "Код комнаты Plink: \(room.code)"
                 roomToPresent = room
-                NotificationCenter.default.post(name: .plinkRoomCreated, object: room)
                 Task { await roomsStore?.load() }
             }
-        } catch {
-            await MainActor.run {
-                HapticManager.errorOccurred()
-                print("[Root] quickCreateRoom failed: \(error)")
-            }
-        }
+        } catch {}
     }
 
     /// Create room from a specific trending video.

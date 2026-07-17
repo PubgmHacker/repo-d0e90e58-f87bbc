@@ -37,8 +37,7 @@ struct PlayerTopChrome: View {
 
                 SyncHealthPill(
                     driftMs: model.lastDriftMs,
-                    connected: model.connectionState == .connected,
-                    transientLabel: SyncHealthPill.transientLabel(for: model.connectionState)
+                    connected: model.connectionState == .connected
                 )
 
                 Spacer()
@@ -157,16 +156,9 @@ struct BufferingOverlay: View {
 struct SyncHealthPill: View {
     let driftMs: Double
     let connected: Bool
-    /// Optional transient label ("Connecting…", "Syncing…", "Reconnecting…").
-    /// When non-nil and not connected, this text replaces the bare "Offline"
-    /// so the user sees an active progress state instead of a dead-end label.
-    var transientLabel: String? = nil
 
     private var color: Color {
-        if !connected {
-            // Transient states use amber (in-progress), true offline uses red.
-            return transientLabel == nil ? Cinema2026.danger : Cinema2026.amber
-        }
+        guard connected else { return Cinema2026.danger }
         if driftMs < 80 { return Cinema2026.accent }
         if driftMs < 250 { return Cinema2026.secondary }
         if driftMs < 750 { return Cinema2026.amber }
@@ -174,10 +166,7 @@ struct SyncHealthPill: View {
     }
 
     private var label: String {
-        if !connected {
-            // Show the active progress label if provided; otherwise bare Offline.
-            return transientLabel ?? "Offline"
-        }
+        guard connected else { return "Offline" }
         if driftMs < 80 { return "In sync" }
         if driftMs < 250 { return "Syncing" }
         if driftMs < 750 { return "Lagging" }
@@ -198,25 +187,5 @@ struct SyncHealthPill: View {
         .padding(.vertical, 5)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.06), lineWidth: 0.5))
-    }
-
-    /// Map a RealtimeConnectionState to a transient UX label.
-    /// Returns nil for .connected (handled by drift label) and .idle/.failed
-    /// (those are "Offline" — the user should see the bare red state).
-    static func transientLabel(for state: RealtimeConnectionState) -> String? {
-        switch state {
-        case .connecting:
-            return "Connecting…"
-        case .authenticating:
-            return "Authenticating…"
-        case .joining:
-            return "Joining…"
-        case .synchronizing:
-            return "Syncing…"
-        case .reconnecting(let attempt):
-            return attempt > 1 ? "Reconnecting (\(attempt))…" : "Reconnecting…"
-        case .connected, .idle, .failed:
-            return nil
-        }
     }
 }

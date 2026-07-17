@@ -226,7 +226,6 @@ public final class RealtimeClient: NSObject {
             setState(.failed(reason: "No roomId"))
             return
         }
-        NSLog("[Realtime] openConnection roomId=\(roomId)")
         generation = UUID()
         let gen = generation
         clockSynced = false
@@ -236,9 +235,7 @@ public final class RealtimeClient: NSObject {
         let ticket: RealtimeTicket
         do {
             ticket = try await ticketProvider(roomId)
-            NSLog("[Realtime] ticket OK roomId=\(ticket.roomId) expiresIn=\(ticket.expiresInSec)s")
         } catch {
-            NSLog("[Realtime] ticket FAIL: \(error.localizedDescription)")
             if gen == generation { setState(.failed(reason: "Ticket error: \(error.localizedDescription)")) }
             return
         }
@@ -260,7 +257,6 @@ public final class RealtimeClient: NSObject {
 
         var request = URLRequest(url: url)
         request.setValue("plink.v2, plink.ticket.\(ticket.jwt)", forHTTPHeaderField: "Sec-WebSocket-Protocol")
-        NSLog("[Realtime] WS url=\(url.absoluteString)")
         let cfg = URLSessionConfiguration.default
         cfg.waitsForConnectivity = true
         cfg.timeoutIntervalForRequest = 15
@@ -425,7 +421,6 @@ public final class RealtimeClient: NSObject {
 
     private func handleReceiveError(_ error: Error) {
         let nsError = error as NSError
-        NSLog("[Realtime] receive error code=\(nsError.code) domain=\(nsError.domain) desc=\(nsError.localizedDescription)")
         let transient = [57, 60, 54, -1005, -1009, -1001].contains(nsError.code)
         if transient {
             beginReconnect(cause: "receive error: \(nsError.localizedDescription)")
@@ -486,7 +481,6 @@ public final class RealtimeClient: NSObject {
     }
 
     private func setState(_ newState: RealtimeConnectionState) {
-        NSLog("[Realtime] state: \(newState)")
         state = newState
         for sink in stateSinks { sink.continuation.yield(newState) }
     }

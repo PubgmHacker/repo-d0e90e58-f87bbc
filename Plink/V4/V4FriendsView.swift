@@ -285,16 +285,12 @@ struct V4FriendsViewLive: View {
         .onReceive(NotificationCenter.default.publisher(for: .plinkRoomsDidChange)) { _ in
             Task { await loadRecentRooms() }
         }
-        // Friends list (presence + avatars) while tab visible.
-        // Was 1s poll - caused contextMenu flicker on long-press because
-        // friendManager.loadAll() rebuilds @Published friends array every
-        // second, forcing SwiftUI to re-snapshot the preview. 10s is enough
-        // for presence; avatars refresh instantly via .plinkAvatarsDidChange.
+        // Friends list (presence + avatars) while tab visible — ~1s for near-realtime avatars
         .task(id: isActive) {
             guard isActive else { return }
             await store?.refreshQuietly()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10s
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
                 guard !Task.isCancelled, isActive else { break }
                 await store?.refreshQuietly()
             }
@@ -304,7 +300,7 @@ struct V4FriendsViewLive: View {
             dmService.startUnreadPolling()
             await inviteService.refreshFromServer()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard !Task.isCancelled else { break }
                 if scenePhase == .active {
                     await inviteService.refreshFromServer()

@@ -42,10 +42,15 @@ struct PlayerTopChrome: View {
 
                 Spacer()
 
-                PlayerChromeButton(systemName: "ellipsis") {
-                    model.openPlayerSettings()
+                ShareLink(item: model.roomShareText) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Cinema2026.text)
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 0.5))
                 }
-                .accessibilityLabel("More options")
+                .accessibilityLabel("Invite to room")
             }
             .padding(.horizontal, 14)
             .padding(.top, variant == .landscape ? 12 : 8)

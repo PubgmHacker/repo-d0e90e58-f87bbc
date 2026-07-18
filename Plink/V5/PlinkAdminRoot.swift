@@ -22,29 +22,28 @@ import SwiftUI
 // MARK: - AdminModule enum
 
 internal enum AdminModule: String, CaseIterable, Identifiable {
-    case overview, users, rooms, moderation, flags
-    case analytics, system, audit, broadcasts, premium
+    case users, rooms, moderation, flags, analytics
+    case system, audit, broadcasts, premium, blocklists
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .overview:    return "Overview"
         case .users:       return "Users"
         case .rooms:       return "Rooms"
         case .moderation:  return "Moderation"
         case .flags:       return "Flags"
         case .analytics:   return "Analytics"
         case .system:      return "System"
-        case .audit:       return "Audit"
+        case .audit:       return "Audit Log"
         case .broadcasts:  return "Broadcasts"
-        case .premium:     return "Premium & Assets"
+        case .premium:     return "Premium"
+        case .blocklists:  return "Blocklists"
         }
     }
 
     var icon: String {
         switch self {
-        case .overview:    return "chart.bar.xaxis"
         case .users:       return "person.2"
         case .rooms:       return "rectangle.3.group.bubble"
         case .moderation:  return "shield.lefthalf.filled"
@@ -54,6 +53,24 @@ internal enum AdminModule: String, CaseIterable, Identifiable {
         case .audit:       return "doc.text.magnifyingglass"
         case .broadcasts:  return "megaphone.fill"
         case .premium:     return "crown.fill"
+        case .blocklists:  return "hand.raised.fill"
+        }
+    }
+
+    var apiPrefix: String { "/api/admin/\(rawValue)" }
+
+    var owner: String {
+        switch self {
+        case .users:       return "auth-team"
+        case .rooms:       return "navigation-team"
+        case .moderation:  return "chat-team"
+        case .flags:       return "platform-team"
+        case .analytics:   return "data-team"
+        case .system:      return "platform-team"
+        case .audit:       return "security-team"
+        case .broadcasts:  return "growth-team"
+        case .premium:     return "billing-team"
+        case .blocklists:  return "trust-safety-team"
         }
     }
 }
@@ -61,7 +78,7 @@ internal enum AdminModule: String, CaseIterable, Identifiable {
 // MARK: - AdminRootView
 
 internal struct AdminRootView: View {
-    @State private var module: AdminModule = .overview
+    @State private var module: AdminModule = .users
 
     init() {}
 
@@ -104,7 +121,6 @@ internal struct AdminRootView: View {
     @ViewBuilder
     private var moduleContent: some View {
         switch module {
-        case .overview:        AdminOverviewModule()
         case .users:           AdminUsersModule()
         case .rooms:           AdminRoomsModule()
         case .moderation:      AdminModerationModule()
@@ -114,6 +130,23 @@ internal struct AdminRootView: View {
         case .audit:           AdminAuditModule()
         case .broadcasts:      AdminBroadcastsModule()
         case .premium:         AdminPremiumModule()
+        case .blocklists:      AdminBlocklistsModule()
+        }
+    }
+
+    @ViewBuilder
+    static func previewContent(for module: AdminModule) -> some View {
+        switch module {
+        case .users:           AdminUsersModule()
+        case .rooms:           AdminRoomsModule()
+        case .moderation:      AdminModerationModule()
+        case .flags:           AdminFlagsModule()
+        case .analytics:       AdminAnalyticsModule()
+        case .system:          AdminSystemModule()
+        case .audit:           AdminAuditModule()
+        case .broadcasts:      AdminBroadcastsModule()
+        case .premium:         AdminPremiumModule()
+        case .blocklists:      AdminBlocklistsModule()
         }
     }
 }
@@ -418,11 +451,11 @@ struct AdminPremiumModule: View {
                 Text("Appearance catalog")
                     .font(.headline)
                     .padding(.top, 8)
-                ForEach(AppearanceCatalog.all) { d in
+                ForEach(AdminAppearanceCatalogItem.all) { d in
                     HStack {
                         Text(d.title).font(.subheadline)
                         Spacer()
-                        Text(d.kind.rawValue).font(.caption2).foregroundStyle(.white.opacity(0.5))
+                        Text(d.kind).font(.caption2).foregroundStyle(.white.opacity(0.5))
                         Text(d.premium ? "Plink+" : "free").font(.caption2).foregroundStyle(d.premium ? .yellow : .white.opacity(0.5))
                     }
                     .padding(8)
@@ -431,6 +464,43 @@ struct AdminPremiumModule: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 11. Blocklists
+
+struct AdminBlocklistsModule: View {
+    var body: some View {
+        AdminModuleShell(title: "Blocklists") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Trust & Safety blocklists")
+                    .font(.headline)
+                Text("Manage blocked users, domains, and abuse patterns.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+}
+
+private struct AdminAppearanceCatalogItem: Identifiable {
+    let id: String
+    let title: String
+    let kind: String
+    let premium: Bool
+
+    static let all: [AdminAppearanceCatalogItem] = [
+        .init(id: "classic", title: "Classic", kind: "theme", premium: false),
+        .init(id: "aurora", title: "Aurora", kind: "live-theme", premium: true),
+        .init(id: "prisma", title: "Prisma Bubbles", kind: "bubble", premium: true),
+    ]
+}
+
+struct AdminModuleView: View {
+    let module: AdminModule
+
+    var body: some View {
+        AdminRootView.previewContent(for: module)
     }
 }
 

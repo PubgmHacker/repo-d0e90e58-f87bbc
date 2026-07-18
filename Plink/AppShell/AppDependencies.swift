@@ -39,9 +39,8 @@ final class AppDependencies {
     /// Live dependencies wired from existing app state.
     @MainActor
     static var live: AppDependencies {
-        let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app/api"
-        let apiClient = APIClient(baseURL: apiBaseURL)
-        let authService = AuthService(api: apiClient)
+        let apiClient = APIClient.shared
+        let authService = AuthService.shared
         let roomService = RoomService(api: apiClient)
         return AppDependencies(
             apiClient: apiClient,

@@ -39,14 +39,9 @@ final class MediaService {
     // MARK: - Public API
 
     /// Resolve media metadata for a YouTube URL.
-    /// Release builds reject googlevideo.com stream URLs (App Store policy).
+    /// Release builds reject legacy direct-stream extraction at compile time.
     func extract(youTubeURL: String) async throws -> ExtractedMedia {
-        #if !DEBUG
-        // App Store: do not call legacy extract that returns CDN stream URLs.
-        // Callers should open the official embed player instead.
-        throw MediaError.blocked("Direct stream URLs not allowed in App Store build")
-        #endif
-
+        #if DEBUG
         // 0. Validate input (accept watch / youtu.be / embed / shorts URLs)
         guard isValidYouTubeURL(youTubeURL) else {
             throw MediaError.invalidURL
@@ -125,10 +120,14 @@ final class MediaService {
         // Cache it
         cache[videoID] = media
         return media
+        #else
+        throw MediaError.blocked("Direct stream URLs not allowed in App Store build")
+        #endif
     }
 
     /// Validate a URL before committing to a full extraction (cheaper server call).
     func validate(url: String) async throws -> ValidationResult {
+        #if DEBUG
         let endpoint = apiBaseURL.appendingPathComponent("media/extract/validate")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -142,6 +141,9 @@ final class MediaService {
 
         let data = try await performRequest(request)
         return try decoder.decode(ValidationResult.self, from: data)
+        #else
+        throw MediaError.blocked("Legacy media validation not allowed in App Store build")
+        #endif
     }
 
     /// Convert an ExtractedMedia into the app's MediaItem model for AVPlayer + sync.

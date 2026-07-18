@@ -435,11 +435,14 @@ enum PlinkTelegramBubbleMetrics {
     static let decorativePadH: CGFloat = 20
     static let decorativePadV: CGFloat = 13
     static let decorativeOuter: CGFloat = 11
-    /// ~75% of a typical phone content width
+    /// Telegram bubble max width as share of available chat width.
+    static let maxWidthRatio: CGFloat = 0.78
     static let maxBubbleWidth: CGFloat = 320
-    static let avatarSize: CGFloat = 34
-    static let clusterGapSame: CGFloat = 3
-    static let clusterGapNew: CGFloat = 12
+    static let minVoiceBubbleWidth: CGFloat = 168
+    static let maxVoiceBubbleWidth: CGFloat = 238
+    static let avatarSize: CGFloat = 32
+    static let clusterGapSame: CGFloat = 2
+    static let clusterGapNew: CGFloat = 8
 }
 
 // MARK: - BubbleIndexTracker
@@ -585,6 +588,8 @@ struct PlinkMessageBubble: View {
         let outer: CGFloat = frame.isDecorative ? m.decorativeOuter : 0
 
         MessageRichText(text: text, fontSize: fontSize, textColor: .white)
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
             .padding(.horizontal, padH)
             .padding(.vertical, padV)
             // Solid capsule only — wallpaper must never show through (Telegram)
@@ -603,9 +608,8 @@ struct PlinkMessageBubble: View {
                 }
             }
             .padding(outer)
-            // Lift capsule off patterned wallpaper like Telegram
-            .shadow(color: .black.opacity(0.40), radius: 8, y: 3)
-            .shadow(color: .black.opacity(0.20), radius: 1, y: 0.5)
+            // Single subtle shadow only — avoids per-row overdraw while scrolling.
+            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
     }
 
     @ViewBuilder
@@ -613,21 +617,21 @@ struct PlinkMessageBubble: View {
         switch frame {
         case .quiet:
             if isOwn {
-                // Telegram-style solid outgoing (no transparency)
+                // Telegram-style outgoing blue/green, fully opaque.
                 LinearGradient(
                     colors: [
-                        Cinema2026.accent,
-                        Cinema2026.accent.opacity(0.92)
+                        Color(red: 0.22, green: 0.64, blue: 1.0),
+                        Color(red: 0.11, green: 0.78, blue: 0.48)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             } else {
-                // Telegram night incoming: solid slate — readable on any wallpaper
+                // Telegram night incoming: clean graphite gray — readable on any wallpaper.
                 LinearGradient(
                     colors: [
-                        Color(hex: "#2E333A"),
-                        Color(hex: "#252A30")
+                        Color(hex: "#2B3138"),
+                        Color(hex: "#232930")
                     ],
                     startPoint: .top,
                     endPoint: .bottom

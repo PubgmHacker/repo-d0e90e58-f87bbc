@@ -30,6 +30,8 @@ public struct PlayerSurfaceView: View {
         let _ = coordinator.surfaceEpoch
         let _ = coordinator.isPreparing
         let _ = coordinator.lastError
+        let error = activeError
+
         ZStack {
             if let vc = coordinator.makePlayerViewController() {
                 PlayerViewControllerRepresentable(controller: vc)
@@ -37,27 +39,14 @@ public struct PlayerSurfaceView: View {
                 // Stable identity — do NOT use .id(surfaceEpoch) or SwiftUI will
                 // tear down / re-create the UIViewRepresentable and kill YT load.
                 EmbeddedViewRepresentable(view: embedded)
-            } else if let error = coordinator.lastError ?? roomError {
-                // Media prepare failed — show error (chat still works).
-                Color.black
-                    .overlay(
-                        VStack(spacing: 14) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 40))
-                                .foregroundStyle(.yellow)
-                            Text("Не удалось загрузить видео")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Text(error)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.6))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 24)
-                            Text("Чат и участники работают")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(0.4))
+                    .overlay {
+                        if let error {
+                            mediaErrorView(error)
                         }
-                    )
+                    }
+            } else if let error {
+                // Media prepare failed — show error (chat still works).
+                mediaErrorView(error)
             } else if coordinator.isPreparing || (expectMedia && coordinator.currentSource == nil && coordinator.currentController == nil) {
                 // Avoid flash "Нет видео" while connect() is still resolving YouTube
                 Color.black
@@ -79,6 +68,37 @@ public struct PlayerSurfaceView: View {
             }
         }
         .background(Color.black)
+    }
+
+    private var activeError: String? {
+        coordinator.lastError
+            ?? (coordinator.currentController as? EmbeddedPlaybackController)?.lastError
+            ?? (coordinator.currentController as? RutubePlaybackController)?.lastError
+            ?? (coordinator.currentController as? VKPlaybackController)?.lastError
+            ?? (coordinator.currentController as? EmbedPlaybackController)?.lastError
+            ?? roomError
+    }
+
+    private func mediaErrorView(_ error: String) -> some View {
+        Color.black
+            .overlay(
+                VStack(spacing: 14) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.yellow)
+                    Text("Не удалось загрузить видео")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text(error)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                    Text("Чат и участники работают")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+            )
     }
 }
 

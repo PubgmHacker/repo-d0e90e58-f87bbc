@@ -260,9 +260,9 @@ struct YouTubeSearchView: View {
             // Brain Phase 3: rows where embeddable == false are disabled (unclickable).
             if item.isEmbeddable {
                 Button {
-                    model.selected = item
+                    confirmSelection(item)
                 } label: {
-                    YouTubeResultRow(item: item, isSelected: model.selected?.id == item.id)
+                    YouTubeResultRow(item: item, isSelected: false)
                 }
                 .buttonStyle(.plain)
             } else {
@@ -407,9 +407,8 @@ struct YouTubeSearchView: View {
     }
 
     private func confirmSelection(_ item: YouTubeVideoSummary) {
-        let url = "https://www.youtube.com/watch?v=\(item.videoId)"
         let thumb = item.thumbnailURLString ?? "https://img.youtube.com/vi/\(item.videoId)/mqdefault.jpg"
-        onSelect(url, item.title, thumb)
+        onSelect(item.videoId, item.title, thumb)
         dismiss()
     }
 }

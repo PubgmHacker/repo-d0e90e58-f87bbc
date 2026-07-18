@@ -3,7 +3,9 @@
 
 import SwiftUI
 import UserNotifications
+#if canImport(UIKit)
 import UIKit
+#endif
 
 enum LaunchDestination: Equatable {
     case restoringSession
@@ -16,6 +18,7 @@ struct AuthLaunchGate: View {
     @State private var destination: LaunchDestination = .restoringSession
     @State private var authRoute: AuthRoute = .login
     @State private var pendingURL: URL?
+    @State private var authNotice: String?
     @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     let dependencies: AppDependencies
@@ -57,7 +60,15 @@ struct AuthLaunchGate: View {
         }
         .task { await restoreSession() }
         .animation(.easeOut(duration: 0.32), value: destination)
-        .onReceive(NotificationCenter.default.publisher(for: .plinkSignedOut)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .plinkSignedOut)) { notification in
+            authNotice = notification.object as? String
+            withAnimation(.easeOut(duration: 0.3)) {
+                destination = .authentication
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .plinkSessionExpired)) { _ in
+            AuthService.shared.signOutLocally(postNotification: false)
+            authNotice = "Сессия истекла. Войдите заново — это защищает ваш аккаунт."
             withAnimation(.easeOut(duration: 0.3)) {
                 destination = .authentication
             }
@@ -79,8 +90,12 @@ struct AuthLaunchGate: View {
         switch authRoute {
         case .login:
             LoginView2026(
+                sessionMessage: authNotice,
                 onAuthenticated: handleAuthenticated,
-                onRegister: { authRoute = .registration }
+                onRegister: {
+                    authNotice = nil
+                    authRoute = .registration
+                }
             )
         case .registration:
             RegistrationView2026(
@@ -92,28 +107,27 @@ struct AuthLaunchGate: View {
 
     private func restoreSession() async {
         async let minimumSplash: Void = Task.sleep(for: .milliseconds(650))
-        let authService = dependencies.authService
-        let token = authService.authToken
+        let result = await dependencies.authService.restoreAndValidateSession()
         _ = try? await minimumSplash
 
-        if token != nil {
-            let user = await authService.currentUser()
-            if user != nil {
-                destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
-            } else {
-                let refreshed = await authService.getFreshToken()
-                if refreshed != nil {
-                    destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
-                } else {
-                    destination = .authentication
-                }
-            }
-        } else {
+        switch result {
+        case .authenticated:
+            authNotice = nil
+            destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+        case .offlineAuthenticated:
+            authNotice = nil
+            destination = onboardingStore.needsCurrentOnboarding ? .onboarding : .app
+        case .expired:
+            authNotice = "Сессия истекла. Войдите заново — мы сохранили ваши локальные настройки."
+            destination = .authentication
+        case .unauthenticated:
+            authNotice = nil
             destination = .authentication
         }
     }
 
     private func handleAuthenticated() {
+        authNotice = nil
         // Sync shared API client token for the whole app
         if APIClient.shared.authToken == nil {
             APIClient.shared.authToken = AuthService.shared.authToken
@@ -148,11 +162,12 @@ struct AuthLaunchGate: View {
 
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            if granted {
-                DispatchQueue.main.async {
-                    UIApplication.shared.registerForRemoteNotifications()
-                }
+            guard granted else { return }
+            #if canImport(UIKit)
+            DispatchQueue.main.async {
+                UIApplication.shared.registerForRemoteNotifications()
             }
+            #endif
         }
     }
 
@@ -187,6 +202,7 @@ struct CinematicSplashView: View {
 
 extension Notification.Name {
     static let plinkSignedOut = Notification.Name("plinkSignedOut")
+    static let plinkSessionExpired = Notification.Name("plinkSessionExpired")
     static let plinkRoomCreated = Notification.Name("plinkRoomCreated")
     /// Posted after leave/end so Home/Friends/Rooms re-sync active vs history lists.
     static let plinkRoomsDidChange = Notification.Name("plinkRoomsDidChange")

@@ -3,7 +3,9 @@
 
 import SwiftUI
 import PhotosUI
+#if canImport(UIKit)
 import UIKit
+#endif
 import Foundation
 
 struct V4TabBar: View {
@@ -283,7 +285,6 @@ struct PlinkApprovedV4Root: View {
         } catch {
             await MainActor.run {
                 HapticManager.errorOccurred()
-                print("[Root] createRoomFromTrending failed: \(error)")
             }
         }
     }

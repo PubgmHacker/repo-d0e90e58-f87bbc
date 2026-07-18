@@ -66,7 +66,7 @@ enum PlinkProductID {
     }
 }
 
-enum PremiumTier: String, Sendable, Equatable, Codable {
+enum PremiumTier: String, Sendable, Equatable, Codable, CaseIterable {
     case free
     case premium
     case lifetime

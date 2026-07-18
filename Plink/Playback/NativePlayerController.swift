@@ -77,9 +77,11 @@ public final class NativePlayerController: PlaybackControlling {
 
         if let item = provider.playerItem {
             let p = AVPlayer(playerItem: item)
+            p.automaticallyWaitsToMinimizeStalling = false
             p.usesExternalPlaybackWhileExternalScreenIsActive = true
             p.allowsExternalPlayback = true
-            item.preferredForwardBufferDuration = 8
+            item.preferredForwardBufferDuration = 16
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
             self.player = p
             observe(p, item)
         }
@@ -87,14 +89,15 @@ public final class NativePlayerController: PlaybackControlling {
 
     public func play() async {
         guard let p = player else { return }
-        // P1-17: preroll only if not yet prerolled (after prepare or route change)
+        // P0-4: TTFF — do not block first visible playback on preroll.
+        // AVPlayer starts immediately; a later precise seek can invalidate
+        // isPrerolled as before.
         if capabilities.supportsRateCorrection && !isPrerolled {
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                p.preroll(atRate: 1.0) { _ in cont.resume() }
-            }
+            p.playImmediately(atRate: 1.0)
             isPrerolled = true
+        } else {
+            p.play()
         }
-        p.play()
         isPlaying = true
     }
 

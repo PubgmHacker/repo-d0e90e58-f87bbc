@@ -39,6 +39,7 @@ public final class PlaybackCoordinator: AnyObject {
     /// Bumped whenever embedded WKWebView is attached so SwiftUI re-reads `embeddedView`.
     /// Keep bumps minimal — `.id(surfaceEpoch)` style identity changes kill WKWebView loads.
     public private(set) var surfaceEpoch: Int = 0
+    private var cachedPlayerViewController: AVPlayerViewController?
 
     /// Native AVPlayer (nil for embedded YouTube source).
     public var nativePlayer: AVPlayer? {
@@ -55,6 +56,12 @@ public final class PlaybackCoordinator: AnyObject {
         }
         if let rutube = currentController as? RutubePlaybackController {
             return rutube.embeddedView
+        }
+        if let vk = currentController as? VKPlaybackController {
+            return vk.embeddedView
+        }
+        if let embed = currentController as? EmbedPlaybackController {
+            return embed.embeddedView
         }
         return nil
     }
@@ -74,7 +81,10 @@ public final class PlaybackCoordinator: AnyObject {
             if let native = prev as? NativePlayerController { native.teardown() }
             if let embedded = prev as? EmbeddedPlaybackController { embedded.teardown() }
             if let rutube = prev as? RutubePlaybackController { rutube.teardown() }
+            if let vk = prev as? VKPlaybackController { vk.teardown() }
+            if let embed = prev as? EmbedPlaybackController { embed.teardown() }
         }
+        cachedPlayerViewController = nil
         currentController = nil
         surfaceEpoch &+= 1
 
@@ -117,8 +127,6 @@ public final class PlaybackCoordinator: AnyObject {
                 controller = vk
                 currentController = controller
             case .embed(let url):
-                // Generic web embed is not the YouTube IFrame path.
-                // Prefer native only if it looks like a stream; otherwise fail clearly.
                 let s = url.absoluteString.lowercased()
                 if s.contains(".m3u8") || s.contains(".mp4") || s.hasSuffix(".mov") {
                     let native = NativePlayerController()
@@ -126,16 +134,21 @@ public final class PlaybackCoordinator: AnyObject {
                     controller = native
                     currentController = controller
                 } else {
-                    throw ProviderError.loadingFailed("Этот источник пока нельзя воспроизвести в комнате")
+                    let embed = EmbedPlaybackController()
+                    currentController = embed
+                    surfaceEpoch &+= 1
+                    try await embed.prepare(source)
+                    controller = embed
                 }
             }
             currentController = controller
             currentSource = source
-            // Surface already live for YouTube; avoid extra epoch bumps that
-            // would rebuild EmbeddedViewRepresentable mid-load.
-            if case .youtube = source {
-                // no-op surfaceEpoch
-            } else {
+            // Surface already live for embedded controllers; avoid extra epoch
+            // bumps that would rebuild EmbeddedViewRepresentable mid-load.
+            switch source {
+            case .youtube, .rutube, .embed:
+                break
+            default:
                 surfaceEpoch &+= 1
             }
         } catch {
@@ -151,6 +164,9 @@ public final class PlaybackCoordinator: AnyObject {
         if let native = currentController as? NativePlayerController { native.teardown() }
         if let embedded = currentController as? EmbeddedPlaybackController { embedded.teardown() }
         if let rutube = currentController as? RutubePlaybackController { rutube.teardown() }
+        if let vk = currentController as? VKPlaybackController { vk.teardown() }
+        if let embed = currentController as? EmbedPlaybackController { embed.teardown() }
+        cachedPlayerViewController = nil
         currentController = nil
         currentSource = nil
         lastError = nil
@@ -161,10 +177,13 @@ public final class PlaybackCoordinator: AnyObject {
     /// Returns nil for embedded YouTube source (no AVPlayer).
     public func makePlayerViewController() -> AVPlayerViewController? {
         guard let native = currentController as? NativePlayerController else { return nil }
-        let vc = AVPlayerViewController()
-        vc.player = native.player
+        let vc = cachedPlayerViewController ?? AVPlayerViewController()
+        if vc.player !== native.player {
+            vc.player = native.player
+        }
         vc.allowsPictureInPicturePlayback = true
         vc.allowsVideoFrameAnalysis = false
+        cachedPlayerViewController = vc
         return vc
     }
 }

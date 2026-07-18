@@ -165,36 +165,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         realtimeClient.connect(roomId: _roomId)
         startDanmakuPolling()
 
-        // Media prepare — if mediaSource was nil at init (server stripped mediaItem),
-        // try one REST re-fetch before giving up on "Нет видео".
-        if mediaSource == nil {
-            if let recovered = await Self.refetchMediaSource(roomId: _roomId) {
-                mediaSource = recovered.source
-                if mediaId == nil { mediaId = recovered.mediaId }
-            }
-        }
+        // Media prepare: resolve YouTube/native handoff off the main actor while
+        // realtime chat/presence are already connecting. This keeps the room UI
+        // responsive during backend extraction and falls back to the official
+        // embedded player if no native MP4/HLS stream is available quickly.
+        let sourceToPrepare = await resolveMediaSourceForPlayback()
 
-        // AVPlayer path: if source is .youtube(videoId), extract direct stream
-        // URL via backend /api/media/extract. Backend uses Piped/Invidious/
-        // YouTube Internal API to get a muxed MP4 or HLS URL that AVPlayer can
-        // play natively with sound + autoplay + full sync control (like Rave).
-        // Falls back to .youtube (WKWebView) if extraction fails - degraded
-        // but app still works.
-        if case .youtube(let ytId) = mediaSource {
-            NSLog("[WatchRoom] extracting YouTube stream for AVPlayer, videoId=\(ytId)")
-            if let extracted = await Self.extractYouTubeStreamURL(videoId: ytId) {
-                NSLog("[WatchRoom] extracted stream URL: \(extracted.absoluteString.prefix(80))...")
-                if extracted.pathExtension.lowercased() == "m3u8" || extracted.absoluteString.contains(".m3u8") {
-                    mediaSource = .hls(extracted, headers: [:])
-                } else {
-                    mediaSource = .mp4(extracted, headers: ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"])
-                }
-            } else {
-                NSLog("[WatchRoom] YouTube extraction failed - falling back to WKWebView")
-            }
-        }
-
-        if let source = mediaSource {
+        if let source = sourceToPrepare {
             do {
                 try await coordinator.prepare(source)
                 playbackProxy.attachTarget(coordinator.currentController)
@@ -219,6 +196,50 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
+    /// Resolve the media source used for this session without blocking room
+    /// realtime startup on slow backend extraction. YouTube native extraction
+    /// races a short grace window; if it does not win, the official embedded
+    /// player is prepared and the extraction task continues only to warm cache.
+    private func resolveMediaSourceForPlayback() async -> PlaybackSource? {
+        if mediaSource == nil {
+            if let recovered = await Self.refetchMediaSource(roomId: _roomId) {
+                mediaSource = recovered.source
+                if mediaId == nil { mediaId = recovered.mediaId }
+            }
+        }
+
+        guard let source = mediaSource else { return nil }
+        guard case .youtube(let ytId) = source else { return source }
+
+        NSLog("[WatchRoom] resolving YouTube playback source, videoId=\(ytId)")
+        let nativeTask = Task.detached(priority: .userInitiated) {
+            await Self.extractYouTubeNativePlaybackSource(videoId: ytId)
+        }
+
+        let nativeWithinGrace = await withTaskGroup(of: PlaybackSource?.self) { group in
+            group.addTask { await nativeTask.value }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+
+        if let nativeWithinGrace {
+            mediaSource = nativeWithinGrace
+            NSLog("[WatchRoom] YouTube native stream resolved before embedded fallback")
+            return nativeWithinGrace
+        }
+
+        Task.detached(priority: .utility) {
+            _ = await nativeTask.value
+        }
+        NSLog("[WatchRoom] YouTube native extraction is still resolving - using embedded fallback")
+        return source
+    }
+
     /// Recover YouTube/media when create/join returned room without mediaItem.
     private static func refetchMediaSource(roomId: String) async -> (source: PlaybackSource, mediaId: String?)? {
         do {
@@ -232,12 +253,28 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
+    /// Extract and cache a native YouTube stream source off the main actor.
+    /// Returns nil if extraction fails; callers fall back to .youtube WKWebView.
+    private nonisolated static func extractYouTubeNativePlaybackSource(videoId: String) async -> PlaybackSource? {
+        if let cached = await YouTubeNativeStreamCache.shared.source(for: videoId) {
+            return cached
+        }
+        guard let extracted = await extractYouTubeStreamURL(videoId: videoId) else { return nil }
+
+        let source: PlaybackSource
+        if extracted.pathExtension.lowercased() == "m3u8" || extracted.absoluteString.contains(".m3u8") {
+            source = .hls(extracted, headers: [:])
+        } else {
+            source = .mp4(extracted, headers: ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"])
+        }
+        await YouTubeNativeStreamCache.shared.store(source, for: videoId)
+        return source
+    }
+
     /// Extract direct stream URL from backend /api/media/extract for AVPlayer.
-    /// Backend uses Piped API / Invidious / YouTube Internal API to get a
-    /// muxed MP4 or HLS URL that AVPlayer can play natively with sound +
-    /// autoplay (no WKWebView, no user gesture needed).
-    /// Returns nil if extraction fails - caller falls back to .youtube WKWebView.
-    private static func extractYouTubeStreamURL(videoId: String) async -> URL? {
+    /// Network work is nonisolated so WatchRoomModel's main actor is not held
+    /// while the backend races yt-dlp/Piped/Innertube.
+    private nonisolated static func extractYouTubeStreamURL(videoId: String) async -> URL? {
         let api = APIClient.shared
         if api.authToken == nil {
             api.authToken = KeychainHelper.read(for: "rave_auth_token")
@@ -246,10 +283,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             NSLog("[WatchRoom] extractYouTubeStreamURL: no auth token")
             return nil
         }
-        guard let baseURL = URL(string: "https://plink-backend-production-ef31.up.railway.app") else {
-            return nil
-        }
-        var components = URLComponents(url: baseURL.appendingPathComponent("api/media/extract"), resolvingAgainstBaseURL: false)
+
+        var components = URLComponents(url: api.baseURL.appendingPathComponent("media/extract"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "id", value: videoId)]
         guard let url = components?.url else { return nil }
 
@@ -263,13 +298,11 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 NSLog("[WatchRoom] extractYouTubeStreamURL: HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
                 return nil
             }
-            // Parse { streamURL: "...", ... }
             struct StreamInfo: Decodable {
                 let streamURL: String?
                 let hlsURL: String?
             }
             let info = try JSONDecoder().decode(StreamInfo.self, from: data)
-            // Prefer HLS for live/long videos, else muxed MP4
             let urlString = info.hlsURL ?? info.streamURL
             guard let urlString, !urlString.isEmpty, let url = URL(string: urlString) else {
                 NSLog("[WatchRoom] extractYouTubeStreamURL: no streamURL in response")
@@ -1192,4 +1225,30 @@ public struct ChatCatchupMessage: Sendable, Equatable {
 public struct ParticipantSnapshot: Sendable, Equatable {
     public let userId: String
     public let username: String
+}
+
+
+private actor YouTubeNativeStreamCache {
+    static let shared = YouTubeNativeStreamCache()
+
+    private struct Entry {
+        let source: PlaybackSource
+        let createdAt: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval = 20 * 60
+
+    func source(for videoId: String) -> PlaybackSource? {
+        guard let entry = entries[videoId] else { return nil }
+        if Date().timeIntervalSince(entry.createdAt) > ttl {
+            entries.removeValue(forKey: videoId)
+            return nil
+        }
+        return entry.source
+    }
+
+    func store(_ source: PlaybackSource, for videoId: String) {
+        entries[videoId] = Entry(source: source, createdAt: Date())
+    }
 }

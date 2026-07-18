@@ -63,7 +63,13 @@ public enum WatchRoomCompositionRoot {
             return .rutube(rutubeId)
         }
 
-        // Direct stream URL → native AVPlayer
+        if let vkId = extractVKVideoId(from: mediaItem.streamURL) {
+            return .vk(vkId)
+        }
+
+        // Direct stream URL → native AVPlayer; other HTTPS pages use the
+        // generic embedded WKWebView controller so premium/cinema links still
+        // get a player surface instead of "Нет видео".
         let urlString = mediaItem.streamURL
         if let url = URL(string: urlString), url.scheme == "http" || url.scheme == "https" {
             if urlString.contains(".m3u8") {
@@ -72,7 +78,7 @@ public enum WatchRoomCompositionRoot {
             if urlString.contains(".mp4") || urlString.hasSuffix(".mov") {
                 return .mp4(url, headers: [:])
             }
-            // Don't return .mp4 for non-video URLs (e.g. youtube.com pages).
+            return .embed(url)
         }
         return nil
     }
@@ -145,6 +151,21 @@ public enum WatchRoomCompositionRoot {
         }
 
         return nil
+    }
+
+    /// VK: https://vk.com/video_ext.php?... or /video-123_456.
+    private static func extractVKVideoId(from url: String) -> String? {
+        let lower = url.lowercased()
+        guard lower.contains("vk.com") else { return nil }
+        if let components = URLComponents(string: url), lower.contains("video_ext.php") {
+            let query = components.query ?? ""
+            return query.isEmpty ? nil : query
+        }
+        if let range = lower.range(of: "video") {
+            let after = String(url[range.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "/?"))
+            if !after.isEmpty { return after }
+        }
+        return url
     }
 
     /// Rutube: https://rutube.ru/video/<32-hex>/ or /play/embed/<id>/

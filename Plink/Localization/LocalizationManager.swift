@@ -98,6 +98,16 @@ enum L10n {
         case loading = "common.loading"
         case search = "common.search"
 
+        // DM chat (Telegram-style)
+        case dmTyping = "dm.typing"
+        case dmEdited = "dm.edited"
+        case dmEditing = "dm.editing"
+        case dmEdit = "dm.edit"
+        case dmDelete = "dm.delete"
+        case dmDeleteTitle = "dm.deleteTitle"
+        case dmDeleteForMe = "dm.deleteForMe"
+        case dmDeleteForBothPrefix = "dm.deleteForBothPrefix"
+
         // Login
         case loginTitle = "login.title"
         case loginTagline = "login.tagline"
@@ -317,6 +327,23 @@ enum L10n {
 
     /// Главная таблица переводов: [ключ: [язык: перевод]].
     static let table: [Key: [AppLanguage: String]] = [
+        // DM chat (Telegram-style)
+        .dmTyping: [
+            .russian: "печатает…", .english: "typing…", .chinese: "正在输入…"],
+        .dmEdited: [
+            .russian: "изменено", .english: "edited", .chinese: "已编辑"],
+        .dmEditing: [
+            .russian: "Редактирование", .english: "Editing", .chinese: "编辑中"],
+        .dmEdit: [
+            .russian: "Изменить", .english: "Edit", .chinese: "编辑"],
+        .dmDelete: [
+            .russian: "Удалить", .english: "Delete", .chinese: "删除"],
+        .dmDeleteTitle: [
+            .russian: "Удалить сообщение?", .english: "Delete message?", .chinese: "删除消息？"],
+        .dmDeleteForMe: [
+            .russian: "Удалить у себя", .english: "Delete for me", .chinese: "仅为我删除"],
+        .dmDeleteForBothPrefix: [
+            .russian: "Удалить у себя и у", .english: "Delete for me and", .chinese: "为双方删除："],
         .appName: [
             .russian: "Плинк",
             .english: "Plink",

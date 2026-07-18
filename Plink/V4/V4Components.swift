@@ -77,7 +77,7 @@ struct V4Avatar: View {
 /// Realtime friend updates: server puts `?v=<avatarUpdatedAt ms>` on avatarURL.
 /// When `v` changes we drop the memory cache and notify UI — no global flash.
 enum PlinkAvatarURL {
-    static let apiBase = "https://plink-backend-production-ef31.up.railway.app"
+    static let apiBase = PlinkConfig.baseURLString
 
     /// Bumped when friends list / profiles reload so AsyncImage refetches immediately.
     static var sessionBust: Int {

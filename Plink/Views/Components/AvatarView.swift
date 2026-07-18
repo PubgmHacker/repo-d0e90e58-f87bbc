@@ -160,7 +160,9 @@ struct AvatarView: View {
 
 // MARK: - Ring Modifier (выбирает Premium или Admin обводку)
 
-private struct RingModifier: ViewModifier {
+/// Internal (not private) so PlinkStableAvatar in DMChatView can reuse it
+/// for admin/Plink+ rings on chat avatars.
+struct RingModifier: ViewModifier {
     let isPremium: Bool
     let isAdmin: Bool
     let lineWidth: CGFloat

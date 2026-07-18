@@ -14,7 +14,8 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
     let senderID: String
     let recipientID: String
     let senderName: String
-    let text: String
+    /// Mutable: Telegram-style message editing updates it in place.
+    var text: String
     let timestamp: Date
     var isRead: Bool
     var senderAvatarURL: String?
@@ -26,6 +27,14 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
     var mediaType: String?
     var mediaDurationSec: Double?
     var hasMedia: Bool
+    /// Telegram-style reply (quoted message).
+    var replyToID: String?
+    var replyPreviewText: String?
+    var replyPreviewSenderID: String?
+    /// Telegram-style forward attribution («Переслано от …»).
+    var forwardedFromName: String?
+    /// Telegram-style edit marker («изменено»).
+    var editedAt: Date?
 
     var timeString: String {
         timestamp.formatted(.dateTime.hour().minute())
@@ -61,7 +70,12 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
         reactions: [DMReactionChip] = [],
         mediaType: String? = nil,
         mediaDurationSec: Double? = nil,
-        hasMedia: Bool = false
+        hasMedia: Bool = false,
+        replyToID: String? = nil,
+        replyPreviewText: String? = nil,
+        replyPreviewSenderID: String? = nil,
+        forwardedFromName: String? = nil,
+        editedAt: Date? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -77,6 +91,11 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
         self.mediaType = mediaType
         self.mediaDurationSec = mediaDurationSec
         self.hasMedia = hasMedia
+        self.replyToID = replyToID
+        self.replyPreviewText = replyPreviewText
+        self.replyPreviewSenderID = replyPreviewSenderID
+        self.forwardedFromName = forwardedFromName
+        self.editedAt = editedAt
     }
 
     /// Own vs other — prefer lightweight id key (always set on login).
@@ -158,4 +177,17 @@ struct DMPayload: Codable, Sendable {
     let recipientID: String
     let senderName: String
     let text: String
+}
+
+// MARK: - Telegram-style pinned message snapshot
+
+/// One pinned DM in a chat (my view). «Pin for both» also creates the
+/// peer's row server-side.
+struct DMPinnedMessage: Identifiable, Equatable, Sendable {
+    var id: String { messageId }
+    let messageId: String
+    let senderID: String
+    let text: String
+    let pinnedAt: Date?
+    let messageCreatedAt: Date?
 }

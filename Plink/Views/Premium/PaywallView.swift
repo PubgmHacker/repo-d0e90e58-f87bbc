@@ -23,7 +23,8 @@ struct PaywallView: View {
         ZStack {
             // Чёрный фон + сине-голубые blur-пятна
             Cinema2026.background
-            // TODO: replace with CompactLivingBackdrop
+            CompactLivingBackdrop()
+                .ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 28) {

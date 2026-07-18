@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class AIService: ObservableObject {
     static let shared = AIService()
-    private static let backendBaseURL = "https://plink-backend-production-ef31.up.railway.app"
+    private static let backendBaseURL = PlinkConfig.baseURLString
     private let chatEndpoint = URL(string: "\(backendBaseURL)/api/ai/chat")!
 
     @Published var isLoading = false

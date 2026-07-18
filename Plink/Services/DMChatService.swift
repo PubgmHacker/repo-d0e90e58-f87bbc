@@ -37,8 +37,22 @@ final class DMChatService: ObservableObject {
     }
 
     /// Start aggressive background unread polling (≈1s) for instant badges.
+    /// Telegram-style pins per friend (my view of each chat).
+    @Published private(set) var pinsByFriend: [String: [DMPinnedMessage]] = [:]
+    /// Telegram-style typing indicator: friendId → peer is typing right now.
+    @Published private(set) var typingByFriend: [String: Bool] = [:]
+    private var lastTypingSentAt: [String: Date] = [:]
+    /// friendId → last known display name (for realtime-triggered reloads)
+    private var friendNameById: [String: String] = [:]
+    private var typingClearTasks: [String: Task<Void, Never>] = [:]
+
     func startUnreadPolling() {
         guard unreadPollTask == nil else { return }
+        // DM realtime channel: instant message/typing events (poll stays as fallback)
+        DMRealtimeClient.shared.onEvent = { [weak self] event in
+            self?.handleRealtimeEvent(event)
+        }
+        DMRealtimeClient.shared.start()
         unreadPollTask = Task { [weak self] in
             await self?.refreshUnread()
             while !Task.isCancelled {
@@ -52,6 +66,37 @@ final class DMChatService: ObservableObject {
     func stopUnreadPolling() {
         unreadPollTask?.cancel()
         unreadPollTask = nil
+        DMRealtimeClient.shared.stop()
+    }
+
+    // MARK: - Realtime (user '@me' channel)
+
+    private func handleRealtimeEvent(_ event: DMRealtimeClient.Event) {
+        guard event.type == "dm.event", let from = event.fromUserId, !from.isEmpty else { return }
+        switch event.event {
+        case "typing":
+            typingByFriend[from] = true
+            typingClearTasks[from]?.cancel()
+            typingClearTasks[from] = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                guard !Task.isCancelled else { return }
+                self?.typingByFriend[from] = false
+            }
+        case "message", "edited", "deleted":
+            Task { [weak self] in
+                guard let self else { return }
+                if self.openFriendId == from || self.conversations[self.conversationID(with: from)] != nil {
+                    await self.loadHistory(
+                        friendId: from,
+                        friendName: self.friendNameById[from] ?? "",
+                        quiet: true
+                    )
+                }
+                await self.refreshUnread()
+            }
+        default:
+            break
+        }
     }
 
     var currentUserId: String? {
@@ -161,6 +206,7 @@ final class DMChatService: ObservableObject {
             return
         }
         let convID = conversationID(with: friendId)
+        if !friendName.isEmpty { friendNameById[friendId] = friendName }
         if !quiet {
             isLoading = true
         }
@@ -206,7 +252,16 @@ final class DMChatService: ObservableObject {
                     reactions: chips,
                     mediaType: isVoice ? "voice" : dto.mediaType,
                     mediaDurationSec: dto.mediaDurationSec ?? voiceMeta.durationSec,
-                    hasMedia: isVoice || (dto.hasMedia == true)
+                    hasMedia: isVoice || (dto.hasMedia == true),
+                    replyToID: dto.replyTo?.id,
+                    replyPreviewText: dto.replyTo.map { (r) -> String in
+                        if r.mediaType == "voice" { return "🎤 Голосовое сообщение" }
+                        if r.mediaType == "photo" { return "📷 Фото" }
+                        return PlinkBubbleWire.decode(r.content).text
+                    },
+                    replyPreviewSenderID: dto.replyTo?.senderID,
+                    forwardedFromName: dto.forwardedFromName,
+                    editedAt: dto.editedAt
                 )
             }
             // Server history is source of truth for this window (newest 200).
@@ -544,7 +599,7 @@ final class DMChatService: ObservableObject {
 
     // MARK: - Send
 
-    func sendMessage(_ text: String, to friend: Friend) {
+    func sendMessage(_ text: String, to friend: Friend, replyTo replyTarget: DirectMessage? = nil) {
         if friend.deleted {
             errorMessage = "Нельзя написать удалённому аккаунту"
             return
@@ -586,7 +641,14 @@ final class DMChatService: ObservableObject {
             isRead: false,
             senderAvatarURL: nil,
             bubbleStyle: styleID,
-            reactions: []
+            reactions: [],
+            replyToID: replyTarget?.id,
+            replyPreviewText: replyTarget.map { (t) -> String in
+                if t.isVoiceNote { return "🎤 Голосовое сообщение" }
+                if t.isPhotoMessage { return "📷 Фото" }
+                return t.text
+            },
+            replyPreviewSenderID: replyTarget?.senderID
         )
 
         var list = conversations[convID] ?? []
@@ -597,14 +659,14 @@ final class DMChatService: ObservableObject {
         touchActivity(friendId: friend.id, at: message.timestamp, preview: body)
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
-        struct Body: Encodable { let receiverId: String; let content: String }
+        struct Body: Encodable { let receiverId: String; let content: String; let replyToId: String? }
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 let saved: DMMessageDTO = try await api.request(
                     "messages/dm",
                     method: .post,
-                    body: Body(receiverId: friend.id, content: wireContent)
+                    body: Body(receiverId: friend.id, content: wireContent, replyToId: replyTarget?.id)
                 )
                 // Replace optimistic message in-place — do NOT wipe history
                 // (full reload was clearing UI / crashing identity updates).
@@ -622,7 +684,14 @@ final class DMChatService: ObservableObject {
                         isRead: false,
                         senderAvatarURL: nil,
                         bubbleStyle: decoded.styleID ?? styleID,
-                        reactions: []
+                        reactions: [],
+                        replyToID: replyTarget?.id,
+                        replyPreviewText: replyTarget.map { (t) -> String in
+                            if t.isVoiceNote { return "🎤 Голосовое сообщение" }
+                            if t.isPhotoMessage { return "📷 Фото" }
+                            return t.text
+                        },
+                        replyPreviewSenderID: replyTarget?.senderID
                     )
                     conversations[convID] = cur
                     historyEpoch &+= 1
@@ -748,6 +817,198 @@ final class DMChatService: ObservableObject {
 
     // MARK: - Helpers
 
+    // MARK: - Telegram-style pins
+
+    func loadPins(friendId: String) async {
+        ensureToken()
+        guard api.authToken != nil else { return }
+        struct PinDTO: Decodable {
+            let messageId: String
+            let pinnedByID: String?
+            let pinnedAt: Date?
+            let content: String
+            let senderID: String
+            let mediaType: String?
+            let messageCreatedAt: Date?
+        }
+        do {
+            let dtos: [PinDTO] = try await api.request("messages/dm/\(friendId)/pins")
+            let pins = dtos.map { (d) -> DMPinnedMessage in
+                let text: String
+                if d.mediaType == "voice" {
+                    text = "🎤 Голосовое сообщение"
+                } else if d.mediaType == "photo" {
+                    text = "📷 Фото"
+                } else {
+                    text = PlinkBubbleWire.decode(d.content).text
+                }
+                return DMPinnedMessage(
+                    messageId: d.messageId,
+                    senderID: d.senderID,
+                    text: text,
+                    pinnedAt: d.pinnedAt,
+                    messageCreatedAt: d.messageCreatedAt
+                )
+            }
+            if pinsByFriend[friendId] != pins {
+                pinsByFriend[friendId] = pins
+            }
+        } catch {
+            Logger.api.warn("DM pins load failed")
+        }
+    }
+
+    /// Telegram: «Закрепить у себя» (forBoth=false) / «Закрепить у обоих» (forBoth=true).
+    func pinMessage(_ message: DirectMessage, forBoth: Bool, friendId: String) async {
+        ensureToken()
+        struct Body: Encodable { let messageId: String; let forBoth: Bool }
+        struct Resp: Decodable { let success: Bool? }
+        do {
+            let _: Resp = try await api.request(
+                "messages/dm/\(friendId)/pin",
+                method: .post,
+                body: Body(messageId: message.id, forBoth: forBoth)
+            )
+            await loadPins(friendId: friendId)
+        } catch {
+            errorMessage = "Не удалось закрепить сообщение"
+            Logger.api.warn("DM pin failed")
+        }
+    }
+
+    func unpinMessage(messageId: String, forBoth: Bool, friendId: String) async {
+        ensureToken()
+        struct Resp: Decodable { let success: Bool?; let removed: Int? }
+        do {
+            let _: Resp = try await api.request(
+                "messages/dm/\(friendId)/pin/\(messageId)?forBoth=\(forBoth)",
+                method: .delete
+            )
+            await loadPins(friendId: friendId)
+        } catch {
+            errorMessage = "Не удалось открепить сообщение"
+            Logger.api.warn("DM unpin failed")
+        }
+    }
+
+    // MARK: - Telegram-style forward
+
+    /// Forward messages to another friend. Returns true on success.
+    @discardableResult
+    func forwardMessages(_ messageIds: [String], to target: Friend) async -> Bool {
+        ensureToken()
+        struct Body: Encodable { let toUserId: String; let messageIds: [String] }
+        struct Resp: Decodable { let success: Bool?; let forwarded: Int? }
+        do {
+            let _: Resp = try await api.request(
+                "messages/dm/forward",
+                method: .post,
+                body: Body(toUserId: target.id, messageIds: messageIds)
+            )
+            await loadHistory(
+                friendId: target.id,
+                friendName: target.displayTitle,
+                friendAvatarURL: target.avatarURL,
+                quiet: true
+            )
+            touchActivity(friendId: target.id, preview: "↪️ Пересланное сообщение")
+            return true
+        } catch {
+            errorMessage = "Не удалось переслать сообщение"
+            Logger.api.warn("DM forward failed")
+            return false
+        }
+    }
+
+    // MARK: - Telegram-style edit / delete / typing
+
+    /// Edit own text message («изменено»). Returns true on success.
+    @discardableResult
+    func editMessage(_ message: DirectMessage, newText: String, friendId: String) async -> Bool {
+        ensureToken()
+        let wire = PlinkBubbleWire.encode(text: newText, styleID: message.bubbleStyle)
+        struct Body: Encodable { let content: String }
+        struct Resp: Decodable { let success: Bool? }
+        do {
+            let _: Resp = try await api.request(
+                "messages/dm/message/\(message.id)",
+                method: .patch,
+                body: Body(content: wire)
+            )
+            let convID = conversationID(with: friendId)
+            if var msgs = conversations[convID],
+               let idx = msgs.firstIndex(where: { $0.id == message.id }) {
+                msgs[idx].text = newText
+                msgs[idx].editedAt = Date()
+                conversations[convID] = msgs
+                historyEpoch += 1
+            }
+            return true
+        } catch {
+            errorMessage = "Не удалось изменить сообщение"
+            Logger.api.warn("DM edit failed")
+            return false
+        }
+    }
+
+    /// Delete message: for me only, or for both (own messages, Telegram-style).
+    @discardableResult
+    func deleteMessage(_ message: DirectMessage, forBoth: Bool, friendId: String) async -> Bool {
+        ensureToken()
+        struct Resp: Decodable { let success: Bool? }
+        do {
+            let _: Resp = try await api.request(
+                "messages/dm/message/\(message.id)?forBoth=\(forBoth)",
+                method: .delete
+            )
+            let convID = conversationID(with: friendId)
+            if var msgs = conversations[convID] {
+                msgs.removeAll { $0.id == message.id }
+                conversations[convID] = msgs
+                historyEpoch += 1
+            }
+            await loadPins(friendId: friendId)
+            return true
+        } catch {
+            errorMessage = "Не удалось удалить сообщение"
+            Logger.api.warn("DM delete failed")
+            return false
+        }
+    }
+
+    /// Throttled typing ping (max 1 per 3s) — Telegram «печатает…».
+    func sendTyping(friendId: String) {
+        let now = Date()
+        if let last = lastTypingSentAt[friendId], now.timeIntervalSince(last) < 3 { return }
+        lastTypingSentAt[friendId] = now
+        ensureToken()
+        struct Resp: Decodable { let success: Bool? }
+        Task {
+            do {
+                let _: Resp = try await api.request(
+                    "messages/dm/\(friendId)/typing",
+                    method: .post
+                )
+            } catch {
+                // best-effort
+            }
+        }
+    }
+
+    /// Poll peer typing state (piggybacks on the 5s history poll).
+    func loadTyping(friendId: String) async {
+        ensureToken()
+        struct Resp: Decodable { let typing: Bool }
+        do {
+            let resp: Resp = try await api.request("messages/dm/\(friendId)/typing")
+            if typingByFriend[friendId] != resp.typing {
+                typingByFriend[friendId] = resp.typing
+            }
+        } catch {
+            // quiet — typing is best-effort
+        }
+    }
+
     func conversationID(with friendID: String) -> String {
         let me = currentUserId ?? "me"
         let ids = [me, friendID].sorted()
@@ -790,6 +1051,13 @@ private struct ReactionDTO: Decodable {
 }
 
 private struct DMMessageDTO: Decodable {
+    struct ReplyRefDTO: Decodable {
+        let id: String
+        let content: String
+        let senderID: String
+        let mediaType: String?
+    }
+
     let id: String
     let senderID: String
     let receiverID: String
@@ -800,12 +1068,17 @@ private struct DMMessageDTO: Decodable {
     let mediaType: String?
     let mediaDurationSec: Double?
     let hasMedia: Bool?
+    let replyTo: ReplyRefDTO?
+    let forwardedFromID: String?
+    let forwardedFromName: String?
+    let editedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id, content, createdAt, isRead, reactions
         case senderID, receiverID
         case senderId, receiverId
         case mediaType, mediaDurationSec, hasMedia
+        case replyTo, forwardedFromID, forwardedFromName, editedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -818,6 +1091,10 @@ private struct DMMessageDTO: Decodable {
         mediaType = try c.decodeIfPresent(String.self, forKey: .mediaType)
         mediaDurationSec = try c.decodeIfPresent(Double.self, forKey: .mediaDurationSec)
         hasMedia = try c.decodeIfPresent(Bool.self, forKey: .hasMedia)
+        replyTo = try c.decodeIfPresent(ReplyRefDTO.self, forKey: .replyTo)
+        forwardedFromID = try c.decodeIfPresent(String.self, forKey: .forwardedFromID)
+        forwardedFromName = try c.decodeIfPresent(String.self, forKey: .forwardedFromName)
+        editedAt = try c.decodeIfPresent(Date.self, forKey: .editedAt)
         if let s = try c.decodeIfPresent(String.self, forKey: .senderID) {
             senderID = s
         } else {

@@ -23,8 +23,8 @@ struct WatchRoomContainer: View {
                     room: room,
                     userId: identity.userId,
                     username: identity.username,
-                    apiBaseURL: URL(string: "https://plink-backend-production-ef31.up.railway.app")!,
-                    wsBaseURL: URL(string: "wss://plink-backend-production-ef31.up.railway.app/ws")!,
+                    apiBaseURL: URL(string: PlinkConfig.baseURLString)!,
+                    wsBaseURL: URL(string: PlinkConfig.wsURLString)!,
                     authToken: identity.token
                 )
             } else if resolveFailed {

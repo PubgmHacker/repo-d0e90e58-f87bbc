@@ -446,8 +446,11 @@ enum PlinkTelegramBubbleMetrics {
     static let minVoiceBubbleWidth: CGFloat = 168
     static let maxVoiceBubbleWidth: CGFloat = 238
     static let avatarSize: CGFloat = 32
-    static let clusterGapSame: CGFloat = 2
-    static let clusterGapNew: CGFloat = 8
+    /// Vertical gap between consecutive same-sender messages.
+    /// Was 2 — too tight, bubbles visually overlapped on iOS 17+.
+    /// 6 gives clean separation without breaking Telegram cluster feel.
+    static let clusterGapSame: CGFloat = 6
+    static let clusterGapNew: CGFloat = 10
 }
 
 // MARK: - BubbleIndexTracker
@@ -585,36 +588,45 @@ struct PlinkMessageBubble: View {
         V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup)
     }
 
+    // MARK: - TikTok Live Chat style
+    // Minimal dark pill, no tail, compact padding, username above
     var body: some View {
-        // Extra inset for decorative frames so mascots sit outside the text
-        let m = PlinkTelegramBubbleMetrics.self
-        let padH: CGFloat = frame.isDecorative ? m.decorativePadH : m.padH
-        let padV: CGFloat = frame.isDecorative ? m.decorativePadV : m.padV
-        let outer: CGFloat = frame.isDecorative ? m.decorativeOuter : 0
+        let isDecorative = frame.isDecorative
+        let padH: CGFloat = isDecorative ? PlinkTelegramBubbleMetrics.decorativePadH : 13
+        let padV: CGFloat = isDecorative ? PlinkTelegramBubbleMetrics.decorativePadV : 8
 
-        MessageRichText(text: text, fontSize: fontSize, textColor: .white)
-            .fixedSize(horizontal: false, vertical: true)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal, padH)
-            .padding(.vertical, padV)
-            // Solid capsule only — wallpaper must never show through (Telegram)
-            .background(
-                ZStack {
-                    // Dark base guarantees contrast even if gradient is translucent
-                    Color(hex: "#1A1C20")
-                    fillLayer
+        ZStack(alignment: .center) {
+            // Background: TikTok uses dark semi-transparent pill
+            Capsule()
+                .fill(
+                    isOwn
+                        ? LinearGradient(colors: [Cinema2026.accent.opacity(0.88), Cinema2026.accent.opacity(0.65)],
+                                         startPoint: .leading, endPoint: .trailing)
+                        : LinearGradient(colors: [Color.black.opacity(0.60), Color.black.opacity(0.45)],
+                                         startPoint: .leading, endPoint: .trailing)
+                )
+                .blur(radius: 0.3)
+
+            // Thin colored border for own msgs / frame color for others
+            Capsule()
+                .strokeBorder(
+                    isOwn
+                        ? Cinema2026.accent.opacity(0.35)
+                        : (isDecorative ? frame.borderColor : Color.white.opacity(0.08)),
+                    lineWidth: isOwn ? 0 : (isDecorative ? 1.5 : 0.5)
+                )
+
+            MessageRichText(text: text, fontSize: fontSize,
+                            textColor: isOwn ? .black : .white)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, padH)
+                .padding(.vertical, padV)
+                .overlay(alignment: .center) {
+                    if isDecorative { TikTokFrameDecor(frame: frame) }
                 }
-            )
-            .clipShape(shape)
-            .overlay(borderLayer)
-            .overlay(alignment: .center) {
-                if frame.isDecorative {
-                    TikTokFrameDecor(frame: frame)
-                }
-            }
-            .padding(outer)
-            // Single subtle shadow only — avoids per-row overdraw while scrolling.
-            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        }
+        .shadow(color: .black.opacity(0.22), radius: 4, x: 0, y: 2)
     }
 
     @ViewBuilder

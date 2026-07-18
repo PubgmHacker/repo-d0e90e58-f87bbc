@@ -26,6 +26,12 @@ public final class NativePlayerController: PlaybackControlling {
     public private(set) var isBuffering: Bool = false
     public private(set) var capabilities: PlaybackCapabilities = .unknown
 
+    // P0 FIX (infinite spinner): AVPlayerItem .failed was never handled, so
+    // the controller reported "buffering" forever. Expose failure state so
+    // the UI stops the spinner and callers can fall back to embedded.
+    public private(set) var loadFailed: Bool = false
+    public private(set) var lastErrorMessage: String?
+
     public private(set) var player: AVPlayer?
     public private(set) var pipController: AVPlayerViewController?
 
@@ -235,6 +241,8 @@ public final class NativePlayerController: PlaybackControlling {
         isPlaying = false
         isBuffering = false
         isPrerolled = false
+        loadFailed = false
+        lastErrorMessage = nil
     }
 
     // ── KVO / periodic time observer wiring ────────────────────────────────
@@ -266,8 +274,17 @@ public final class NativePlayerController: PlaybackControlling {
         statusObservation = item.observe(\.status, options: [.new]) { [weak self] it, _ in
             Task { @MainActor in
                 guard let self else { return }
-                if it.status == .readyToPlay {
+                switch it.status {
+                case .readyToPlay:
                     self.duration = it.duration.seconds.isFinite ? it.duration.seconds : 0
+                case .failed:
+                    // P0 FIX: surface the failure — previously unhandled,
+                    // which left isBuffering == true forever (infinite spinner).
+                    self.loadFailed = true
+                    self.lastErrorMessage = it.error?.localizedDescription ?? "Playback failed"
+                    self.isPlaying = false
+                default:
+                    break
                 }
                 self.recomputeBuffering(player: player, item: it)
             }
@@ -301,7 +318,10 @@ public final class NativePlayerController: PlaybackControlling {
         let ready = item.status == .readyToPlay
 
         let buffering: Bool
-        if controlStatus == .waitingToPlayAtSpecifiedRate {
+        if item.status == .failed {
+            // P0 FIX: a dead item is not "buffering" — stop the spinner.
+            buffering = false
+        } else if controlStatus == .waitingToPlayAtSpecifiedRate {
             buffering = true
         } else if !ready {
             buffering = true

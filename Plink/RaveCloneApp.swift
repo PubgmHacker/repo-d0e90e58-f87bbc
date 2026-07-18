@@ -68,10 +68,35 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
         #endif
         AnalyticsService.shared.appOpen()
         // Soft-detect LiveKit so mic UI can appear when ops enable keys
-        if let base = URL(string: "https://plink-backend-production-ef31.up.railway.app") {
+        if let base = URL(string: PlinkConfig.baseURLString) {
             Task { await FeatureFlags.refreshLiveKitAvailability(apiBaseURL: base) }
         }
         return true
+    }
+
+    // MARK: - Push notifications (APNs device token → backend)
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        print("[Push] APNs device token received")
+        Task { await PlinkAppDelegate.sendPushToken(token) }
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[Push] APNs registration failed: \(error.localizedDescription)")
+    }
+
+    private static func sendPushToken(_ token: String) async {
+        guard let auth = KeychainHelper.read(for: "rave_auth_token"),
+              let url = URL(string: PlinkConfig.apiURLString + "/auth/fcm-token") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(auth)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token])
+        _ = try? await URLSession.shared.data(for: req)
     }
 }
 #else

@@ -45,7 +45,7 @@ final class APIClient: ObservableObject, @unchecked Sendable {
         }
     }
 
-    init(baseURL: String = "https://plink-backend-production-ef31.up.railway.app/api") {
+    init(baseURL: String = PlinkConfig.apiURLString) {
         self.baseURL = URL(string: baseURL)!
         // 🔧 FIX: Was `.convertToSnakeCase` — but the backend reads camelCase everywhere
         // (rooms.ts: `mediaItem`, `hostName`, `maxParticipants`; auth.ts: `refreshToken`;

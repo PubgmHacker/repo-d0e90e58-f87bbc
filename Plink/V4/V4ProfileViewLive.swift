@@ -598,7 +598,7 @@ struct AvatarPickerSheet: View {
         }
 
         let base64 = jpegData.base64EncodedString()
-        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/me/avatar") else { return }
+        guard let url = URL(string: PlinkConfig.apiURLString + "/users/me/avatar") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -623,7 +623,7 @@ struct AvatarPickerSheet: View {
                     serverURL = URL(string: avatarURLString)
                 }
                 if serverURL == nil, let uid = AuthService.shared.currentUserValue?.id {
-                    serverURL = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/\(uid)/avatar")
+                    serverURL = URL(string: PlinkConfig.apiURLString + "/users/\(uid)/avatar")
                 }
                 await MainActor.run {
                     store?.applyAvatar(image: image, serverURL: serverURL)

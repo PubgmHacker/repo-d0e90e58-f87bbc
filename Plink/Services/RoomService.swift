@@ -45,7 +45,7 @@ final class RoomService: RoomServiceProtocol {
     func fetchActiveRooms() async throws -> [Room] {
         let rooms: [Room] = try await api.request("rooms", method: .get)
         // Client-side guard: never show empty / ended shells in "watching now"
-        return rooms.filter { $0.isActive && $0.participantCount > 0 }
+        return rooms.filter { $0.isActive && $0.participantCount >= 2 } // BUG-FIX: skip host-only rooms
     }
 
     // MARK: - Fetch Single Room

@@ -224,8 +224,29 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     startAmbientPalettePolling()
                 }
             } catch {
-                let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                lastError = "Не удалось загрузить видео: \(detail)"
+                // P0 FIX: the native AVPlayer path can still fail (expired
+                // stream, poisoned cache, 403). Recover with the official
+                // embedded player instead of dead-ending with an error.
+                var recovered = false
+                if case .youtube = source {
+                    // embedded path itself failed — nothing to fall back to
+                } else if let ytId = mediaId {
+                    await YouTubeNativeStreamCache.shared.invalidate(videoId: ytId)
+                    if (try? await coordinator.prepare(.youtube(ytId))) != nil {
+                        playbackProxy.attachTarget(coordinator.currentController)
+                        if let embedded = coordinator.currentController as? EmbeddedPlaybackController {
+                            embedded.onUserPlaybackChange = { [weak self] playing, position in
+                                self?.publishHostPlaybackState(playing: playing, positionSeconds: position)
+                            }
+                        }
+                        mediaSource = .youtube(ytId)
+                        recovered = true
+                    }
+                }
+                if !recovered {
+                    let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    lastError = "Не удалось загрузить видео: \(detail)"
+                }
             }
         } else {
             lastError = "Нет медиа в комнате — выберите YouTube-видео при создании"
@@ -247,7 +268,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         guard let source = mediaSource else { return nil }
         guard case .youtube(let ytId) = source else { return source }
 
-        #if DEBUG
+        // YouTube native extraction (AVPlayer path) — enabled in ALL builds
+        // (Debug + Release). Was #if DEBUG which broke Release/App Store builds.
         let nativeTask = Task.detached(priority: .userInitiated) {
             await Self.extractYouTubeNativePlaybackSource(videoId: ytId)
         }
@@ -271,7 +293,6 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         Task.detached(priority: .utility) {
             _ = await nativeTask.value
         }
-        #endif
         return source
     }
 
@@ -288,21 +309,68 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
-    #if DEBUG
     /// Extract and cache a native YouTube stream source off the main actor.
     /// Returns nil if extraction fails; callers fall back to .youtube WKWebView.
+    /// Enabled in ALL builds (Debug + Release) — was #if DEBUG which broke
+    /// Release/App Store builds (player fell back to WKWebView in production).
     private nonisolated static func extractYouTubeNativePlaybackSource(videoId: String) async -> PlaybackSource? {
+        // P1 audit: remote kill-switch — when disabled, return nil so the
+        // caller falls back to the embedded YouTube player (App Store-safe).
+        guard FeatureFlags.youtubeNativeExtraction else { return nil }
+
         if let cached = await YouTubeNativeStreamCache.shared.source(for: videoId) {
             return cached
         }
-        guard let extracted = await extractYouTubeStreamURL(videoId: videoId) else { return nil }
-
-        let source: PlaybackSource
-        if extracted.pathExtension.lowercased() == "m3u8" || extracted.absoluteString.contains(".m3u8") {
-            source = .hls(extracted, headers: [:])
-        } else {
-            source = .mp4(extracted, headers: ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"])
+        // ── P0 FIX (YouTube infinite loading) ──────────────────────────
+        // Never hand AVPlayer the raw googlevideo URL from /media/extract:
+        // those URLs are IP-bound to the backend server IP, so on-device
+        // requests get HTTP 403 → AVPlayer fails with -11828 and the player
+        // spun forever. Stream through the backend reverse proxy instead
+        // (/api/media/youtube-stream), which fetches upstream from the same
+        // IP that extracted the URL and supports Range requests.
+        let api = APIClient.shared
+        if api.authToken == nil {
+            api.authToken = KeychainHelper.read(for: "rave_auth_token")
         }
+        guard api.authToken != nil else { return nil }
+
+        // P1 audit: never put the long-lived session JWT into a query string
+        // (URLs leak into logs/proxies). Ask for a 45-min media-scoped token.
+        struct StreamTokenResp: Decodable { let token: String }
+        let token: String
+        do {
+            let resp: StreamTokenResp = try await api.request("media/stream-token", method: .post)
+            token = resp.token
+        } catch {
+            // Fallback for older backend builds without /media/stream-token
+            guard let legacy = api.authToken else { return nil }
+            token = legacy
+        }
+
+        var components = URLComponents(
+            url: api.baseURL.appendingPathComponent("media/youtube-stream"),
+            resolvingAgainstBaseURL: false
+        )
+        // AVPlayer drops custom headers on Range requests → token as query param.
+        components?.queryItems = [
+            URLQueryItem(name: "id", value: videoId),
+            URLQueryItem(name: "token", value: token),
+        ]
+        guard let proxyURL = components?.url else { return nil }
+
+        // Preflight (bytes 0-1): commit to the native path only if the proxy
+        // actually serves media. On any failure return nil → caller falls
+        // back to the official embedded YouTube player.
+        var probe = URLRequest(url: proxyURL)
+        probe.setValue("bytes=0-1", forHTTPHeaderField: "Range")
+        probe.timeoutInterval = 6
+        guard
+            let (_, response) = try? await URLSession.shared.data(for: probe),
+            let http = response as? HTTPURLResponse,
+            http.statusCode == 200 || http.statusCode == 206
+        else { return nil }
+
+        let source = PlaybackSource.mp4(proxyURL, headers: [:])
         await YouTubeNativeStreamCache.shared.store(source, for: videoId)
         return source
     }
@@ -346,7 +414,6 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             return nil
         }
     }
-    #endif
 
     public func disconnect() {
         stateChangesTask?.cancel()
@@ -1381,7 +1448,6 @@ public struct ParticipantSnapshot: Sendable, Equatable {
 }
 
 
-#if DEBUG
 private actor YouTubeNativeStreamCache {
     static let shared = YouTubeNativeStreamCache()
 
@@ -1405,5 +1471,9 @@ private actor YouTubeNativeStreamCache {
     func store(_ source: PlaybackSource, for videoId: String) {
         entries[videoId] = Entry(source: source, createdAt: Date())
     }
+
+    /// P0 FIX: drop a poisoned entry (e.g. a stream URL that started 403-ing).
+    func invalidate(videoId: String) {
+        entries.removeValue(forKey: videoId)
+    }
 }
-#endif

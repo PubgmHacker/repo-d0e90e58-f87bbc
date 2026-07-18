@@ -218,7 +218,7 @@ final class ProfileViewModel {
         guard let api = authService as? AuthService else { return }
         guard let token = await api.getFreshToken() else { return }
 
-        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/users/me/avatar") else { return }
+        guard let url = URL(string: PlinkConfig.apiURLString + "/users/me/avatar") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

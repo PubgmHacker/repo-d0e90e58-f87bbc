@@ -73,7 +73,7 @@ final class V4SearchStore {
     private(set) var state: SearchState = .idle
     private(set) var trending: [V4SearchResult] = []
     private var searchTask: Task<Void, Never>?
-    private let apiBase = "https://plink-backend-production-ef31.up.railway.app"
+    private let apiBase = PlinkConfig.baseURLString
 
     func loadTrending() async {
         guard let url = URL(string: "\(apiBase)/api/media/trending?regionCode=RU&maxResults=20") else { return }
@@ -217,7 +217,7 @@ final class V4AIStore {
     func setStatus(_ text: String) {
         state = text
     }
-    private let apiBase = "https://plink-backend-production-ef31.up.railway.app"
+    private let apiBase = PlinkConfig.baseURLString
 
     func send(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

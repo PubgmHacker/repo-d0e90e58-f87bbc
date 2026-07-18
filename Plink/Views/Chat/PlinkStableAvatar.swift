@@ -12,9 +12,17 @@ struct PlinkStableAvatar: View {
     var size: CGFloat = 28
     /// Optional — enables targeted invalidation when this user changes photo.
     var userId: String? = nil
+    /// Show admin ring (scarlet→maroon rotating) — priority over premium.
+    var isAdmin: Bool = false
+    /// Show Plink+ / premium ring (gold→bronze rotating).
+    var isPremium: Bool = false
 
     @State private var image: UIImage?
     @State private var loadedKey: String?
+
+    private var ringLineWidth: CGFloat {
+        max(1.4, size * 0.07)
+    }
 
     var body: some View {
         ZStack {
@@ -27,6 +35,7 @@ struct PlinkStableAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+        .modifier(RingModifier(isPremium: isPremium, isAdmin: isAdmin, lineWidth: ringLineWidth))
         .task(id: url?.absoluteString ?? letter) {
             await loadIfNeeded(force: false)
         }

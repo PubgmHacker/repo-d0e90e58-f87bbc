@@ -1,909 +1,609 @@
-// Plink/Views/Home/RoomCreationView.swift — V5 state machine
-// Implements GPT-5.6 P0.2: 4-step flow (service → content → settings → create)
-// All paths funnel through RoomPresentationCoordinator.
+
+// Plink/Views/Home/RoomCreationView.swift
+// PLINK_M11: Beautiful room creation with service carousel
 
 import SwiftUI
 
+// MARK: - Step
+enum RoomCreationStep { case service, content, setup, creating }
+
+// MARK: - ServiceCardKind
+enum ServiceCardKind { case direct, subscription, other }
+
+// MARK: - Main View
 struct RoomCreationView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var apiClient: APIClient
-    var onRoomCreated: (Room) -> Void
-    /// When set (Friends → «Смотреть»), prefill name and show invite hint.
-    var inviteFriend: Friend? = nil
-
-    @State private var step: Step = .service
-    @State private var selectedService: VideoService = .youtube
-    @State private var mediaURL: String = ""
-    @State private var mediaTitle: String = ""
-    @State private var mediaThumbnail: String?
-    @State private var mediaVideoId: String?  // for YouTube
+    @State private var step: RoomCreationStep = .service
+    @State private var selectedService: VideoService? = nil
+    @State private var detectedVideo: DetectedVideo? = nil
     @State private var roomName: String = ""
-    @State private var maxParticipants: Int = 4
-    @State private var privacy: RoomPrivacy = .publicRoom
-    @State private var isCreating = false
-    @State private var errorMessage: String?
-    @State private var showYouTubeSearch = false
-    @State private var authWallService: VideoService?
-    @State private var pendingAuthAction: PendingAuthAction?
+    @State private var isPublic: Bool = true
+    @State private var showAuthSheet: Bool = false
+    @State private var pendingAuthService: VideoService? = nil
+    @State private var isCreating: Bool = false
+    @State private var heroOffset: CGFloat = 0
 
-    enum Step: String, CaseIterable {
-        case service, content, settings, creating
+    let onCreate: ((String, VideoService, DetectedVideo?) -> Void)?
+
+    init(onCreate: ((String, VideoService, DetectedVideo?) -> Void)? = nil) {
+        self.onCreate = onCreate
     }
-
-    private enum PendingAuthAction {
-        case continueToSettings
-        case fastYouTube(videoId: String, title: String, thumbnail: String?)
-        case createRoom
-    }
-
-    private var isPremium: Bool { PremiumStatusManager.shared.isPremium }
 
     var body: some View {
         NavigationStack {
-            Cinema2026.background.ignoresSafeArea().overlay {
-                VStack(spacing: 0) {
-                    progressBar
-                    ScrollView {
+            ZStack(alignment: .bottom) {
+                Cinema2026.bg.ignoresSafeArea()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
                         switch step {
-                        case .service: serviceStep
-                        case .content: contentStep
-                        case .settings: settingsStep
+                        case .service:  serviceStep
+                        case .content:  contentStep
+                        case .setup:    setupStep
                         case .creating: creatingStep
                         }
                     }
                 }
+
+                // Floating back button
+                if step != .service {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    switch step {
+                                    case .content: step = .service
+                                    case .setup:   step = .content
+                                    default: break
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.left")
+                                    Text("Назад")
+                                }
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Cinema2026.text)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(.ultraThinMaterial, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 16)
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                }
             }
-            .navigationTitle("Новая комната")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Закрыть") { dismiss() }
+                    Button("Отмена") { dismiss() }
+                        .foregroundStyle(Cinema2026.secondary)
                 }
-                if step != .service && step != .creating {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Назад") { goBack() }
-                    }
-                }
-            }
-            .sheet(isPresented: $showYouTubeSearch) {
-                YouTubeSearchView { videoId, title, thumb in
-                    beginFastYouTubeCreate(videoId: videoId, title: title, thumbnail: thumb)
+                ToolbarItem(placement: .principal) {
+                    Text(stepTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Cinema2026.text)
                 }
             }
-            .overlay {
-                if let service = authWallService {
-                    ServiceAuthView(
-                        service: service,
-                        onAuthorized: {
-                            ServiceAuthStore.markAuthorized(service.serviceType)
-                            authWallService = nil
-                            resumePendingAuthAction()
-                        },
-                        onCancel: {
-                            pendingAuthAction = nil
-                            authWallService = nil
-                        }
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(20)
+        }
+        .sheet(isPresented: $showAuthSheet) {
+            if let svc = pendingAuthService {
+                ServiceAuthSheet(service: svc) {
+                    ServiceAuthStore.markAuthorized(svc.serviceType)
+                    showAuthSheet = false
+                    selectedService = svc
+                    withAnimation { step = .content }
                 }
             }
-            .animation(.spring(response: 0.32, dampingFraction: 0.88), value: authWallService?.id)
         }
     }
 
-    // MARK: - Progress bar
-
-    private var progressBar: some View {
-        HStack(spacing: 4) {
-            ForEach(Step.allCases.filter { $0 != .creating }, id: \.self) { s in
-                Capsule()
-                    .fill(stepIndex(s) <= stepIndex(step) ? Cinema2026.accent : Cinema2026.surface)
-                    .frame(height: 3)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
-
-    private func stepIndex(_ s: Step) -> Int {
-        switch s {
-        case .service: return 0
-        case .content: return 1
-        case .settings: return 2
-        case .creating: return 3
-        }
-    }
-
-    private func goBack() {
+    private var stepTitle: String {
         switch step {
-        case .content: step = .service
-        case .settings: step = .content
-        default: break
+        case .service:  return "Создать комнату"
+        case .content:  return selectedService?.title ?? "Выбор видео"
+        case .setup:    return "Настройка"
+        case .creating: return "Создаём..."
         }
     }
 
-    // MARK: - Step 1: Service
-
-    private var serviceStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("ВЫБОР СЕРВИСА")
-                .font(.caption2.bold())
-                .tracking(1.1)
-                .foregroundStyle(Cinema2026.accent)
-            Text("Что смотрим?")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Cinema2026.text)
-
-            Text("ПРЯМОЙ SYNC")
-                .font(.caption2.bold())
-                .tracking(1.1)
-                .foregroundStyle(Cinema2026.secondary)
-
-            ForEach(syncableServices, id: \.self) { svc in
-                serviceCard(svc, kind: .direct)
-            }
-
-            // OTT / cinemas: host subscription — guests still sync via Plink (product strategy)
-            Text("КИНОТЕАТРЫ · ПОДПИСКА HOST")
-                .font(.caption2.bold())
-                .tracking(1.1)
-                .foregroundStyle(Cinema2026.secondary)
-                .padding(.top, 8)
-
-            Text("Host входит в свой аккаунт. Гости смотрят синхронно в Plink.")
-                .font(.system(size: 12))
-                .foregroundStyle(Cinema2026.secondary.opacity(0.9))
-
-            ForEach(cinemaServices, id: \.self) { svc in
-                serviceCard(svc, kind: .subscription)
-            }
-
-            Text("ДРУГОЕ")
-                .font(.caption2.bold())
-                .tracking(1.1)
-                .foregroundStyle(Cinema2026.secondary)
-                .padding(.top, 8)
-
-            ForEach(otherServices, id: \.self) { svc in
-                serviceCard(svc, kind: .other)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 32)
-    }
-
+    // MARK: - Service groups
     private var syncableServices: [VideoService] {
         [.youtube, .vk, .rutube]
     }
-
     private var cinemaServices: [VideoService] {
-        [.netflix, .disney, .kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion]
+        [.kinopoisk, .netflix, .okko, .ivi, .disney, .wink, .start, .premier, .kion]
     }
-
     private var otherServices: [VideoService] {
-        [.customURL, .browser]
+        [.browser, .customURL]
     }
 
-    private enum ServiceCardKind {
-        case direct        // YouTube / VK / Rutube
-        case subscription  // Netflix / RU cinemas — host sub, guests sync
-        case other
-    }
-
-    private func serviceCard(_ svc: VideoService, kind: ServiceCardKind) -> some View {
-        Button {
-            selectedService = svc
-            step = .content
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: svc.icon)
-                    .font(.system(size: 22))
-                    .foregroundStyle(svc.accentColor)
-                    .frame(width: 44, height: 44)
-                    .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 12))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(svc.title)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Cinema2026.text)
-                        if kind == .subscription {
-                            Text("подписка host")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Cinema2026.accent)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Cinema2026.accent.opacity(0.15), in: Capsule())
-                        } else if kind == .direct {
-                            Text("sync")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Color(hex: 0x26D9A4))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(hex: 0x26D9A4).opacity(0.15), in: Capsule())
-                        }
-                    }
-                    Text(svc.subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Cinema2026.secondary)
-                }
-
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
+    // MARK: - Step 1: Service
+    private var serviceStep: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Hero greeting
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Что смотрим?")
+                    .font(.system(size: 32, weight: .black))
+                    .foregroundStyle(Cinema2026.text)
+                Text("Выбери сервис — пригласи друзей и смотрите вместе")
+                    .font(.system(size: 15))
                     .foregroundStyle(Cinema2026.secondary)
             }
-            .padding(14)
-            .background(Cinema2026.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 22)
+
+            // Section: Direct sync
+            sectionLabel("СИНХРОННЫЕ СЕРВИСЫ", subtitle: "Бесплатно — прямой синх без подписки")
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+
+            // Large horizontal hero cards
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(syncableServices, id: \.self) { svc in
+                        DirectServiceCard(service: svc) { selectService(svc) }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 2)
+            }
+            .padding(.bottom, 30)
+
+            // Section: Cinemas
+            sectionLabel("КИНОТЕАТРЫ · УНИКАЛЬНОЕ", subtitle: "Host входит в аккаунт. Гости смотрят через Plink", accent: true)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 14)
+
+            LazyVGrid(
+                columns: [.init(.flexible(), spacing: 12), .init(.flexible(), spacing: 12), .init(.flexible(), spacing: 12)],
+                spacing: 12
+            ) {
+                ForEach(cinemaServices, id: \.self) { svc in
+                    CinemaServiceCard(service: svc) { selectService(svc) }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 30)
+
+            // Section: Other
+            sectionLabel("ДРУГОЕ", subtitle: "Любая ссылка или встроенный браузер")
+                .padding(.horizontal, 20)
+                .padding(.bottom, 10)
+
+            VStack(spacing: 10) {
+                ForEach(otherServices, id: \.self) { svc in
+                    OtherServiceRow(service: svc) { selectService(svc) }
+                        .padding(.horizontal, 20)
+                }
+            }
+            .padding(.bottom, 60)
         }
-        .buttonStyle(.plain)
+    }
+
+    private func selectService(_ svc: VideoService) {
+        if svc.serviceType.requiresAuth && !ServiceAuthStore.hasAccess(to: svc.serviceType) {
+            pendingAuthService = svc
+            showAuthSheet = true
+        } else {
+            selectedService = svc
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { step = .content }
+        }
+    }
+
+    private func sectionLabel(_ title: String, subtitle: String, accent: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                if accent {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Cinema2026.accent)
+                }
+                Text(title)
+                    .font(.system(size: 10, weight: .black))
+                    .tracking(1.4)
+                    .foregroundStyle(accent ? Cinema2026.accent : Cinema2026.secondary)
+            }
+            Text(subtitle)
+                .font(.system(size: 12))
+                .foregroundStyle(Cinema2026.secondary.opacity(0.8))
+        }
     }
 
     // MARK: - Step 2: Content
-
     private var contentStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("ВЫБОР КОНТЕНТА")
-                .font(.caption2.bold())
-                .tracking(1.1)
-                .foregroundStyle(Cinema2026.accent)
-            Text("Что именно смотрим?")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Cinema2026.text)
-            Text(selectedService.title)
-                .font(.subheadline)
-                .foregroundStyle(Cinema2026.secondary)
-
-            // YouTube / VK / Rutube: search button + paste URL section
-            if selectedService == .youtube || selectedService == .vk || selectedService == .rutube {
-                if selectedService == .youtube {
-                    Button {
-                        showYouTubeSearch = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 20))
-                            Text("Найти на \(selectedService.title)")
-                                .font(.system(size: 16, weight: .semibold))
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .bold))
-                        }
-                        .foregroundStyle(Cinema2026.text)
-                        .padding(16)
-                        .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain)
-
-                    serviceBrandCarousel
+        Group {
+            if let svc = selectedService {
+                ServiceBrowserView(service: svc) { video in
+                    detectedVideo = video
+                    roomName = video.title
+                    withAnimation { step = .setup }
                 }
-
-                pasteURLSection
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 300)
             }
-
-            // Cinema services: paste URL only
-            if cinemaServices.contains(selectedService) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ссылка на контент")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Cinema2026.secondary)
-                    TextField("https://\(selectedService.rawValue).com/...", text: $mediaURL)
-                        .font(.system(size: 16))
-                        .foregroundStyle(Cinema2026.text)
-                        .padding(.horizontal, 16)
-                        .frame(height: 52)
-                        .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.divider, lineWidth: 0.5))
-                }
-
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundStyle(Cinema2026.amber)
-                    Text(selectedService.subscriptionDisclaimer + " Гости смотрят синхронно через Plink.")
-                        .font(.caption)
-                        .foregroundStyle(Cinema2026.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-                .background(Cinema2026.amber.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityLabel(selectedService.subscriptionDisclaimer)
-            }
-
-            // Custom URL / Browser
-            if selectedService == .customURL || selectedService == .browser {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Прямая ссылка")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Cinema2026.secondary)
-                    TextField("https://example.com/video.mp4", text: $mediaURL)
-                        .font(.system(size: 16))
-                        .foregroundStyle(Cinema2026.text)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .padding(.horizontal, 16)
-                        .frame(height: 52)
-                        .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.divider, lineWidth: 0.5))
-                    Text("Поддерживается: .mp4, .m3u8, .mp3")
-                        .font(.caption)
-                        .foregroundStyle(Cinema2026.secondary)
-                }
-            }
-
-            // Continue button
-            Button {
-                continueFromContent()
-            } label: {
-                Text("Продолжить")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Cinema2026.background)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(canContinueFromContent ? Cinema2026.accent : Cinema2026.surface, in: RoundedRectangle(cornerRadius: 16))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canContinueFromContent)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 32)
-    }
-
-    private var canContinueFromContent: Bool {
-        if selectedService == .youtube {
-            return mediaVideoId != nil || !mediaURL.isEmpty
-        }
-        return !mediaURL.isEmpty
-    }
-
-    private var brandCarouselServices: [VideoService] {
-        [.kinopoisk, .okko, .youtube, .ivi, .wink, .start, .premier, .rutube, .vk, .kion]
-    }
-
-    private var serviceBrandCarousel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Доступно в Plink")
-                .font(.system(size: 12, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(Cinema2026.secondary)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(brandCarouselServices, id: \.self) { service in
-                        serviceLogoPill(service)
-                    }
-                }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 2)
-            }
-            .scrollDisabled(false)
-        }
-        .padding(.top, 2)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Карусель поддерживаемых сервисов")
-    }
-
-    private func serviceLogoPill(_ service: VideoService) -> some View {
-        HStack(spacing: 9) {
-            ServiceLogoView(service: service, size: 28)
-                .frame(width: 28, height: 28)
-
-            Text(service.brandName)
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
-                .foregroundStyle(Cinema2026.text)
-                .lineLimit(1)
-        }
-        .padding(.leading, 10)
-        .padding(.trailing, 12)
-        .frame(height: 46)
-        .background(
-            LinearGradient(
-                colors: [
-                    service.accentColor.opacity(0.26),
-                    Cinema2026.surface.opacity(0.78)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(service.accentColor.opacity(0.24), lineWidth: 0.8)
-        )
-        .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
-    private var pasteURLSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Или вставьте ссылку")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Cinema2026.secondary)
-            TextField("https://...", text: $mediaURL)
-                .font(.system(size: 16))
-                .foregroundStyle(Cinema2026.text)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .padding(.horizontal, 16)
-                .frame(height: 52)
-                .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.divider, lineWidth: 0.5))
         }
     }
 
-    // MARK: - Step 3: Settings
-
-    private var settingsStep: some View {
+    // MARK: - Step 3: Setup
+    private var setupStep: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Text("НАСТРОЙКИ")
-                .font(.caption2.bold())
-                .tracking(1.1)
-                .foregroundStyle(Cinema2026.accent)
-            Text("Финальный штрих")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Cinema2026.text)
-
-            // Content preview
-            if !mediaTitle.isEmpty || mediaThumbnail != nil {
-                HStack(spacing: 12) {
-                    if let thumb = mediaThumbnail, let url = URL(string: thumb) {
-                        AsyncImage(url: url) { image in
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Rectangle().fill(Cinema2026.surface)
-                        }
-                        .frame(width: 80, height: 45)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        Image(systemName: selectedService.icon)
-                            .font(.system(size: 24))
-                            .foregroundStyle(selectedService.accentColor)
-                            .frame(width: 80, height: 45)
-                            .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 8))
+            if let video = detectedVideo {
+                // Video preview
+                ZStack(alignment: .bottomLeading) {
+                    AsyncImage(url: URL(string: video.thumbnailURL ?? "")) { img in
+                        img.resizable().aspectRatio(16/9, contentMode: .fill)
+                    } placeholder: {
+                        Rectangle().fill(Cinema2026.surface)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(mediaTitle.isEmpty ? selectedService.title : mediaTitle)
-                            .font(.system(size: 14, weight: .medium))
+                    .frame(height: 200)
+                    .clipped()
+
+                    LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
+
+                    if let svc = selectedService {
+                        ServiceLogoView(service: svc, size: 28)
+                            .padding(14)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                // Room name
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Название комнаты")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Cinema2026.secondary)
+                    TextField("Как назвём комнату?", text: $roomName)
+                        .font(.system(size: 17))
+                        .foregroundStyle(Cinema2026.text)
+                        .padding(14)
+                        .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
+                }
+
+                // Privacy toggle
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(isPublic ? "Открытая комната" : "Закрытая комната")
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Cinema2026.text)
-                            .lineLimit(2)
-                        Text(selectedService.title)
+                        Text(isPublic ? "Любой может присоединиться" : "Только по ссылке")
                             .font(.system(size: 12))
                             .foregroundStyle(Cinema2026.secondary)
                     }
                     Spacer()
+                    Toggle("", isOn: $isPublic)
+                        .labelsHidden()
+                        .tint(Cinema2026.accent)
                 }
-                .padding(12)
-                .background(Cinema2026.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-            }
+                .padding(16)
+                .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 16))
 
-            // Room name
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Название комнаты")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Cinema2026.secondary)
-                TextField("Комната друзей", text: $roomName)
-                    .font(.system(size: 16))
-                    .foregroundStyle(Cinema2026.text)
-                    .padding(.horizontal, 16)
-                    .frame(height: 52)
-                    .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Cinema2026.divider, lineWidth: 0.5))
-            }
-
-            if let friend = inviteFriend {
-                HStack(spacing: 8) {
-                    Image(systemName: "person.badge.plus")
-                        .foregroundStyle(Cinema2026.accent)
-                    Text("После создания \(friend.displayTitle) получит приглашение в чат")
-                        .font(.caption)
-                        .foregroundStyle(Cinema2026.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                // Create button
+                Button {
+                    withAnimation { step = .creating }
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        onCreate?(roomName, selectedService ?? .youtube, detectedVideo)
+                        dismiss()
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 20))
+                        Text("Создать комнату")
+                            .font(.system(size: 17, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .background(
+                        LinearGradient(colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.7)],
+                                       startPoint: .leading, endPoint: .trailing),
+                        in: RoundedRectangle(cornerRadius: 18)
+                    )
+                    .foregroundStyle(.black)
+                    .shadow(color: Cinema2026.accent.opacity(0.4), radius: 12, y: 6)
                 }
-                .padding(12)
-                .background(Cinema2026.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .buttonStyle(.plain)
             }
-
-            // Privacy
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Приватность")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Cinema2026.secondary)
-                HStack(spacing: 10) {
-                    privacyChip("Публичная", privacy == .publicRoom) { privacy = .publicRoom }
-                    privacyChip("Приватная", privacy == .privateRoom) { privacy = .privateRoom }
-                }
-            }
-
-            // Max participants
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Максимум участников: \(maxParticipants)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Cinema2026.secondary)
-                Stepper(value: $maxParticipants, in: 2...(isPremium ? 50 : 4)) {
-                    Text("\(maxParticipants) чел.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Cinema2026.text)
-                }
-                .tint(Cinema2026.accent)
-                if !isPremium {
-                    Text("Plink+ — до 50 участников")
-                        .font(.caption)
-                        .foregroundStyle(Cinema2026.amber)
-                }
-            }
-
-            // Error
-            if let err = errorMessage {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(Cinema2026.danger)
-                    .padding(12)
-                    .background(Cinema2026.danger.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-            }
-
-            // Create button — always enabled (empty name → auto default)
-            Button {
-                Task { await createRoom() }
-            } label: {
-                HStack {
-                    if isCreating { ProgressView().tint(Cinema2026.background) }
-                    Text(inviteFriend == nil ? "Создать комнату" : "Создать и пригласить")
-                }
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Cinema2026.background)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(isCreating ? Cinema2026.surface : Cinema2026.accent, in: RoundedRectangle(cornerRadius: 16))
-            }
-            .buttonStyle(.plain)
-            .disabled(isCreating)
-            .onAppear {
-                fillDefaultRoomName()
-            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 32)
-    }
-
-    private func privacyChip(_ title: String, _ isSelected: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isSelected ? Cinema2026.background : Cinema2026.text)
-                .padding(.horizontal, 16)
-                .frame(height: 40)
-                .background(isSelected ? Cinema2026.accent : Cinema2026.surface, in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Step 4: Creating
-
     private var creatingStep: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
+            Spacer()
             ProgressView()
                 .scaleEffect(1.5)
                 .tint(Cinema2026.accent)
-            Text("Создаём комнату…")
-                .font(.headline)
+            Text("Создаём комнату...")
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Cinema2026.text)
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minHeight: 400)
     }
+}
 
-    // MARK: - Create
+// MARK: - Direct Service Card (YouTube / VK / Rutube)
+struct DirectServiceCard: View {
+    let service: VideoService
+    let action: () -> Void
+    @State private var pressed = false
 
-    private func requiresSmartWall(for service: VideoService) -> Bool {
-        !WatchRoomModel.checkServiceAccess(for: service.serviceType)
-    }
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .bottomLeading) {
+                // Brand gradient
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [service.accentColor.opacity(0.9), service.accentColor.opacity(0.4), .black.opacity(0.5)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 210, height: 140)
 
-    @discardableResult
-    private func ensureServiceAccess(for service: VideoService, pending action: PendingAuthAction) -> Bool {
-        guard requiresSmartWall(for: service) else { return true }
-        pendingAuthAction = action
-        authWallService = service
-        return false
-    }
+                // Inner glow
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(service.accentColor.opacity(0.35), lineWidth: 1)
+                    .frame(width: 210, height: 140)
 
-    private func resumePendingAuthAction() {
-        guard let action = pendingAuthAction else { return }
-        pendingAuthAction = nil
-        switch action {
-        case .continueToSettings:
-            continueFromContent(skipAuth: true)
-        case .fastYouTube(let videoId, let title, let thumbnail):
-            beginFastYouTubeCreate(videoId: videoId, title: title, thumbnail: thumbnail, skipAuth: true)
-        case .createRoom:
-            Task { await createRoom(skipAuth: true) }
-        }
-    }
-
-    private func continueFromContent(skipAuth: Bool = false) {
-        if mediaTitle.isEmpty {
-            mediaTitle = selectedService.title
-        }
-        fillDefaultRoomName()
-        guard skipAuth || ensureServiceAccess(for: selectedService, pending: .continueToSettings) else { return }
-        step = .settings
-    }
-
-    private func beginFastYouTubeCreate(videoId: String, title: String, thumbnail: String?, skipAuth: Bool = false) {
-        guard isValidYouTubeVideoId(videoId) else {
-            errorMessage = "Не удалось распознать YouTube-видео. Попробуйте другое."
-            showYouTubeSearch = false
-            step = .content
-            return
-        }
-
-        selectedService = .youtube
-        mediaVideoId = videoId
-        mediaURL = "https://www.youtube.com/watch?v=\(videoId)"
-        mediaTitle = title
-        mediaThumbnail = thumbnail
-        fillDefaultRoomName(preferredTitle: title)
-        showYouTubeSearch = false
-        errorMessage = nil
-
-        guard skipAuth || ensureServiceAccess(
-            for: selectedService,
-            pending: .fastYouTube(videoId: videoId, title: title, thumbnail: thumbnail)
-        ) else { return }
-
-        step = .creating
-        Task { await createRoom(skipAuth: true) }
-    }
-
-    private func fillDefaultRoomName(preferredTitle: String? = nil) {
-        guard roomName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if let friend = inviteFriend {
-            roomName = "С \(friend.displayTitle)"
-        } else if let preferredTitle, !preferredTitle.isEmpty {
-            roomName = String(preferredTitle.prefix(40))
-        } else if !mediaTitle.isEmpty {
-            roomName = String(mediaTitle.prefix(40))
-        } else {
-            roomName = selectedService.title
-        }
-    }
-
-    private func createRoom(skipAuth: Bool = false) async {
-        guard skipAuth || ensureServiceAccess(for: selectedService, pending: .createRoom) else { return }
-        // P0.2: idempotency guard — prevent double-tap creating two rooms
-        guard !isCreating else { return }
-        isCreating = true
-        errorMessage = nil
-        step = .creating
-        defer { isCreating = false }
-
-        // Ensure JWT is on the API client used by this sheet (shared or injected)
-        AuthService.shared.rebindSessionFromStorage()
-        if apiClient.authToken == nil {
-            apiClient.authToken = AuthService.shared.authToken
-                ?? KeychainHelper.read(for: "rave_auth_token")
-        }
-        if APIClient.shared.authToken == nil {
-            APIClient.shared.authToken = apiClient.authToken
-        }
-        guard apiClient.authToken != nil else {
-            errorMessage = "Сессия истекла. Выйдите и войдите снова."
-            step = .settings
-            return
-        }
-
-        // Build MediaItem based on service
-        let mediaItem: MediaItem
-        let streamURL: String
-        let source: MediaItem.MediaSource
-        let videoId: String?
-
-        switch selectedService {
-        case .youtube:
-            guard let vid = mediaVideoId ?? extractYouTubeId(from: mediaURL), isValidYouTubeVideoId(vid) else {
-                errorMessage = "Вставьте корректную ссылку YouTube или выберите видео из поиска."
-                step = .content
-                return
-            }
-            // Prefer watch URL — more reliable for id extract + backend
-            streamURL = "https://www.youtube.com/watch?v=\(vid)"
-            videoId = vid
-            source = .youtube
-        case .vk:
-            streamURL = mediaURL
-            videoId = nil
-            source = .url
-        case .rutube:
-            streamURL = mediaURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            videoId = nil
-            source = .url
-        case .customURL:
-            streamURL = mediaURL
-            videoId = nil
-            source = .url
-        case .browser:
-            streamURL = mediaURL
-            videoId = nil
-            source = .url
-        default:
-            // Cinema services
-            streamURL = mediaURL
-            videoId = nil
-            source = .url
-        }
-
-        mediaItem = MediaItem(
-            id: streamURL,
-            title: mediaTitle.isEmpty ? selectedService.title : mediaTitle,
-            artist: nil,
-            thumbnailURL: mediaThumbnail,
-            streamURL: streamURL,
-            duration: nil,
-            mediaType: .video,
-            source: source,
-            videoId: videoId
-        )
-
-        let hostName = AuthService.shared.currentUserValue?.username
-            ?? UserDefaults.standard.string(forKey: "plink_current_username")
-
-        // Guard empty URL for link-based services
-        if selectedService == .rutube || selectedService == .vk || selectedService == .customURL || selectedService == .browser {
-            let trimmed = mediaURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || !trimmed.lowercased().hasPrefix("http") {
-                errorMessage = "Вставьте корректную ссылку (https://…)"
-                step = .content
-                return
-            }
-        }
-
-        let finalName: String = {
-            let t = roomName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !t.isEmpty { return t }
-            if let friend = inviteFriend { return "С \(friend.displayTitle)" }
-            if !mediaTitle.isEmpty { return String(mediaTitle.prefix(40)) }
-            return selectedService.title
-        }()
-
-        let request = CreateRoomRequest(
-            name: finalName,
-            maxParticipants: maxParticipants,
-            mediaItem: mediaItem,
-            privacy: privacy,
-            password: nil,
-            hostName: hostName
-        )
-
-        do {
-            var room = try await RoomService(api: apiClient).createRoom(request)
-            // Ensure host is joined (presence / participant count) even if
-            // older backends omitted RoomParticipant on create.
-            if let joined = try? await RoomService(api: apiClient).joinRoom(code: room.code) {
-                // Never drop local mediaItem when join returns a stripped payload
-                let mergedMedia = joined.mediaItem ?? room.mediaItem ?? mediaItem
-                room = Room(
-                    id: joined.id,
-                    name: joined.name,
-                    hostID: joined.hostID,
-                    hostName: joined.hostName,
-                    code: joined.code,
-                    participants: joined.participants.isEmpty ? room.participants : joined.participants,
-                    mediaItem: mergedMedia,
-                    isActive: joined.isActive,
-                    maxParticipants: joined.maxParticipants,
-                    hostIsPremium: joined.hostIsPremium,
-                    createdAt: joined.createdAt,
-                    privacy: joined.privacy,
-                    password: joined.password
-                )
-            }
-            // Keep client-side media if server stripped it
-            if room.mediaItem == nil {
-                room = Room(
-                    id: room.id,
-                    name: room.name,
-                    hostID: room.hostID,
-                    hostName: room.hostName,
-                    code: room.code,
-                    participants: room.participants,
-                    mediaItem: mediaItem,
-                    isActive: room.isActive,
-                    maxParticipants: room.maxParticipants,
-                    hostIsPremium: room.hostIsPremium,
-                    createdAt: room.createdAt,
-                    privacy: room.privacy,
-                    password: room.password
-                )
-            }
-            onRoomCreated(room)
-            dismiss()
-        } catch {
-            let msg = error.localizedDescription
-            if msg.lowercased().contains("unauthorized")
-                || msg.lowercased().contains("401")
-                || msg.localizedCaseInsensitiveContains("вход") {
-                errorMessage = "Сессия истекла. Закройте приложение и войдите снова."
-            } else if msg.contains("FREE_TIER")
-                || msg.localizedCaseInsensitiveContains("1 active room")
-                || msg.localizedCaseInsensitiveContains("free tier")
-                || msg.contains("403") {
-                // Retry once: end own active rooms then create again
-                if await endMyActiveRooms() {
-                    do {
-                        var room = try await RoomService(api: apiClient).createRoom(request)
-                        if let joined = try? await RoomService(api: apiClient).joinRoom(code: room.code) {
-                            room = joined
+                // SYNC badge
+                VStack {
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Circle().fill(.green).frame(width: 5, height: 5)
+                            Text("SYNC")
+                                .font(.system(size: 8, weight: .black))
+                                .tracking(1.2)
                         }
-                        if room.mediaItem == nil {
-                            room = Room(
-                                id: room.id, name: room.name, hostID: room.hostID,
-                                hostName: room.hostName, code: room.code,
-                                participants: room.participants, mediaItem: mediaItem,
-                                isActive: room.isActive, maxParticipants: room.maxParticipants,
-                                hostIsPremium: room.hostIsPremium, createdAt: room.createdAt,
-                                privacy: room.privacy, password: room.password
-                            )
-                        }
-                        onRoomCreated(room)
-                        dismiss()
-                        return
-                    } catch {
-                        errorMessage = "Не удалось создать комнату. Попробуйте ещё раз."
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.35), in: Capsule())
+                        .padding(12)
                     }
-                } else {
-                    errorMessage = "Уже есть активная комната. Закройте её и создайте новую."
+                    Spacer()
                 }
-            } else {
-                errorMessage = "Не удалось создать комнату: \(msg)"
+                .frame(width: 210, height: 140)
+
+                // Bottom info
+                HStack(alignment: .bottom, spacing: 10) {
+                    ServiceLogoView(service: service, size: 42)
+                        .shadow(color: .black.opacity(0.4), radius: 6)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(service.title)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.white)
+                        Text(service.subtitle)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .padding(14)
             }
-            step = .settings
+            .frame(width: 210, height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .shadow(color: service.accentColor.opacity(0.35), radius: 14, x: 0, y: 6)
+            .scaleEffect(pressed ? 0.96 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.22, dampingFraction: 0.65), value: pressed)
+        .simultaneousGesture(DragGesture(minimumDistance: 0)
+            .onChanged { _ in pressed = true }
+            .onEnded { _ in pressed = false })
+    }
+}
+
+// MARK: - Cinema Service Card (Kinopoisk, Netflix, Okko...)
+struct CinemaServiceCard: View {
+    let service: VideoService
+    let action: () -> Void
+    @State private var pressed = false
+
+    private var isAuthorized: Bool {
+        ServiceAuthStore.hasAccess(to: service.serviceType)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(service.accentColor.opacity(0.12))
+                            .frame(width: 64, height: 64)
+                        ServiceLogoView(service: service, size: 44)
+                    }
+
+                    Text(service.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Cinema2026.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+
+                    // Host badge
+                    HStack(spacing: 3) {
+                        Image(systemName: isAuthorized ? "checkmark.circle.fill" : "crown.fill")
+                            .font(.system(size: 8))
+                        Text(isAuthorized ? "Вход" : "Host")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(isAuthorized ? .green : Cinema2026.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        (isAuthorized ? Color.green : Cinema2026.accent).opacity(0.12),
+                        in: Capsule()
+                    )
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .padding(.horizontal, 6)
+                .background {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Cinema2026.surface)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(
+                            isAuthorized
+                                ? LinearGradient(colors: [.green.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : LinearGradient(colors: [service.accentColor.opacity(0.3), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1
+                        )
+                }
+
+                // Green dot if authorized
+                if isAuthorized {
+                    Circle().fill(Color.green).frame(width: 8, height: 8).padding(8)
+                }
+            }
+            .scaleEffect(pressed ? 0.94 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.22, dampingFraction: 0.65), value: pressed)
+        .simultaneousGesture(DragGesture(minimumDistance: 0)
+            .onChanged { _ in pressed = true }
+            .onEnded { _ in pressed = false })
+    }
+}
+
+// MARK: - Other Service Row (Browser, Custom URL)
+struct OtherServiceRow: View {
+    let service: VideoService
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(service.accentColor.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    ServiceLogoView(service: service, size: 26)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(service.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Cinema2026.text)
+                    Text(service.subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Cinema2026.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Cinema2026.secondary.opacity(0.4))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Cinema2026.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Service Auth Sheet
+struct ServiceAuthSheet: View {
+    let service: VideoService
+    let onAuthorized: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var webShown: Bool = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 28) {
+                Spacer()
+
+                // Logo & brand
+                ZStack {
+                    Circle()
+                        .fill(service.accentColor.opacity(0.15))
+                        .frame(width: 110, height: 110)
+                    ServiceLogoView(service: service, size: 72)
+                }
+
+                VStack(spacing: 10) {
+                    Text("Войдите в \(service.title)")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(Cinema2026.text)
+                    Text("Чтобы стать Host, необходима подписка \(service.title).
+Гости смотрят бесплатно через Plink.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Cinema2026.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                }
+
+                // Benefits
+                VStack(spacing: 12) {
+                    authBenefit(icon: "key.fill", text: "Войдите один раз — сессия сохраняется")
+                    authBenefit(icon: "iphone", text: "Чтобы снова войти — откройте Настройки → Сервисы")
+                    authBenefit(icon: "person.2.fill", text: "Гостям подписка не нужна")
+                }
+                .padding(.horizontal, 30)
+
+                Spacer()
+
+                // CTA
+                Button {
+                    webShown = true
+                } label: {
+                    HStack(spacing: 10) {
+                        ServiceLogoView(service: service, size: 22)
+                        Text("Войти через \(service.title)")
+                            .font(.system(size: 17, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .background(
+                        LinearGradient(colors: [service.accentColor, service.accentColor.opacity(0.7)],
+                                       startPoint: .leading, endPoint: .trailing),
+                        in: RoundedRectangle(cornerRadius: 18)
+                    )
+                    .foregroundStyle(.white)
+                    .shadow(color: service.accentColor.opacity(0.4), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+
+                Button("Позже") { dismiss() }
+                    .font(.system(size: 15))
+                    .foregroundStyle(Cinema2026.secondary)
+                    .padding(.bottom, 30)
+            }
+            .background(Cinema2026.bg.ignoresSafeArea())
+            .navigationBarHidden(true)
+            .sheet(isPresented: $webShown) {
+                ServiceBrowserView(service: service) { _ in
+                    onAuthorized()
+                }
+            }
         }
     }
 
-    /// Close free-tier leftover rooms so a new create can succeed.
-    private func endMyActiveRooms() async -> Bool {
-        do {
-            let mine = try await RoomService(api: apiClient).fetchMyRooms()
-            let active = mine.filter(\.isActive)
-            guard !active.isEmpty else { return true }
-            for room in active {
-                try? await RoomService(api: apiClient).leaveRoom(roomID: room.id)
-                try? await RoomService(api: apiClient).deleteRoom(roomID: room.id)
-            }
-            return true
-        } catch {
-            return false
+    private func authBenefit(icon: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(Cinema2026.accent)
+                .frame(width: 24)
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundStyle(Cinema2026.text)
+            Spacer()
         }
-    }
-
-    private func extractYouTubeId(from url: String) -> String? {
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if isValidYouTubeVideoId(trimmed) { return trimmed }
-
-        if let components = URLComponents(string: trimmed),
-           let videoId = components.queryItems?.first(where: { $0.name == "v" })?.value,
-           isValidYouTubeVideoId(videoId) {
-            return videoId
-        }
-
-        let lower = trimmed.lowercased()
-        for marker in ["youtu.be/", "embed/", "shorts/", "live/", "v/"] {
-            if let range = lower.range(of: marker) {
-                let after = trimmed[range.upperBound...]
-                let candidate = String(after.split(separator: "?").first ?? Substring(after))
-                    .split(separator: "/")
-                    .first
-                    .map(String.init) ?? ""
-                if isValidYouTubeVideoId(candidate) { return candidate }
-            }
-        }
-        return nil
-    }
-
-    private func isValidYouTubeVideoId(_ value: String) -> Bool {
-        guard value.count == 11 else { return false }
-        return value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
     }
 }

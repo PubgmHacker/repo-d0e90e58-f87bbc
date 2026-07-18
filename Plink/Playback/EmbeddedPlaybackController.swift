@@ -121,7 +121,7 @@ public final class EmbeddedPlaybackController: PlaybackControlling {
 
     /// Brain Phase 2: backend HTTPS wrapper URL.
     /// Set via prepare(_:) — the wrapper page lives at /api/media/youtube-player.
-    private static let backendBaseURL = URL(string: "https://plink-backend-production-ef31.up.railway.app")!
+    private static let backendBaseURL = URL(string: PlinkConfig.baseURLString)!
 
     public init() {}
 

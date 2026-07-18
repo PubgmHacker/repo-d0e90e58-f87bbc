@@ -51,7 +51,7 @@ public final class EmbedPlaybackController: PlaybackControlling {
 
         case .youtube(let videoId):
             // YouTube — load backend-hosted player page (avoids error 153)
-            let baseURL = "https://plink-backend-production-ef31.up.railway.app"
+            let baseURL = PlinkConfig.baseURLString
             guard let url = URL(string: "\(baseURL)/api/media/youtube-player?id=\(videoId)") else {
                 throw ProviderError.unsupportedSource
             }

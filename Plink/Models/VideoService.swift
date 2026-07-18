@@ -63,6 +63,14 @@ enum ServiceAuthStore {
     static func markAuthorized(_ service: ServiceType) {
         UserDefaults.standard.set(true, forKey: key(for: service))
     }
+
+    static func logout(_ service: ServiceType) {
+        UserDefaults.standard.removeObject(forKey: key(for: service))
+    }
+
+    static var allAuthorizedServices: [ServiceType] {
+        ServiceType.allCases.filter { hasAccess(to: $0) && $0.requiresAuth }
+    }
 }
 
 // MARK: - Video Service

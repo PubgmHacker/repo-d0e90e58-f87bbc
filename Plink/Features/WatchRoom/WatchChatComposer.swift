@@ -470,6 +470,7 @@ struct EmojiAssetImage: View {
 struct GifPlayerView: View {
     let images: [UIImage]
     @State private var currentFrame = 0
+    @State private var frameTimer: Timer?
     private let frameDuration: TimeInterval = 0.1
 
     var body: some View {
@@ -479,9 +480,16 @@ struct GifPlayerView: View {
             Image(uiImage: images[currentFrame])
                 .resizable()
                 .onAppear {
-                    Timer.scheduledTimer(withTimeInterval: frameDuration, repeats: true) { _ in
+                    // P1 audit fix: timer was never invalidated -> leaked run-loop
+                    // work for every rendered GIF. Store and stop on disappear.
+                    frameTimer?.invalidate()
+                    frameTimer = Timer.scheduledTimer(withTimeInterval: frameDuration, repeats: true) { _ in
                         currentFrame = (currentFrame + 1) % images.count
                     }
+                }
+                .onDisappear {
+                    frameTimer?.invalidate()
+                    frameTimer = nil
                 }
         }
     }

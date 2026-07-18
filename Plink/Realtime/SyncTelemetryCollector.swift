@@ -7,11 +7,12 @@
 //
 
 import Foundation
+import Network
 
 @MainActor
 @Observable
 final class SyncTelemetryCollector {
-    private let apiBase = "https://plink-backend-production-ef31.up.railway.app"
+    private let apiBase = PlinkConfig.baseURLString
     private var sessionId: String = UUID().uuidString
     private var roomId: String = ""
     private var role: String = "participant"
@@ -178,7 +179,19 @@ final class SyncTelemetryCollector {
     }
 
     private func currentNetworkType() async -> String {
-        // TODO: use NWPathMonitor to detect Wi-Fi vs cellular
-        return "wifi"
+        await withCheckedContinuation { continuation in
+            let monitor = NWPathMonitor()
+            monitor.pathUpdateHandler = { path in
+                monitor.pathUpdateHandler = nil
+                monitor.cancel()
+                let type: String
+                if path.usesInterfaceType(.wifi) { type = "wifi" }
+                else if path.usesInterfaceType(.cellular) { type = "cellular" }
+                else if path.usesInterfaceType(.wiredEthernet) { type = "ethernet" }
+                else { type = "other" }
+                continuation.resume(returning: type)
+            }
+            monitor.start(queue: DispatchQueue.global(qos: .utility))
+        }
     }
 }

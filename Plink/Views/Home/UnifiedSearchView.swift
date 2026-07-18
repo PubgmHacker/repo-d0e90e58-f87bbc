@@ -210,7 +210,7 @@ struct UnifiedSearchView: View {
                     hostName: AuthService.shared.currentUserValue?.username
                 )
                 do {
-                    let api = APIClient(baseURL: "https://plink-backend-production-ef31.up.railway.app/api")
+                    let api = APIClient(baseURL: PlinkConfig.apiURLString)
                     let room = try await RoomService(api: api).createRoom(request)
                     await MainActor.run {
                         HapticManager.roomJoined()

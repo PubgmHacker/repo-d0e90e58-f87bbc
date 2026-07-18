@@ -15,6 +15,37 @@ struct SettingsView: View {
                         settingsRow("lock.shield", "Приватность")
                         settingsRow("person.crop.circle.badge.xmark", "Заблокированные")
                     }
+                    // Connected services (NEW M11)
+                    settingsGroup("Подключённые сервисы") {
+                        NavigationLink(destination: ConnectedServicesSettingsView()) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "play.rectangle.on.rectangle")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Cinema2026.accent)
+                                    .frame(width: 28)
+                                Text("Кинотеатры и сервисы")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Cinema2026.text)
+                                Spacer()
+                                // Count badge
+                                let authorized = ServiceType.allCases.filter { $0.requiresAuth && ServiceAuthStore.hasAccess(to: $0) }.count
+                                if authorized > 0 {
+                                    Text("\(authorized)")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Cinema2026.accent, in: Capsule())
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(Cinema2026.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 50)
+                        }
+                        .buttonStyle(.plain)
+                    }
                     // App
                     settingsGroup("Приложение") {
                         settingsRow("circle.lefthalf.filled", "Оформление")

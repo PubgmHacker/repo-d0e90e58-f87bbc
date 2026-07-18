@@ -278,6 +278,17 @@ public enum FeatureFlags {
         return true  // P1-56: temporarily forced TRUE for v2 testing
     }
 
+    /// P1 audit: kill-switch for native YouTube stream extraction (App Store
+    /// review safety). Remote flag key: "youtube_native_extraction".
+    /// Defaults to TRUE; flip the remote flag (or the DEBUG UserDefaults
+    /// override) to force the embedded-player path without an app update.
+    public static var youtubeNativeExtraction: Bool {
+        if UserDefaults.standard.object(forKey: "plink.yt_native_extraction_debug") != nil {
+            return UserDefaults.standard.bool(forKey: "plink.yt_native_extraction_debug")
+        }
+        return cachedRemoteFlags["youtube_native_extraction"] ?? true
+    }
+
     /// P1-56: cached remote flags fetched from backend
     private static var cachedRemoteFlags: [String: Bool] {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),

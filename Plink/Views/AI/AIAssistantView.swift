@@ -1,265 +1,294 @@
-// Plink/Views/AI/AIAssistantView.swift — premium AI entry point
+
+// Plink/Views/AI/AIAssistantView.swift -- AI Assistant (real chat + action cards)
 import SwiftUI
 
+// MARK: - Message model
+
+struct AIChatMessage: Identifiable {
+    let id = UUID()
+    let role: AIChatRole
+    let text: String
+    let timestamp = Date()
+}
+enum AIChatRole { case user, assistant, system }
+
+// MARK: - ViewModel
+
+@MainActor
+final class AIAssistantViewModel: ObservableObject {
+    @Published var messages: [AIChatMessage] = []
+    @Published var input: String = ""
+    @Published var isLoading = false
+    @Published var orbState: AIAssistantOrbState = .idle
+    @Published var pendingAction: AIProposedAction? = nil
+    @Published var errorText: String? = nil
+
+    func send() {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isLoading else { return }
+        input = ""
+        messages.append(AIChatMessage(role: .user, text: text))
+        Task { await reply(to: text) }
+    }
+
+    private func reply(to text: String) async {
+        isLoading = true; orbState = .thinking; errorText = nil
+        defer { isLoading = false }
+        do {
+            let history = messages.suffix(12).map {
+                AIService.ChatMessage(role: $0.role == .user ? "user" : "assistant", content: $0.text)
+            }
+            let msgs = [AIService.ChatMessage(role: "system", content: AIService.strictSystemPrompt)] + history
+            let raw = try await AIService.shared.chat(messages: msgs, temperature: 0.8)
+            let reply = AIService.sanitizeResponse(raw)
+            orbState = .speaking
+            messages.append(AIChatMessage(role: .assistant, text: reply))
+            // Fire parallel action-detection call with room_host mode
+            await detectAction(for: text)
+        } catch {
+            let m: String
+            if let e = error as? APIError {
+                switch e {
+                case .unauthorized: m = "Сессия истекла"
+                case .serverError(429, _): m = "Перегрузка, подожди"
+                case .serverError(503, _): m = "AI временно недоступен"
+                default: m = "Ошибка соединения"
+                }
+            } else { m = "Ошибка" }
+            errorText = m
+            messages.append(AIChatMessage(role: .system, text: "⚠ " + m))
+        }
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        orbState = .idle
+    }
+
+    private func detectAction(for userText: String) async {
+        guard let auth = KeychainHelper.read(for: "rave_auth_token"),
+              let url = URL(string: PlinkConfig.apiURLString + "/ai/chat") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer " + auth, forHTTPHeaderField: "Authorization")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "messages": [["role": "user", "content": userText]],
+            "mode": "room_host"
+        ])
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return }
+        struct R: Decodable {
+            struct PA: Decodable {
+                let type: String?; let confirmationId: String?; let expiresAt: String?
+                struct Pv: Decodable { let title: String?; let privacy: String?; let queueCount: Int? }
+                let payloadPreview: Pv?
+            }
+            let proposedAction: PA?
+        }
+        guard let d = try? JSONDecoder().decode(R.self, from: data),
+              let pa = d.proposedAction, let t = pa.type, let cid = pa.confirmationId else { return }
+        let pv = pa.payloadPreview.map { AIPayloadPreview(title: $0.title, privacy: $0.privacy, queueCount: $0.queueCount) }
+        pendingAction = AIProposedAction(type: t, confirmationId: cid, expiresAt: pa.expiresAt, payloadPreview: pv)
+    }
+
+    func confirmAction() {
+        guard let a = pendingAction else { return }
+        pendingAction = nil
+        Task {
+            await AIActionExecutor(roomModel: nil).execute(a)
+            messages.append(AIChatMessage(role: .system, text: "✅ " + (a.payloadPreview?.title ?? a.type)))
+        }
+    }
+    func dismissAction() { pendingAction = nil }
+    func clear() { messages = []; pendingAction = nil; errorText = nil }
+}
+
+enum AIAssistantOrbState: Equatable {
+    case idle, listening, thinking, speaking
+    var metal: OrbState {
+        switch self {
+        case .idle: return .idle
+        case .listening: return .listening
+        case .thinking: return .thinking
+        case .speaking: return .speaking
+        }
+    }
+}
+
+// MARK: - View
+
 struct AIAssistantView: View {
-    @State private var input = ""
-    @State private var orbState: AssistantOrbState = .idle
+    @StateObject private var vm = AIAssistantViewModel()
+    @FocusState private var focused: Bool
+
+    private let chips: [(String, String)] = [
+        ("film", "Что посмотреть вечером?"),
+        ("person.2", "Комедия для компании"),
+        ("sparkles", "Топ фантастики 2024"),
+        ("play.rectangle", "Создай комнату для просмотра"),
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 24)
-
-            LocalSiriGlowingOrbView(state: orbState, size: 210)
-                .frame(width: 300, height: 300)
-                .padding(.bottom, 4)
-
-            VStack(spacing: 8) {
-                Text("Plink AI")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(aiText)
-                Text(stateCaption)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(stateColor)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(stateColor.opacity(0.12), in: Capsule())
+            navBar
+            if vm.messages.isEmpty { welcome } else { chat }
+            if let a = vm.pendingAction {
+                AIActionCard(action: a, onConfirm: vm.confirmAction, onDismiss: vm.dismissAction)
+                    .padding(.horizontal, 12).padding(.bottom, 4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Кинокомпаньон")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(aiText)
-                Text("Соберу очередь, помогу выбрать видео, подскажу что смотрят друзья и создам комнату после подтверждения.")
-                    .font(.system(size: 14))
-                    .lineSpacing(4)
-                    .foregroundStyle(aiSecondary)
-            }
-            .padding(16)
-            .background(aiSurface.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.white.opacity(0.08)))
-            .padding(.horizontal, 18)
-            .padding(.top, 26)
-
-            HStack(spacing: 8) {
-                chip("Очередь", state: .thinking)
-                chip("Слушать", state: .listening)
-                chip("Ответ", state: .speaking)
-            }
-            .padding(.top, 16)
-
-            Spacer(minLength: 16)
-
-            HStack(spacing: 8) {
-                Button {
-                    setTemporaryState(.listening)
-                } label: {
-                    Image(systemName: orbState == .listening ? "mic.fill" : "mic")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(orbState == .listening ? .black : aiText)
-                }
-                .frame(width: 44, height: 44)
-                .background(orbState == .listening ? stateColor : aiSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-
-                TextField("Спроси про фильмы и комнаты", text: $input)
-                    .font(.system(size: 14))
-                    .foregroundStyle(aiText)
-                    .onChange(of: input) { _, newValue in
-                        orbState = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .idle : .listening
-                    }
-
-                Button {
-                    input = ""
-                    setTemporaryState(.thinking, then: .speaking)
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.black)
-                }
-                .frame(width: 44, height: 44)
-                .background(aiAccent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.10)))
-            .padding(.horizontal, 14)
-            .padding(.bottom, 12)
+            composer
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(aiBackground.ignoresSafeArea())
-        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .background(Color(red:0.035,green:0.04,blue:0.06).ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .animation(.spring(response:0.35,dampingFraction:0.85), value: vm.pendingAction != nil)
     }
 
-    private var aiBackground: Color { Color(red: 0.035, green: 0.04, blue: 0.06) }
-    private var aiSurface: Color { Color(red: 0.10, green: 0.12, blue: 0.17) }
-    private var aiText: Color { Color.white.opacity(0.94) }
-    private var aiSecondary: Color { Color.white.opacity(0.62) }
-    private var aiAccent: Color { Color(red: 0.20, green: 0.82, blue: 0.92) }
-
-    private var stateCaption: String {
-        switch orbState {
-        case .idle: return "Готов помочь"
-        case .listening: return "Слушаю…"
-        case .thinking: return "Думаю…"
-        case .speaking: return "Отвечаю…"
-        }
-    }
-
-    private var stateColor: Color {
-        switch orbState {
-        case .idle: return Color(red: 0.35, green: 0.70, blue: 1.0)
-        case .listening: return Color(red: 0.25, green: 0.92, blue: 1.0)
-        case .thinking: return Color(red: 1.0, green: 0.30, blue: 0.88)
-        case .speaking: return Color(red: 0.28, green: 1.0, blue: 0.72)
-        }
-    }
-
-    private func chip(_ title: String, state: AssistantOrbState) -> some View {
-        Button {
-            setTemporaryState(state)
-        } label: {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(aiText)
-                .padding(.horizontal, 13)
-                .frame(height: 36)
-                .background(aiSurface.opacity(0.75), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(.white.opacity(0.08)))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func setTemporaryState(_ state: AssistantOrbState, then next: AssistantOrbState? = nil) {
-        orbState = state
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.15))
-            if let next {
-                orbState = next
-                try? await Task.sleep(for: .seconds(1.7))
+    // NAV
+    private var navBar: some View {
+        HStack(spacing: 10) {
+            AssistantOrbView(state: vm.orbState.metal)
+                .frame(width: 38, height: 38).clipShape(Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Plink AI").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text(caption).font(.system(size: 11)).foregroundStyle(capColor)
             }
-            if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                orbState = .idle
+            Spacer()
+            if !vm.messages.isEmpty {
+                Button { vm.clear() } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14)).foregroundStyle(.white.opacity(0.45))
+                }.buttonStyle(.plain)
             }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+    }
+
+    // WELCOME
+    private var welcome: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Spacer(minLength: 12)
+                AssistantOrbView(state: vm.orbState.metal).frame(width: 130, height: 130)
+                Text("Привет! Я Plink AI
+Помогу выбрать фильм и создам комнату.")
+                    .font(.system(size: 15)).foregroundStyle(.white.opacity(0.8))
+                    .multilineTextAlignment(.center).padding(.horizontal, 32)
+                VStack(spacing: 8) {
+                    ForEach(chips, id: \.1) { icon, label in
+                        Button { vm.input = label; vm.send() } label: {
+                            Label(label, systemImage: icon)
+                                .font(.system(size: 14)).foregroundStyle(.white.opacity(0.85))
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(red:0.10,green:0.12,blue:0.17), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(.white.opacity(0.07)))
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal, 16)
+                Spacer(minLength: 90)
+            }
+        }
+    }
+
+    // CHAT
+    private var chat: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(vm.messages) { m in AIChatBubble(msg: m) }
+                    if vm.isLoading { TypingDots().padding(.leading, 10) }
+                    Color.clear.frame(height: 1).id("bot")
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
+            }
+            .onChange(of: vm.messages.count) { _, _ in withAnimation { proxy.scrollTo("bot", anchor: .bottom) } }
+            .onChange(of: vm.isLoading) { _, _ in withAnimation { proxy.scrollTo("bot", anchor: .bottom) } }
+        }
+    }
+
+    // COMPOSER
+    private var composer: some View {
+        HStack(spacing: 8) {
+            TextField("Спроси про фильмы и комнаты...", text: $vm.input, axis: .vertical)
+                .font(.system(size: 15)).foregroundStyle(.white)
+                .lineLimit(1...4).focused($focused)
+                .submitLabel(.send).onSubmit { vm.send() }
+            Button { focused = false; vm.send() } label: {
+                Image(systemName: vm.isLoading ? "ellipsis" : "arrow.up")
+                    .font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
+                    .frame(width: 34, height: 34)
+                    .background(vm.isLoading ? Color.gray : Color(red:0.20,green:0.82,blue:0.92), in: Circle())
+            }.buttonStyle(.plain)
+             .disabled(vm.isLoading || vm.input.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+        }
+        .padding(11)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.white.opacity(0.09)))
+        .padding(.horizontal, 12).padding(.bottom, 10)
+    }
+
+    private var caption: String {
+        switch vm.orbState {
+        case .idle: return "Готов"
+        case .listening: return "Слушаю..."
+        case .thinking: return "Думаю..."
+        case .speaking: return "Отвечаю..."
+        }
+    }
+    private var capColor: Color {
+        switch vm.orbState {
+        case .idle: return Color(red:0.35,green:0.70,blue:1.0)
+        case .listening: return Color(red:0.25,green:0.92,blue:1.0)
+        case .thinking: return Color(red:1.0,green:0.30,blue:0.88)
+        case .speaking: return Color(red:0.28,green:1.0,blue:0.72)
         }
     }
 }
 
-private enum AssistantOrbState: Equatable {
-    case idle
-    case listening
-    case thinking
-    case speaking
-}
-
-private struct LocalSiriGlowingOrbView: View {
-    let state: AssistantOrbState
-    var size: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+// MARK: - Bubble
+struct AIChatBubble: View {
+    let msg: AIChatMessage
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 45.0, paused: reduceMotion)) { timeline in
-            let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-            ZStack {
+        HStack(alignment: .bottom, spacing: 6) {
+            if msg.role == .user { Spacer(minLength: 48) }
+            if msg.role != .user {
                 Circle()
-                    .fill(RadialGradient(colors: [primary.opacity(glowOpacity), secondary.opacity(0.22), .clear], center: .center, startRadius: size * 0.08, endRadius: size * 0.82))
-                    .frame(width: size * 1.45, height: size * 1.45)
-                    .blur(radius: size * 0.08)
-
-                Canvas { ctx, canvasSize in
-                    let rect = CGRect(origin: .zero, size: canvasSize)
-                    let center = CGPoint(x: rect.midX, y: rect.midY)
-                    let radius = min(canvasSize.width, canvasSize.height) * 0.43
-                    let body = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-
-                    ctx.addFilter(.blur(radius: state == .idle ? 8 : 11))
-                    for i in 0..<7 {
-                        let fi = Double(i)
-                        let angle = t * speed * (0.65 + fi * 0.11) + fi * .pi * 0.44
-                        let wobble = radius * (0.12 + 0.035 * sin(t * 1.7 + fi))
-                        let blobCenter = CGPoint(x: center.x + cos(angle) * wobble, y: center.y + sin(angle * 1.23) * wobble)
-                        let blobRadius = radius * CGFloat(0.58 + 0.12 * sin(t * 2.1 + fi))
-                        let color = [primary, secondary, Color.white.opacity(0.82), primary][i % 4]
-                        ctx.fill(Path(ellipseIn: CGRect(x: blobCenter.x - blobRadius, y: blobCenter.y - blobRadius, width: blobRadius * 2, height: blobRadius * 2)), with: .radialGradient(Gradient(colors: [color.opacity(0.95), color.opacity(0)]), center: blobCenter, startRadius: 0, endRadius: blobRadius))
-                    }
-
-                    ctx.addFilter(.blur(radius: 0))
-                    ctx.clip(to: body)
-                    ctx.fill(body, with: .radialGradient(Gradient(colors: [Color.white.opacity(0.48), primary.opacity(0.7), secondary.opacity(0.58), deep.opacity(0.88)]), center: CGPoint(x: center.x - radius * 0.25, y: center.y - radius * 0.28), startRadius: 0, endRadius: radius * 1.35))
-                    ctx.stroke(body, with: .color(Color.white.opacity(0.30)), lineWidth: 1.4)
-                }
-                .frame(width: size, height: size)
-                .clipShape(Circle())
-                .shadow(color: primary.opacity(0.55), radius: size * 0.10)
-                .shadow(color: secondary.opacity(0.32), radius: size * 0.20)
-
-                Circle()
-                    .stroke(AngularGradient(colors: [.clear, primary, secondary, Color.white.opacity(0.8), primary, .clear], center: .center), lineWidth: state == .idle ? 1.2 : 2.4)
-                    .frame(width: size * 1.08, height: size * 1.08)
-                    .rotationEffect(.degrees(t * rotation * 20))
-                    .opacity(state == .idle ? 0.42 : 0.85)
-
-                Ellipse()
-                    .fill(LinearGradient(colors: [Color.white.opacity(0.72), Color.white.opacity(0.12), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: size * 0.42, height: size * 0.25)
-                    .offset(x: -size * 0.17, y: -size * 0.23)
-                    .rotationEffect(.degrees(-24 + sin(t * 0.7) * 4))
-                    .blur(radius: 1.1)
-
-                if state != .idle {
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .stroke(primary.opacity(0.32 - Double(i) * 0.07), lineWidth: 1.6)
-                            .frame(width: size * (1.08 + CGFloat(i) * 0.18 + CGFloat(max(0, sin(t * speed + Double(i))) * 0.08)), height: size * (1.08 + CGFloat(i) * 0.18 + CGFloat(max(0, sin(t * speed + Double(i))) * 0.08)))
-                            .blur(radius: CGFloat(i) * 0.8)
-                    }
-                }
+                    .fill(LinearGradient(colors: [Color(red:0.20,green:0.82,blue:0.92),Color(red:0.28,green:1.0,blue:0.72)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 24, height: 24)
+                    .overlay(Image(systemName: msg.role == .system ? "info.circle" : "sparkles")
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.black))
             }
-            .frame(width: size * 1.55, height: size * 1.55)
-            .scaleEffect(1 + CGFloat((sin(t * speed) + 1) * 0.5) * scale)
+            Text(msg.text).font(.system(size: 15)).foregroundStyle(msg.role == .system ? .white.opacity(0.55) : .white)
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(bgColor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            if msg.role != .user { Spacer(minLength: 48) }
         }
     }
+    private var bgColor: Color {
+        switch msg.role {
+        case .user: return Color(red:0.20,green:0.82,blue:0.92).opacity(0.22)
+        case .assistant: return Color(red:0.10,green:0.12,blue:0.18)
+        case .system: return .white.opacity(0.04)
+        }
+    }
+}
 
-    private var primary: Color {
-        switch state {
-        case .idle: return Color(red: 0.20, green: 0.76, blue: 1.0)
-        case .listening: return Color(red: 0.15, green: 0.92, blue: 1.0)
-        case .thinking: return Color(red: 1.0, green: 0.25, blue: 0.86)
-        case .speaking: return Color(red: 0.28, green: 1.0, blue: 0.72)
+// MARK: - Typing dots
+struct TypingDots: View {
+    @State private var phase = 0
+    private let timer = Timer.publish(every: 0.38, on: .main, in: .common).autoconnect()
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle().fill(Color.white.opacity(phase == i ? 0.9 : 0.28))
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(phase == i ? 1.4 : 1.0)
+                    .animation(.easeInOut(duration: 0.28), value: phase)
+            }
         }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color(red:0.10,green:0.12,blue:0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onReceive(timer) { _ in phase = (phase + 1) % 3 }
     }
-    private var secondary: Color {
-        switch state {
-        case .idle: return Color(red: 0.43, green: 0.28, blue: 1.0)
-        case .listening: return Color(red: 1.0, green: 0.27, blue: 0.82)
-        case .thinking: return Color(red: 0.24, green: 0.82, blue: 1.0)
-        case .speaking: return Color(red: 0.20, green: 0.66, blue: 1.0)
-        }
-    }
-    private var deep: Color {
-        switch state {
-        case .idle: return Color(red: 0.08, green: 0.05, blue: 0.30)
-        case .listening: return Color(red: 0.06, green: 0.08, blue: 0.42)
-        case .thinking: return Color(red: 0.22, green: 0.03, blue: 0.38)
-        case .speaking: return Color(red: 0.03, green: 0.25, blue: 0.24)
-        }
-    }
-    private var speed: Double {
-        switch state {
-        case .idle: return 0.85
-        case .listening: return 2.1
-        case .thinking: return 3.4
-        case .speaking: return 2.7
-        }
-    }
-    private var rotation: Double {
-        switch state {
-        case .idle: return 0.55
-        case .listening: return 1.25
-        case .thinking: return 2.2
-        case .speaking: return 1.75
-        }
-    }
-    private var glowOpacity: Double { state == .idle ? 0.46 : 0.70 }
-    private var scale: CGFloat { state == .idle ? 0.035 : state == .thinking ? 0.10 : 0.08 }
 }

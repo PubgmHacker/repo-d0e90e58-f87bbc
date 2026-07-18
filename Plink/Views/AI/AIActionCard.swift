@@ -147,7 +147,7 @@ final class AIActionExecutor {
     }
 
     private func confirmWithBackend(confirmationId: String) async {
-        guard let url = URL(string: "https://plink-backend-production-ef31.up.railway.app/api/ai/confirm-action") else { return }
+        guard let url = URL(string: PlinkConfig.apiURLString + "/ai/confirm-action") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -115,7 +115,7 @@ final class YouTubePickerModel {
     var urlText = ""
 
     private var searchTask: Task<Void, Never>?
-    private let apiBaseURL = "https://plink-backend-production-ef31.up.railway.app"
+    private let apiBaseURL = PlinkConfig.baseURLString
 
     func queryChanged() {
         searchTask?.cancel()

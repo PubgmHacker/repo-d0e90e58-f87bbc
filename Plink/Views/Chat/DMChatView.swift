@@ -17,6 +17,15 @@ struct DMChatView: View {
     @State private var confirmDeleteChat = false
     @State private var confirmBlockUser = false
     @State private var reactionTarget: DirectMessage?
+    // Telegram-style chat features
+    @State private var replyTarget: DirectMessage?
+    @State private var pinTarget: DirectMessage?
+    @State private var isSelecting = false
+    @State private var selectedMessageIDs: Set<String> = []
+    @State private var showForwardSheet = false
+    @State private var forwardIDs: [String] = []
+    @State private var editTarget: DirectMessage?
+    @State private var deleteTarget: DirectMessage?
     @FocusState private var isInputFocused: Bool
     private let charLimit = 280
     @State private var lastSendTime: Date = .distantPast
@@ -51,7 +60,8 @@ struct DMChatView: View {
     }
 
     private var headerPresence: String {
-        FriendPresence.headerStatus(
+        if dmService.typingByFriend[friend.id] == true { return LocalizationManager.shared.string(.dmTyping) }
+        return FriendPresence.headerStatus(
             isOnline: liveFriend.isOnline,
             lastSeenAt: liveFriend.lastSeenAt
         )
@@ -105,6 +115,11 @@ struct DMChatView: View {
 
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
+                    VStack(spacing: 0) {
+                    if let pin = currentPins.last {
+                        pinnedBar(pin, proxy: proxy)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             DMDayDivider(label: "Сегодня")
@@ -134,7 +149,25 @@ struct DMChatView: View {
                                                 friendId: friend.id
                                             )
                                         }
-                                    }
+                                    },
+                                    senderIsAdmin: own ? (AuthService.shared.currentUserValue?.isAdmin ?? false) : false,
+                                    senderIsPremium: own ? (AuthService.shared.currentUserValue?.isPremium ?? false) : false,
+                                    replySenderName: msg.replyPreviewSenderID.map { $0 == meId ? "Вы" : liveFriend.displayTitle },
+                                    isSelecting: isSelecting,
+                                    isSelected: selectedMessageIDs.contains(msg.id),
+                                    onReply: { startReply(msg) },
+                                    onPinRequest: { pinTarget = msg },
+                                    onForward: {
+                                        forwardIDs = [msg.id]
+                                        showForwardSheet = true
+                                    },
+                                    onSelect: { enterSelection(with: msg) },
+                                    onToggleSelection: { toggleSelection(msg) },
+                                    onQuoteTap: { quotedId in
+                                        withAnimation { proxy.scrollTo(quotedId, anchor: .center) }
+                                    },
+                                    onEdit: { startEdit(msg) },
+                                    onDelete: { deleteTarget = msg }
                                 )
                                 .id(msg.id)
                                 .padding(.horizontal, 8)
@@ -167,6 +200,7 @@ struct DMChatView: View {
                             scrollToBottom(proxy: proxy, animated: false)
                         }
                     }
+                    }
                 }
 
                 if showEmojiPicker {
@@ -175,7 +209,21 @@ struct DMChatView: View {
                         .background(.ultraThinMaterial)
                 }
 
-                glassInputBar
+                if let target = replyTarget {
+                    replyComposerBar(target)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if let editing = editTarget {
+                    editComposerBar(editing)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if isSelecting {
+                    selectionActionBar
+                } else {
+                    glassInputBar
+                }
             }
         }
         // Telegram: fixed top bar over chat (safe-area aware)
@@ -254,13 +302,86 @@ struct DMChatView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(.ultraThinMaterial)
         }
+        .confirmationDialog(
+            "Закрепить сообщение?",
+            isPresented: Binding(
+                get: { pinTarget != nil },
+                set: { if !$0 { pinTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Закрепить у себя") {
+                if let msg = pinTarget {
+                    Task { await dmService.pinMessage(msg, forBoth: false, friendId: friend.id) }
+                }
+                pinTarget = nil
+            }
+            Button("Закрепить у себя и у \(liveFriend.displayTitle)") {
+                if let msg = pinTarget {
+                    Task { await dmService.pinMessage(msg, forBoth: true, friendId: friend.id) }
+                }
+                pinTarget = nil
+            }
+            Button("Отмена", role: .cancel) { pinTarget = nil }
+        }
+        .confirmationDialog(
+            LocalizationManager.shared.string(.dmDeleteTitle),
+            isPresented: Binding(
+                get: { deleteTarget != nil },
+                set: { if !$0 { deleteTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(LocalizationManager.shared.string(.dmDeleteForMe), role: .destructive) {
+                if let msg = deleteTarget {
+                    Task { await dmService.deleteMessage(msg, forBoth: false, friendId: friend.id) }
+                }
+                deleteTarget = nil
+            }
+            if deleteTarget?.isFromCurrentUser(currentUserId: meId) == true {
+                Button("\(LocalizationManager.shared.string(.dmDeleteForBothPrefix)) \(liveFriend.displayTitle)", role: .destructive) {
+                    if let msg = deleteTarget {
+                        Task { await dmService.deleteMessage(msg, forBoth: true, friendId: friend.id) }
+                    }
+                    deleteTarget = nil
+                }
+            }
+            Button("Отмена", role: .cancel) { deleteTarget = nil }
+        }
+        .sheet(isPresented: $showForwardSheet) {
+            DMForwardSheet(
+                friends: friendManager.friends.filter { $0.id != friend.id && !$0.deleted },
+                onPick: { target in
+                    let ids = forwardIDs
+                    showForwardSheet = false
+                    Task {
+                        let ok = await dmService.forwardMessages(ids, to: target)
+                        if ok { HapticManager.impact(.medium) }
+                        exitSelection()
+                        forwardIDs = []
+                    }
+                },
+                onCancel: { showForwardSheet = false }
+            )
+        }
         .preferredColorScheme(.dark)
         .onAppear {
             dmService.chatDidOpen(friendId: friend.id)
             Task { await dmService.refreshUnread() }
+            // Telegram-style draft: restore unsent text for this chat
+            if messageText.isEmpty {
+                messageText = UserDefaults.standard.string(forKey: "plink.dm_draft_\(friend.id)") ?? ""
+            }
         }
         .onDisappear {
             dmService.chatDidClose(friendId: friend.id)
+            // Telegram-style draft: persist unsent text per chat
+            let draft = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if draft.isEmpty || editTarget != nil {
+                UserDefaults.standard.removeObject(forKey: "plink.dm_draft_\(friend.id)")
+            } else {
+                UserDefaults.standard.set(draft, forKey: "plink.dm_draft_\(friend.id)")
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .plinkChatWallpaperChanged)) { _ in
             wallpaper = PlinkChatWallpaperPrefs.current
@@ -288,6 +409,7 @@ struct DMChatView: View {
                 friendAvatarURL: liveFriend.avatarURL,
                 quiet: false
             )
+            await dmService.loadPins(friendId: friend.id)
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { break }
@@ -299,8 +421,212 @@ struct DMChatView: View {
                     friendAvatarURL: liveFriend.avatarURL,
                     quiet: true
                 )
+                await dmService.loadPins(friendId: friend.id)
+                await dmService.loadTyping(friendId: friend.id)
             }
         }
+    }
+
+    // MARK: - Telegram-style chat helpers (reply / pin / select / forward)
+
+    private var currentPins: [DMPinnedMessage] {
+        dmService.pinsByFriend[friend.id] ?? []
+    }
+
+    private func startReply(_ msg: DirectMessage) {
+        guard !isSelecting else { return }
+        HapticManager.impact(.light)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { replyTarget = msg }
+        isInputFocused = true
+    }
+
+    private func enterSelection(with msg: DirectMessage) {
+        HapticManager.impact(.medium)
+        withAnimation {
+            isSelecting = true
+            selectedMessageIDs = [msg.id]
+        }
+    }
+
+    private func toggleSelection(_ msg: DirectMessage) {
+        if selectedMessageIDs.contains(msg.id) {
+            selectedMessageIDs.remove(msg.id)
+        } else {
+            selectedMessageIDs.insert(msg.id)
+        }
+        if selectedMessageIDs.isEmpty { exitSelection() }
+    }
+
+    private func exitSelection() {
+        withAnimation {
+            isSelecting = false
+            selectedMessageIDs = []
+        }
+    }
+
+    private func orderedSelectedIDs() -> [String] {
+        messages.filter { selectedMessageIDs.contains($0.id) }.map(\.id)
+    }
+
+    /// Telegram pinned-message bar (top of chat, tap → scroll to message).
+    @ViewBuilder
+    private func pinnedBar(_ pin: DMPinnedMessage, proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Cinema2026.accent)
+                .frame(width: 3, height: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Cinema2026.accent)
+                    Text(currentPins.count > 1
+                         ? "Закреплённые сообщения · \(currentPins.count)"
+                         : "Закреплённое сообщение")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Cinema2026.accent)
+                }
+                Text(pin.text.isEmpty ? "Сообщение" : pin.text)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Menu {
+                Button {
+                    Task { await dmService.unpinMessage(messageId: pin.messageId, forBoth: false, friendId: friend.id) }
+                } label: {
+                    Label("Открепить у себя", systemImage: "pin.slash")
+                }
+                Button(role: .destructive) {
+                    Task { await dmService.unpinMessage(messageId: pin.messageId, forBoth: true, friendId: friend.id) }
+                } label: {
+                    Label("Открепить у обоих", systemImage: "pin.slash.fill")
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(8)
+                    .contentShape(Rectangle())
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation { proxy.scrollTo(pin.messageId, anchor: .center) }
+        }
+    }
+
+    /// Telegram reply bar above the composer.
+    private func replyComposerBar(_ target: DirectMessage) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrowshape.turn.up.left")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Cinema2026.accent)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Cinema2026.accent)
+                .frame(width: 3, height: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(target.isFromCurrentUser(currentUserId: meId) ? "Вы" : liveFriend.displayTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Cinema2026.accent)
+                Text(target.isVoiceNote
+                     ? "🎤 Голосовое сообщение"
+                     : (target.isPhotoMessage ? "📷 Фото" : target.text))
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Button {
+                withAnimation { replyTarget = nil }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    /// Telegram selection-mode bottom bar («Переслать N»).
+    private var selectionActionBar: some View {
+        HStack(spacing: 16) {
+            Button("Отмена") { exitSelection() }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer()
+            Text("Выбрано: \(selectedMessageIDs.count)")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+            Spacer()
+            Button {
+                forwardIDs = orderedSelectedIDs()
+                showForwardSheet = true
+            } label: {
+                Label("Переслать", systemImage: "arrowshape.turn.up.right.fill")
+                    .font(.system(size: 15, weight: .bold))
+            }
+            .disabled(selectedMessageIDs.isEmpty)
+            .foregroundStyle(selectedMessageIDs.isEmpty ? Color.white.opacity(0.3) : Cinema2026.accent)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial)
+    }
+
+    /// Telegram edit bar above the composer («Редактирование»).
+    private func editComposerBar(_ target: DirectMessage) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "pencil")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Cinema2026.accent)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Cinema2026.accent)
+                .frame(width: 3, height: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(LocalizationManager.shared.string(.dmEditing))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Cinema2026.accent)
+                Text(target.text)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Button {
+                withAnimation {
+                    editTarget = nil
+                }
+                messageText = ""
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private func startEdit(_ msg: DirectMessage) {
+        guard msg.isFromCurrentUser(currentUserId: meId), !msg.isVoiceNote, !msg.isPhotoMessage else { return }
+        HapticManager.impact(.light)
+        withAnimation {
+            replyTarget = nil
+            editTarget = msg
+        }
+        messageText = msg.text
+        isInputFocused = true
     }
 
     // MARK: - Telegram 2026 glass chat header
@@ -661,6 +987,9 @@ struct DMChatView: View {
                 .submitLabel(.send)
                 .onSubmit { sendAction() }
                 .onChange(of: messageText) { _, newValue in
+                    if !newValue.isEmpty, editTarget == nil {
+                        dmService.sendTyping(friendId: friend.id)
+                    }
                     if newValue.count > charLimit {
                         messageText = String(newValue.prefix(charLimit))
                         HapticManager.impact(.light)
@@ -844,8 +1173,15 @@ struct DMChatView: View {
             return
         }
         lastSendTime = now
-        dmService.sendMessage(text, to: friend)
+        if let editing = editTarget {
+            Task { await dmService.editMessage(editing, newText: text, friendId: friend.id) }
+            withAnimation { editTarget = nil }
+        } else {
+            dmService.sendMessage(text, to: friend, replyTo: replyTarget)
+        }
         messageText = ""
+        withAnimation { replyTarget = nil }
+        UserDefaults.standard.removeObject(forKey: "plink.dm_draft_\(friend.id)")
         HapticManager.impact(.light)
     }
 }
@@ -942,6 +1278,21 @@ private struct DMMessageRow: View {
     var cluster: ChatClusterLayout
     var onReact: () -> Void
     var onToggleChip: (String) -> Void
+    /// Sender roles — drive admin/premium ring on chat avatar.
+    var senderIsAdmin: Bool = false
+    var senderIsPremium: Bool = false
+    // Telegram-style features
+    var replySenderName: String? = nil
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
+    var onReply: () -> Void = {}
+    var onPinRequest: () -> Void = {}
+    var onForward: () -> Void = {}
+    var onSelect: () -> Void = {}
+    var onToggleSelection: () -> Void = {}
+    var onQuoteTap: (String) -> Void = { _ in }
+    var onEdit: () -> Void = {}
+    var onDelete: () -> Void = {}
 
     var body: some View {
         GeometryReader { geo in
@@ -956,7 +1307,20 @@ private struct DMMessageRow: View {
                     geo.size.width * PlinkTelegramBubbleMetrics.maxWidthRatio
                 ),
                 onReact: onReact,
-                onToggleChip: onToggleChip
+                onToggleChip: onToggleChip,
+                senderIsAdmin: senderIsAdmin,
+                senderIsPremium: senderIsPremium,
+                replySenderName: replySenderName,
+                isSelecting: isSelecting,
+                isSelected: isSelected,
+                onReply: onReply,
+                onPinRequest: onPinRequest,
+                onForward: onForward,
+                onSelect: onSelect,
+                onToggleSelection: onToggleSelection,
+                onQuoteTap: onQuoteTap,
+                onEdit: onEdit,
+                onDelete: onDelete
             )
         }
         .frame(minHeight: 1)
@@ -973,6 +1337,24 @@ private struct DMBubble: View {
     var maxBubbleWidth: CGFloat = PlinkTelegramBubbleMetrics.maxBubbleWidth
     var onReact: () -> Void
     var onToggleChip: (String) -> Void
+    /// Sender roles — drive admin/premium ring on chat avatar.
+    var senderIsAdmin: Bool = false
+    var senderIsPremium: Bool = false
+    // Telegram-style features
+    var replySenderName: String? = nil
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
+    var onReply: () -> Void = {}
+    var onPinRequest: () -> Void = {}
+    var onForward: () -> Void = {}
+    var onSelect: () -> Void = {}
+    var onToggleSelection: () -> Void = {}
+    var onQuoteTap: (String) -> Void = { _ in }
+    var onEdit: () -> Void = {}
+    var onDelete: () -> Void = {}
+
+    /// Horizontal swipe offset (Telegram swipe-to-reply).
+    @State private var dragOffset: CGFloat = 0
 
     private let avatarSize: CGFloat = PlinkTelegramBubbleMetrics.avatarSize
 
@@ -989,6 +1371,45 @@ private struct DMBubble: View {
             }
 
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
+                if let forwarded = message.forwardedFromName {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.right.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Переслано от \(forwarded)")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(Cinema2026.accent.opacity(0.9))
+                    .padding(.horizontal, 4)
+                }
+
+                if let quote = message.replyPreviewText {
+                    Button {
+                        if let quotedId = message.replyToID { onQuoteTap(quotedId) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(Cinema2026.accent)
+                                .frame(width: 3, height: 30)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(replySenderName ?? "Ответ")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Cinema2026.accent)
+                                Text(quote.isEmpty ? "Сообщение" : quote)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.85))
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Group {
                     if message.isVoiceNote {
                         VoiceNoteBubble(
@@ -1022,12 +1443,45 @@ private struct DMBubble: View {
                     } label: {
                         Label("Реакция", systemImage: "face.smiling")
                     }
+                    Button {
+                        onReply()
+                    } label: {
+                        Label("Ответить", systemImage: "arrowshape.turn.up.left")
+                    }
                     if !message.isVoiceNote {
                         Button {
                             UIPasteboard.general.string = message.text
                         } label: {
                             Label("Копировать", systemImage: "doc.on.doc")
                         }
+                    }
+                    Button {
+                        onForward()
+                    } label: {
+                        Label("Переслать", systemImage: "arrowshape.turn.up.right")
+                    }
+                    Button {
+                        onPinRequest()
+                    } label: {
+                        Label("Закрепить", systemImage: "pin")
+                    }
+                    if isOwn && !message.isVoiceNote {
+                        Button {
+                            onEdit()
+                        } label: {
+                            Label(LocalizationManager.shared.string(.dmEdit), systemImage: "pencil")
+                        }
+                    }
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label(LocalizationManager.shared.string(.dmDelete), systemImage: "trash")
+                    }
+                    Divider()
+                    Button {
+                        onSelect()
+                    } label: {
+                        Label("Выбрать", systemImage: "checkmark.circle")
                     }
                 }
                 // Removed onLongPressGesture — conflicts with .contextMenu causing flicker.
@@ -1040,6 +1494,14 @@ private struct DMBubble: View {
 
                 if cluster.isLastInGroup {
                     HStack(spacing: 3) {
+                        if message.editedAt != nil {
+                            Text(LocalizationManager.shared.string(.dmEdited))
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.white.opacity(0.8))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.black.opacity(0.42)))
+                        }
                         Text(message.timeString)
                             .font(.system(size: 11, weight: .semibold))
                             // Time sits on wallpaper — use solid pill so it never vanishes
@@ -1068,6 +1530,57 @@ private struct DMBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
+        .overlay(alignment: .leading) {
+            if isSelecting {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(isSelected ? Cinema2026.accent : Color.white.opacity(0.45))
+                    .padding(.leading, 2)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isSelecting {
+                HapticManager.impact(.light)
+                onToggleSelection()
+            }
+        }
+        .offset(x: dragOffset)
+        .overlay(alignment: isOwn ? .leading : .trailing) {
+            if abs(dragOffset) > 30 {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .padding(8)
+                    .background(Circle().fill(Color.black.opacity(0.35)))
+                    .transition(.opacity)
+            }
+        }
+        .simultaneousGesture(replySwipeGesture)
+    }
+
+    /// Telegram swipe-to-reply — works in both directions (← and →).
+    private var replySwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onChanged { value in
+                guard !isSelecting else { return }
+                let t = value.translation.width
+                guard abs(t) > abs(value.translation.height) else { return }
+                dragOffset = max(-72, min(72, t * 0.55))
+            }
+            .onEnded { value in
+                let shouldReply = !isSelecting
+                    && abs(value.translation.width) > 56
+                    && abs(value.translation.width) > abs(value.translation.height)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                    dragOffset = 0
+                }
+                if shouldReply {
+                    HapticManager.impact(.medium)
+                    onReply()
+                }
+            }
     }
 
     private var reactionChips: some View {
@@ -1116,9 +1629,10 @@ private struct DMBubble: View {
                 url: avatarURL,
                 letter: letter,
                 size: avatarSize,
-                userId: message.senderID
+                userId: message.senderID,
+                isAdmin: senderIsAdmin,
+                isPremium: senderIsPremium
             )
-                .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
         } else {
             Color.clear.frame(width: avatarSize, height: avatarSize)
         }
@@ -1411,4 +1925,53 @@ private struct DMDayDivider: View {
     }
 }
 
+// MARK: - Forward sheet (Telegram «Переслать»)
 
+private struct DMForwardSheet: View {
+    let friends: [Friend]
+    let onPick: (Friend) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if friends.isEmpty {
+                    Text("Нет друзей для пересылки")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(friends, id: \.id) { f in
+                    Button {
+                        onPick(f)
+                    } label: {
+                        HStack(spacing: 12) {
+                            PlinkStableAvatar(
+                                url: PlinkAvatarURL.stable(userId: f.id, stored: f.avatarURL),
+                                letter: PlinkAvatarURL.letter(from: f.displayTitle),
+                                size: 40,
+                                userId: f.id,
+                                isAdmin: false,
+                                isPremium: false
+                            )
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(f.displayTitle)
+                                    .font(.system(size: 15, weight: .semibold))
+                                Text(f.isOnline ? "в сети" : "не в сети")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(f.isOnline ? .green : .secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Переслать")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { onCancel() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}

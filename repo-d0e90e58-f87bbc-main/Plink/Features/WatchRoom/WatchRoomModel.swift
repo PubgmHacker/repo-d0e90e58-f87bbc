@@ -355,6 +355,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         statePumpTask = nil
         pendingStates.removeAll()
         pendingActions.removeAll()
+        reactionExpiryTask?.cancel()
+        reactionExpiryTask = nil
         realtimeClient.disconnect()
         coordinator.teardown()
         syncController.resetCompletely()
@@ -600,6 +602,84 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         scheduleChatSendTimeout(clientMessageId: clientMessageId)
     }
 
+    public func sendPhoto(dataURL: String, previewImage: UIImage?, caption: String) {
+        let clientMessageId = UUID().uuidString
+        let styleID = PlinkBubbleStylePrefs.currentID
+        let displayText = String(caption.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1800))
+        let wireText = PlinkBubbleWire.encode(text: displayText, styleID: styleID)
+        let local = ChatMessageInfo(
+            messageId: nil,
+            clientMessageId: clientMessageId,
+            senderId: currentUserId,
+            senderName: currentUsername,
+            text: displayText,
+            createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+            isPending: true,
+            isFailed: false,
+            bubbleStyle: styleID,
+            mediaType: "photo",
+            hasMedia: true
+        )
+        chatMessages.append(local)
+        clientMessageIds.insert(clientMessageId)
+        if let previewImage { ChatPhotoCache.shared.register(previewImage, for: clientMessageId) }
+        if chatMessages.count > 200 { chatMessages.removeFirst(chatMessages.count - 200) }
+
+        struct Body: Encodable {
+            let imageData: String
+            let content: String
+            let clientMessageId: String
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let saved: ChatPhotoSendResponse = try await APIClient.shared.request(
+                    "rooms/\(_roomId)/messages/photo",
+                    method: .post,
+                    body: Body(imageData: dataURL, content: wireText, clientMessageId: clientMessageId)
+                )
+                if let previewImage {
+                    ChatPhotoCache.shared.promote(from: clientMessageId, to: saved.messageId)
+                    ChatPhotoCache.shared.register(previewImage, for: saved.messageId)
+                }
+                if let idx = chatMessages.firstIndex(where: { $0.clientMessageId == clientMessageId }) {
+                    let decoded = PlinkBubbleWire.decode(saved.text.isEmpty ? wireText : saved.text)
+                    chatMessages[idx] = ChatMessageInfo(
+                        messageId: saved.messageId,
+                        clientMessageId: saved.clientMessageId ?? clientMessageId,
+                        senderId: saved.senderId,
+                        senderName: saved.senderName,
+                        text: decoded.text,
+                        createdAtMs: saved.createdAtMs,
+                        isPending: false,
+                        isFailed: false,
+                        bubbleStyle: decoded.styleID ?? styleID,
+                        mediaType: saved.mediaType ?? "photo",
+                        hasMedia: saved.hasMedia ?? true
+                    )
+                }
+            } catch {
+                if let idx = chatMessages.firstIndex(where: { $0.clientMessageId == clientMessageId }) {
+                    let msg = chatMessages[idx]
+                    chatMessages[idx] = ChatMessageInfo(
+                        messageId: msg.messageId,
+                        clientMessageId: msg.clientMessageId,
+                        senderId: msg.senderId,
+                        senderName: msg.senderName,
+                        text: msg.text,
+                        createdAtMs: msg.createdAtMs,
+                        isPending: false,
+                        isFailed: true,
+                        bubbleStyle: msg.bubbleStyle,
+                        mediaType: msg.mediaType,
+                        hasMedia: msg.hasMedia
+                    )
+                }
+                lastError = "Photo send failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
     // P1-54: retry a failed chat message
     /// Host kicks a participant via REST (POST /api/rooms/:id/kick).
     @discardableResult
@@ -782,7 +862,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                     text: decoded.text,
                     createdAtMs: chat.createdAtMs,
                     isPending: false,
-                    bubbleStyle: decoded.styleID ?? chatMessages[idx].bubbleStyle
+                    bubbleStyle: decoded.styleID ?? chatMessages[idx].bubbleStyle,
+                    mediaType: chat.mediaType,
+                    hasMedia: chat.hasMedia ?? false
                 )
             }
             // P0-35: update cursor for confirmed own messages too
@@ -797,7 +879,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             text: decoded.text,
             createdAtMs: chat.createdAtMs,
             isPending: false,
-            bubbleStyle: decoded.styleID
+            bubbleStyle: decoded.styleID,
+            mediaType: chat.mediaType,
+            hasMedia: chat.hasMedia ?? false
         )
         chatMessages.append(msg)
         if let cmid = chat.clientMessageId { clientMessageIds.insert(cmid) }
@@ -807,6 +891,8 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
 
         // PATCH 14: enqueue danmaku placement for this chat message.
+        // Photo messages stay in the feed and do not fly over the video.
+        guard !msg.isPhotoMessage, !msg.text.isEmpty else { return }
         // Skip system/admin messages (they don't fly as danmaku).
         // Text width is estimated at 8pt per character — close enough
         // for lane scheduling; the actual rendered width is irrelevant
@@ -918,7 +1004,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                             createdAtMs: msg.createdAtMs,
                             isPending: false,
                             isFailed: false,
-                            bubbleStyle: decoded.styleID ?? chatMessages[idx].bubbleStyle
+                            bubbleStyle: decoded.styleID ?? chatMessages[idx].bubbleStyle,
+                            mediaType: msg.mediaType,
+                            hasMedia: msg.hasMedia
                         )
                         clientMessageIds.insert(cmid)
                         continue
@@ -936,7 +1024,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                         text: decoded.text,
                         createdAtMs: msg.createdAtMs,
                         isPending: false,
-                        bubbleStyle: decoded.styleID
+                        bubbleStyle: decoded.styleID,
+                        mediaType: msg.mediaType,
+                        hasMedia: msg.hasMedia
                     )
                     chatMessages.append(info)
                     if let cmid = msg.clientMessageId { clientMessageIds.insert(cmid) }
@@ -1176,6 +1266,10 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     public var isPremium: Bool = false
     /// Sender bubble style (synced via wire format in text).
     public var bubbleStyle: String? = nil
+    /// Optional media metadata. Photo bytes are fetched via authenticated REST, never through realtime.
+    public var mediaType: String? = nil
+    public var hasMedia: Bool = false
+    public var isPhotoMessage: Bool { mediaType == "photo" && hasMedia }
     /// Stable SwiftUI identity — MUST NOT flip from clientMessageId → server messageId
     /// or ForEach deletes the bubble (looks like "message vanished").
     public var id: String {
@@ -1187,7 +1281,8 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
     // P1-54: convenience init without isFailed
     public init(messageId: String?, clientMessageId: String?, senderId: String,
                 senderName: String, text: String, createdAtMs: Int64,
-                isPending: Bool, isFailed: Bool = false, bubbleStyle: String? = nil) {
+                isPending: Bool, isFailed: Bool = false, bubbleStyle: String? = nil,
+                mediaType: String? = nil, hasMedia: Bool = false) {
         self.messageId = messageId
         self.clientMessageId = clientMessageId
         self.senderId = senderId
@@ -1197,6 +1292,8 @@ public struct ChatMessageInfo: Identifiable, Sendable, Equatable {
         self.isPending = isPending
         self.isFailed = isFailed
         self.bubbleStyle = bubbleStyle
+        self.mediaType = mediaType
+        self.hasMedia = hasMedia
     }
 }
 
@@ -1245,6 +1342,17 @@ public struct ChatCatchupResponse: Sendable, Equatable {
     public let nextCursor: String?  // P0-59: opaque server cursor
 }
 
+private struct ChatPhotoSendResponse: Decodable, Sendable {
+    let messageId: String
+    let clientMessageId: String?
+    let senderId: String
+    let senderName: String
+    let text: String
+    let createdAtMs: Int64
+    let mediaType: String?
+    let hasMedia: Bool?
+}
+
 public struct ChatCatchupMessage: Sendable, Equatable {
     public let messageId: String
     public let clientMessageId: String?
@@ -1252,14 +1360,18 @@ public struct ChatCatchupMessage: Sendable, Equatable {
     public let senderName: String
     public let text: String
     public let createdAtMs: Int64
+    public let mediaType: String?
+    public let hasMedia: Bool
 
-    public init(messageId: String, clientMessageId: String?, senderId: String, senderName: String, text: String, createdAtMs: Int64) {
+    public init(messageId: String, clientMessageId: String?, senderId: String, senderName: String, text: String, createdAtMs: Int64, mediaType: String? = nil, hasMedia: Bool = false) {
         self.messageId = messageId
         self.clientMessageId = clientMessageId
         self.senderId = senderId
         self.senderName = senderName
         self.text = text
         self.createdAtMs = createdAtMs
+        self.mediaType = mediaType
+        self.hasMedia = hasMedia
     }
 }
 

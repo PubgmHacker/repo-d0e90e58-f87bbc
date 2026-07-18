@@ -485,6 +485,13 @@ struct ServiceWebView: UIViewRepresentable {
         }
     }
 
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "plinkURLChange")
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }

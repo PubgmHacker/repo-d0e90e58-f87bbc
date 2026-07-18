@@ -143,6 +143,9 @@ model ChatMessage {
   sender    User     @relation(fields: [senderID], references: [id])
   text      String
   createdAt DateTime @default(now())
+  /// Optional room-chat attachment: "photo" for image messages (data lives in mediaData).
+  mediaType String?
+  mediaData String?  @db.Text
 
   @@index([roomID, createdAt])
 }

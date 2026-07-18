@@ -208,6 +208,8 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
         public let senderName: String
         public let text: String
         public let createdAtMs: Int64
+        public let mediaType: String?
+        public let hasMedia: Bool?
     }
 
     public struct ParticipantEvent: Decodable, Sendable, Equatable {

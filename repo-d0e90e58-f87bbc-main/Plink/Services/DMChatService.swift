@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - DM Chat Service v4 (history + unread badges)
 /// Личные сообщения + счётчик непрочитанных для списка «Чаты».
@@ -387,7 +390,8 @@ final class DMChatService: ObservableObject {
             let content: String
         }
 
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             do {
                 let saved: DMMessageDTO = try await api.request(
                     "messages/dm/voice",
@@ -428,6 +432,103 @@ final class DMChatService: ObservableObject {
                 errorMessage = "Голосовое: \(error.localizedDescription)"
                 Logger.api.warn("DM voice note send failed")
                 // Keep optimistic row — still playable from local cache
+            }
+        }
+    }
+
+    /// Upload compressed JPEG/WebP-compatible image data and create a DM photo message.
+    func sendPhoto(dataURL: String, previewImage: UIImage?, caption: String, to friend: Friend) {
+        if friend.deleted {
+            errorMessage = "Нельзя написать удалённому аккаунту"
+            return
+        }
+        if UserBlockManager.shared.isBlocked(friend.id) {
+            errorMessage = "Пользователь заблокирован"
+            return
+        }
+        ensureToken()
+        let me = currentUserId
+            ?? UserDefaults.standard.string(forKey: "plink_current_user_id")
+            ?? "me"
+        if me != "me", UserDefaults.standard.string(forKey: "plink_current_user_id") == nil {
+            UserDefaults.standard.set(me, forKey: "plink_current_user_id")
+        }
+
+        let convID = conversationID(with: friend.id)
+        let localID = UUID().uuidString
+        let styleID = PlinkBubbleStylePrefs.currentID
+        let body = String(caption.trimmingCharacters(in: .whitespacesAndNewlines).prefix(240))
+        let wireContent = PlinkBubbleWire.encode(text: body, styleID: styleID)
+        let preview = body.isEmpty ? "📷 Фото" : "📷 \(body)"
+        let message = DirectMessage(
+            id: localID,
+            conversationID: convID,
+            senderID: me,
+            recipientID: friend.id,
+            senderName: "You",
+            text: body,
+            timestamp: Date(),
+            isRead: false,
+            senderAvatarURL: nil,
+            bubbleStyle: styleID,
+            reactions: [],
+            mediaType: "photo",
+            mediaDurationSec: nil,
+            hasMedia: true
+        )
+        var list = conversations[convID] ?? []
+        list.append(message)
+        conversations[convID] = list
+        historyEpoch &+= 1
+        lastPreviewByFriend[friend.id] = preview
+        touchActivity(friendId: friend.id, at: message.timestamp, preview: preview)
+        updateLastMessage(conversationID: convID, friend: friend, message: message)
+        if let previewImage {
+            ChatPhotoCache.shared.register(previewImage, for: localID)
+        }
+
+        struct Body: Encodable {
+            let receiverId: String
+            let imageData: String
+            let content: String
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let saved: DMMessageDTO = try await api.request(
+                    "messages/dm/photo",
+                    method: .post,
+                    body: Body(receiverId: friend.id, imageData: dataURL, content: wireContent)
+                )
+                if let previewImage {
+                    ChatPhotoCache.shared.promote(from: localID, to: saved.id)
+                    ChatPhotoCache.shared.register(previewImage, for: saved.id)
+                }
+                if var cur = conversations[convID],
+                   let idx = cur.firstIndex(where: { $0.id == localID }) {
+                    let decoded = PlinkBubbleWire.decode(saved.content.isEmpty ? wireContent : saved.content)
+                    cur[idx] = DirectMessage(
+                        id: saved.id,
+                        conversationID: convID,
+                        senderID: saved.senderID.isEmpty ? me : saved.senderID,
+                        recipientID: saved.receiverID.isEmpty ? friend.id : saved.receiverID,
+                        senderName: "You",
+                        text: decoded.text.isEmpty ? body : decoded.text,
+                        timestamp: saved.createdAt,
+                        isRead: false,
+                        senderAvatarURL: nil,
+                        bubbleStyle: decoded.styleID ?? styleID,
+                        reactions: [],
+                        mediaType: "photo",
+                        mediaDurationSec: nil,
+                        hasMedia: true
+                    )
+                    conversations[convID] = cur
+                    historyEpoch &+= 1
+                }
+            } catch {
+                errorMessage = "Фото: \(error.localizedDescription)"
+                Logger.api.warn("DM photo send failed")
             }
         }
     }
@@ -497,7 +598,8 @@ final class DMChatService: ObservableObject {
         updateLastMessage(conversationID: convID, friend: friend, message: message)
 
         struct Body: Encodable { let receiverId: String; let content: String }
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             do {
                 let saved: DMMessageDTO = try await api.request(
                     "messages/dm",

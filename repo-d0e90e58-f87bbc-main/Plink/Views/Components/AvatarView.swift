@@ -11,8 +11,8 @@ import UIKit
 //              isPremium: user.isPremium, isAdmin: user.isAdmin)
 //
 // Логика:
-//   • Admin → adminStroke (crimson rotating, 4 сек) — приоритет над Premium
-//   • Premium → premiumStroke (cyan→emerald rotating, 4 сек)
+//   • Admin → adminStroke (scarlet→maroon rotating) — приоритет над Premium
+//   • Premium/Plink+ → premiumStroke (gold→bronze rotating)
 //   • Бейдж внизу справа: crown для Premium, shield для Admin
 //   • Если есть изображение — показывает его, иначе инициалы
 

@@ -33,8 +33,13 @@ struct DirectMessage: Codable, Identifiable, Sendable, Equatable, Hashable {
 
     /// True when this row is a real (or legacy placeholder) voice note.
     var isVoiceNote: Bool {
-        if mediaType == "voice" || hasMedia { return true }
+        if mediaType == "voice" { return true }
+        if mediaType == "photo" { return false }
         return PlinkVoiceWire.decode(text).isVoice
+    }
+
+    var isPhotoMessage: Bool {
+        mediaType == "photo"
     }
 
     var voiceDurationSec: TimeInterval? {

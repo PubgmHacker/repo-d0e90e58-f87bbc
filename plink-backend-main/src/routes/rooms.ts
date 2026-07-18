@@ -12,6 +12,23 @@ import {
 const ROOMS_CACHE_KEY = 'rooms:public:50';
 const ROOMS_CACHE_TTL = 30; // 30 sec
 
+function parseImageDataURL(input: string): { mime: string; buffer: Buffer; dataUrl: string } | null {
+    const match = input.match(/^data:(image\/(jpeg|jpg|png|webp));base64,(.+)$/i);
+    if (!match) return null;
+    const mime = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
+    let buffer: Buffer;
+    try {
+        buffer = Buffer.from(match[3], 'base64');
+    } catch {
+        return null;
+    }
+    const isJPEG = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+    const isWebP = buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46;
+    if (!isJPEG && !isPNG && !isWebP) return null;
+    return { mime, buffer, dataUrl: `data:${mime};base64,${match[3]}` };
+}
+
 // 🔧 FIX: mediaItem хранится в БД как JSON-строка (Prisma `String?` колонка).
 // iOS ожидает structured object, не строку — иначе decoding падает с typeMismatch
 // и весь Room decode ломается. Эта функция парсит строку обратно в объект.
@@ -674,6 +691,125 @@ export default async function roomRoutes(fastify, _options) {
         });
     });
 
+    // POST /api/rooms/:id/messages/photo — room photo message via REST upload.
+    // Realtime only broadcasts metadata; base64 image bytes never go over WebSocket.
+    fastify.post('/rooms/:id/messages/photo', {
+        preHandler: [fastify.authenticate],
+        config: { rateLimit: { max: 15, timeWindow: '1 minute' } },
+        bodyLimit: 3 * 1024 * 1024,
+    }, async (request: any, reply: any) => {
+        const { id: roomId } = request.params as { id: string };
+        const body = (request.body ?? {}) as { imageData?: string; content?: string; clientMessageId?: string };
+
+        const [participant, room, sender] = await Promise.all([
+            prisma.roomParticipant.findUnique({
+                where: { roomID_userID: { roomID: roomId, userID: request.user.id } },
+                select: { id: true },
+            }).catch(() => null),
+            prisma.room.findUnique({
+                where: { id: roomId },
+                select: { hostID: true, isActive: true },
+            }),
+            prisma.user.findUnique({
+                where: { id: request.user.id },
+                select: { username: true },
+            }),
+        ]);
+        if (!room) return reply.status(404).send({ error: 'Room not found' });
+        if (!room.isActive) return reply.status(410).send({ error: 'Room is closed' });
+        if (room.hostID !== request.user.id && !participant) {
+            return reply.status(403).send({ error: 'Not a room member' });
+        }
+
+        const parsed = parseImageDataURL(typeof body.imageData === 'string' ? body.imageData : '');
+        if (!parsed) {
+            return reply.status(400).send({ error: 'Invalid image. Expected JPEG/PNG/WebP data URL.' });
+        }
+        if (parsed.buffer.length < 200) {
+            return reply.status(400).send({ error: 'Image too small' });
+        }
+        if (parsed.buffer.length > 2.25 * 1024 * 1024) {
+            return reply.status(413).send({ error: 'Image too large (max 2.25MB)' });
+        }
+
+        const caption = typeof body.content === 'string' ? body.content.trim().slice(0, 2000) : '';
+        const created = await prisma.chatMessage.create({
+            data: {
+                roomID: roomId,
+                senderID: request.user.id,
+                text: caption,
+                mediaType: 'photo',
+                mediaData: parsed.dataUrl,
+            },
+        });
+        const clientMessageId = typeof body.clientMessageId === 'string' && body.clientMessageId.length > 0
+            ? body.clientMessageId
+            : null;
+        const senderName = sender?.username ?? request.user.username ?? 'unknown';
+        const event = {
+            kind: 'chat.broadcast' as const,
+            roomId,
+            messageId: created.id,
+            clientMessageId,
+            senderId: request.user.id,
+            senderName,
+            text: caption,
+            createdAtMs: created.createdAt.getTime(),
+            mediaType: 'photo' as const,
+            hasMedia: true,
+        };
+        try {
+            await (fastify as any).gateway?.publishChatMessage?.(event);
+        } catch (e: any) {
+            console.warn('[room-photo] realtime publish failed:', e?.message || e);
+        }
+        return reply.send({
+            messageId: created.id,
+            clientMessageId,
+            senderId: request.user.id,
+            senderName,
+            text: caption,
+            createdAtMs: created.createdAt.getTime(),
+            mediaType: 'photo',
+            hasMedia: true,
+        });
+    });
+
+    // GET /api/rooms/:id/messages/:messageId/photo — stream room photo attachment.
+    fastify.get('/rooms/:id/messages/:messageId/photo', {
+        preHandler: [fastify.authenticate],
+    }, async (request: any, reply: any) => {
+        const { id: roomId, messageId } = request.params as { id: string; messageId: string };
+        const [participant, room, message] = await Promise.all([
+            prisma.roomParticipant.findUnique({
+                where: { roomID_userID: { roomID: roomId, userID: request.user.id } },
+                select: { id: true },
+            }).catch(() => null),
+            prisma.room.findUnique({
+                where: { id: roomId },
+                select: { hostID: true },
+            }),
+            prisma.chatMessage.findUnique({
+                where: { id: messageId },
+                select: { roomID: true, mediaType: true, mediaData: true },
+            }),
+        ]);
+        if (!room || !message || message.roomID !== roomId) return reply.status(404).send({ error: 'Not found' });
+        if (room.hostID !== request.user.id && !participant) {
+            return reply.status(403).send({ error: 'Not a room member' });
+        }
+        if (message.mediaType !== 'photo' || !message.mediaData) {
+            return reply.status(404).send({ error: 'No photo attachment' });
+        }
+        const parsed = parseImageDataURL(String(message.mediaData));
+        if (!parsed) return reply.status(500).send({ error: 'Corrupt photo data' });
+        reply
+            .header('Cache-Control', 'private, max-age=3600')
+            .header('Content-Length', String(parsed.buffer.length))
+            .type(parsed.mime)
+            .send(parsed.buffer);
+    });
+
     // P0-59/P1-11: GET /api/rooms/:id/messages — chat catch-up with opaque cursor
     // P0-59: cursor is opaque base64 of (createdAtMs,id), not raw messageId.
     // Fetches limit+1 to determine hasMore deterministically.
@@ -741,6 +877,8 @@ export default async function roomRoutes(fastify, _options) {
                 senderID: true,
                 text: true,
                 createdAt: true,
+                mediaType: true,
+                mediaData: true,
             },
         });
 
@@ -773,6 +911,8 @@ export default async function roomRoutes(fastify, _options) {
                 senderName: senderMap.get(m.senderID) ?? 'unknown',
                 text: m.text,
                 createdAtMs: m.createdAt.getTime(),
+                mediaType: m.mediaType ?? null,
+                hasMedia: Boolean(m.mediaType && m.mediaData),
             })),
             hasMore,
             nextCursor,  // P0-59: opaque cursor, not messageId

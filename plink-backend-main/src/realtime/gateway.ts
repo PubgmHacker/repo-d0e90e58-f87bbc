@@ -512,6 +512,10 @@ export class RealtimeGateway {
     }
   }
 
+  async publishChatMessage(event: Extract<RoomEvent, { kind: 'chat.broadcast' }>): Promise<void> {
+    await this.eventBus.publish(event.roomId, event);
+  }
+
   private eventToServerMessage(event: RoomEvent): ServerMessage | null {
     switch (event.kind) {
       case 'participant.joined':
@@ -530,6 +534,8 @@ export class RealtimeGateway {
           senderName: event.senderName,
           text: event.text,
           createdAtMs: event.createdAtMs,
+          mediaType: event.mediaType ?? null,
+          hasMedia: event.hasMedia ?? false,
         };
       case 'reaction.broadcast':
         return {

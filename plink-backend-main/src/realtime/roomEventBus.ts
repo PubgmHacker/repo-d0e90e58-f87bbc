@@ -36,6 +36,8 @@ export type RoomEvent =
       senderName: string;
       text: string;
       createdAtMs: number;
+      mediaType?: 'photo' | null;
+      hasMedia?: boolean;
     }
   | {
       kind: 'reaction.broadcast';
@@ -73,8 +75,10 @@ const RoomEventSchema = z.discriminatedUnion('kind', [
     clientMessageId: z.string().uuid().nullable(),
     senderId: z.string().uuid(),
     senderName: z.string().min(1).max(64),
-    text: z.string().min(1).max(2000),
+    text: z.string().min(0).max(2000),
     createdAtMs: z.number().int(),
+    mediaType: z.enum(['photo']).nullable().optional(),
+    hasMedia: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal('reaction.broadcast'),

@@ -20,6 +20,23 @@ const FREE_REACT_EMOJIS = new Set([
   '😍', '🤔', '😭', '🙏', '✨', '🤣', '😎', '🤝', '💪', '👀',
 ]);
 
+function parseImageDataURL(input: string): { mime: string; buffer: Buffer; dataUrl: string } | null {
+  const match = input.match(/^data:(image\/(jpeg|jpg|png|webp));base64,(.+)$/i);
+  if (!match) return null;
+  const mime = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(match[3], 'base64');
+  } catch {
+    return null;
+  }
+  const isJPEG = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+  const isWebP = buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46;
+  if (!isJPEG && !isPNG && !isWebP) return null;
+  return { mime, buffer, dataUrl: `data:${mime};base64,${match[3]}` };
+}
+
 function aggregateReactions(
   rows: { emoji: string; userID: string }[],
   me: string
@@ -55,6 +72,8 @@ export default async function messageRoutes(fastify) {
         content: true,
         createdAt: true,
         isRead: true,
+        mediaType: true,
+        mediaData: true,
       },
     });
 
@@ -73,14 +92,16 @@ export default async function messageRoutes(fastify) {
       const existing = byFriend.get(friendId);
       if (!existing) {
         const rawPreview = String(m.content || '');
-        const voiceish =
-          rawPreview.includes('[[vn:') || rawPreview.includes('🎤');
+        const voiceish = m.mediaType === 'voice' || rawPreview.includes('[[vn:') || rawPreview.includes('🎤');
+        const photoish = m.mediaType === 'photo';
         byFriend.set(friendId, {
           friendId,
           unreadCount: 0,
           lastPreview: voiceish
             ? '🎤 Голосовое сообщение'
-            : rawPreview.slice(0, 80),
+            : photoish
+              ? (rawPreview.trim() ? `📷 ${rawPreview.slice(0, 76)}` : '📷 Фото')
+              : rawPreview.slice(0, 80),
           lastAt: m.createdAt,
         });
       }
@@ -457,6 +478,115 @@ export default async function messageRoutes(fastify) {
         .header('Content-Length', String(buffer.length))
         .type(mime)
         .send(buffer);
+    }
+  );
+
+  // POST /messages/dm/photo — photo message (base64 image + optional caption)
+  fastify.post(
+    '/messages/dm/photo',
+    {
+      preHandler: [fastify.authenticate],
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+      bodyLimit: 3 * 1024 * 1024,
+    },
+    async (request: any, reply: any) => {
+      const me = request.user.id;
+      const body = (request.body ?? {}) as {
+        receiverId?: string;
+        imageData?: string;
+        content?: string;
+      };
+      const receiverId = typeof body.receiverId === 'string' ? body.receiverId.trim() : '';
+      if (!receiverId || receiverId === me) {
+        return reply.status(400).send({ error: 'Invalid receiverId' });
+      }
+
+      try {
+        const peer = await prisma.user.findUnique({
+          where: { id: receiverId },
+          select: { id: true, username: true, deletedAt: true } as any,
+        });
+        if (!peer) return reply.status(404).send({ error: 'User not found' });
+        const { isDeletedUser } = await import('../services/accountTombstone.js');
+        if (isDeletedUser(peer as any)) {
+          return reply.status(403).send({ error: 'This account has been deleted', code: 'ACCOUNT_DELETED' });
+        }
+        const blocked = await prisma.userBlock.findFirst({
+          where: {
+            OR: [
+              { blockerID: me, blockedID: receiverId },
+              { blockerID: receiverId, blockedID: me },
+            ],
+          },
+          select: { id: true },
+        });
+        if (blocked) return reply.status(403).send({ error: 'Messaging not allowed', code: 'BLOCKED' });
+      } catch (e: any) {
+        console.warn('[dm-photo] peer check:', e?.message);
+      }
+
+      const parsed = parseImageDataURL(typeof body.imageData === 'string' ? body.imageData : '');
+      if (!parsed) {
+        return reply.status(400).send({ error: 'Invalid image. Expected JPEG/PNG/WebP data URL.' });
+      }
+      if (parsed.buffer.length < 200) {
+        return reply.status(400).send({ error: 'Image too small' });
+      }
+      if (parsed.buffer.length > 2.25 * 1024 * 1024) {
+        return reply.status(413).send({ error: 'Image too large (max 2.25MB)' });
+      }
+
+      const caption = typeof body.content === 'string' ? body.content.trim().slice(0, 280) : '';
+      const msg = await prisma.directMessage.create({
+        data: {
+          senderID: me,
+          receiverID: receiverId,
+          content: caption,
+          isRead: false,
+          mediaType: 'photo',
+          mediaData: parsed.dataUrl,
+        },
+      });
+      return reply.send({
+        id: msg.id,
+        senderID: msg.senderID,
+        receiverID: msg.receiverID,
+        content: msg.content,
+        isRead: msg.isRead,
+        createdAt: msg.createdAt,
+        mediaType: 'photo',
+        mediaDurationSec: null,
+        hasMedia: true,
+        reactions: [],
+      });
+    }
+  );
+
+  // GET /messages/photo/:messageId — stream photo attachment (participants only)
+  fastify.get(
+    '/messages/photo/:messageId',
+    { preHandler: [fastify.authenticate] },
+    async (request: any, reply: any) => {
+      const me = request.user.id;
+      const { messageId } = request.params as { messageId: string };
+      const msg = await prisma.directMessage.findUnique({
+        where: { id: messageId },
+        select: { id: true, senderID: true, receiverID: true, mediaType: true, mediaData: true },
+      });
+      if (!msg) return reply.status(404).send({ error: 'Not found' });
+      if (msg.senderID !== me && msg.receiverID !== me) {
+        return reply.status(403).send({ error: 'Forbidden' });
+      }
+      if (msg.mediaType !== 'photo' || !msg.mediaData) {
+        return reply.status(404).send({ error: 'No photo attachment' });
+      }
+      const parsed = parseImageDataURL(String(msg.mediaData));
+      if (!parsed) return reply.status(500).send({ error: 'Corrupt photo data' });
+      reply
+        .header('Cache-Control', 'private, max-age=3600')
+        .header('Content-Length', String(parsed.buffer.length))
+        .type(parsed.mime)
+        .send(parsed.buffer);
     }
   );
 

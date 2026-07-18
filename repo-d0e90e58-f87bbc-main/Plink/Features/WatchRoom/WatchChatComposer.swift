@@ -3,6 +3,7 @@
 // PATCH 26: inline emoji panel (Telegram-style) instead of popover.
 
 import SwiftUI
+import PhotosUI
 
 struct WatchChatComposer: View {
     let model: WatchRoomModel
@@ -11,6 +12,10 @@ struct WatchChatComposer: View {
     @State private var showEmojiPanel = false
     @State private var currentPackIndex = 0
     @State private var showPacksPopover = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var photoDraft: ChatPhotoDraft?
+    @State private var photoCaption = ""
+    @State private var photoError: String?
 
     private var canSend: Bool {
         // Connected or still negotiating — allow optimistic send
@@ -81,8 +86,19 @@ struct WatchChatComposer: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Telegram-style: [ field ………………… ] [😊] [↑]
+            // Telegram-style: [ + ] [ field ………………… ] [😊] [↑]
             HStack(alignment: .bottom, spacing: 8) {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Cinema2026.accent)
+                        .frame(width: 38, height: 40)
+                        .background(Cinema2026.raised, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Галерея")
+                .simultaneousGesture(TapGesture().onEnded { Task { await PlinkPermissions.preparePhotoPicker() } })
+
                 VStack(spacing: 4) {
                     TextField("Сообщение…", text: $state.text, axis: .vertical)
                         .lineLimit(1...4)
@@ -179,6 +195,63 @@ struct WatchChatComposer: View {
                 if let insertion = note.userInfo?["text"] as? String {
                     state.insertAtCursor(insertion)
                 }
+            }
+        }
+        .onChange(of: selectedPhotoItem) { _, item in
+            guard let item else { return }
+            Task { await preparePhotoDraft(from: item) }
+        }
+        .sheet(item: $photoDraft) { draft in
+            PhotoSendPreviewSheet(
+                draft: draft,
+                caption: $photoCaption,
+                onCancel: {
+                    photoDraft = nil
+                    selectedPhotoItem = nil
+                    photoCaption = ""
+                },
+                onSend: {
+                    model.sendPhoto(
+                        dataURL: draft.compressed.dataURL,
+                        previewImage: draft.compressed.image,
+                        caption: photoCaption
+                    )
+                    state.clearAfterSend()
+                    photoDraft = nil
+                    selectedPhotoItem = nil
+                    photoCaption = ""
+                    HapticManager.impact(.medium)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.ultraThinMaterial)
+        }
+        .alert("Фото", isPresented: Binding(
+            get: { photoError != nil },
+            set: { if !$0 { photoError = nil } }
+        )) {
+            Button("OK", role: .cancel) { photoError = nil }
+        } message: {
+            Text(photoError ?? "")
+        }
+    }
+
+    private func preparePhotoDraft(from item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                await MainActor.run { photoError = "Не удалось прочитать фото" }
+                return
+            }
+            let compressed = try ChatImageCompressor.compress(data)
+            await MainActor.run {
+                photoCaption = state.trimmedText
+                photoDraft = ChatPhotoDraft(compressed: compressed)
+            }
+        } catch {
+            await MainActor.run {
+                photoError = "Не удалось подготовить фото: \(error.localizedDescription)"
+                selectedPhotoItem = nil
             }
         }
     }

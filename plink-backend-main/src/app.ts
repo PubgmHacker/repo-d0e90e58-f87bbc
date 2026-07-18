@@ -169,6 +169,7 @@ await fastify.register(livekitRoutes, { prefix: '/api' });  // Stage 9
       redis,
       wss: fastify.websocketServer,
     });
+    (fastify as any).gateway = gateway;
   } else {
     fastify.log.warn('Realtime gateway NOT constructed — Redis unavailable');
   }

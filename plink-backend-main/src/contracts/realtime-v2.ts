@@ -147,8 +147,10 @@ export const ChatBroadcastSchema = z
     clientMessageId: z.string().uuid().nullable(),
     senderId: z.string().uuid(),
     senderName: z.string().min(1).max(64),
-    text: z.string().min(1).max(2000),
+    text: z.string().min(0).max(2000),
     createdAtMs: z.number().int(),
+    mediaType: z.enum(['photo']).nullable().optional(),
+    hasMedia: z.boolean().optional(),
   })
   .strict();
 

@@ -1,0 +1,33 @@
+{
+  "name": "plink-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "dmg:clean": "bash scripts/dmg-clean.sh",
+    "tauri:build": "npm run dmg:clean && tauri build",
+    "tauri:build:debug": "npm run dmg:clean && tauri build --debug"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^1.6.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.6.3",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  }
+}

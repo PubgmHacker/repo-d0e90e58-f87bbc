@@ -1,0 +1,97 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+build/
+*.moved-aside
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Node (backend, если есть рядом)
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Unity / Godot / чужие проекты — НИКОГДА не коммитить
+MegabonkUnity/
+Builds/
+*.app/
+*.dylib
+*.dll
+*.so
+
+# Сессии и временные файлы
+*.session-history.md
+*.zcode-session
+sess_*/
+
+# Встроенные git-репозитории (submodules случайно добавленные)
+dating/
+mobile/
+
+# 🔧 NEW: Never commit real API keys
+Secrets.xcconfig
+*.xcconfig.local
+
+# Agent / tooling scratch (per Plink runbook §2)
+tool-results/
+upload/
+download/
+save/
+*.save
+
+# Archives & generated artifacts
+*.zip
+*.pdf
+*.tar
+*.gz
+
+# Backend duplicates that accidentally landed in iOS repo
+plink-backend/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+Plink.xcodeproj/
+
+*.xcuserstate
+GoogleService-Info.plist
+repo-d0e90e58-f87bbc/
+
+# --- Desktop / web clients (Tauri + landing) ---
+node_modules/
+dist/
+.next/
+out/
+windows-client/src-tauri/target/
+build/
+*.ipa
+*.apk
+plink-landing/public/downloads/*.dmg
+plink-landing/public/downloads/*.exe
+plink-landing/public/downloads/*.apk
+android-client/.gradle/
+android-client/app/build/
+android-client/local.properties

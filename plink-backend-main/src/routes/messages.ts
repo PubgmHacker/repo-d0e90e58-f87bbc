@@ -1,0 +1,576 @@
+import { prisma } from '../config/db.js';
+
+/** Explicit DTO — prevents `const invites = []` → never[] under strict tsc (Railway). */
+export type RoomInviteDTO = {
+  id: string;
+  messageId: string;
+  roomID: string;
+  roomCode: string;
+  roomName: string;
+  fromUserID: string;
+  fromUsername: string;
+  fromAvatarURL: string | null;
+  mediaTitle: string | null;
+  timestamp: Date;
+  preview: string;
+};
+
+const FREE_REACT_EMOJIS = new Set([
+  '❤️', '👍', '😂', '😮', '😢', '🔥', '👏', '🎉', '💯', '🥰',
+  '😍', '🤔', '😭', '🙏', '✨', '🤣', '😎', '🤝', '💪', '👀',
+]);
+
+function aggregateReactions(
+  rows: { emoji: string; userID: string }[],
+  me: string
+): { emoji: string; count: number; includesMe: boolean }[] {
+  const map = new Map<string, { count: number; includesMe: boolean }>();
+  for (const r of rows) {
+    const cur = map.get(r.emoji) ?? { count: 0, includesMe: false };
+    cur.count += 1;
+    if (r.userID === me) cur.includesMe = true;
+    map.set(r.emoji, cur);
+  }
+  return [...map.entries()]
+    .map(([emoji, v]) => ({ emoji, count: v.count, includesMe: v.includesMe }))
+    .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji));
+}
+
+export default async function messageRoutes(fastify) {
+  // GET /messages/unread — inbox summary for chat list (Telegram-style sort)
+  // Returns last message + unread count per friend (including read threads).
+  fastify.get('/messages/unread', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const me = request.user.id;
+
+    // Latest activity across all DMs involving me (read + unread)
+    const recent = await prisma.directMessage.findMany({
+      where: {
+        OR: [{ senderID: me }, { receiverID: me }],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 800,
+      select: {
+        senderID: true,
+        receiverID: true,
+        content: true,
+        createdAt: true,
+        isRead: true,
+      },
+    });
+
+    type Row = {
+      friendId: string;
+      unreadCount: number;
+      lastPreview: string;
+      lastAt: Date;
+    };
+    const byFriend = new Map<string, Row>();
+
+    for (const m of recent) {
+      const friendId = m.senderID === me ? m.receiverID : m.senderID;
+      if (!friendId || friendId === me) continue;
+
+      const existing = byFriend.get(friendId);
+      if (!existing) {
+        const rawPreview = String(m.content || '');
+        const voiceish =
+          rawPreview.includes('[[vn:') || rawPreview.includes('🎤');
+        byFriend.set(friendId, {
+          friendId,
+          unreadCount: 0,
+          lastPreview: voiceish
+            ? '🎤 Голосовое сообщение'
+            : rawPreview.slice(0, 80),
+          lastAt: m.createdAt,
+        });
+      }
+      // Unread only for inbound
+      if (m.receiverID === me && m.isRead === false) {
+        const row = byFriend.get(friendId)!;
+        row.unreadCount += 1;
+      }
+    }
+
+    // Sort by last activity desc so clients can apply pin overlay easily
+    const list = [...byFriend.values()].sort(
+      (a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime()
+    );
+    reply.send(list);
+  });
+
+  // GET /messages/dm/:friendId — history; opening chat marks inbound as read
+  fastify.get('/messages/dm/:friendId', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { friendId } = request.params;
+    const me = request.user.id;
+
+    // Mark everything from this friend as read (user opened the chat)
+    await prisma.directMessage.updateMany({
+      where: {
+        senderID: friendId,
+        receiverID: me,
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+
+    // IMPORTANT: take NEWEST messages, not oldest.
+    // `orderBy asc + take 100` returned the first 100 ever → inbox preview
+    // showed a new message that disappeared after open (not in the oldest 100).
+    let messages: any[];
+    try {
+      messages = await prisma.directMessage.findMany({
+        where: {
+          OR: [
+            { senderID: me, receiverID: friendId },
+            { senderID: friendId, receiverID: me },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        include: {
+          reactions: {
+            select: { emoji: true, userID: true },
+          },
+        },
+      });
+      messages = messages.reverse(); // chronological for the client
+    } catch {
+      // Table may not exist yet mid-migrate / reactions missing
+      messages = await prisma.directMessage.findMany({
+        where: {
+          OR: [
+            { senderID: me, receiverID: friendId },
+            { senderID: friendId, receiverID: me },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      messages = messages.reverse();
+    }
+
+    const payload = messages.map((m: any) => ({
+      id: m.id,
+      senderID: m.senderID,
+      receiverID: m.receiverID,
+      content: m.content,
+      isRead: m.isRead,
+      createdAt: m.createdAt,
+      mediaType: m.mediaType ?? null,
+      mediaDurationSec: m.mediaDurationSec ?? null,
+      // Never include mediaData in list — clients fetch via /messages/voice/:id
+      hasMedia: Boolean(m.mediaType && m.mediaData),
+      reactions: aggregateReactions(m.reactions ?? [], me),
+    }));
+    reply.send(payload);
+  });
+
+  // POST /messages/dm/:friendId/read — explicit mark-read (e.g. chat stayed open)
+  fastify.post('/messages/dm/:friendId/read', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { friendId } = request.params;
+    const me = request.user.id;
+    const result = await prisma.directMessage.updateMany({
+      where: {
+        senderID: friendId,
+        receiverID: me,
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+    reply.send({ success: true, marked: result.count });
+  });
+
+  // DELETE /messages/dm/:friendId — Telegram-style «delete chat»
+  // Clears the entire DM thread between me and friendId (both directions).
+  fastify.delete(
+    '/messages/dm/:friendId',
+    {
+      preHandler: [fastify.authenticate],
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    async (request: any, reply: any) => {
+      const { friendId } = request.params as { friendId: string };
+      const me = request.user.id;
+      if (!friendId || friendId === me) {
+        return reply.status(400).send({ error: 'Invalid friendId' });
+      }
+
+      // Reactions cascade via FK on message delete when configured; otherwise clean manually.
+      const thread = await prisma.directMessage.findMany({
+        where: {
+          OR: [
+            { senderID: me, receiverID: friendId },
+            { senderID: friendId, receiverID: me },
+          ],
+        },
+        select: { id: true },
+        take: 5000,
+      });
+      const ids = thread.map((m: { id: string }) => m.id);
+      if (ids.length > 0) {
+        try {
+          await prisma.directMessageReaction.deleteMany({
+            where: { messageID: { in: ids } },
+          });
+        } catch {
+          /* reactions table may be missing mid-migrate */
+        }
+      }
+      const result = await prisma.directMessage.deleteMany({
+        where: {
+          OR: [
+            { senderID: me, receiverID: friendId },
+            { senderID: friendId, receiverID: me },
+          ],
+        },
+      });
+      reply.send({ success: true, deleted: result.count });
+    }
+  );
+
+  fastify.post('/messages/dm', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { receiverId, content } = request.body;
+    // 280: room invites + short chat (was 150 — invites didn't fit)
+    if (!content || typeof content !== 'string' || content.length > 280) {
+      return reply.status(400).send({ error: 'Invalid message (max 280 chars)' });
+    }
+    if (!receiverId || typeof receiverId !== 'string') {
+      return reply.status(400).send({ error: 'receiverId required' });
+    }
+
+    // Telegram: cannot message a deleted account
+    try {
+      const peer = await prisma.user.findUnique({
+        where: { id: receiverId },
+        select: { id: true, username: true, deletedAt: true } as any,
+      });
+      if (!peer) {
+        return reply.status(404).send({ error: 'User not found', code: 'USER_NOT_FOUND' });
+      }
+      const { isDeletedUser } = await import('../services/accountTombstone.js');
+      if (isDeletedUser(peer as any)) {
+        return reply.status(403).send({
+          error: 'This account has been deleted',
+          code: 'ACCOUNT_DELETED',
+        });
+      }
+      // Also block if either side blocked the other
+      const blocked = await prisma.userBlock.findFirst({
+        where: {
+          OR: [
+            { blockerID: request.user.id, blockedID: receiverId },
+            { blockerID: receiverId, blockedID: request.user.id },
+          ],
+        },
+        select: { id: true },
+      });
+      if (blocked) {
+        return reply.status(403).send({ error: 'Messaging not allowed', code: 'BLOCKED' });
+      }
+    } catch (e: any) {
+      console.warn('[dm] peer check:', e?.message);
+    }
+
+    const msg = await prisma.directMessage.create({
+      data: {
+        senderID: request.user.id,
+        receiverID: receiverId,
+        content,
+        isRead: false,
+      },
+    });
+    reply.send({
+      ...msg,
+      mediaType: null,
+      mediaDurationSec: null,
+      hasMedia: false,
+      reactions: [],
+    });
+  });
+
+  // POST /messages/dm/voice — real voice note (base64 audio + duration)
+  // Free for friend DMs. Body:
+  //   { receiverId, audioData: "data:audio/mp4;base64,...", durationSec, content? }
+  fastify.post(
+    '/messages/dm/voice',
+    {
+      preHandler: [fastify.authenticate],
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      bodyLimit: 2 * 1024 * 1024,
+    },
+    async (request: any, reply: any) => {
+      const me = request.user.id;
+      const body = (request.body ?? {}) as {
+        receiverId?: string;
+        audioData?: string;
+        durationSec?: number;
+        content?: string;
+      };
+
+      const receiverId = typeof body.receiverId === 'string' ? body.receiverId.trim() : '';
+      if (!receiverId || receiverId === me) {
+        return reply.status(400).send({ error: 'Invalid receiverId' });
+      }
+      try {
+        const peer = await prisma.user.findUnique({
+          where: { id: receiverId },
+          select: { id: true, username: true, deletedAt: true } as any,
+        });
+        if (!peer) return reply.status(404).send({ error: 'User not found' });
+        const { isDeletedUser } = await import('../services/accountTombstone.js');
+        if (isDeletedUser(peer as any)) {
+          return reply.status(403).send({
+            error: 'This account has been deleted',
+            code: 'ACCOUNT_DELETED',
+          });
+        }
+      } catch {
+        /* schema drift — allow path below */
+      }
+
+      const audioData = typeof body.audioData === 'string' ? body.audioData : '';
+      // Accept data URL or raw base64; normalize to data:audio/mp4;base64,...
+      let dataUrl = audioData;
+      if (!dataUrl.startsWith('data:audio/')) {
+        if (/^[A-Za-z0-9+/=\s]+$/.test(dataUrl) && dataUrl.replace(/\s/g, '').length > 64) {
+          dataUrl = `data:audio/mp4;base64,${dataUrl.replace(/\s/g, '')}`;
+        } else {
+          return reply.status(400).send({
+            error: 'Invalid audio. Expected data:audio/...;base64,...',
+          });
+        }
+      }
+
+      const mimeMatch = dataUrl.match(
+        /^data:(audio\/(mp4|m4a|aac|mpeg|mp3|wav|x-m4a|caf));base64,(.+)$/i
+      );
+      if (!mimeMatch) {
+        return reply.status(400).send({
+          error: 'Unsupported audio type. Use m4a/mp4/aac/mp3/wav.',
+        });
+      }
+
+      const b64 = mimeMatch[3];
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(b64, 'base64');
+      } catch {
+        return reply.status(400).send({ error: 'Invalid base64 audio' });
+      }
+      if (buffer.length < 200) {
+        return reply.status(400).send({ error: 'Audio too short' });
+      }
+      if (buffer.length > 1.5 * 1024 * 1024) {
+        return reply.status(413).send({ error: 'Audio too large (max 1.5MB)' });
+      }
+
+      let durationSec = Number(body.durationSec);
+      if (!Number.isFinite(durationSec) || durationSec <= 0) durationSec = 1;
+      durationSec = Math.min(60, Math.max(0.5, durationSec));
+
+      const mins = Math.floor(durationSec / 60);
+      const secs = Math.floor(durationSec % 60);
+      const preview =
+        typeof body.content === 'string' && body.content.trim().length > 0
+          ? String(body.content).slice(0, 200)
+          : `[[vn:${durationSec.toFixed(1)}]]🎤 ${mins}:${String(secs).padStart(2, '0')}`;
+
+      try {
+        const msg = await prisma.directMessage.create({
+          data: {
+            senderID: me,
+            receiverID: receiverId,
+            content: preview,
+            isRead: false,
+            mediaType: 'voice',
+            mediaData: dataUrl,
+            mediaDurationSec: durationSec,
+          },
+        });
+        return reply.send({
+          id: msg.id,
+          senderID: msg.senderID,
+          receiverID: msg.receiverID,
+          content: msg.content,
+          isRead: msg.isRead,
+          createdAt: msg.createdAt,
+          mediaType: 'voice',
+          mediaDurationSec: durationSec,
+          hasMedia: true,
+          reactions: [],
+        });
+      } catch (e: any) {
+        // Schema may lag mid-deploy — surface clear error
+        console.error('[dm-voice]', e?.message || e);
+        return reply.status(503).send({
+          error: 'Voice notes unavailable',
+          code: 'VOICE_UNAVAILABLE',
+          detail: e?.message,
+        });
+      }
+    }
+  );
+
+  // GET /messages/voice/:messageId — stream voice note audio (participants only)
+  fastify.get(
+    '/messages/voice/:messageId',
+    { preHandler: [fastify.authenticate] },
+    async (request: any, reply: any) => {
+      const me = request.user.id;
+      const { messageId } = request.params as { messageId: string };
+
+      let msg: any;
+      try {
+        msg = await prisma.directMessage.findUnique({
+          where: { id: messageId },
+          select: {
+            id: true,
+            senderID: true,
+            receiverID: true,
+            mediaType: true,
+            mediaData: true,
+          },
+        });
+      } catch (e: any) {
+        console.warn('[dm-voice-get]', e?.message);
+        return reply.status(503).send({ error: 'Voice notes unavailable' });
+      }
+
+      if (!msg) return reply.status(404).send({ error: 'Not found' });
+      if (msg.senderID !== me && msg.receiverID !== me) {
+        return reply.status(403).send({ error: 'Forbidden' });
+      }
+      if (msg.mediaType !== 'voice' || !msg.mediaData) {
+        return reply.status(404).send({ error: 'No voice attachment' });
+      }
+
+      const match = String(msg.mediaData).match(
+        /^data:(audio\/[a-z0-9.+-]+);base64,(.+)$/i
+      );
+      if (!match) {
+        return reply.status(500).send({ error: 'Corrupt voice data' });
+      }
+      const mime = match[1].toLowerCase() === 'audio/m4a' ? 'audio/mp4' : match[1];
+      const buffer = Buffer.from(match[2], 'base64');
+      reply
+        .header('Cache-Control', 'private, max-age=3600')
+        .header('Content-Length', String(buffer.length))
+        .type(mime)
+        .send(buffer);
+    }
+  );
+
+  // POST /messages/dm/:messageId/react — toggle Telegram-style reaction
+  // Body: { emoji: "❤️" }  — same emoji again removes; different replaces.
+  fastify.post(
+    '/messages/dm/:messageId/react',
+    {
+      preHandler: [fastify.authenticate],
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    async (request: any, reply: any) => {
+      const me = request.user.id;
+      const { messageId } = request.params as { messageId: string };
+      const { emoji } = (request.body ?? {}) as { emoji?: string };
+
+      if (!emoji || typeof emoji !== 'string' || emoji.length > 16) {
+        return reply.status(400).send({ error: 'emoji required' });
+      }
+      if (!FREE_REACT_EMOJIS.has(emoji)) {
+        return reply.status(400).send({ error: 'Emoji not allowed', code: 'EMOJI_NOT_ALLOWED' });
+      }
+
+      const msg = await prisma.directMessage.findUnique({ where: { id: messageId } });
+      if (!msg) return reply.status(404).send({ error: 'Message not found' });
+      if (msg.senderID !== me && msg.receiverID !== me) {
+        return reply.status(403).send({ error: 'Not a participant' });
+      }
+
+      try {
+        const existing = await prisma.directMessageReaction.findUnique({
+          where: { messageID_userID: { messageID: messageId, userID: me } },
+        });
+
+        if (existing && existing.emoji === emoji) {
+          // Toggle off
+          await prisma.directMessageReaction.delete({ where: { id: existing.id } });
+        } else if (existing) {
+          await prisma.directMessageReaction.update({
+            where: { id: existing.id },
+            data: { emoji },
+          });
+        } else {
+          await prisma.directMessageReaction.create({
+            data: { messageID: messageId, userID: me, emoji },
+          });
+        }
+
+        const all = await prisma.directMessageReaction.findMany({
+          where: { messageID: messageId },
+          select: { emoji: true, userID: true },
+        });
+        return reply.send({
+          success: true,
+          messageId,
+          reactions: aggregateReactions(all, me),
+        });
+      } catch (e: any) {
+        console.warn('[dm-react]', e?.message);
+        return reply.status(503).send({ error: 'Reactions unavailable', code: 'REACTIONS_UNAVAILABLE' });
+      }
+    }
+  );
+
+  // GET /messages/invites — pending room invites embedded in unread DMs
+  // Format: "... plink-invite:CODE|ROOMID|RoomName"
+  fastify.get('/messages/invites', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const me = request.user.id;
+    const unread = await prisma.directMessage.findMany({
+      where: {
+        receiverID: me,
+        isRead: false,
+        content: { contains: 'plink-invite:' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      include: {
+        sender: { select: { id: true, username: true, avatarURL: true, displayName: true } },
+      },
+    });
+
+    // Use Array<T> constructor — never leave invites as never[] under strict tsc
+    const invites = new Array<RoomInviteDTO>();
+    for (const m of unread as any[]) {
+      const content = String(m?.content ?? '');
+      const marker = 'plink-invite:';
+      const idx = content.indexOf(marker);
+      if (idx < 0) continue;
+      const payload = content.slice(idx + marker.length).trim();
+      const parts = payload.split('|');
+      const code = (parts[0] || '').trim().toUpperCase();
+      const roomId = (parts[1] || '').trim();
+      const roomName = (parts[2] || 'Комната').trim() || 'Комната';
+      if (!code || code.length < 4) continue;
+      const fromUsername =
+        (m?.sender?.displayName as string | undefined) ||
+        (m?.sender?.username as string | undefined) ||
+        'Друг';
+      const fromAvatarURL =
+        m?.sender?.avatarURL != null ? String(m.sender.avatarURL) : null;
+      invites.push({
+        id: String(m.id),
+        messageId: String(m.id),
+        roomID: roomId || code,
+        roomCode: code,
+        roomName,
+        fromUserID: String(m.senderID),
+        fromUsername,
+        fromAvatarURL,
+        mediaTitle: null,
+        timestamp: m.createdAt as Date,
+        preview: content.slice(0, 120),
+      });
+    }
+    return reply.send(invites);
+  });
+}

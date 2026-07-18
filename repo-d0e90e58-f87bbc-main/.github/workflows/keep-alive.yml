@@ -1,0 +1,25 @@
+# Pings production backend every 5 minutes so Railway free/hobby
+# instances stay warm (reduces cold-start RTT spikes).
+name: Backend keep-alive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health ping
+        run: |
+          set -e
+          for i in 1 2 3; do
+            code=$(curl -sS -o /tmp/h.json -w "%{http_code}" --max-time 15 \
+              https://plink-backend-production-ef31.up.railway.app/health || echo 000)
+            echo "attempt $i → HTTP $code time=$(curl -sS -o /dev/null -w '%{time_total}' --max-time 15 https://plink-backend-production-ef31.up.railway.app/health || true)"
+            cat /tmp/h.json || true
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 2
+          done
+          exit 1

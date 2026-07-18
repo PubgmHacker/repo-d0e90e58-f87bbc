@@ -1,0 +1,45 @@
+/* Plink Desktop — Cinema2026 (iOS parity) */
+:root {
+  --void: #0e1113;
+  --bg: #0e1113;
+  --surface: #171b1e;
+  --raised: #222729;
+  --divider: #34393b;
+  --text: #eceae3;
+  --text-secondary: #a6acae;
+  --text-tertiary: #6e7578;
+
+  --accent: #5ab09b;
+  --accent-pressed: #488c7c;
+  --accent-bright: #5ab09b;
+  --amber: #d7a750;
+  --live: #5ab09b;
+  --danger: #d14b45;
+
+  --neon-red: #ff3c28;
+  --neon-red-glow: rgba(255, 60, 40, 0.55);
+  --neon-red-soft: rgba(255, 60, 40, 0.18);
+
+  --nav-accent: var(--accent);
+  --nav-accent-glow: rgba(90, 176, 155, 0.15);
+
+  --gradient-accent: linear-gradient(135deg, #5ab09b 0%, #488c7c 100%);
+  --gradient-bio: linear-gradient(135deg, #5ab09b 0%, #488c7c 100%);
+  --gradient-hero: linear-gradient(180deg, transparent 30%, rgba(14, 17, 19, 0.6) 70%, #0e1113 100%);
+
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-strong: rgba(22, 27, 30, 0.82);
+
+  --inset-x: 18px;
+  --section-gap: 18px;
+  --rail-gap: 8px;
+  --poster-w: 108px;
+  --landscape-w: 186px;
+  --landscape-h: 105px;
+  --titlebar-h: 52px;
+  --radius-poster: 9px;
+  --radius-control: 14px;
+  --radius-panel: 16px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable', system-ui, sans-serif;
+}

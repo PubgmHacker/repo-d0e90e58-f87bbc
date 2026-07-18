@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Archives & generated artifacts (must never be tracked)
+*.zip
+*.pdf
+*.tar
+*.gz
+
+# Tooling / agent scratch
+tool-results/
+upload/
+download/
+save/
+*.save
+
+# Skills (internal)
+skills/
+
+# Local duplicates of project trees (anti-pattern — keep out of runtime repo)
+plink-backend/
+plink-backend-v3/
+raveclone-review/
+raveclone-review-v2/
+
+# Prisma local
+prisma/migrations/dev.db*
+
+# Editor
+.idea/
+.vscode/
+*.swp

@@ -65,6 +65,9 @@ model User {
   sentDMs          DirectMessage[]   @relation("SentDMs")
   receivedDMs      DirectMessage[]   @relation("ReceivedDMs")
   dmReactions      DirectMessageReaction[]
+  pinnedDMMessages PinnedMessage[]   @relation("DMPinnedBy")
+  pinnedDMThreadsA PinnedMessage[]   @relation("PinnedDMUserA")
+  pinnedDMThreadsB PinnedMessage[]   @relation("PinnedDMUserB")
   friendRequestsSent     FriendRequest[]  @relation("RequestsSent")
   friendRequestsReceived FriendRequest[]  @relation("RequestsReceived")
   friendshipsInitiated   Friendship[]     @relation("FriendshipsInitiated")
@@ -164,9 +167,34 @@ model DirectMessage {
   /// data:audio/mp4;base64,... — stored in DB (Railway ephemeral FS-safe).
   mediaData   String?  @db.Text
   mediaDurationSec Float?
+  /// Reply pointer for threaded context inside the DM timeline.
+  pinnedMessageId String?
+  pinnedMessage   DirectMessage? @relation("DMReplyPointer", fields: [pinnedMessageId], references: [id], onDelete: SetNull)
+  replyChildren   DirectMessage[] @relation("DMReplyPointer")
   reactions   DirectMessageReaction[]
+  pinnedInThreads PinnedMessage[]
 
   @@index([senderID, receiverID])
+  @@index([pinnedMessageId])
+}
+
+/// One pinned direct message per user-to-user thread.
+model PinnedMessage {
+  id        String   @id @default(uuid())
+  userAID   String
+  userA     User     @relation("PinnedDMUserA", fields: [userAID], references: [id], onDelete: Cascade)
+  userBID   String
+  userB     User     @relation("PinnedDMUserB", fields: [userBID], references: [id], onDelete: Cascade)
+  messageID String
+  message   DirectMessage @relation(fields: [messageID], references: [id], onDelete: Cascade)
+  pinnedByID String
+  pinnedBy User @relation("DMPinnedBy", fields: [pinnedByID], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userAID, userBID])
+  @@index([messageID])
+  @@index([pinnedByID])
 }
 
 /// Telegram-style reactions on DMs (one emoji per user per message).

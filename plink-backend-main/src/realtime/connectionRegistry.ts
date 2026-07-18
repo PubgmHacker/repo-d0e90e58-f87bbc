@@ -102,6 +102,10 @@ export class ConnectionRegistry {
     return false;
   }
 
+  getUserSockets(userId: string): PlinkSocket[] {
+    return [...(this.userSockets.get(userId) ?? [])];
+  }
+
   /**
    * Broadcast a typed ServerMessage to all sockets in a room on this replica.
    * Excludes the sender if provided.

@@ -516,6 +516,19 @@ export class RealtimeGateway {
     await this.eventBus.publish(event.roomId, event);
   }
 
+  publishDMPin(event: Extract<ServerMessage, { type: 'dm.pin.broadcast' }>): void {
+    const encoded = JSON.stringify(event);
+    const targets = new Set([
+      ...this.registry.getUserSockets(event.threadUserIds[0]),
+      ...this.registry.getUserSockets(event.threadUserIds[1]),
+    ]);
+    for (const socket of targets) {
+      if (socket.readyState !== socket.OPEN) continue;
+      if ((socket.bufferedAmount ?? 0) > 256 * 1024) continue;
+      socket.send(encoded);
+    }
+  }
+
   private eventToServerMessage(event: RoomEvent): ServerMessage | null {
     switch (event.kind) {
       case 'participant.joined':

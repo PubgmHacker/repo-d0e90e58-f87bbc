@@ -53,6 +53,40 @@ function aggregateReactions(
     .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji));
 }
 
+function dmThreadKey(a: string, b: string): { userAID: string; userBID: string } {
+  return a < b ? { userAID: a, userBID: b } : { userAID: b, userBID: a };
+}
+
+function dmPreview(content: string, mediaType?: string | null): string {
+  const raw = String(content || '');
+  if (mediaType === 'voice' || raw.includes('[[vn:') || raw.includes('🎤')) return '🎤 Голосовое сообщение';
+  if (mediaType === 'photo') return raw.trim() ? `📷 ${raw.slice(0, 76)}` : '📷 Фото';
+  return raw.slice(0, 120);
+}
+
+function serializePinnedMessage(row: any) {
+  if (!row) return null;
+  const m = row.message;
+  return {
+    id: row.id,
+    threadUserIds: [row.userAID, row.userBID],
+    messageId: row.messageID,
+    pinnedByID: row.pinnedByID,
+    pinnedAt: row.updatedAt ?? row.createdAt,
+    message: m ? {
+      id: m.id,
+      senderID: m.senderID,
+      receiverID: m.receiverID,
+      content: m.content,
+      preview: dmPreview(m.content, m.mediaType),
+      createdAt: m.createdAt,
+      mediaType: m.mediaType ?? null,
+      mediaDurationSec: m.mediaDurationSec ?? null,
+      hasMedia: Boolean(m.mediaType && m.mediaData),
+    } : null,
+  };
+}
+
 export default async function messageRoutes(fastify) {
   // GET /messages/unread — inbox summary for chat list (Telegram-style sort)
   // Returns last message + unread count per friend (including read threads).
@@ -184,6 +218,97 @@ export default async function messageRoutes(fastify) {
       reactions: aggregateReactions(m.reactions ?? [], me),
     }));
     reply.send(payload);
+  });
+
+  // POST /chat/pin — pin one DM for the whole 1:1 thread.
+  fastify.post(
+    '/chat/pin',
+    {
+      preHandler: [fastify.authenticate],
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    async (request: any, reply: any) => {
+      const me = request.user.id;
+      const { messageId } = (request.body ?? {}) as { messageId?: string };
+      if (!messageId || typeof messageId !== 'string') {
+        return reply.status(400).send({ error: 'messageId required' });
+      }
+
+      const msg: any = await prisma.directMessage.findUnique({
+        where: { id: messageId },
+        select: {
+          id: true,
+          senderID: true,
+          receiverID: true,
+          content: true,
+          createdAt: true,
+          mediaType: true,
+          mediaData: true,
+          mediaDurationSec: true,
+        },
+      });
+      if (!msg) return reply.status(404).send({ error: 'Message not found' });
+      if (msg.senderID !== me && msg.receiverID !== me) {
+        return reply.status(403).send({ error: 'Not a participant' });
+      }
+
+      const thread = dmThreadKey(msg.senderID, msg.receiverID);
+      const pinned = await prisma.pinnedMessage.upsert({
+        where: { userAID_userBID: thread },
+        create: {
+          ...thread,
+          messageID: msg.id,
+          pinnedByID: me,
+        },
+        update: {
+          messageID: msg.id,
+          pinnedByID: me,
+        },
+        include: {
+          message: true,
+        },
+      });
+
+      const event = {
+        type: 'dm.pin.broadcast' as const,
+        protocolVersion: 2 as const,
+        threadUserIds: [thread.userAID, thread.userBID] as [string, string],
+        messageId: msg.id,
+        pinnedById: me,
+        pinnedAtMs: new Date(pinned.updatedAt ?? pinned.createdAt).getTime(),
+      };
+      try {
+        (fastify as any).gateway?.publishDMPin?.(event);
+      } catch (e: any) {
+        request.log.warn({ err: e?.message }, 'dm pin broadcast failed');
+      }
+
+      reply.send({ success: true, pinned: serializePinnedMessage(pinned) });
+    }
+  );
+
+  // GET /chat/pinned — pinned DM for ?friendId=... or all my pinned DM threads.
+  fastify.get('/chat/pinned', { preHandler: [fastify.authenticate] }, async (request: any, reply: any) => {
+    const me = request.user.id;
+    const friendId = typeof request.query?.friendId === 'string' ? request.query.friendId.trim() : '';
+
+    if (friendId) {
+      if (friendId === me) return reply.status(400).send({ error: 'Invalid friendId' });
+      const thread = dmThreadKey(me, friendId);
+      const pinned = await prisma.pinnedMessage.findUnique({
+        where: { userAID_userBID: thread },
+        include: { message: true },
+      });
+      return reply.send({ pinned: serializePinnedMessage(pinned) });
+    }
+
+    const pinned = await prisma.pinnedMessage.findMany({
+      where: { OR: [{ userAID: me }, { userBID: me }] },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+      include: { message: true },
+    });
+    return reply.send({ pinned: pinned.map(serializePinnedMessage) });
   });
 
   // POST /messages/dm/:friendId/read — explicit mark-read (e.g. chat stayed open)

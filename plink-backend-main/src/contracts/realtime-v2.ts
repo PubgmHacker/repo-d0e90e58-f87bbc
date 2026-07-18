@@ -166,6 +166,17 @@ export const ParticipantEventSchema = z
   })
   .strict();
 
+export const DMPinBroadcastSchema = z
+  .object({
+    type: z.literal('dm.pin.broadcast'),
+    protocolVersion: z.literal(2),
+    threadUserIds: z.tuple([z.string().uuid(), z.string().uuid()]),
+    messageId: z.string().uuid(),
+    pinnedById: z.string().uuid(),
+    pinnedAtMs: z.number().int(),
+  })
+  .strict();
+
 export const ErrorMessageSchema = z
   .object({
     type: z.literal('error'),
@@ -225,6 +236,7 @@ export type ClockProbeReply = z.infer<typeof ClockProbeReplySchema>;
 export type ChatBroadcast = z.infer<typeof ChatBroadcastSchema>;
 export type ReactionBroadcast = z.infer<typeof ReactionBroadcastSchema>;
 export type ParticipantEvent = z.infer<typeof ParticipantEventSchema>;
+export type DMPinBroadcast = z.infer<typeof DMPinBroadcastSchema>;
 export type ErrorMessage = z.infer<typeof ErrorMessageSchema>;
 export type SessionReady = z.infer<typeof SessionReadySchema>;
 export type RoleChanged = z.infer<typeof RoleChangedSchema>;
@@ -249,6 +261,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ChatBroadcastSchema,
   ReactionBroadcastSchema,
   ParticipantEventSchema,
+  DMPinBroadcastSchema,
   ErrorMessageSchema,
   SessionReadySchema,
   RoleChangedSchema,  // P1-64
@@ -274,6 +287,7 @@ export const SERVER_MESSAGE_TYPES = [
   'reaction.broadcast',
   'participant.joined',
   'participant.left',
+  'dm.pin.broadcast',
   'error',
   'session.ready',
   'role.changed',  // P1-64

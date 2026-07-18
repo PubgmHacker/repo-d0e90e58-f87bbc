@@ -1,48 +1,33 @@
-# Plink MVP Development Instructions
+# Plink MVP: Current Status & Remaining Tasks
 
-## Role & Objective
-You are the lead iOS engineer for the Plink project. Your goal is to finalize the MVP, transitioning it from a functional prototype to a submission-ready product with professional-grade polish, high-performance architecture, and a "TikTok/Telegram-inspired" user experience.
+## Completed (Do not modify)
+- Technical audit & memory stabilization (WKWebView, HeroVideoBanner, DMChatService).
+- VIP Avatar Rings (Admin/Plink+, animated gradient).
+- Message Bubbles (TikTok style, adaptive layout).
+- Full Media Sharing (Photo upload/fetch, DM/Room gallery, real-time metadata via WebSocket, Prisma migration).
 
-## Execution Priority
-1. **Technical Audit & Stability**
-2. **Architectural Prep for Media Sharing**
-3. **UI Redesign (Bubbles & Avatar Rings)**
+## Active Phase: Chat Functionality Polish
+The codebase is currently stable. The next target is to implement **Pinned Messages & Replies** for the DM system.
 
----
+### 1. Backend Implementation (Pinned Messages)
+- Update Prisma Schema: Add `pinnedMessageId` (nullable) to `DirectMessage`.
+- Create `PinnedMessage` table for efficient lookups.
+- Implement API endpoints: `POST /api/chat/pin`, `GET /api/chat/pinned`.
+- Ensure real-time broadcast of pin events via existing WebSocket logic.
 
-## Task Breakdown
+### 2. iOS UI Implementation (Chat Bar & Reply)
+- **Pinned Message Bar:** Add a thin, sleek bar at the top of the `DMChatView`.
+- **Reply Metadata:** Add UI logic to display "Replying to..." context within `PlinkMessageBubble`.
+- **Forwarding:** Implement forward logic and target selection flow.
 
-### 1. Technical Audit and Stabilization
-Before implementing any UI changes, perform a thorough audit:
-- Check for memory leaks in chat controllers.
-- Ensure the recent `ServiceAuthView` integration is stable and does not cause retain cycles.
-- **Output:** Provide a brief report on findings/errors or confirm system stability before proceeding.
-
-### 2. VIP Status Animation ("Ring Effect")
-Implement a continuous animated gradient ring around Admin and Plink+ avatars.
-- **Style:** Fast, smooth, continuous gradient loop.
-- **Palettes:**
-  - **Admin:** Bright Scarlet -> Deep Maroon.
-  - **Plink+:** Gold -> Bronze.
-- **Technical constraints:** Use optimized `CoreAnimation` or `Angular Gradient` (SwiftUI). Performance is critical—the animation must not affect scroll smoothness.
-
-### 3. Message Bubble Redesign (TikTok Style)
-Overhaul message visuals for a modern, sleek feel:
-- Custom bubble shapes with modern rounded corners.
-- Automatic sizing based on content (text/links).
-- Refine visual hierarchy (padding, typography, contrast) to match a professional messaging experience.
-
-### 4. Media Sharing (Photos)
-Implement photo sharing for Private and Video Room chats.
-- **UI:** Add a "+" / "Gallery" button in the chat input field.
-- **Functionality:** 
-  - Support previews and captions (Telegram-style).
-  - **Video Room:** Ensure photo messages integrate into the feed without disrupting video synchronization or obstructing the player.
-- **Logic:** Implement image compression to optimize bandwidth usage.
+### 3. Verification & Deployment
+- Run full build scheme for Backend and iOS.
+- Verify WebSocket sync for pinned messages.
+- Final commit and push to `main`.
 
 ---
 
-## Guidelines for Claude
-- **Code Quality:** Prioritize performance and memory safety. Use `@Published` and `WatchRoomModel` state management as per the existing architecture.
-- **Stability:** Ensure all experimental code is properly gated.
-- **Communication:** If you encounter architectural blockers during the audit, stop and report them before moving to UI tasks.
+## Instructions for Claude
+1. **Critical:** Since you are experiencing API errors, work in small, incremental steps. Perform the backend change first. **Stop and verify** before proceeding to iOS.
+2. **Persistence:** Do not re-explore already completed areas. The architecture for media and sockets is already in place; extend it, don't reinvent it.
+3. **Stability:** If an `API Error` occurs, pause, report the error, and wait for the user to trigger the next step.

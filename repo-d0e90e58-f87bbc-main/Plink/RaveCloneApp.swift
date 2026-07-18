@@ -1,9 +1,17 @@
 import SwiftUI
+#if os(iOS)
 import UIKit
 import AVFoundation
+#endif
+#if canImport(FirebaseCore)
 import FirebaseCore
+#endif
+#if canImport(FirebaseAnalytics)
 import FirebaseAnalytics
+#endif
+#if canImport(FirebaseCrashlytics)
 import FirebaseCrashlytics
+#endif
 
 // MARK: - AppDelegate (orientation lock)
 //
@@ -23,6 +31,7 @@ import FirebaseCrashlytics
 // with `interactiveDismissDisabled(true)` and `.fullScreenCover` presentation
 // (see MainTabView), this completely isolates RoomView from TabView gestures
 // and system edge-swipe handling.
+#if os(iOS)
 final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
 
     /// Active orientation mask. Defaults to `.all` so the rest of the app
@@ -65,6 +74,11 @@ final class PlinkAppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 }
+#else
+final class PlinkAppDelegate: NSObject {
+    static var orientationLock: Int = 0
+}
+#endif
 
 // MARK: - App Entry Point
 /// Конфигурирует dependency injection, прокидывает JWT-токен между сервисами,
@@ -75,7 +89,9 @@ struct PlinkApp: App {
 
     // 🔧 Wire up AppDelegate so `supportedInterfaceOrientationsFor` is consulted
     // by UIKit. Required for the orientation-lock fix above.
+    #if os(iOS)
     @UIApplicationDelegateAdaptor(PlinkAppDelegate.self) private var appDelegate
+    #endif
 
     // MARK: - Service Singletons (app lifetime)
 
@@ -117,14 +133,16 @@ struct PlinkApp: App {
         // 🔧 v56 (Gemini): Configure AVAudioSession at app launch.
         // Tells iOS: "we are a media player, don't kill WebKit/AVPlayer
         // when app goes inactive (Control Center, notification shade)".
+        #if os(iOS)
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("⚠️ v56: AVAudioSession config failed: \(error)")
         }
+        #endif
 
-        let api = APIClient()
+        let api = APIClient.shared
         apiClient = api
         authService = AuthService.shared
         mediaService = MediaService()

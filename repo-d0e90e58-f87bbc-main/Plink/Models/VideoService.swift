@@ -10,6 +10,61 @@ enum PlaybackMode: String, Sendable {
     case webview
 }
 
+// MARK: - Smart Wall Service Type
+
+/// Service access type for Lazy Auth / Smart Wall.
+/// Mirrors VideoService so existing room creation code can keep using VideoService.
+enum ServiceType: String, CaseIterable, Identifiable, Sendable, Codable, Equatable, Hashable {
+    case youtube
+    case vk
+    case rutube
+    case netflix
+    case disney
+    case browser
+    case customURL = "custom"
+    case kinopoisk
+    case ivi
+    case okko
+    case wink
+    case start
+    case premier
+    case smotrim
+    case kion
+
+    var id: String { rawValue }
+
+    init(service: VideoService) {
+        self = ServiceType(rawValue: service.rawValue) ?? .youtube
+    }
+
+    /// True when host must authenticate with the external content service.
+    var requiresAuth: Bool {
+        switch self {
+        case .youtube, .vk, .rutube, .smotrim, .browser, .customURL:
+            return false
+        case .netflix, .disney, .kinopoisk, .ivi, .okko, .wink, .start, .premier, .kion:
+            return true
+        }
+    }
+}
+
+// MARK: - Service Auth Store
+
+enum ServiceAuthStore {
+    private static func key(for service: ServiceType) -> String {
+        "plink.service_auth.\(service.rawValue)"
+    }
+
+    static func hasAccess(to service: ServiceType) -> Bool {
+        guard service.requiresAuth else { return true }
+        return UserDefaults.standard.bool(forKey: key(for: service))
+    }
+
+    static func markAuthorized(_ service: ServiceType) {
+        UserDefaults.standard.set(true, forKey: key(for: service))
+    }
+}
+
 // MARK: - Video Service
 /// Поддерживаемые видеосервисы для выбора при создании комнаты.
 ///
@@ -86,13 +141,16 @@ enum VideoService: String, CaseIterable, Identifiable, Sendable, Codable, Equata
     /// Host needs an active subscription on the service (Netflix/Disney + RU cinemas).
     /// Plink does not provide content — host logs into their own account.
     var requiresSubscription: Bool {
-        switch self {
-        case .netflix, .disney,
-             .kinopoisk, .ivi, .okko, .wink, .start, .premier, .smotrim, .kion:
-            return true
-        default:
-            return false
-        }
+        serviceType.requiresAuth
+    }
+
+    /// Smart Wall auth requirement for this service.
+    var requiresAuth: Bool {
+        serviceType.requiresAuth
+    }
+
+    var serviceType: ServiceType {
+        ServiceType(service: self)
     }
 
     /// Short App Store–safe disclaimer shown when host picks a subscription service.

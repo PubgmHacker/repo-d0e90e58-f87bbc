@@ -23,10 +23,17 @@ struct RoomCreationView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showYouTubeSearch = false
-    @State private var showCinemaWarning = false
+    @State private var authWallService: VideoService?
+    @State private var pendingAuthAction: PendingAuthAction?
 
     enum Step: String, CaseIterable {
         case service, content, settings, creating
+    }
+
+    private enum PendingAuthAction {
+        case continueToSettings
+        case fastYouTube(videoId: String, title: String, thumbnail: String?)
+        case createRoom
     }
 
     private var isPremium: Bool { PremiumStatusManager.shared.isPremium }
@@ -60,20 +67,28 @@ struct RoomCreationView: View {
             }
             .sheet(isPresented: $showYouTubeSearch) {
                 YouTubeSearchView { videoId, title, thumb in
-                    mediaVideoId = videoId
-                    mediaURL = "https://www.youtube.com/watch?v=\(videoId)"
-                    mediaTitle = title
-                    mediaThumbnail = thumb
-                    showYouTubeSearch = false
-                    step = .settings
+                    beginFastYouTubeCreate(videoId: videoId, title: title, thumbnail: thumb)
                 }
             }
-            .alert("Подписка host", isPresented: $showCinemaWarning) {
-                Button("Понятно, продолжить") { step = .content }
-                Button("Отмена", role: .cancel) { }
-            } message: {
-                Text("\(selectedService.subscriptionDisclaimer) Гости смотрят вместе через sync в Plink — своя подписка на сервис им не нужна.")
+            .overlay {
+                if let service = authWallService {
+                    ServiceAuthView(
+                        service: service,
+                        onAuthorized: {
+                            ServiceAuthStore.markAuthorized(service.serviceType)
+                            authWallService = nil
+                            resumePendingAuthAction()
+                        },
+                        onCancel: {
+                            pendingAuthAction = nil
+                            authWallService = nil
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(20)
+                }
             }
+            .animation(.spring(response: 0.32, dampingFraction: 0.88), value: authWallService?.id)
         }
     }
 
@@ -180,11 +195,7 @@ struct RoomCreationView: View {
     private func serviceCard(_ svc: VideoService, kind: ServiceCardKind) -> some View {
         Button {
             selectedService = svc
-            if kind == .subscription {
-                showCinemaWarning = true
-            } else {
-                step = .content
-            }
+            step = .content
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: svc.icon)
@@ -265,6 +276,8 @@ struct RoomCreationView: View {
                         .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 14))
                     }
                     .buttonStyle(.plain)
+
+                    serviceBrandCarousel
                 }
 
                 pasteURLSection
@@ -321,20 +334,7 @@ struct RoomCreationView: View {
 
             // Continue button
             Button {
-                if mediaTitle.isEmpty {
-                    mediaTitle = selectedService.title
-                }
-                // Auto room name so Create isn't stuck disabled
-                if roomName.trimmingCharacters(in: .whitespaces).isEmpty {
-                    if let friend = inviteFriend {
-                        roomName = "С \(friend.displayTitle)"
-                    } else if !mediaTitle.isEmpty {
-                        roomName = String(mediaTitle.prefix(40))
-                    } else {
-                        roomName = selectedService.title
-                    }
-                }
-                step = .settings
+                continueFromContent()
             } label: {
                 Text("Продолжить")
                     .font(.system(size: 17, weight: .semibold))
@@ -356,6 +356,64 @@ struct RoomCreationView: View {
             return mediaVideoId != nil || !mediaURL.isEmpty
         }
         return !mediaURL.isEmpty
+    }
+
+    private var brandCarouselServices: [VideoService] {
+        [.kinopoisk, .okko, .youtube, .ivi, .wink, .start, .premier, .rutube, .vk, .kion]
+    }
+
+    private var serviceBrandCarousel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Доступно в Plink")
+                .font(.system(size: 12, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(Cinema2026.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(brandCarouselServices, id: \.self) { service in
+                        serviceLogoPill(service)
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
+            }
+            .scrollDisabled(false)
+        }
+        .padding(.top, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Карусель поддерживаемых сервисов")
+    }
+
+    private func serviceLogoPill(_ service: VideoService) -> some View {
+        HStack(spacing: 9) {
+            ServiceLogoView(service: service, size: 28)
+                .frame(width: 28, height: 28)
+
+            Text(service.brandName)
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(Cinema2026.text)
+                .lineLimit(1)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
+        .frame(height: 46)
+        .background(
+            LinearGradient(
+                colors: [
+                    service.accentColor.opacity(0.26),
+                    Cinema2026.surface.opacity(0.78)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(service.accentColor.opacity(0.24), lineWidth: 0.8)
+        )
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -503,15 +561,7 @@ struct RoomCreationView: View {
             .buttonStyle(.plain)
             .disabled(isCreating)
             .onAppear {
-                if roomName.trimmingCharacters(in: .whitespaces).isEmpty {
-                    if let friend = inviteFriend {
-                        roomName = "С \(friend.displayTitle)"
-                    } else if !mediaTitle.isEmpty {
-                        roomName = String(mediaTitle.prefix(40))
-                    } else {
-                        roomName = selectedService.title
-                    }
-                }
+                fillDefaultRoomName()
             }
         }
         .padding(.horizontal, 20)
@@ -547,7 +597,81 @@ struct RoomCreationView: View {
 
     // MARK: - Create
 
-    private func createRoom() async {
+    private func requiresSmartWall(for service: VideoService) -> Bool {
+        !WatchRoomModel.checkServiceAccess(for: service.serviceType)
+    }
+
+    @discardableResult
+    private func ensureServiceAccess(for service: VideoService, pending action: PendingAuthAction) -> Bool {
+        guard requiresSmartWall(for: service) else { return true }
+        pendingAuthAction = action
+        authWallService = service
+        return false
+    }
+
+    private func resumePendingAuthAction() {
+        guard let action = pendingAuthAction else { return }
+        pendingAuthAction = nil
+        switch action {
+        case .continueToSettings:
+            continueFromContent(skipAuth: true)
+        case .fastYouTube(let videoId, let title, let thumbnail):
+            beginFastYouTubeCreate(videoId: videoId, title: title, thumbnail: thumbnail, skipAuth: true)
+        case .createRoom:
+            Task { await createRoom(skipAuth: true) }
+        }
+    }
+
+    private func continueFromContent(skipAuth: Bool = false) {
+        if mediaTitle.isEmpty {
+            mediaTitle = selectedService.title
+        }
+        fillDefaultRoomName()
+        guard skipAuth || ensureServiceAccess(for: selectedService, pending: .continueToSettings) else { return }
+        step = .settings
+    }
+
+    private func beginFastYouTubeCreate(videoId: String, title: String, thumbnail: String?, skipAuth: Bool = false) {
+        guard isValidYouTubeVideoId(videoId) else {
+            errorMessage = "Не удалось распознать YouTube-видео. Попробуйте другое."
+            showYouTubeSearch = false
+            step = .content
+            return
+        }
+
+        selectedService = .youtube
+        mediaVideoId = videoId
+        mediaURL = "https://www.youtube.com/watch?v=\(videoId)"
+        mediaTitle = title
+        mediaThumbnail = thumbnail
+        fillDefaultRoomName(preferredTitle: title)
+        showYouTubeSearch = false
+        errorMessage = nil
+
+        guard skipAuth || ensureServiceAccess(
+            for: selectedService,
+            pending: .fastYouTube(videoId: videoId, title: title, thumbnail: thumbnail)
+        ) else { return }
+
+        step = .creating
+        Task { await createRoom(skipAuth: true) }
+    }
+
+    private func fillDefaultRoomName(preferredTitle: String? = nil) {
+        guard roomName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if let friend = inviteFriend {
+            roomName = "С \(friend.displayTitle)"
+        } else if let preferredTitle, !preferredTitle.isEmpty {
+            roomName = String(preferredTitle.prefix(40))
+        } else if !mediaTitle.isEmpty {
+            roomName = String(mediaTitle.prefix(40))
+        } else {
+            roomName = selectedService.title
+        }
+    }
+
+    private func createRoom(skipAuth: Bool = false) async {
+        guard skipAuth || ensureServiceAccess(for: selectedService, pending: .createRoom) else { return }
         // P0.2: idempotency guard — prevent double-tap creating two rooms
         guard !isCreating else { return }
         isCreating = true
@@ -578,7 +702,11 @@ struct RoomCreationView: View {
 
         switch selectedService {
         case .youtube:
-            let vid = mediaVideoId ?? extractYouTubeId(from: mediaURL) ?? mediaURL
+            guard let vid = mediaVideoId ?? extractYouTubeId(from: mediaURL), isValidYouTubeVideoId(vid) else {
+                errorMessage = "Вставьте корректную ссылку YouTube или выберите видео из поиска."
+                step = .content
+                return
+            }
             // Prefer watch URL — more reliable for id extract + backend
             streamURL = "https://www.youtube.com/watch?v=\(vid)"
             videoId = vid
@@ -731,7 +859,6 @@ struct RoomCreationView: View {
                 errorMessage = "Не удалось создать комнату: \(msg)"
             }
             step = .settings
-            print("[RoomCreate] failed: \(msg)")
         }
     }
 
@@ -747,25 +874,36 @@ struct RoomCreationView: View {
             }
             return true
         } catch {
-            print("[RoomCreate] endMyActiveRooms: \(error.localizedDescription)")
             return false
         }
     }
 
     private func extractYouTubeId(from url: String) -> String? {
-        // Extract 11-char video ID from various YouTube URL formats
-        let patterns = [
-            "watch?v=", "youtu.be/", "embed/", "shorts/"
-        ]
-        for p in patterns {
-            if let range = url.range(of: p) {
-                let start = url.index(range.upperBound, offsetBy: 0)
-                let end = url.index(start, offsetBy: 11, limitedBy: url.endIndex) ?? url.endIndex
-                return String(url[start..<end])
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isValidYouTubeVideoId(trimmed) { return trimmed }
+
+        if let components = URLComponents(string: trimmed),
+           let videoId = components.queryItems?.first(where: { $0.name == "v" })?.value,
+           isValidYouTubeVideoId(videoId) {
+            return videoId
+        }
+
+        let lower = trimmed.lowercased()
+        for marker in ["youtu.be/", "embed/", "shorts/", "live/", "v/"] {
+            if let range = lower.range(of: marker) {
+                let after = trimmed[range.upperBound...]
+                let candidate = String(after.split(separator: "?").first ?? Substring(after))
+                    .split(separator: "/")
+                    .first
+                    .map(String.init) ?? ""
+                if isValidYouTubeVideoId(candidate) { return candidate }
             }
         }
-        // Maybe it's already just the ID
-        if url.count == 11 { return url }
         return nil
+    }
+
+    private func isValidYouTubeVideoId(_ value: String) -> Bool {
+        guard value.count == 11 else { return false }
+        return value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
     }
 }

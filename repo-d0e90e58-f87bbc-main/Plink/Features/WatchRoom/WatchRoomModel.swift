@@ -16,7 +16,9 @@
 
 import Foundation
 import Observation
+#if canImport(UIKit)
 import UIKit  // PATCH 16: UIApplication + UIWindowScene for Rutube fallback presentation
+#endif
 
 @MainActor
 @Observable
@@ -67,6 +69,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     /// May be recovered after connect if create/join stripped mediaItem.
     public private(set) var mediaSource: PlaybackSource?
     public private(set) var mediaId: String?  // P1-33: typed media ID for host commands
+    public private(set) var roomCode: String?
     public let currentUserId: String  // P1-32: identity via init, not UserDefaults
     public let currentUsername: String  // P1-32
     private var chatCatchupCursor: String?  // P0-59: opaque server cursor
@@ -99,6 +102,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         ticketProvider: @escaping (String) async throws -> RealtimeTicket,
         mediaSource: PlaybackSource? = nil,
         mediaId: String? = nil,
+        roomCode: String? = nil,
         chatCatchupClient: ChatCatchupClient? = nil,
         clock: ClockSynchronizer? = nil,
         coordinator: PlaybackCoordinator? = nil,
@@ -109,6 +113,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         self.currentUsername = currentUsername
         self.mediaSource = mediaSource
         self.mediaId = mediaId
+        self.roomCode = roomCode
         self.chatCatchupClient = chatCatchupClient
         self.roomHostId = roomHostId
         let resolvedClock = clock ?? ClockSynchronizer()
@@ -139,6 +144,37 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         Task { @MainActor [danmakuEngine] in
             await danmakuEngine.configure(laneCount: 5)
         }
+    }
+
+    // MARK: - Invite / Share
+
+    public var shareRoomId: String { _roomId }
+
+    public var displayRoomCode: String {
+        if let roomCode, !roomCode.isEmpty { return roomCode.uppercased() }
+        return String(_roomId.replacingOccurrences(of: "-", with: "").prefix(6)).uppercased()
+    }
+
+    public var roomDeepLink: URL {
+        URL(string: "plink://room/\(_roomId)")!
+    }
+
+    public var roomFallbackURL: URL {
+        URL(string: "https://plink.app/join/\(_roomId)")!
+    }
+
+    public var roomShareText: String {
+        "Смотри со мной в Plink 🎬\nКод комнаты: \(displayRoomCode)\n\(roomDeepLink.absoluteString)\nЕсли ссылка не открылась: \(roomFallbackURL.absoluteString)"
+    }
+
+    // MARK: - Lazy Auth / Smart Wall
+
+    func checkServiceAccess(for service: ServiceType) -> Bool {
+        Self.checkServiceAccess(for: service)
+    }
+
+    static func checkServiceAccess(for service: ServiceType) -> Bool {
+        ServiceAuthStore.hasAccess(to: service)
     }
 
     // MARK: - Lifecycle
@@ -189,7 +225,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
                 }
             } catch {
                 let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                lastError = detail
+                lastError = "Не удалось загрузить видео: \(detail)"
             }
         } else {
             lastError = "Нет медиа в комнате — выберите YouTube-видео при создании"
@@ -211,7 +247,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         guard let source = mediaSource else { return nil }
         guard case .youtube(let ytId) = source else { return source }
 
-        NSLog("[WatchRoom] resolving YouTube playback source, videoId=\(ytId)")
+        #if DEBUG
         let nativeTask = Task.detached(priority: .userInitiated) {
             await Self.extractYouTubeNativePlaybackSource(videoId: ytId)
         }
@@ -229,14 +265,13 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
         if let nativeWithinGrace {
             mediaSource = nativeWithinGrace
-            NSLog("[WatchRoom] YouTube native stream resolved before embedded fallback")
             return nativeWithinGrace
         }
 
         Task.detached(priority: .utility) {
             _ = await nativeTask.value
         }
-        NSLog("[WatchRoom] YouTube native extraction is still resolving - using embedded fallback")
+        #endif
         return source
     }
 
@@ -253,6 +288,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
     }
 
+    #if DEBUG
     /// Extract and cache a native YouTube stream source off the main actor.
     /// Returns nil if extraction fails; callers fall back to .youtube WKWebView.
     private nonisolated static func extractYouTubeNativePlaybackSource(videoId: String) async -> PlaybackSource? {
@@ -280,7 +316,6 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             api.authToken = KeychainHelper.read(for: "rave_auth_token")
         }
         guard let token = api.authToken else {
-            NSLog("[WatchRoom] extractYouTubeStreamURL: no auth token")
             return nil
         }
 
@@ -295,7 +330,6 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                NSLog("[WatchRoom] extractYouTubeStreamURL: HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
                 return nil
             }
             struct StreamInfo: Decodable {
@@ -305,15 +339,14 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             let info = try JSONDecoder().decode(StreamInfo.self, from: data)
             let urlString = info.hlsURL ?? info.streamURL
             guard let urlString, !urlString.isEmpty, let url = URL(string: urlString) else {
-                NSLog("[WatchRoom] extractYouTubeStreamURL: no streamURL in response")
                 return nil
             }
             return url
         } catch {
-            NSLog("[WatchRoom] extractYouTubeStreamURL error: \(error.localizedDescription)")
             return nil
         }
     }
+    #endif
 
     public func disconnect() {
         stateChangesTask?.cancel()
@@ -1020,6 +1053,7 @@ public final class WatchRoomModel: RealtimeClientDelegate {
 
     // PATCH 14: open current Rutube video in SFSafariViewController.
     // Called by WatchRoomScreen when user taps "Open in Rutube" toast.
+    #if canImport(UIKit)
     func openInRutubeExternal() {
         guard let rutube = coordinator.currentController as? RutubePlaybackController else {
             return
@@ -1036,6 +1070,9 @@ public final class WatchRoomModel: RealtimeClientDelegate {
         }
         rutube.openInExternalPlayer(from: topVC)
     }
+    #else
+    func openInRutubeExternal() {}
+    #endif
 
     private var didLeaveRoom = false
 
@@ -1075,14 +1112,18 @@ public final class WatchRoomModel: RealtimeClientDelegate {
     func startPiP() {}
     func enterFullscreen() {
         // PATCH: force landscape rotation — do NOT disconnect or stop playback
+        #if canImport(UIKit)
         OrientationManager.shared.lockOrientation(.landscape)
         OrientationManager.shared.forceLandscape()
+        #endif
     }
 
     func exitFullscreen() {
         // Return to portrait — do NOT disconnect
+        #if canImport(UIKit)
         OrientationManager.shared.lockOrientation(.portrait)
         OrientationManager.shared.forcePortrait()
+        #endif
     }
     func openEmojiPicker() {}  // PATCH 14: kept for back-compat; picker is now shown by composer
     func toggleMicrophone() async {
@@ -1228,6 +1269,7 @@ public struct ParticipantSnapshot: Sendable, Equatable {
 }
 
 
+#if DEBUG
 private actor YouTubeNativeStreamCache {
     static let shared = YouTubeNativeStreamCache()
 
@@ -1252,3 +1294,4 @@ private actor YouTubeNativeStreamCache {
         entries[videoId] = Entry(source: source, createdAt: Date())
     }
 }
+#endif

@@ -11,5 +11,5 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "exclude": ["src/legacy-index.ts", "src/websocket/legacy-ws-handler.ts"]
+  "exclude": []
 }

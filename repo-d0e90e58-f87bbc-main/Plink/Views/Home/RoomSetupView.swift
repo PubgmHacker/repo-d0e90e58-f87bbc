@@ -390,9 +390,6 @@ struct RoomSetupView: View {
         errorMessage = nil
         HapticManager.impact(.medium)
 
-        // 🔧 DEBUG: log what we received from ServiceBrowserView
-        print("🔍 RoomSetupView.createRoom: contentURL='\(contentURL)', contentTitle='\(contentTitle)', service=\(service.rawValue)")
-
         // Build MediaItem from the browsed URL
         // 🔧 FIX: set proper `source` based on the selected service — was always `.url`.
         // RoomView uses this to pick playbackMode (YouTube embed URL → WebView,
@@ -462,7 +459,6 @@ struct RoomSetupView: View {
             } else {
                 finalThumbnailURL = nil
             }
-            print("🖼️ RoomSetupView v33: thumbnailURL = \(finalThumbnailURL ?? "nil")")
 
             // 🔧 v97: Save videoId for server-side extraction
             let savedVideoId: String?
@@ -483,7 +479,6 @@ struct RoomSetupView: View {
                 source: finalSource,
                 videoId: savedVideoId
             )
-            print("🔍 RoomSetupView.createRoom: mediaItem.streamURL='\(mediaItem.streamURL.prefix(80))', source=\(mediaItem.source.rawValue)")
 
             do {
                 // 🔧 FIX: save selected theme to PremiumStatusManager so RoomView

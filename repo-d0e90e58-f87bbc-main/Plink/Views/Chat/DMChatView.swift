@@ -114,7 +114,7 @@ struct DMChatView: View {
                                     nextSenderId: nextId,
                                     isOwn: own
                                 )
-                                DMBubble(
+                                DMMessageRow(
                                     message: msg,
                                     isOwn: own,
                                     avatarURL: own ? meAvatarURL : peerAvatarURL,
@@ -132,7 +132,7 @@ struct DMChatView: View {
                                     }
                                 )
                                 .id(msg.id)
-                                .padding(.horizontal, 10)
+                                .padding(.horizontal, 8)
                                 .padding(.top, cluster.topPadding)
                             }
                         }
@@ -246,15 +246,15 @@ struct DMChatView: View {
                 quiet: false
             )
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { break }
                 await friendManager.loadFriends()
-                // quiet:false every poll so server newest messages always win
+                // Quiet polling prevents full-list visual churn and reduces chat lag.
                 await dmService.loadHistory(
                     friendId: friend.id,
                     friendName: liveFriend.displayTitle,
                     friendAvatarURL: liveFriend.avatarURL,
-                    quiet: false
+                    quiet: true
                 )
             }
         }
@@ -568,11 +568,13 @@ struct DMChatView: View {
                     .frame(width: 36, height: 36)
             }
 
-            TextField("Сообщение", text: $messageText)
+            TextField("Сообщение", text: $messageText, axis: .vertical)
                 .font(.system(size: 17))
                 .foregroundStyle(.white)
+                .lineLimit(1...5)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
                 .frame(minHeight: 42)
                 .background(
                     Capsule(style: .continuous)
@@ -859,12 +861,43 @@ private struct DMCircleAvatar: View {
 
 // MARK: - DM Bubble (Telegram clusters + reactions + glass capsules)
 
+private struct DMMessageRow: View {
+    let message: DirectMessage
+    let isOwn: Bool
+    var avatarURL: URL?
+    var letter: String = "?"
+    var cluster: ChatClusterLayout
+    var onReact: () -> Void
+    var onToggleChip: (String) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            DMBubble(
+                message: message,
+                isOwn: isOwn,
+                avatarURL: avatarURL,
+                letter: letter,
+                cluster: cluster,
+                maxBubbleWidth: min(
+                    PlinkTelegramBubbleMetrics.maxBubbleWidth,
+                    geo.size.width * PlinkTelegramBubbleMetrics.maxWidthRatio
+                ),
+                onReact: onReact,
+                onToggleChip: onToggleChip
+            )
+        }
+        .frame(minHeight: 1)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 private struct DMBubble: View {
     let message: DirectMessage
     let isOwn: Bool
     var avatarURL: URL?
     var letter: String = "?"
     var cluster: ChatClusterLayout
+    var maxBubbleWidth: CGFloat = PlinkTelegramBubbleMetrics.maxBubbleWidth
     var onReact: () -> Void
     var onToggleChip: (String) -> Void
 
@@ -883,7 +916,8 @@ private struct DMBubble: View {
                     if message.isVoiceNote {
                         VoiceNoteBubble(
                             message: message,
-                            isOwn: isOwn
+                            isOwn: isOwn,
+                            maxWidth: maxBubbleWidth
                         )
                     } else {
                         PlinkMessageBubble(
@@ -937,7 +971,8 @@ private struct DMBubble: View {
                     .padding(.horizontal, 2)
                 }
             }
-            .frame(maxWidth: PlinkTelegramBubbleMetrics.maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
+            .frame(maxWidth: maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
+            .fixedSize(horizontal: false, vertical: true)
 
             if isOwn {
                 avatarSlot
@@ -1008,6 +1043,7 @@ private struct DMBubble: View {
 private struct VoiceNoteBubble: View {
     let message: DirectMessage
     let isOwn: Bool
+    var maxWidth: CGFloat = PlinkTelegramBubbleMetrics.maxVoiceBubbleWidth
     @State private var player = VoiceNotePlayer.shared
     @State private var playError: String?
 
@@ -1090,16 +1126,25 @@ private struct VoiceNoteBubble: View {
                     Spacer(minLength: 0)
                 }
             }
-            .frame(minWidth: 150, maxWidth: 220)
+            .frame(
+                minWidth: PlinkTelegramBubbleMetrics.minVoiceBubbleWidth,
+                idealWidth: min(maxWidth, PlinkTelegramBubbleMetrics.maxVoiceBubbleWidth),
+                maxWidth: min(maxWidth, PlinkTelegramBubbleMetrics.maxVoiceBubbleWidth),
+                alignment: .leading
+            )
         }
-        .padding(.horizontal, PlinkTelegramBubbleMetrics.padH)
+        .frame(maxWidth: min(maxWidth, PlinkTelegramBubbleMetrics.maxVoiceBubbleWidth), alignment: .leading)
+        .padding(.horizontal, 12)
         .padding(.vertical, PlinkTelegramBubbleMetrics.padV)
         .background(
             ZStack {
                 Color(hex: "#1A1C20")
                 if isOwn {
                     LinearGradient(
-                        colors: [Cinema2026.accent, Cinema2026.accent.opacity(0.92)],
+                        colors: [
+                            Color(red: 0.22, green: 0.64, blue: 1.0),
+                            Color(red: 0.11, green: 0.78, blue: 0.48)
+                        ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -1113,8 +1158,7 @@ private struct VoiceNoteBubble: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.white.opacity(isOwn ? 0.20 : 0.14), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.40), radius: 8, y: 3)
-        .shadow(color: .black.opacity(0.20), radius: 1, y: 0.5)
+        .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
     }
 }
 

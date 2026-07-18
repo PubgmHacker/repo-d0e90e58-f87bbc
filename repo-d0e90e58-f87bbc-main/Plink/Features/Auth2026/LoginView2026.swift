@@ -14,6 +14,7 @@ struct LoginView2026: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
 
+    var sessionMessage: String? = nil
     let onAuthenticated: () -> Void
     let onRegister: () -> Void
 
@@ -62,6 +63,22 @@ struct LoginView2026: View {
 
                     // ── Auth card (glassmorphism) ──
                     authCard
+
+                    if let sessionMessage {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color(hex: 0xD7A750))
+                            Text(sessionMessage)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Cinema2026.text)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: 0xD7A750).opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: 0xD7A750).opacity(0.35), lineWidth: 1))
+                        .padding(.top, 14)
+                    }
 
                     // ── Toggle hint ──
                     HStack(spacing: 4) {

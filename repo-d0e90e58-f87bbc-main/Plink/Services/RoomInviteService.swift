@@ -53,9 +53,7 @@ final class RoomInviteService: ObservableObject {
             }
             pendingInvites = Array(byId.values).sorted { $0.timestamp > $1.timestamp }
             saveInvites()
-            print("[RoomInvite] pending=\(pendingInvites.count)")
         } catch {
-            print("[RoomInvite] refresh error: \(error.localizedDescription)")
         }
     }
 
@@ -70,7 +68,6 @@ final class RoomInviteService: ObservableObject {
 
         // Single send via shared DM service (optimistic + server)
         DMChatService.shared.sendMessage(body, to: friend)
-        print("[RoomInvite] sent to \(friend.username) code=\(code)")
     }
 
     // MARK: - Add Invite (local / push)
@@ -96,7 +93,6 @@ final class RoomInviteService: ObservableObject {
             await markInviteDMRead(invite)
             return room
         } catch {
-            print("[RoomInvite] accept failed: \(error.localizedDescription)")
             // Keep dismissed — user can re-join by code; card must not linger
             return nil
         }

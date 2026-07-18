@@ -32,6 +32,7 @@ public enum WatchRoomCompositionRoot {
                 username: username,
                 mediaSource: mediaSource,
                 mediaId: mediaId,
+                roomCode: room.code,
                 apiBaseURL: apiBaseURL,
                 wsBaseURL: wsBaseURL,
                 authToken: authToken,
@@ -201,6 +202,7 @@ public enum WatchRoomCompositionRoot {
         username: String,
         mediaSource: PlaybackSource?,
         mediaId: String?,
+        roomCode: String?,
         apiBaseURL: URL,
         wsBaseURL: URL,
         authToken: String,
@@ -227,6 +229,7 @@ public enum WatchRoomCompositionRoot {
             ticketProvider: ticketProvider,
             mediaSource: mediaSource,
             mediaId: mediaId,
+            roomCode: roomCode,
             chatCatchupClient: catchupClient,
             roomHostId: hostId
         )

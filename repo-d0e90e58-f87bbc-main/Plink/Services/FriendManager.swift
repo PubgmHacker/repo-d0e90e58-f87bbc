@@ -127,10 +127,7 @@ final class FriendManager: ObservableObject {
 
     func loadFriends() async {
         ensureToken()
-        guard api.authToken != nil else {
-            print("[Friends] loadFriends: no auth token")
-            return
-        }
+        guard api.authToken != nil else { return }
         do {
             let dtos: [FriendDTO] = try await api.request("friends")
             var next = dtos.map { $0.toFriend() }
@@ -174,9 +171,9 @@ final class FriendManager: ObservableObject {
                 // ensure observers refresh even if only URL string changed.
                 NotificationCenter.default.post(name: .plinkAvatarsDidChange, object: PlinkAvatarURL.sessionBust)
             }
-            print("[Friends] loaded \(friends.count) friends")
+            Logger.api.info("Friends loaded")
         } catch {
-            print("[Friends] loadFriends error: \(error.localizedDescription)")
+            Logger.api.warn("Friends load failed")
         }
     }
 
@@ -203,7 +200,7 @@ final class FriendManager: ObservableObject {
             return true
         } catch {
             // Local pin already applied — list still works offline
-            print("[Friends] pin sync: \(error.localizedDescription)")
+            Logger.api.warn("Friend pin sync failed")
             return true
         }
     }
@@ -214,7 +211,7 @@ final class FriendManager: ObservableObject {
             let dtos: [IncomingRequestDTO] = try await api.request("friends/requests/incoming")
             incomingRequests = dtos.map { $0.toFriendRequest() }
         } catch {
-            print("[Friends] loadIncoming error: \(error.localizedDescription)")
+            Logger.api.warn("Incoming friend requests load failed")
         }
     }
 
@@ -225,7 +222,7 @@ final class FriendManager: ObservableObject {
             outgoingRequests = dtos.map { $0.toFriendRequest() }
         } catch {
             // Older backends without outgoing endpoint — keep local list
-            print("[Friends] loadOutgoing error: \(error.localizedDescription)")
+            Logger.api.warn("Outgoing friend requests load failed")
         }
     }
 
@@ -269,7 +266,7 @@ final class FriendManager: ObservableObject {
             return true
         } catch {
             errorMessage = friendlyError(error)
-            print("[Friends] sendRequest error: \(error.localizedDescription)")
+            Logger.api.warn("Friend request send failed")
             return false
         }
     }
@@ -377,7 +374,7 @@ final class FriendManager: ObservableObject {
             let dtos: [UserPreviewDTO] = try await api.request("friends/search", query: ["q": cleanedQuery])
             searchResults = dtos.map { $0.toUserPreview() }
         } catch {
-            print("[Friends] search error: \(error.localizedDescription)")
+            Logger.api.warn("Friend search failed")
             searchResults = []
             errorMessage = friendlyError(error)
         }

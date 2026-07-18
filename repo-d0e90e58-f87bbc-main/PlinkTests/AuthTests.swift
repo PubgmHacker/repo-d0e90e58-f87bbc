@@ -205,7 +205,7 @@ final class AuthTests: XCTestCase {
         XCTAssertEqual(auth.currentUser?.role, "ADMIN")
     }
 
-    func testVerifyAdminCode_withInvalidCode_throws() async {
+    func testVerifyAdminCode_withInvalidCode_throws() async throws {
         _ = auth.seedUser(email: "admin2@example.com", password: "pw", username: "admin2")
         try await auth.signIn(email: "admin2@example.com", password: "pw")
 

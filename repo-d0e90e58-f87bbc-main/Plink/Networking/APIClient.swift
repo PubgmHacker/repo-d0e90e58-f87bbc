@@ -157,6 +157,9 @@ final class APIClient: ObservableObject, @unchecked Sendable {
             }
             return try decoder.decode(T.self, from: data)
         case 401:
+            if !Self.isPublicAuthEndpoint(path) {
+                NotificationCenter.default.post(name: Notification.Name("plinkSessionExpired"), object: nil)
+            }
             throw APIError.unauthorized
         case 404:
             throw APIError.notFound
@@ -225,6 +228,9 @@ final class APIClient: ObservableObject, @unchecked Sendable {
         case 200..<300:
             return
         case 401:
+            if !Self.isPublicAuthEndpoint(path) {
+                NotificationCenter.default.post(name: Notification.Name("plinkSessionExpired"), object: nil)
+            }
             throw APIError.unauthorized
         // 🔧 FIX M7: requestNoBody was missing 404 handling
         case 404:

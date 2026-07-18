@@ -39,7 +39,6 @@ import { livekitRoutes } from "./routes/livekit.js";
 import telemetryRoutes from './routes/telemetry.js';
 import { roomJoinDuration, syncDrift, syncHardCorrections, wsReconnectCount, presenceLeaseCount } from "./observability/slo-metrics.js";
 import { realtimeTicketRoutes } from './routes/realtime.js';
-import { legacyStreamRelayRoutes, shouldRegisterLegacyRelay } from './routes/legacy/legacyStreamRelay.js';
 import devRoutes from './routes/dev.js';
 
 export async function buildApp(): Promise<{
@@ -156,18 +155,7 @@ await fastify.register(livekitRoutes, { prefix: '/api' });  // Stage 9
   await fastify.register(telemetryRoutes, { prefix: '/api' });  // B3: sync telemetry
   await fastify.register(devRoutes, { prefix: '/api' });
 
-  // ── LEGACY stream relay (gated — App Store compliant builds skip) ──────
-  // Runbook §7: 'APP_STORE_COMPLIANT=1: только официальный embedded/provider
-  // flow. extraction/relay endpoints выключены и не входят в production
-  // route registration.'
-  if (shouldRegisterLegacyRelay()) {
-    await fastify.register(legacyStreamRelayRoutes, { prefix: '/internal/legacy/media' });
-    fastify.log.warn(
-      '⚠️ LEGACY stream relay registered — this build is NOT App Store compliant.',
-    );
-  } else {
-    fastify.log.info('✅ App Store compliant build — legacy stream relay disabled.');
-  }
+  fastify.log.info('✅ App Store compliant build — legacy stream relay removed.');
 
   // ── Realtime gateway (replaces setupWebSocketHandler) ─────────────────
   // P1-4: only construct gateway when Redis is available — gateway's
@@ -223,7 +211,7 @@ await fastify.register(livekitRoutes, { prefix: '/api' });  // Stage 9
         database: db ? 'up' : 'down',
         redis: r === null ? 'not_configured' : r ? 'up' : 'down',
         appStoreCompliant: config.APP_STORE_COMPLIANT,
-        legacyRelay: shouldRegisterLegacyRelay(),
+        legacyRelay: false,
         realtimeV2: config.REALTIME_PROTOCOL_V2,
         livekitSfu: !!(config.LIVEKIT_URL && config.LIVEKIT_API_KEY && config.LIVEKIT_API_SECRET),
         livekitSfuFlag: config.LIVEKIT_SFU,

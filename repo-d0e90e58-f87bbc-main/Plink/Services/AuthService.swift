@@ -8,6 +8,13 @@ import Foundation
 /// 🔧 FIX C2: JWT now stored in Keychain (not UserDefaults) via KeychainHelper.
 /// 🔧 FIX C3: getFreshToken() now actually refreshes via /auth/refresh.
 /// 🔧 FIX H14: AuthService is @MainActor — currentUser restore is synchronous.
+enum AuthRestoreResult: Sendable, Equatable {
+    case authenticated
+    case offlineAuthenticated
+    case unauthenticated
+    case expired
+}
+
 @MainActor
 final class AuthService: AuthServiceProtocol, @unchecked Sendable {
 
@@ -85,6 +92,32 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
         restoreSessionFromStorage()
     }
 
+    /// MVP launch gate: restore cached session, refresh token if needed, then
+    /// validate it against `/users/me`. Only an explicit 401 clears the session;
+    /// transient network/backend failures keep the cached user in offline mode.
+    func restoreAndValidateSession() async -> AuthRestoreResult {
+        restoreSessionFromStorage()
+
+        guard authToken != nil else {
+            return .unauthenticated
+        }
+
+        guard await getFreshToken() != nil else {
+            signOutLocally(postNotification: false)
+            return .expired
+        }
+
+        do {
+            _ = try await fetchCurrentUser()
+            return .authenticated
+        } catch APIError.unauthorized {
+            signOutLocally(postNotification: false)
+            return .expired
+        } catch {
+            return currentUser == nil ? .unauthenticated : .offlineAuthenticated
+        }
+    }
+
     // MARK: - Sign In (реальный запрос к серверу)
 
     func signIn(email: String, password: String) async throws -> User {
@@ -151,18 +184,7 @@ final class AuthService: AuthServiceProtocol, @unchecked Sendable {
     // MARK: - Sign Out
 
     func signOut() async throws {
-        // 🔧 FIX C2: Clear Keychain entries too
-        KeychainHelper.delete(for: Keys.authToken)
-        KeychainHelper.delete(for: Keys.tokenExpiry)
-        KeychainHelper.delete(for: Keys.refreshToken)
-        defaults.removeObject(forKey: Keys.savedUser)
-        defaults.removeObject(forKey: "plink_current_user_id")
-
-        authToken = nil
-        tokenExpiry = 0
-        refreshToken = nil
-        api.authToken = nil
-        currentUser = nil
+        signOutLocally(postNotification: true)
     }
 
     // MARK: - Current User
@@ -411,17 +433,22 @@ struct AuthUser: Codable, Sendable {
 extension AuthService {
     /// Synchronous local sign-out (no network call).
     /// Clears Keychain tokens + cached user immediately.
-    func signOutLocally() {
+    func signOutLocally(postNotification: Bool = true) {
         KeychainHelper.delete(for: Keys.authToken)
         KeychainHelper.delete(for: Keys.tokenExpiry)
         KeychainHelper.delete(for: Keys.refreshToken)
         defaults.removeObject(forKey: Keys.savedUser)
         defaults.removeObject(forKey: "plink_current_user_id")
+        defaults.removeObject(forKey: "plink_current_username")
+        defaults.removeObject(forKey: "plink_current_display_name")
+        defaults.removeObject(forKey: "plink_current_user_role")
         authToken = nil
         tokenExpiry = 0
         refreshToken = nil
         api.authToken = nil
         currentUser = nil
-        NotificationCenter.default.post(name: .plinkSignedOut, object: nil)
+        if postNotification {
+            NotificationCenter.default.post(name: .plinkSignedOut, object: nil)
+        }
     }
 }

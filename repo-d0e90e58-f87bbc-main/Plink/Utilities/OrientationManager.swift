@@ -1,9 +1,12 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 // MARK: - Orientation Manager
 /// Управление ориентацией устройства.
 /// Позволяет принудительно повернуть экран в ландшафт/портрет.
+#if canImport(UIKit)
 final class OrientationManager {
     static let shared = OrientationManager()
     private init() {}
@@ -11,13 +14,9 @@ final class OrientationManager {
     /// Принудительно повернуть в ландшафт.
     func forceLandscape() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
-        print("🔄 FORCE LANDSCAPE at \(callStack())")
-
         // macOS Catalyst / симулятор: через requestGeometryUpdate
         if #available(iOS 16.0, *) {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { error in
-                print("🔄 FORCE LANDSCAPE result: \(error)")
-            }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
             // 🔧 iOS 16+: заменённый API вместо устаревшего attemptRotationToDeviceOrientation().
             // Просит UIKit пересчитать поддерживаемые ориентации для всех VC в сцене.
             for vc in scene.windows.compactMap({ $0.rootViewController }) {
@@ -34,8 +33,6 @@ final class OrientationManager {
     /// Принудительно повернуть в портрет.
     func forcePortrait() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
-        print("🔄 FORCE PORTRAIT at \(callStack())")
-
         if #available(iOS 16.0, *) {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             // 🔧 iOS 16+: заменённый API вместо устаревшего attemptRotationToDeviceOrientation().
@@ -92,7 +89,6 @@ final class OrientationManager {
     /// Lock the device to a specific set of orientations.
     /// Pass `.all` to release the lock (allow any orientation).
     func lockOrientation(_ mask: UIInterfaceOrientationMask) {
-        print("🔒 ORIENTATION LOCK: \(mask) at \(callStack())")
         PlinkAppDelegate.orientationLock = mask
         // Force UIKit to re-evaluate the supported orientations NOW.
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
@@ -124,3 +120,15 @@ final class OrientationManager {
         lockOrientation(.all)
     }
 }
+#else
+final class OrientationManager {
+    static let shared = OrientationManager()
+    private init() {}
+    func forceLandscape() {}
+    func forcePortrait() {}
+    var isPortrait: Bool { true }
+    func unlockOrientation() {}
+    func lockToPortrait() {}
+    func lockToLandscape() {}
+}
+#endif

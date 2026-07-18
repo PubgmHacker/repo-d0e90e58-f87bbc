@@ -3,7 +3,9 @@
 
 import SwiftUI
 import PhotosUI
+#if canImport(UIKit)
 import UIKit
+#endif
 import Foundation
 
 struct V4HomeView: View {
@@ -606,7 +608,6 @@ struct V4HomeViewLive: View {
         } catch {
             await MainActor.run {
                 HapticManager.errorOccurred()
-                print("[Home] createRoomFromTrending failed: \(error)")
             }
         }
     }

@@ -145,7 +145,7 @@ final class DMChatService: ObservableObject {
                 inboxEpoch &+= 1
             }
         } catch {
-            print("[DM] refreshUnread error: \(error.localizedDescription)")
+            Logger.api.warn("DM unread refresh failed")
         }
     }
 
@@ -154,7 +154,7 @@ final class DMChatService: ObservableObject {
     func loadHistory(friendId: String, friendName: String, friendAvatarURL: String? = nil, quiet: Bool = false) async {
         ensureToken()
         guard api.authToken != nil else {
-            print("[DM] loadHistory: no token")
+            Logger.api.warn("DM history skipped without token")
             return
         }
         let convID = conversationID(with: friendId)
@@ -209,7 +209,7 @@ final class DMChatService: ObservableObject {
             // Server history is source of truth for this window (newest 200).
             // Keep only very recent optimistic locals not yet on server.
             if messages.isEmpty, let existing = conversations[convID], !existing.isEmpty {
-                print("[DM] history empty from server — keep \(existing.count) local msgs")
+                _ = existing
             } else {
                 var merged = messages
                 if let existing = conversations[convID] {
@@ -260,9 +260,9 @@ final class DMChatService: ObservableObject {
                     )
                 }
             }
-            print("[DM] history \(conversations[convID]?.count ?? 0) msgs with \(friendId)")
+            _ = convID
         } catch {
-            print("[DM] loadHistory error: \(error.localizedDescription)")
+            Logger.api.warn("DM history load failed")
             // Keep existing conversation on error
         }
     }
@@ -299,9 +299,9 @@ final class DMChatService: ObservableObject {
                 "messages/dm/\(friendId)",
                 method: .delete
             )
-            print("[DM] deleteChat ok with \(friendId)")
+            Logger.api.info("DM chat deleted")
         } catch {
-            print("[DM] deleteChat server error: \(error.localizedDescription)")
+            Logger.api.warn("DM chat delete sync failed")
             // Local clear already applied — list stays clean offline
         }
     }
@@ -426,7 +426,7 @@ final class DMChatService: ObservableObject {
                 }
             } catch {
                 errorMessage = "Голосовое: \(error.localizedDescription)"
-                print("[DM] sendVoiceNote error: \(error.localizedDescription)")
+                Logger.api.warn("DM voice note send failed")
                 // Keep optimistic row — still playable from local cache
             }
         }
@@ -527,7 +527,7 @@ final class DMChatService: ObservableObject {
                 }
             } catch {
                 errorMessage = error.localizedDescription
-                print("[DM] sendMessage error: \(error.localizedDescription)")
+                Logger.api.warn("DM send failed")
                 // Keep optimistic message visible so chat does not "disappear"
             }
         }
@@ -595,7 +595,7 @@ final class DMChatService: ObservableObject {
                 )
             }
         } catch {
-            print("[DM] react error: \(error.localizedDescription)")
+            Logger.api.warn("DM reaction sync failed")
             // Soft-fail: keep optimistic state; next history poll reconciles
         }
     }

@@ -32,13 +32,12 @@ struct ServiceBrowserView: View {
     @State private var showCreateConfirm = false
     /// 🔧 NEW: When a video page is detected, this is set to the detected video info
     @State private var detectedVideo: DetectedVideo?
-    /// 🔧 NEW: Whether this service requires auth for content
-    @State private var showAuthBanner: Bool
+    /// Smart Wall appears only when the user selects protected content.
+    @State private var authWallVideo: DetectedVideo?
 
     init(service: VideoService, onCreateRoom: @escaping (String, String) -> Void) {
         self.service = service
         self.onCreateRoom = onCreateRoom
-        self._showAuthBanner = State(initialValue: service.requiresAuth)
     }
 
     var body: some View {
@@ -47,11 +46,6 @@ struct ServiceBrowserView: View {
                 Cinema2026.background.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // 🔧 Auth banner (shown for subscription services)
-                    if showAuthBanner {
-                        authBanner
-                    }
-
                     // WebView
                     ServiceWebView(
                         initialURL: URL(string: service.browseURL)!,
@@ -68,6 +62,24 @@ struct ServiceBrowserView: View {
                     // Кнопка "Создать комнату" больше не нужна — видео автоматически
                     // открывает RoomSetupView.
                 }
+
+                if let video = authWallVideo {
+                    ServiceAuthView(
+                        service: video.service,
+                        onAuthorized: {
+                            ServiceAuthStore.markAuthorized(video.service.serviceType)
+                            authWallVideo = nil
+                            HapticManager.impact(.medium)
+                            onCreateRoom(video.embedURL, video.title ?? pageTitle)
+                        },
+                        onCancel: {
+                            authWallVideo = nil
+                            detectedVideo = nil
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(20)
+                }
             }
             .navigationTitle(service.brandName)
             .navigationBarTitleDisplayMode(.inline)
@@ -83,51 +95,19 @@ struct ServiceBrowserView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
-            // 🔧 Pack v3: АВТО-переход — мгновенно, без задержки
-            .onChange(of: detectedVideo) { _, newVideo in
-                guard let video = newVideo else { return }
-                HapticManager.impact(.medium)
-                // 🔧 DEBUG: log what we're passing to onCreateRoom
-                print("🔍 ServiceBrowserView: detected video, embedURL='\(video.embedURL)', title='\(video.title ?? "nil")', pageTitle='\(pageTitle)'")
-                onCreateRoom(video.embedURL, video.title ?? pageTitle)
+            // 🔧 Pack v3: АВТО-переход — мгновенно для free services.
+            // Smart Wall appears only when protected content is selected.
+            .onChange(of: detectedVideo) {
+                guard let video = detectedVideo else { return }
+                if WatchRoomModel.checkServiceAccess(for: video.service.serviceType) {
+                    HapticManager.impact(.medium)
+                    onCreateRoom(video.embedURL, video.title ?? pageTitle)
+                } else {
+                    authWallVideo = video
+                }
             }
         }
         .preferredColorScheme(.dark)
-    }
-
-    // MARK: - Auth Banner
-
-    private var authBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 14))
-                .foregroundColor(Cinema2026.accent)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Требуется подписка \(service.brandName)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Cinema2026.text)
-                Text("Войдите в свой аккаунт для доступа к контенту. YouTube, VK Видео и Rutube не требуют входа.")
-                    .font(.system(size: 10))
-                    .foregroundColor(Cinema2026.secondary)
-                    .lineLimit(2)
-            }
-
-            Spacer()
-
-            Button {
-                withAnimation { showAuthBanner = false }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Cinema2026.tertiary)
-                    .frame(width: 24, height: 24)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Cinema2026.accent.opacity(0.08))
-        .overlay(Rectangle().fill(Cinema2026.accent.opacity(0.2)).frame(height: 0.5))
     }
 
     // MARK: - Video Detected Banner
@@ -233,21 +213,76 @@ struct DetectedVideo: Equatable {
     let service: VideoService
 }
 
-// MARK: - VideoService + Auth Requirements
+// MARK: - Service Auth Wall
 
-extension VideoService {
-    /// 🔧 Returns true if this service requires authentication/subscription for content.
-    /// YouTube, VK Video, and Rutube have free public content.
-    /// Cinema services require subscription.
-    var requiresAuth: Bool {
-        switch self {
-        case .youtube, .vk, .rutube, .smotrim, .browser, .customURL:
-            return false  // free / public content
-        case .netflix, .disney, .kinopoisk, .ivi, .okko, .wink, .start, .premier, .kion:
-            return true   // subscription required
+struct ServiceAuthView: View {
+    let service: VideoService
+    let onAuthorized: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.72)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onCancel)
+
+            VStack(spacing: 18) {
+                ServiceLogoView(service: service, size: 58)
+                    .frame(width: 72, height: 72)
+                    .background(service.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(service.accentColor.opacity(0.32), lineWidth: 1)
+                    )
+
+                VStack(spacing: 8) {
+                    Text("Войдите в \(service.brandName)")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(Cinema2026.text)
+                        .multilineTextAlignment(.center)
+
+                    Text("Для этого сервиса host использует свой аккаунт подписки. Plink не предоставляет контент — мы только синхронизируем просмотр.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Cinema2026.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
+                    HapticManager.impact(.medium)
+                    onAuthorized()
+                } label: {
+                    Text("Я вошёл, продолжить")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Cinema2026.background)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(service.accentColor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Button("Отмена") {
+                    onCancel()
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Cinema2026.secondary)
+            }
+            .padding(22)
+            .frame(maxWidth: 340)
+            .background(Cinema2026.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 28, y: 18)
+            .padding(.horizontal, 24)
         }
     }
+}
 
+// MARK: - VideoService + Video Detection
+
+extension VideoService {
     /// 🔧 Detects if a URL is a video page for this service, and returns the
     /// embeddable video URL if so. Returns nil if the URL is not a video page.
     static func detectVideoURL(_ url: URL, for service: VideoService, title: String?) -> DetectedVideo? {

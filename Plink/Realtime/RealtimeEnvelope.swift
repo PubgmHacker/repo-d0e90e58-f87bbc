@@ -174,6 +174,8 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
     case error(ErrorMessage)
     case sessionReady(SessionReady)
     case serverDraining(ServerDraining)
+    case dmPinBroadcast(DMPinBroadcast)
+    case roleChanged(RoleChanged)
 
     public struct SyncStateMessage: Decodable, Sendable, Equatable {
         public let type: String  // "sync.state"
@@ -256,6 +258,28 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
         public let retryInMs: Int64
     }
 
+    // dm.pin.broadcast — a DM message was pinned/unpinned in a 1:1 thread.
+    // Delivered to both thread participants over their user sockets.
+    public struct DMPinBroadcast: Decodable, Sendable, Equatable {
+        public let type: String  // "dm.pin.broadcast"
+        public let protocolVersion: Int
+        public let threadUserIds: [String]  // tuple of exactly 2 user ids
+        public let messageId: String
+        public let pinnedById: String
+        public let pinnedAtMs: Int64
+    }
+
+    // P1-64: role.changed — host migration event with epoch bump.
+    public struct RoleChanged: Decodable, Sendable, Equatable {
+        public let type: String  // "role.changed"
+        public let protocolVersion: Int
+        public let roomId: String
+        public let newHostId: String
+        public let newRole: String  // "host" | "viewer"
+        public let epoch: Int64
+        public let serverTimeMs: Int64
+    }
+
     private enum DiscriminatorKey: String, CodingKey { case type, protocolVersion }
 
     public init(from decoder: Decoder) throws {
@@ -292,6 +316,10 @@ public enum RealtimeServerMessage: Decodable, Sendable, Equatable {
             self = .reactionBroadcast(try single.decode(ReactionBroadcast.self))
         case "server.draining":
             self = .serverDraining(try single.decode(ServerDraining.self))
+        case "dm.pin.broadcast":
+            self = .dmPinBroadcast(try single.decode(DMPinBroadcast.self))
+        case "role.changed":
+            self = .roleChanged(try single.decode(RoleChanged.self))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,

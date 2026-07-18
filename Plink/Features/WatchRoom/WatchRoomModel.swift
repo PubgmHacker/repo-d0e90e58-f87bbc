@@ -912,6 +912,10 @@ public final class WatchRoomModel: RealtimeClientDelegate {
             }
         case .syncState, .syncStateSnapshot, .clockProbeReply, .sessionReady:
             break
+        case .dmPinBroadcast, .roleChanged:
+            // Not watch-room state: dm.pin.broadcast is handled by the DM layer;
+            // role.changed is decoded for contract parity (no host migration UI yet).
+            break
         }
     }
 

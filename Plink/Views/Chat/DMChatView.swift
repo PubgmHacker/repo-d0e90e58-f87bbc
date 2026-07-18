@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - DM Chat View v7 — Telegram glassmorphism + reactions
 
@@ -28,6 +29,10 @@ struct DMChatView: View {
     /// Drag left past threshold → cancel (VK / Telegram).
     @State private var voiceCancelArmed = false
     @State private var voiceDragX: CGFloat = 0
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var photoDraft: ChatPhotoDraft?
+    @State private var photoCaption = ""
+    @State private var photoError: String?
     @ObservedObject private var blockManager = UserBlockManager.shared
 
     /// Telegram iOS 2026 private-chat navigation metrics.
@@ -208,6 +213,32 @@ struct DMChatView: View {
             .presentationCornerRadius(28)
             .presentationBackground(.ultraThinMaterial)
         }
+        .sheet(item: $photoDraft) { draft in
+            PhotoSendPreviewSheet(
+                draft: draft,
+                caption: $photoCaption,
+                onCancel: {
+                    photoDraft = nil
+                    selectedPhotoItem = nil
+                    photoCaption = ""
+                },
+                onSend: {
+                    dmService.sendPhoto(
+                        dataURL: draft.compressed.dataURL,
+                        previewImage: draft.compressed.image,
+                        caption: photoCaption,
+                        to: liveFriend
+                    )
+                    photoDraft = nil
+                    selectedPhotoItem = nil
+                    photoCaption = ""
+                    HapticManager.impact(.medium)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.ultraThinMaterial)
+        }
         .sheet(item: $reactionTarget) { msg in
             DMReactionPickerSheet(
                 message: msg,
@@ -233,6 +264,18 @@ struct DMChatView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .plinkChatWallpaperChanged)) { _ in
             wallpaper = PlinkChatWallpaperPrefs.current
+        }
+        .onChange(of: selectedPhotoItem) { _, item in
+            guard let item else { return }
+            Task { await preparePhotoDraft(from: item) }
+        }
+        .alert("Фото", isPresented: Binding(
+            get: { photoError != nil },
+            set: { if !$0 { photoError = nil } }
+        )) {
+            Button("OK", role: .cancel) { photoError = nil }
+        } message: {
+            Text(photoError ?? "")
         }
         .task {
             dmService.chatDidOpen(friendId: friend.id)
@@ -263,6 +306,25 @@ struct DMChatView: View {
     // MARK: - Telegram 2026 glass chat header
 
     /// Layout: [← Чаты · badge]  [  ник / online  ]  [ avatar ⋯ ]
+    private func preparePhotoDraft(from item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                photoError = "Не удалось прочитать фото"
+                return
+            }
+            let compressed = try ChatImageCompressor.compress(data)
+            await MainActor.run {
+                photoCaption = ""
+                photoDraft = ChatPhotoDraft(compressed: compressed)
+            }
+        } catch {
+            await MainActor.run {
+                photoError = "Не удалось подготовить фото: \(error.localizedDescription)"
+                selectedPhotoItem = nil
+            }
+        }
+    }
+
     private var telegramNavBar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -556,6 +618,17 @@ struct DMChatView: View {
 
     private var composerLeading: some View {
         HStack(spacing: 10) {
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Cinema2026.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Галерея")
+            .simultaneousGesture(TapGesture().onEnded { Task { await PlinkPermissions.preparePhotoPicker() } })
+
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     showEmojiPicker.toggle()
@@ -565,7 +638,7 @@ struct DMChatView: View {
                 Image(systemName: showEmojiPicker ? "keyboard.fill" : "face.smiling.fill")
                     .font(.system(size: 22))
                     .foregroundStyle(showEmojiPicker ? Cinema2026.accent : Color.white.opacity(0.55))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 34, height: 36)
             }
 
             TextField("Сообщение", text: $messageText, axis: .vertical)
@@ -903,6 +976,10 @@ private struct DMBubble: View {
 
     private let avatarSize: CGFloat = PlinkTelegramBubbleMetrics.avatarSize
 
+    private var photoURL: URL? {
+        APIClient.shared.baseURL.appendingPathComponent("messages/photo/\(message.id)")
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isOwn {
@@ -919,6 +996,16 @@ private struct DMBubble: View {
                             isOwn: isOwn,
                             maxWidth: maxBubbleWidth
                         )
+                    } else if message.isPhotoMessage {
+                        PlinkPhotoMessageBubble(
+                            imageURL: photoURL,
+                            localImage: ChatPhotoCache.shared.image(for: message.id),
+                            caption: message.text,
+                            isOwn: isOwn,
+                            styleID: message.bubbleStyle,
+                            isLastInGroup: cluster.isLastInGroup
+                        )
+                        .frame(maxWidth: min(maxBubbleWidth, PlinkTelegramBubbleMetrics.maxPhotoBubbleWidth), alignment: isOwn ? .trailing : .leading)
                     } else {
                         PlinkMessageBubble(
                             text: message.text,
@@ -1034,6 +1121,63 @@ private struct DMBubble: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
         } else {
             Color.clear.frame(width: avatarSize, height: avatarSize)
+        }
+    }
+}
+
+// MARK: - Photo preview sheet
+
+struct ChatPhotoDraft: Identifiable {
+    let id = UUID()
+    let compressed: ChatCompressedImage
+}
+
+struct PhotoSendPreviewSheet: View {
+    let draft: ChatPhotoDraft
+    @Binding var caption: String
+    let onCancel: () -> Void
+    let onSend: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Image(uiImage: draft.compressed.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 320)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
+
+                TextField("Добавить подпись…", text: $caption, axis: .vertical)
+                    .lineLimit(1...4)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Cinema2026.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Cinema2026.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .onChange(of: caption) { _, value in
+                        if value.count > 240 { caption = String(value.prefix(240)) }
+                    }
+
+                Text("Сжато до \(max(1, draft.compressed.byteCount / 1024)) KB")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Cinema2026.secondary)
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .background(Cinema2026.background.ignoresSafeArea())
+            .navigationTitle("Отправить фото")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Отправить", action: onSend)
+                        .fontWeight(.bold)
+                }
+            }
         }
     }
 }

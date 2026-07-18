@@ -418,7 +418,9 @@ public final class RESTChatCatchupClient: ChatCatchupClient, @unchecked Sendable
                     senderId: m.senderId,
                     senderName: m.senderName,
                     text: m.text,
-                    createdAtMs: m.createdAtMs
+                    createdAtMs: m.createdAtMs,
+                    mediaType: m.mediaType,
+                    hasMedia: m.hasMedia ?? false
                 )
             },
             hasMore: decoded.hasMore,
@@ -493,4 +495,6 @@ private struct MessageDTO: Decodable {
     let senderName: String
     let text: String
     let createdAtMs: Int64
+    let mediaType: String?
+    let hasMedia: Bool?
 }

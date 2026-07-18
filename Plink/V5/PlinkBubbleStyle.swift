@@ -20,6 +20,9 @@
 
 import SwiftUI
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - BubbleStyleRegistry
 
@@ -438,6 +441,8 @@ enum PlinkTelegramBubbleMetrics {
     /// Telegram bubble max width as share of available chat width.
     static let maxWidthRatio: CGFloat = 0.78
     static let maxBubbleWidth: CGFloat = 320
+    static let maxPhotoBubbleWidth: CGFloat = 260
+    static let maxPhotoBubbleHeight: CGFloat = 320
     static let minVoiceBubbleWidth: CGFloat = 168
     static let maxVoiceBubbleWidth: CGFloat = 238
     static let avatarSize: CGFloat = 32
@@ -667,6 +672,200 @@ struct PlinkMessageBubble: View {
                     lineWidth: max(frame.borderWidth, 1)
                 )
         }
+    }
+}
+
+// MARK: - Chat image compression/cache
+
+struct ChatCompressedImage: Sendable {
+    let dataURL: String
+    let image: UIImage
+    let byteCount: Int
+}
+
+enum ChatImageCompressor {
+    static func compress(_ data: Data, maxDimension: CGFloat = 1600, maxBytes: Int = 2_100_000) throws -> ChatCompressedImage {
+        guard let source = UIImage(data: data) else { throw URLError(.cannotDecodeContentData) }
+        let normalized = normalize(source)
+        let resized = resize(normalized, maxDimension: maxDimension)
+        var quality: CGFloat = 0.82
+        var jpeg = resized.jpegData(compressionQuality: quality)
+        while let current = jpeg, current.count > maxBytes, quality > 0.42 {
+            quality -= 0.08
+            jpeg = resized.jpegData(compressionQuality: quality)
+        }
+        guard let final = jpeg, final.count <= maxBytes else { throw URLError(.dataLengthExceedsMaximum) }
+        return ChatCompressedImage(
+            dataURL: "data:image/jpeg;base64,\(final.base64EncodedString())",
+            image: resized,
+            byteCount: final.count
+        )
+    }
+
+    private static func normalize(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+        let renderer = UIGraphicsImageRenderer(size: image.size)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: image.size)) }
+    }
+
+    private static func resize(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxDimension else { return image }
+        let scale = maxDimension / longest
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+    }
+}
+
+@MainActor
+final class ChatPhotoCache {
+    static let shared = ChatPhotoCache()
+    private var images: [String: UIImage] = [:]
+
+    func register(_ image: UIImage, for messageId: String) {
+        images[messageId] = image
+    }
+
+    func promote(from localId: String, to serverId: String) {
+        if let image = images[localId] {
+            images[serverId] = image
+        }
+    }
+
+    func image(for messageId: String) -> UIImage? {
+        images[messageId]
+    }
+}
+
+// MARK: - Shared photo bubble
+
+struct PlinkPhotoMessageBubble: View {
+    let imageURL: URL?
+    let localImage: UIImage?
+    let caption: String
+    let isOwn: Bool
+    var styleID: String? = nil
+    var isPending: Bool = false
+    var isFailed: Bool = false
+    var isLastInGroup: Bool = true
+
+    @State private var remoteImage: UIImage?
+    @State private var isLoading = false
+    @State private var loadFailed = false
+
+    private var shape: V5BubbleShape {
+        V5BubbleShape(isOutgoing: isOwn, isLastInGroup: isLastInGroup)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: caption.isEmpty ? 0 : 8) {
+            photoContent
+                .frame(maxWidth: PlinkTelegramBubbleMetrics.maxPhotoBubbleWidth)
+                .frame(height: 188)
+                .clipped()
+                .overlay(alignment: .topTrailing) {
+                    if isPending || isFailed {
+                        HStack(spacing: 4) {
+                            Image(systemName: isFailed ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill")
+                            Text(isFailed ? "Ошибка" : "Отправка")
+                        }
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.48), in: Capsule())
+                        .padding(8)
+                    }
+                }
+
+            if !caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                MessageRichText(text: caption, fontSize: PlinkTelegramBubbleMetrics.fontSize, textColor: .white)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            }
+        }
+        .background(
+            ZStack {
+                Color(hex: "#1A1C20")
+                photoFillLayer.opacity(caption.isEmpty ? 0.72 : 1)
+            }
+        )
+        .clipShape(shape)
+        .overlay(photoBorderLayer)
+        .shadow(color: .black.opacity(0.20), radius: 3, y: 1)
+        .task(id: imageURL?.absoluteString) {
+            await loadRemoteIfNeeded()
+        }
+        .accessibilityLabel(caption.isEmpty ? "Фото" : "Фото: \(caption)")
+    }
+
+    @ViewBuilder
+    private var photoContent: some View {
+        if let localImage {
+            Image(uiImage: localImage)
+                .resizable()
+                .scaledToFill()
+        } else if let remoteImage {
+            Image(uiImage: remoteImage)
+                .resizable()
+                .scaledToFill()
+        } else {
+            ZStack {
+                LinearGradient(
+                    colors: [Color.white.opacity(0.08), Color.white.opacity(0.03)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                VStack(spacing: 8) {
+                    Image(systemName: loadFailed ? "photo.badge.exclamationmark" : "photo")
+                        .font(.system(size: 28, weight: .semibold))
+                    Text(loadFailed ? "Не удалось загрузить" : "Фото")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(Color.white.opacity(0.72))
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                        .offset(y: 42)
+                }
+            }
+        }
+    }
+
+    private func loadRemoteIfNeeded() async {
+        guard localImage == nil, remoteImage == nil, let imageURL else { return }
+        isLoading = true
+        loadFailed = false
+        defer { isLoading = false }
+        do {
+            var request = URLRequest(url: imageURL)
+            let token = APIClient.shared.authToken ?? KeychainHelper.read(for: "rave_auth_token")
+            if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let image = UIImage(data: data) else {
+                loadFailed = true
+                return
+            }
+            remoteImage = image
+        } catch {
+            loadFailed = true
+        }
+    }
+
+    @ViewBuilder
+    private var photoFillLayer: some View {
+        if isOwn {
+            LinearGradient(colors: [Color(red: 0.22, green: 0.64, blue: 1.0), Color(red: 0.11, green: 0.78, blue: 0.48)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        } else {
+            LinearGradient(colors: [Color(hex: "#2B3138"), Color(hex: "#232930")], startPoint: .top, endPoint: .bottom)
+        }
+    }
+
+    private var photoBorderLayer: some View {
+        shape.stroke(isOwn ? Color.white.opacity(0.22) : Color.white.opacity(0.14), lineWidth: 1)
     }
 }
 

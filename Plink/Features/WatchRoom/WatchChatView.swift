@@ -1,6 +1,9 @@
 // Plink/Features/WatchRoom/WatchChatView.swift — PATCH 02 polish + P0 report/block/kick
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct WatchChatView: View {
     let model: WatchRoomModel
@@ -27,6 +30,7 @@ struct WatchChatView: View {
                         )
                         WatchChatBubbleInline(
                             message: message,
+                            roomId: model.roomId ?? model.shareRoomId,
                             isOwn: isOwn,
                             cluster: cluster,
                             onRetry: { model.retryChatMessage(message) }
@@ -257,6 +261,7 @@ private struct ChatReportSheet: View {
 
 private struct WatchChatBubbleInline: View {
     let message: ChatMessageInfo
+    let roomId: String
     let isOwn: Bool
     var cluster: ChatClusterLayout = ChatClusterLayout.compute(
         senderId: "", previousSenderId: nil, nextSenderId: nil, isOwn: false
@@ -264,6 +269,21 @@ private struct WatchChatBubbleInline: View {
     let onRetry: () -> Void
 
     private let avatarSize: CGFloat = PlinkTelegramBubbleMetrics.avatarSize
+
+    private var photoURL: URL? {
+        guard let messageId = message.messageId else { return nil }
+        return APIClient.shared.baseURL.appendingPathComponent("rooms/\(roomId)/messages/\(messageId)/photo")
+    }
+
+    private var localPhotoImage: UIImage? {
+        if let messageId = message.messageId, let image = ChatPhotoCache.shared.image(for: messageId) {
+            return image
+        }
+        if let clientMessageId = message.clientMessageId {
+            return ChatPhotoCache.shared.image(for: clientMessageId)
+        }
+        return nil
+    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -291,14 +311,28 @@ private struct WatchChatBubbleInline: View {
                 }
 
                 // Always use style from message so all clients see sender's bubble
-                PlinkMessageBubble(
-                    text: message.text,
-                    isOwn: isOwn,
-                    styleID: message.bubbleStyle,
-                    fontSize: PlinkTelegramBubbleMetrics.fontSize,
-                    isLastInGroup: cluster.isLastInGroup
-                )
-                .frame(maxWidth: PlinkTelegramBubbleMetrics.maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
+                if message.isPhotoMessage {
+                    PlinkPhotoMessageBubble(
+                        imageURL: photoURL,
+                        localImage: localPhotoImage,
+                        caption: message.text,
+                        isOwn: isOwn,
+                        styleID: message.bubbleStyle,
+                        isPending: message.isPending,
+                        isFailed: message.isFailed,
+                        isLastInGroup: cluster.isLastInGroup
+                    )
+                    .frame(maxWidth: PlinkTelegramBubbleMetrics.maxPhotoBubbleWidth, alignment: isOwn ? .trailing : .leading)
+                } else {
+                    PlinkMessageBubble(
+                        text: message.text,
+                        isOwn: isOwn,
+                        styleID: message.bubbleStyle,
+                        fontSize: PlinkTelegramBubbleMetrics.fontSize,
+                        isLastInGroup: cluster.isLastInGroup
+                    )
+                    .frame(maxWidth: PlinkTelegramBubbleMetrics.maxBubbleWidth, alignment: isOwn ? .trailing : .leading)
+                }
 
                 if message.isPending {
                     Text("Sending…")
@@ -371,6 +405,8 @@ private struct ChatAvatarInline: View {
         }
         .frame(width: 28, height: 28)
         .clipShape(Circle())
+        .ifTransform(message.isAdmin) { $0.adminStroke(lineWidth: 2, animated: false) }
+        .ifTransform(!message.isAdmin && message.isPremium) { $0.premiumStroke(lineWidth: 2, animated: false) }
         .id("room-av-\(message.senderId)-\(avatarURL?.absoluteString ?? letter)")
         .accessibilityHidden(true)
     }

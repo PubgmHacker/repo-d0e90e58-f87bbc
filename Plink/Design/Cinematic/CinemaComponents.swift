@@ -156,12 +156,61 @@ struct PosterImage: View {
 }
 
 // MARK: - adminStroke + premiumStroke (used by AvatarView's RingModifier)
-extension View {
-    func adminStroke(lineWidth: CGFloat = 2) -> some View {
-        self.overlay(Circle().stroke(Cinema2026.amber, lineWidth: lineWidth))
+
+private struct VIPAvatarRingModifier: ViewModifier {
+    let colors: [Color]
+    let lineWidth: CGFloat
+    let glowColor: Color
+    let animated: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rotation: Double = 0
+
+    func body(content: Content) -> some View {
+        let shouldAnimate = animated && !reduceMotion
+        content
+            .overlay {
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: colors + [colors.first ?? .clear],
+                            center: .center
+                        ),
+                        lineWidth: lineWidth
+                    )
+                    .rotationEffect(.degrees(shouldAnimate ? rotation : 0))
+                    .shadow(color: glowColor.opacity(0.32), radius: lineWidth * 2.2)
+                    .drawingGroup(opaque: false)
+            }
+            .onAppear {
+                guard shouldAnimate, rotation == 0 else { return }
+                withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
     }
-    func premiumStroke(lineWidth: CGFloat = 2) -> some View {
-        self.overlay(Circle().stroke(Cinema2026.accent, lineWidth: lineWidth))
+}
+
+extension View {
+    func adminStroke(lineWidth: CGFloat = 2, animated: Bool = true) -> some View {
+        self.modifier(
+            VIPAvatarRingModifier(
+                colors: [Color(hex: 0xFF2D55), Color(hex: 0x7A0019), Color(hex: 0xFF4A4A)],
+                lineWidth: lineWidth,
+                glowColor: Color(hex: 0xFF2D55),
+                animated: animated
+            )
+        )
+    }
+
+    func premiumStroke(lineWidth: CGFloat = 2, animated: Bool = true) -> some View {
+        self.modifier(
+            VIPAvatarRingModifier(
+                colors: [Color(hex: 0xFFD700), Color(hex: 0xB87333), Color(hex: 0xFFB000)],
+                lineWidth: lineWidth,
+                glowColor: Color(hex: 0xFFD700),
+                animated: animated
+            )
+        )
     }
 }
 

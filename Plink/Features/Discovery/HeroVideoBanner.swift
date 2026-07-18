@@ -18,6 +18,7 @@ struct HeroVideoBanner: View {
 
     @State private var player: AVPlayer?
     @State private var loopObserver: NSObjectProtocol?
+    @State private var failureObserver: NSObjectProtocol?
     @State private var videoFailed = false
 
     var body: some View {
@@ -153,7 +154,7 @@ struct HeroVideoBanner: View {
         }
 
         // If item fails, keep poster visible
-        NotificationCenter.default.addObserver(
+        failureObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemFailedToPlayToEndTime,
             object: item,
             queue: .main
@@ -170,7 +171,11 @@ struct HeroVideoBanner: View {
         if let loopObserver {
             NotificationCenter.default.removeObserver(loopObserver)
         }
+        if let failureObserver {
+            NotificationCenter.default.removeObserver(failureObserver)
+        }
         loopObserver = nil
+        failureObserver = nil
         player = nil
     }
 
